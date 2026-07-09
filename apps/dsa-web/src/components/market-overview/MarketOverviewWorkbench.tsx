@@ -28,6 +28,7 @@ import { VolatilityCard } from './VolatilityCard';
 import { CoreMarketChart, type CoreMarketChartPoint } from '../charts/CoreMarketChart';
 import type {
   MarketOverviewContextHighlightView,
+  MarketOverviewEvidenceGroupView,
   MarketOverviewExecutiveGroupView,
 } from './MarketOverviewWorkbenchGrid';
 import {
@@ -972,7 +973,7 @@ const UsBreadthTruthStrip: React.FC<{
   return (
     <div
       data-testid="market-overview-us-breadth-truth-strip"
-      className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5"
+      className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-2.5"
     >
       <div className="flex min-w-0 flex-wrap gap-1.5">
         <TerminalChip variant={view.stateVariant}>{view.stateLabel}</TerminalChip>
@@ -980,9 +981,9 @@ const UsBreadthTruthStrip: React.FC<{
         <TerminalChip variant={view.freshnessVariant}>{view.freshnessLabel}</TerminalChip>
         <TerminalChip variant={view.coverageVariant}>{view.coverageLabel}</TerminalChip>
       </div>
-      <p className="mt-2 text-[11px] leading-5 text-white/68">{view.summary}</p>
+      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{view.summary}</p>
       {view.missingSummary ? (
-        <p className="mt-1 text-[11px] leading-5 text-white/52">{view.missingSummary}</p>
+        <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{view.missingSummary}</p>
       ) : null}
     </div>
   );
@@ -1161,7 +1162,7 @@ function formatHeroChange(value: number | null | undefined): string {
 
 function heroToneClass(item: MarketOverviewItem | undefined): string {
   if (!item || item.changePct == null) {
-    return 'text-white/35';
+    return 'text-[color:var(--wolfy-text-muted)]';
   }
   return item.changePct >= 0
     ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.36)]'
@@ -1297,7 +1298,7 @@ function scoreTone(score: MarketTemperatureScore, pressure = false): string {
   if (pressure) {
     return score.value >= 65 ? 'text-rose-400' : score.value >= 55 ? 'text-amber-300' : 'text-emerald-400';
   }
-  return score.value >= 76 ? 'text-amber-200' : score.value >= 61 ? 'text-emerald-400' : score.value <= 45 ? 'text-sky-300' : 'text-white';
+  return score.value >= 76 ? 'text-amber-200' : score.value >= 61 ? 'text-emerald-400' : score.value <= 45 ? 'text-sky-300' : 'text-[color:var(--wolfy-text-primary)]';
 }
 
 const MarketOverviewWorkbenchGridFallback: React.FC<{ language: 'zh' | 'en' }> = ({ language }) => {
@@ -1315,25 +1316,25 @@ const MarketOverviewWorkbenchGridFallback: React.FC<{ language: 'zh' | 'en' }> =
         data-mobile-order="main"
         className="flex min-w-0 flex-col gap-4 xl:col-span-9"
       >
-        <TerminalPanel dense className="min-h-[152px] bg-white/[0.02]">
+        <TerminalPanel dense className="min-h-[152px] bg-[color:var(--wolfy-surface-input)]">
           <div className="flex h-full min-w-0 flex-col justify-between gap-4">
             <div className="flex min-w-0 items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
                   {isEnglish ? 'Workbench' : 'Workbench'}
                 </p>
-                <p className="mt-1 text-sm font-semibold text-white/82">{loadingTitle}</p>
+                <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">{loadingTitle}</p>
               </div>
               <TerminalChip variant="info" className="shrink-0 px-2 py-1 text-[10px] font-bold uppercase tracking-widest">
                 {loadingLabel}
               </TerminalChip>
             </div>
-            <p className="max-w-2xl text-xs leading-5 text-white/46">{loadingLine}</p>
+            <p className="max-w-2xl text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{loadingLine}</p>
             <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
               {Array.from({ length: 2 }).map((_, index) => (
                 <div
                   key={index}
-                  className="min-h-[72px] rounded-xl border border-white/[0.04] bg-white/[0.03]"
+                  className="min-h-[72px] rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)]"
                   aria-hidden="true"
                 />
               ))}
@@ -1342,14 +1343,14 @@ const MarketOverviewWorkbenchGridFallback: React.FC<{ language: 'zh' | 'en' }> =
         </TerminalPanel>
         <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
           {Array.from({ length: 2 }).map((_, index) => (
-            <TerminalPanel key={index} dense className="min-h-[148px] bg-white/[0.02]">
+            <TerminalPanel key={index} dense className="min-h-[148px] bg-[color:var(--wolfy-surface-input)]">
               <div className="flex h-full min-w-0 flex-col gap-3">
-                <div className="h-3 w-24 rounded-full bg-white/[0.08]" aria-hidden="true" />
-                <div className="h-6 w-40 rounded-full bg-white/[0.06]" aria-hidden="true" />
+                <div className="h-3 w-24 rounded-full bg-[color:var(--wolfy-surface-input)]" aria-hidden="true" />
+                <div className="h-6 w-40 rounded-full bg-[color:var(--wolfy-surface-input)]" aria-hidden="true" />
                 <div className="mt-auto space-y-2">
-                  <div className="h-3 w-full rounded-full bg-white/[0.05]" aria-hidden="true" />
-                  <div className="h-3 w-5/6 rounded-full bg-white/[0.05]" aria-hidden="true" />
-                  <div className="h-3 w-2/3 rounded-full bg-white/[0.05]" aria-hidden="true" />
+                  <div className="h-3 w-full rounded-full bg-[color:var(--wolfy-surface-input)]" aria-hidden="true" />
+                  <div className="h-3 w-5/6 rounded-full bg-[color:var(--wolfy-surface-input)]" aria-hidden="true" />
+                  <div className="h-3 w-2/3 rounded-full bg-[color:var(--wolfy-surface-input)]" aria-hidden="true" />
                 </div>
               </div>
             </TerminalPanel>
@@ -1361,15 +1362,15 @@ const MarketOverviewWorkbenchGridFallback: React.FC<{ language: 'zh' | 'en' }> =
         data-mobile-order="rail"
         className="flex min-w-0 flex-col gap-3 xl:col-span-3"
       >
-        <TerminalPanel dense className="min-h-[152px] bg-white/[0.02]">
+        <TerminalPanel dense className="min-h-[152px] bg-[color:var(--wolfy-surface-input)]">
           <div className="flex h-full min-w-0 flex-col gap-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{railTitle}</p>
-            <p className="text-sm font-semibold text-white/82">{loadingLabel}</p>
-            <p className="text-xs leading-5 text-white/46">{railLine}</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{railTitle}</p>
+            <p className="text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">{loadingLabel}</p>
+            <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{railLine}</p>
             <div className="mt-auto space-y-2">
-              <div className="h-3 w-full rounded-full bg-white/[0.05]" aria-hidden="true" />
-              <div className="h-3 w-4/5 rounded-full bg-white/[0.05]" aria-hidden="true" />
-              <div className="h-3 w-3/5 rounded-full bg-white/[0.05]" aria-hidden="true" />
+              <div className="h-3 w-full rounded-full bg-[color:var(--wolfy-surface-input)]" aria-hidden="true" />
+              <div className="h-3 w-4/5 rounded-full bg-[color:var(--wolfy-surface-input)]" aria-hidden="true" />
+              <div className="h-3 w-3/5 rounded-full bg-[color:var(--wolfy-surface-input)]" aria-hidden="true" />
             </div>
           </div>
         </TerminalPanel>
@@ -2425,15 +2426,23 @@ const MarketOverviewSection: React.FC<{
   rowId: string;
   meta: MarketOverviewSectionMeta;
   children: React.ReactNode;
-}> = ({ rowId, meta, children }) => (
-  <section data-testid={`market-overview-section-${rowId}`} className="flex min-w-0 flex-col gap-3">
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/36">{meta.eyebrow}</p>
-      <div className="flex min-w-0 flex-col gap-1 lg:flex-row lg:items-end lg:justify-between">
-        <h2 className="text-base font-semibold text-white/86">{meta.title}</h2>
-        <p className="max-w-3xl text-[11px] leading-5 text-white/44">{meta.detail}</p>
+  /** When nested inside an evidence group, suppress duplicate section chrome. */
+  nestedInEvidenceGroup?: boolean;
+}> = ({ rowId, meta, children, nestedInEvidenceGroup = false }) => (
+  <section
+    data-testid={`market-overview-section-${rowId}`}
+    data-evidence-section={rowId}
+    className="flex min-w-0 flex-col gap-3"
+  >
+    {nestedInEvidenceGroup ? null : (
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[color:var(--wolfy-text-muted)]">{meta.eyebrow}</p>
+        <div className="flex min-w-0 flex-col gap-1 lg:flex-row lg:items-end lg:justify-between">
+          <h2 className="text-base font-semibold text-[color:var(--wolfy-text-primary)]">{meta.title}</h2>
+          <p className="max-w-3xl text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{meta.detail}</p>
+        </div>
       </div>
-    </div>
+    )}
     {children}
   </section>
 );
@@ -2470,30 +2479,30 @@ const CnShortSentimentCard: React.FC<{
       <div className="flex h-full min-h-0 flex-col gap-3">
         <div className="flex shrink-0 items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.cnShortSentiment.eyebrow')}</p>
-            <h2 className="mt-1 truncate text-sm font-semibold text-white/84">{title}</h2>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{t('marketOverviewPage.cards.cnShortSentiment.eyebrow')}</p>
+            <h2 className="mt-1 truncate text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">{title}</h2>
           </div>
           <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title })} refreshing={refreshing} onRefresh={onRefresh} />
         </div>
-        <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
+        <div className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-2.5">
           <div className="flex items-end justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xs text-white/45">{t('marketOverviewPage.cards.cnShortSentiment.score')}</p>
-              <p className={cn('mt-1 font-mono text-2xl font-semibold', fallbackOnly ? 'text-white/55' : 'text-emerald-400')}>{data.sentimentScore}</p>
+              <p className="text-xs text-[color:var(--wolfy-text-muted)]">{t('marketOverviewPage.cards.cnShortSentiment.score')}</p>
+              <p className={cn('mt-1 font-mono text-2xl font-semibold', fallbackOnly ? 'text-[color:var(--wolfy-text-muted)]' : 'text-emerald-400')}>{data.sentimentScore}</p>
             </div>
-            <p className="min-w-0 max-w-[220px] truncate text-right text-xs leading-5 text-white/55">{data.summary}</p>
+            <p className="min-w-0 max-w-[220px] truncate text-right text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{data.summary}</p>
           </div>
         </div>
         <div className="grid min-h-0 grid-cols-2 gap-2 overflow-y-auto no-scrollbar ui-scroll-y-quiet">
           {metrics.slice(0, 6).map(([key, label, value]) => (
-            <div key={key} className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2">
-              <p className="truncate text-[10px] text-white/38">{label}</p>
-              <p className="mt-1 font-mono text-sm font-semibold text-white">{value}</p>
+            <div key={key} className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-2">
+              <p className="truncate text-[10px] text-[color:var(--wolfy-text-muted)]">{label}</p>
+              <p className="mt-1 font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{value}</p>
             </div>
           ))}
         </div>
-        {metrics.length > 6 ? <p className="text-[10px] text-white/38">其余 {metrics.length - 6} 项已折叠</p> : null}
-        {loading ? <div className="mt-3 rounded-lg border border-white/8 bg-white/[0.03] p-3 text-sm text-white/60">{t('marketOverviewPage.loading')}</div> : null}
+        {metrics.length > 6 ? <p className="text-[10px] text-[color:var(--wolfy-text-muted)]">其余 {metrics.length - 6} 项已折叠</p> : null}
+        {loading ? <div className="mt-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-3 text-sm text-[color:var(--wolfy-text-muted)]">{t('marketOverviewPage.loading')}</div> : null}
         <MarketOverviewPanelFooter panel={panel} sourceLabel={data.sourceLabel || (fallbackOnly ? '延迟可用' : '可用')} />
       </div>
     </MarketOverviewCardFrame>
@@ -2536,10 +2545,10 @@ const ContextMetricModuleCard: React.FC<{
       <div className="flex h-full min-h-0 flex-col gap-3">
         <div className="flex shrink-0 items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{eyebrow}</p>
-            <h2 className="mt-1 truncate text-sm font-semibold text-white/84">{title}</h2>
-            <p className="mt-1 line-clamp-1 text-[11px] leading-4 text-white/42">{description}</p>
-            {notice ? <p className="mt-1 truncate text-[10px] leading-4 text-white/38">{notice}</p> : null}
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{eyebrow}</p>
+            <h2 className="mt-1 truncate text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">{title}</h2>
+            <p className="mt-1 line-clamp-1 text-[11px] leading-4 text-[color:var(--wolfy-text-muted)]">{description}</p>
+            {notice ? <p className="mt-1 truncate text-[10px] leading-4 text-[color:var(--wolfy-text-muted)]">{notice}</p> : null}
           </div>
           {onRefresh ? (
             <MarketOverviewRefreshButton
@@ -2550,7 +2559,7 @@ const ContextMetricModuleCard: React.FC<{
           ) : null}
         </div>
         {insightStrip}
-        <div className="flex min-h-0 flex-col overflow-y-auto no-scrollbar border-y border-white/[0.045] ui-scroll-y-quiet">
+        <div className="flex min-h-0 flex-col overflow-y-auto no-scrollbar border-y border-[color:var(--wolfy-border-subtle)] ui-scroll-y-quiet">
           {visibleItems.map((item) => (
             <MarketOverviewDenseQuoteItem
               key={`${moduleId}-${item.symbol}`}
@@ -2561,7 +2570,7 @@ const ContextMetricModuleCard: React.FC<{
           ))}
         </div>
         {hiddenItemCount > 0 ? (
-          <p className="text-[10px] text-white/38">其余 {hiddenItemCount} 项已折叠</p>
+          <p className="text-[10px] text-[color:var(--wolfy-text-muted)]">其余 {hiddenItemCount} 项已折叠</p>
         ) : null}
         <MarketOverviewPanelFooter panel={panel} sourceLabel={sourceLabel} />
       </div>
@@ -2636,7 +2645,7 @@ function useMarketOverviewWorkbenchModel({
   const cryptoSnapshotCard = (
     <div className="flex h-full min-h-0 flex-col gap-2">
       <div className="flex items-center justify-end">
-        <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold uppercase text-white/55">
+        <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-2 py-0.5 text-[10px] font-semibold uppercase text-[color:var(--wolfy-text-muted)]">
           {cryptoRealtimeStatus === 'live' ? '实时' : cryptoRealtimeStatus === 'reconnecting' ? '重连中' : '最近快照'}
         </span>
       </div>
@@ -3046,7 +3055,36 @@ function useMarketOverviewWorkbenchModel({
     );
   };
 
-  const renderPlannedRow = (row: MarketOverviewLayoutRow, rowIndex: number) => {
+  const resolveEvidenceGroupRole = (
+    row: MarketOverviewLayoutRow,
+  ): MarketOverviewEvidenceGroupView['role'] => {
+    const modules = row.modules.join(' ');
+    if (row.tier === 'deep') {
+      return 'deep';
+    }
+    if (/breadth|Indices|indices|sectorRotation|usSector/i.test(modules) || /hero/.test(row.id)) {
+      return 'regime-breadth';
+    }
+    if (/volatility|globalRisk|Risk/i.test(modules)) {
+      return 'volatility-risk';
+    }
+    if (/fundsFlow|cnFlows|cryptoLiquidity|rates|fx|macroRates|macroFx|usRates/i.test(modules)) {
+      return 'liquidity-funding';
+    }
+    if (/sentiment|shortSentiment|cryptoSentiment|usSentiment/i.test(modules)) {
+      return 'sentiment-positioning';
+    }
+    if (/crypto|cnSnapshot|fxCnh|macroContext/i.test(modules)) {
+      return 'cross-asset';
+    }
+    return 'supporting';
+  };
+
+  const renderPlannedRow = (
+    row: MarketOverviewLayoutRow,
+    rowIndex: number,
+    options?: { nestedInEvidenceGroup?: boolean },
+  ) => {
     const modules = row.modules.filter(hasRenderableModule);
     if (modules.length === 0) {
       return null;
@@ -3061,7 +3099,12 @@ function useMarketOverviewWorkbenchModel({
       detail: '按主题查看当前市场状态。',
     };
     return (
-      <MarketOverviewSection key={row.id} rowId={row.id} meta={sectionMeta}>
+      <MarketOverviewSection
+        key={row.id}
+        rowId={row.id}
+        meta={sectionMeta}
+        nestedInEvidenceGroup={options?.nestedInEvidenceGroup}
+      >
         <MarketOverviewRow row={plannedRow}>{children}</MarketOverviewRow>
       </MarketOverviewSection>
     );
@@ -3145,7 +3188,7 @@ function useMarketOverviewWorkbenchModel({
   const temperatureSummary: MarketOverviewTemperatureSummaryView = {
     reliable: decisionReliable,
     valueText: decisionReliable ? formatNumber(panels.temperature.scores.overall.value, 0) : '暂不判定',
-    toneClass: decisionReliable ? scoreTone(panels.temperature.scores.overall) : 'text-white/45',
+    toneClass: decisionReliable ? scoreTone(panels.temperature.scores.overall) : 'text-[color:var(--wolfy-text-muted)]',
     label: decisionReliable ? panels.temperature.scores.overall.label : disabledLabel,
     confidenceLabel: confidenceLabel(panels.temperature.confidence),
     reliableInputCount: panels.temperature.reliableInputCount ?? 0,
@@ -3186,7 +3229,7 @@ function useMarketOverviewWorkbenchModel({
   };
   const briefingSummary: MarketOverviewBriefingSummaryView = {
     confidenceLabel: confidenceLabel(panels.briefing.confidence),
-    toneClass: panels.briefing.isReliable === false || panels.briefing.isFallback ? 'text-amber-200' : 'text-white',
+    toneClass: panels.briefing.isReliable === false || panels.briefing.isFallback ? 'text-amber-200' : 'text-[color:var(--wolfy-text-primary)]',
     leadMessage: panels.briefing.items[0]?.message || panels.briefing.warning || '暂无简报',
     warning: panels.briefing.warning || undefined,
   };
@@ -3250,6 +3293,29 @@ function useMarketOverviewWorkbenchModel({
   const heroRows = activeRows.reduce<React.ReactNode[]>((acc, row, index) => { if (row.tier === 'hero') { const node = renderPlannedRow(row, index); if (node) acc.push(node); } return acc; }, []);
   const secondaryRows = activeRows.reduce<React.ReactNode[]>((acc, row, index) => { if (row.tier === 'secondary') { const node = renderPlannedRow(row, index); if (node) acc.push(node); } return acc; }, []);
   const deepRows = activeRows.reduce<React.ReactNode[]>((acc, row, index) => { if (row.tier === 'deep') { const node = renderPlannedRow(row, index); if (node) acc.push(node); } return acc; }, []);
+  const evidenceGroups: MarketOverviewEvidenceGroupView[] = [];
+  activeRows.forEach((row, index) => {
+    if (row.tier === 'hero') {
+      return;
+    }
+    const sectionMeta = CATEGORY_SECTION_META[activeCategory][row.id] || {
+      eyebrow: '市场证据',
+      title: '分组证据',
+      detail: '按主题查看当前市场证据。',
+    };
+    const node = renderPlannedRow(row, index, { nestedInEvidenceGroup: true });
+    if (!node) {
+      return;
+    }
+    evidenceGroups.push({
+      id: row.id,
+      role: resolveEvidenceGroupRole(row),
+      tier: row.tier === 'deep' ? 'deep' : 'secondary',
+      label: sectionMeta.eyebrow,
+      claim: sectionMeta.title,
+      rows: [node],
+    });
+  });
   const visualEvidenceCards = buildVisualEvidenceCards({
     activeCategory,
     panels,
@@ -3289,6 +3355,7 @@ function useMarketOverviewWorkbenchModel({
     primaryPathLabel,
     secondaryRows,
     deepRows,
+    evidenceGroups,
     showDeepSection: activeRows.some((row) => row.tier === 'deep') || activeCategory === 'all',
   };
 }
@@ -3327,6 +3394,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     primaryPathLabel,
     secondaryRows,
     deepRows,
+    evidenceGroups,
     showDeepSection,
   } = useMarketOverviewWorkbenchModel(modelProps);
 
@@ -3334,6 +3402,8 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     <div
       data-testid="market-overview-workbench"
       data-bento-surface="true"
+      data-market-overview-anatomy="research-evidence-composition"
+      data-research-density="research"
       className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden no-scrollbar text-[color:var(--wolfy-text-primary)]"
     >
       <MarketOverviewWorkbenchTopSurface
@@ -3371,6 +3441,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
         <section
           data-testid="market-overview-hero-lane"
           data-card-tier="hero"
+          data-evidence-group-role="regime-breadth"
           className="flex min-w-0 flex-col gap-4"
         >
           {heroRows}
@@ -3380,6 +3451,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
         <LazyMarketOverviewWorkbenchGrid
           secondaryRows={secondaryRows}
           deepRows={deepRows}
+          evidenceGroups={evidenceGroups}
           showDeepSection={showDeepSection}
           showContextRail={showContextRail}
           contextHighlights={contextHighlights}

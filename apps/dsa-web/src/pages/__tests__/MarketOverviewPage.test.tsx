@@ -2799,9 +2799,47 @@ describe('MarketOverviewPage', () => {
     renderMarketOverviewWithLanguage('zh');
 
     const heading = await screen.findByRole('heading', { level: 1, name: '市场状态概览' });
-    expect(heading).toHaveClass('text-xl', 'md:text-2xl');
+    expect(heading).toHaveAttribute('data-research-type-role', 'observation-title');
+    expect(screen.getByTestId('market-overview-observation-head')).toContainElement(heading);
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.queryByText(/开发者详情|debug|raw|schema|trace|provider_timeout|not_enough_history|MarketCache|generatedCandidates|failedCandidates|LLM Ledger|QUOTA PILOT/i)).not.toBeInTheDocument();
+  });
+
+  it('adopts research anatomy composition for observation, quality, risk limits, and next research actions', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: false,
+      canReadProviders: false,
+    });
+    render(createElement(MarketOverviewPage));
+
+    const observationHead = await screen.findByTestId('market-overview-observation-head');
+    expect(observationHead).toHaveAttribute('data-research-anatomy', 'observation-head');
+    expect(observationHead).toHaveAttribute('data-research-density', 'research');
+    expect(within(observationHead).getByTestId('market-overview-top-verdict')).toBeInTheDocument();
+    expect(within(observationHead).getByTestId('market-overview-summary-strip')).toBeInTheDocument();
+
+    const quality = screen.getByTestId('market-overview-data-quality-composition');
+    expect(quality).toHaveAttribute('data-research-anatomy', 'data-quality');
+    expect(quality.querySelectorAll('[data-quality-facet]').length).toBeGreaterThan(0);
+
+    const riskLimits = screen.getByTestId('market-overview-research-risk-limits');
+    expect(riskLimits).toHaveAttribute('data-research-anatomy', 'risk-limits');
+    expect(riskLimits).toHaveAttribute('data-risk-limits-placement', 'disclosure');
+    expect(within(riskLimits).getByRole('button')).toHaveAttribute('aria-expanded', 'false');
+
+    const nextAction = screen.getByTestId('market-overview-next-research-action');
+    expect(nextAction).toHaveAttribute('data-research-anatomy', 'next-research-action');
+    expect(nextAction.tagName.toLowerCase()).toBe('nav');
+    expect(within(nextAction).getByText('研究雷达')).toBeInTheDocument();
+    expect(within(nextAction).getByText('扫描器')).toBeInTheDocument();
+    expect(nextAction.textContent || '').not.toMatch(/买入|卖出|加仓|减仓|推荐|目标价|position size/i);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('market-overview-main-grid')).toHaveAttribute('data-market-overview-composition', 'grouped-evidence');
+    });
+    expect(screen.getByTestId('market-overview-secondary-grid')).toHaveAttribute('data-evidence-composition', 'grouped');
+    expect(document.querySelectorAll('[data-evidence-group-role]').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('market-overview-workbench').className).not.toMatch(/\btext-white\b/);
   });
 
   it('does not render route-level actionability diagnostics by default for ready-ish frames', async () => {
@@ -3138,8 +3176,8 @@ describe('MarketOverviewPage', () => {
     expect(workbench.className).not.toContain('max-w-[1800px]');
     expect(shell.className).not.toContain('max-w-5xl');
     expect(shell.className).not.toContain('max-w-6xl');
-    expect(screen.getByTestId('market-overview-category-tabs')).toHaveClass('w-full', 'flex', 'bg-white/[0.02]', 'backdrop-blur-md');
-    expect(screen.getByTestId('market-overview-category-tabs')).toHaveClass('min-w-0');
+    expect(screen.getByTestId('market-overview-category-tabs')).toHaveClass('w-full', 'min-w-0', 'backdrop-blur-md');
+    expect(screen.getByTestId('market-overview-category-tabs').className).toMatch(/bg-\[color:var\(--wolfy-surface-input\)\]|bg-white\/\[0\.02\]/);
     expect(screen.getByTestId('market-overview-export-summary')).toHaveTextContent('复制证据快照');
     expect(screen.getByTestId('market-overview-export-summary')).not.toHaveTextContent('摘要');
     expect(screen.getByTestId('market-overview-category-tabs')).not.toHaveClass('sticky', 'top-0', 'z-20', '-mx-4');
@@ -4173,17 +4211,26 @@ describe('MarketOverviewPage', () => {
     render(createElement(MarketOverviewPage));
 
     const posturePanel = await screen.findByTestId('market-decision-semantics-strip');
+    const readinessBand = await screen.findByTestId('market-overview-decision-readiness');
+    // Intentional consumer-safe insufficient contract (see buildMarketNarrativeVerdict +
+    // marketDecisionPostureLabel): first-read verdict is 证据待补; posture/direction is 证据不足.
+    // Do not require legacy first-read copy 数据不足 (replaced intentionally for fail-closed
+    // observation language) or directional 偏*观察 labels under pure data_insufficient.
+    await waitFor(() => {
+      expect(within(readinessBand).getByTestId('market-overview-top-verdict')).toHaveTextContent('证据待补');
+    });
     const text = posturePanel.textContent || '';
 
-    expect(posturePanel).toHaveTextContent(/数据不足|偏强观察|中性观察|偏弱观察/);
+    expect(posturePanel).toHaveTextContent(/证据不足|证据待补/);
+    expect(posturePanel).toHaveTextContent(/当前市场：证据不足|证据强度|不支持强方向判断/);
     expect(posturePanel).toHaveTextContent(/关键证据未补齐|关键证据仍待补齐|关键确认仍待补齐|信号置信度仍偏有限|评分待恢复|数据更新中/);
     expect(posturePanel).toHaveTextContent(/待补|待确认|更新中/);
     expect(posturePanel).toHaveTextContent(/研究观察，不构成投资建议/);
     expect(posturePanel).toHaveTextContent(/可见事实有限|等待.*证据补齐|下一步看什么/);
     expect(posturePanel).not.toHaveTextContent('missing_scoring_pillars');
-    const readinessBand = screen.getByTestId('market-overview-decision-readiness');
-    expect(readinessBand).toHaveTextContent(/数据不足|偏强观察|中性观察|偏弱观察/);
+    expect(readinessBand).toHaveTextContent(/证据待补/);
     expect(readinessBand).toHaveTextContent(/关键证据未补齐|关键证据仍待补齐|关键确认仍待补齐|信号置信度仍偏有限|评分待恢复|数据更新中/);
+    expect(readinessBand).not.toHaveTextContent(/偏强观察|偏弱观察/);
     expect(readinessBand).not.toHaveTextContent('fallback_proxy_or_observation_only_evidence_present');
     expect(screen.getByTestId('market-decision-semantics-strip')).not.toHaveTextContent('fallback_proxy_or_observation_only_evidence_present');
     expect(text).not.toMatch(/买入|卖出|买卖|加仓|减仓|仓位|看多|看空|bullish|bearish|buy|sell|target|stop|recommend|add|reduce|position-size/i);

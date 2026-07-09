@@ -270,7 +270,7 @@ function shouldShowInlineWarning(meta?: Partial<MarketDataMeta>): boolean {
 
 export const MarketOverviewSparkline: React.FC<{ values?: number[]; tone?: string; className?: string }> = ({
   values,
-  tone = 'text-white/35',
+  tone = 'text-[color:var(--wolfy-text-muted)]',
   className,
 }) => {
   const points = Array.isArray(values) ? values.filter((value) => Number.isFinite(value)) : [];
@@ -342,12 +342,12 @@ export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; 
   const freshness = resolveFreshness(resolvedMeta);
 
   return (
-    <div className="mt-auto min-w-0 border-t border-white/5 pt-3">
+    <div className="mt-auto min-w-0 border-t border-[color:var(--wolfy-border-subtle)] pt-3">
       <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap">
         <DataFreshnessBadge freshness={resolvedMeta?.freshness} status={freshness} />
         <span
           data-testid="market-overview-footer-meta"
-          className="min-w-0 truncate text-[10px] uppercase tracking-widest text-white/34"
+          className="min-w-0 truncate text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]"
           title={details.join(' · ') || fallbackUpdatedAt || sourceLabel}
         >
           {compactDetails}
@@ -378,22 +378,22 @@ export const MarketDataRow: React.FC<{
     ? 'text-rose-400'
     : direction === 'decreasing'
       ? 'text-emerald-400'
-      : 'text-white/35';
+      : 'text-[color:var(--wolfy-text-muted)]';
 
   return (
     <article
       data-testid="market-overview-data-row"
       data-row-layout="bounded-market-row"
-      className="grid min-h-[48px] min-w-0 grid-cols-[minmax(0,1fr)_minmax(84px,0.65fr)_64px_minmax(88px,max-content)] items-center gap-x-2 overflow-hidden border-b border-white/[0.045] py-2 last:border-b-0 max-[640px]:grid-cols-[minmax(0,1fr)_minmax(82px,max-content)] max-[640px]:gap-y-0.5"
+      className="grid min-h-[48px] min-w-0 grid-cols-[minmax(0,1fr)_minmax(84px,0.65fr)_64px_minmax(88px,max-content)] items-center gap-x-2 overflow-hidden border-b border-[color:var(--wolfy-border-subtle)] py-2 last:border-b-0 max-[640px]:grid-cols-[minmax(0,1fr)_minmax(82px,max-content)] max-[640px]:gap-y-0.5"
     >
       <div className="col-start-1 min-w-0 max-[640px]:row-start-1">
         <div className="flex min-w-0 items-center gap-2">
           <span className={cn('size-1.5 shrink-0 rounded-full bg-current shadow-[0_0_12px_currentColor]', tone)} aria-hidden="true" />
-          <p className="min-w-0 truncate text-xs font-semibold text-white/78">{displayLabel.primary}</p>
+          <p className="min-w-0 truncate text-xs font-semibold text-[color:var(--wolfy-text-secondary)]">{displayLabel.primary}</p>
         </div>
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5 pl-3.5">
           {displayLabel.secondary ? (
-            <span className="min-w-0 truncate font-mono text-[10px] font-semibold uppercase text-white/32">{displayLabel.secondary}</span>
+            <span className="min-w-0 truncate font-mono text-[10px] font-semibold uppercase text-[color:var(--wolfy-text-muted)]">{displayLabel.secondary}</span>
           ) : null}
         </div>
       </div>
@@ -402,7 +402,7 @@ export const MarketDataRow: React.FC<{
           data-testid="market-overview-quote-metadata"
           data-metadata-position="middle-left"
           title={metadataTitle(itemDetails, item.warning, item.hoverDetails)}
-          className="col-start-2 flex min-w-0 max-w-full items-center gap-x-1.5 overflow-hidden whitespace-nowrap text-[9px] text-white/32 max-[640px]:col-start-1 max-[640px]:row-start-2 max-[640px]:pl-3.5"
+          className="col-start-2 flex min-w-0 max-w-full items-center gap-x-1.5 overflow-hidden whitespace-nowrap text-[9px] text-[color:var(--wolfy-text-muted)] max-[640px]:col-start-1 max-[640px]:row-start-2 max-[640px]:pl-3.5"
         >
           {!suppressFreshnessBadge ? <DataFreshnessBadge freshness={item.freshness} status={freshness} className="shrink-0 px-1.5 text-[9px]" /> : null}
           {compactDetails ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{compactDetails}</span> : null}
@@ -412,7 +412,7 @@ export const MarketDataRow: React.FC<{
         <MarketOverviewSparkline values={item.trend} tone={sparklineTone} className="h-7" />
       </div>
       <div data-testid="market-overview-quote-value" className="col-start-4 row-start-1 min-w-[88px] text-right font-mono tabular-nums max-[640px]:col-start-2">
-        <p className={cn('truncate text-base font-semibold leading-none text-white', valueClassName)}>{formatMetricValue(item, valueDigitsBelowHundred)}</p>
+        <p className={cn('truncate text-base font-semibold leading-none text-[color:var(--wolfy-text-primary)]', valueClassName)}>{formatMetricValue(item, valueDigitsBelowHundred)}</p>
         <p className={cn('mt-1 truncate text-[11px] font-bold leading-none', tone)}>
           {formatChangeSummary(item, neutralLabel)}
         </p>
@@ -446,21 +446,21 @@ export const MarketOverviewDenseQuoteItem: React.FC<{
     ? 'text-rose-400'
     : direction === 'decreasing'
       ? 'text-emerald-400'
-      : 'text-white/35';
+      : 'text-[color:var(--wolfy-text-muted)]';
 
   return (
     <article
       data-testid="market-overview-dense-quote-item"
       data-quote-item-layout="compact-grid"
-      className="grid min-h-[44px] min-w-0 grid-cols-[minmax(96px,1fr)_minmax(104px,0.9fr)_76px_minmax(82px,max-content)_minmax(92px,max-content)] items-center gap-x-2 border-b border-white/[0.045] p-1.5 last:border-b-0 max-[720px]:grid-cols-[minmax(0,1fr)_76px_minmax(82px,max-content)] max-[720px]:gap-y-0.5"
+      className="grid min-h-[44px] min-w-0 grid-cols-[minmax(96px,1fr)_minmax(104px,0.9fr)_76px_minmax(82px,max-content)_minmax(92px,max-content)] items-center gap-x-2 border-b border-[color:var(--wolfy-border-subtle)] p-1.5 last:border-b-0 max-[720px]:grid-cols-[minmax(0,1fr)_76px_minmax(82px,max-content)] max-[720px]:gap-y-0.5"
     >
       <div className="col-start-1 min-w-0 max-[720px]:row-start-1">
         <div className="flex min-w-0 items-center gap-2">
           <span className={cn('size-1.5 shrink-0 rounded-full bg-current shadow-[0_0_12px_currentColor]', tone)} aria-hidden="true" />
-          <p className="min-w-0 truncate text-xs font-semibold text-white/78">{displayLabel.primary}</p>
+          <p className="min-w-0 truncate text-xs font-semibold text-[color:var(--wolfy-text-secondary)]">{displayLabel.primary}</p>
         </div>
         {displayLabel.secondary ? (
-          <p className="mt-0.5 truncate pl-3.5 font-mono text-[10px] font-semibold uppercase text-white/32">{displayLabel.secondary}</p>
+          <p className="mt-0.5 truncate pl-3.5 font-mono text-[10px] font-semibold uppercase text-[color:var(--wolfy-text-muted)]">{displayLabel.secondary}</p>
         ) : null}
       </div>
 
@@ -468,7 +468,7 @@ export const MarketOverviewDenseQuoteItem: React.FC<{
         data-testid="market-overview-quote-metadata"
         data-metadata-position="middle-left"
         title={metadataTitle(itemDetails, item.warning, item.hoverDetails)}
-        className="col-start-2 flex min-w-0 max-w-full items-center gap-x-1.5 overflow-hidden whitespace-nowrap text-[9px] text-white/32 max-[720px]:col-start-1 max-[720px]:row-start-2 max-[720px]:pl-3.5"
+        className="col-start-2 flex min-w-0 max-w-full items-center gap-x-1.5 overflow-hidden whitespace-nowrap text-[9px] text-[color:var(--wolfy-text-muted)] max-[720px]:col-start-1 max-[720px]:row-start-2 max-[720px]:pl-3.5"
       >
         {!suppressFreshnessBadge ? <DataFreshnessBadge freshness={item.freshness} status={freshness} className="shrink-0 px-1.5 text-[9px]" /> : null}
         {compactDetails ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{compactDetails}</span> : null}
@@ -479,7 +479,7 @@ export const MarketOverviewDenseQuoteItem: React.FC<{
       </div>
 
       <div data-testid="market-overview-quote-value" className="col-start-4 min-w-[82px] text-right font-mono tabular-nums max-[720px]:col-start-3 max-[720px]:row-start-1">
-        <p className="truncate text-base font-semibold leading-none text-white">{formatMetricValue(item, valueDigitsBelowHundred)}</p>
+        <p className="truncate text-base font-semibold leading-none text-[color:var(--wolfy-text-primary)]">{formatMetricValue(item, valueDigitsBelowHundred)}</p>
       </div>
       <div
         data-testid="market-overview-quote-change"

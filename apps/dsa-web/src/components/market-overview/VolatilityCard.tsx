@@ -35,8 +35,8 @@ export const VolatilityCard: React.FC<{
       <div className="flex min-h-0 h-full flex-col gap-3">
         <div className="flex shrink-0 items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.volatility.eyebrow')}</p>
-            <h2 className="mt-1 truncate text-sm font-semibold text-white/84">{title}</h2>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{t('marketOverviewPage.cards.volatility.eyebrow')}</p>
+            <h2 className="mt-1 truncate text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">{title}</h2>
           </div>
           <MarketOverviewRefreshButton
             label={t('marketOverviewPage.refreshCard', { title })}
@@ -54,11 +54,11 @@ export const VolatilityCard: React.FC<{
             >
               {panel.isStale || panel.isFromSnapshot ? '最近快照' : '待刷新'}
             </TerminalChip>
-            <span className="min-w-0 truncate text-[10px] text-white/38">刷新失败，保留最近快照</span>
+            <span className="min-w-0 truncate text-[10px] text-[color:var(--wolfy-text-muted)]">刷新失败，保留最近快照</span>
           </div>
         ) : null}
 
-        <div data-testid="market-overview-dense-quote-grid" className="flex min-h-0 flex-col overflow-y-auto no-scrollbar border-y border-white/[0.045] ui-scroll-y-quiet">
+        <div data-testid="market-overview-dense-quote-grid" className="flex min-h-0 flex-col overflow-y-auto no-scrollbar border-y border-[color:var(--wolfy-border-subtle)] ui-scroll-y-quiet">
           {compactItems.map((item) => (
             <MarketOverviewDenseQuoteItem
               key={item.symbol}
@@ -70,13 +70,13 @@ export const VolatilityCard: React.FC<{
         </div>
 
         {hiddenItemCount > 0 ? (
-          <p className="text-[10px] text-white/38">
+          <p className="text-[10px] text-[color:var(--wolfy-text-muted)]">
             已优先显示关键 {compactItems.length} 项，其余 {hiddenItemCount} 项已折叠。
           </p>
         ) : null}
 
         {loading ? (
-          <div className="rounded-xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/60">
+          <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-4 text-sm text-[color:var(--wolfy-text-muted)]">
             {t('marketOverviewPage.loading')}
           </div>
         ) : null}
