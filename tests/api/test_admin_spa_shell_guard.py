@@ -25,6 +25,17 @@ def _reset_auth_globals() -> None:
     auth._admin_reauth_markers = {}
 
 
+def _safe_error(error: str, message: str, status: int) -> dict[str, object]:
+    return {
+        "error": error,
+        "code": error,
+        "message": message,
+        "status": status,
+        "reason": error,
+        "consumerSafeMessage": message,
+    }
+
+
 @pytest.fixture()
 def auth_enabled_spa_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     _reset_auth_globals()
@@ -195,9 +206,9 @@ def test_admin_spa_guard_preserves_api_and_static_asset_behavior(auth_enabled_sp
     assert unknown_api_v1.headers["content-type"].startswith("application/json")
     assert "admin-spa-shell" not in unknown_api_v1.text
     assert scanner_status.status_code == 401
-    assert scanner_status.json() == {"error": "unauthorized", "message": "Login required"}
+    assert scanner_status.json() == _safe_error("unauthorized", "Login required", 401)
     assert private_admin_api.status_code == 401
-    assert private_admin_api.json() == {"error": "unauthorized", "message": "Login required"}
+    assert private_admin_api.json() == _safe_error("unauthorized", "Login required", 401)
     assert asset.status_code == 200
     assert asset.text == "console.log('asset');\n"
     assert favicon.status_code == 200
