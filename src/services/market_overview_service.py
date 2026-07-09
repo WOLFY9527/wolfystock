@@ -6365,6 +6365,8 @@ class MarketOverviewService:
                 "risk_direction": self._risk_direction(change),
                 "unit": "USD",
                 "source": "binance",
+                "sourceType": "exchange_public",
+                "freshness": "live",
                 "last_update": last_update,
                 "error": None,
             }
@@ -6459,6 +6461,8 @@ class MarketOverviewService:
             "risk_direction": "increasing" if funding_percent > 0.01 else "neutral",
             "unit": "%",
             "source": "binance",
+            "sourceType": "exchange_public",
+            "freshness": "live",
             "last_update": last_update,
             "error": None,
         }
