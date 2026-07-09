@@ -369,7 +369,7 @@ def test_preflight_pass_reports_machine_readable_current_run_identity(monkeypatc
     evidence_path = tmp_path / "evidence.json"
     evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
     monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path.resolve()))
-    monkeypatch.setattr(harness, "pid_is_alive", lambda _pid: True)
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
     monkeypatch.setattr(
         harness,
         "find_port_owner",
@@ -415,7 +415,7 @@ def test_preflight_fails_for_wrong_port_owner(monkeypatch, tmp_path: Path) -> No
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(harness, "pid_is_alive", lambda _pid: True)
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
     monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path.resolve()))
     monkeypatch.setattr(
         harness,
@@ -463,7 +463,7 @@ def test_safe_stop_rejects_wrong_pid_cwd_identity(monkeypatch, tmp_path: Path) -
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(harness, "pid_is_alive", lambda _pid: True)
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
     monkeypatch.setattr(harness, "process_start_time", lambda _pid: "Sun Jul  5 00:00:00 2026")
     monkeypatch.setattr(harness, "process_cwd", lambda _pid: "/tmp/other")
     monkeypatch.setattr(harness.os, "kill", lambda *_args, **_kwargs: pytest.fail("wrong cwd process must not be killed"))
@@ -486,7 +486,7 @@ def test_safe_stop_records_already_absent_without_killing(monkeypatch, tmp_path:
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(harness, "pid_is_alive", lambda _pid: False)
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="absent"))
     monkeypatch.setattr(harness.os, "kill", lambda *_args, **_kwargs: pytest.fail("absent process must not be killed"))
 
     result = harness.stop_runtime_from_evidence(evidence_path)
@@ -528,7 +528,7 @@ def test_safe_stop_rejects_reused_pid_without_killing(monkeypatch, tmp_path: Pat
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(harness, "pid_is_alive", lambda _pid: True)
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
     monkeypatch.setattr(harness, "process_start_time", lambda _pid: "Sun Jul  5 00:01:00 2026")
     monkeypatch.setattr(harness.os, "kill", lambda *_args, **_kwargs: pytest.fail("reused pid must not be killed"))
 
@@ -553,7 +553,7 @@ def test_safe_stop_rejects_wrong_port_owner_without_killing(monkeypatch, tmp_pat
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(harness, "pid_is_alive", lambda _pid: True)
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
     monkeypatch.setattr(harness, "process_start_time", lambda _pid: "Sun Jul  5 00:00:00 2026")
     monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path.resolve()))
     monkeypatch.setattr(
@@ -585,7 +585,7 @@ def test_safe_stop_rejects_missing_port_owner_without_killing(monkeypatch, tmp_p
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(harness, "pid_is_alive", lambda _pid: True)
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
     monkeypatch.setattr(harness, "process_start_time", lambda _pid: "Sun Jul  5 00:00:00 2026")
     monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path.resolve()))
     monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
@@ -595,6 +595,114 @@ def test_safe_stop_rejects_missing_port_owner_without_killing(monkeypatch, tmp_p
 
     assert result["status"] == "rejected"
     assert result["reasonCode"] == "pid_not_port_owner"
+
+
+def test_safe_stop_windows_invalid_pid_returns_absent_without_raw_exception(monkeypatch, tmp_path: Path) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(
+        json.dumps(
+            {
+                "run": {"pid": 43210, "cwd": str(tmp_path.resolve()), "runId": "uat-run"},
+                "runtime": {"ownedByHarness": True, "processStartTime": "2026-07-05T00:00:00+00:00"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness.os, "name", "nt", raising=False)
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="absent", windows_error=87))
+    monkeypatch.setattr(harness, "_terminate_pid", lambda _pid: pytest.fail("invalid pid must not be terminated"))
+
+    result = harness.stop_runtime_from_evidence(evidence_path)
+
+    assert result["status"] == "absent"
+    assert result["reasonCode"] == "runtime_already_absent"
+    assert result["windowsError"] == 87
+    payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+    assert payload["lifecycleEvents"][-1]["reasonCode"] == "runtime_already_absent"
+
+
+def test_safe_stop_windows_access_denied_is_not_classified_as_absent(monkeypatch, tmp_path: Path) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(
+        json.dumps(
+            {
+                "run": {"pid": 43210, "cwd": str(tmp_path.resolve()), "runId": "uat-run"},
+                "runtime": {"ownedByHarness": True, "processStartTime": "2026-07-05T00:00:00+00:00"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness.os, "name", "nt", raising=False)
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="access_denied", windows_error=5))
+    monkeypatch.setattr(harness, "_terminate_pid", lambda _pid: pytest.fail("access denied process must not be terminated"))
+
+    result = harness.stop_runtime_from_evidence(evidence_path)
+
+    assert result["status"] == "rejected"
+    assert result["reasonCode"] == "access_denied"
+    assert result["windowsError"] == 5
+    payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+    assert payload["lifecycleEvents"][-1]["status"] == "rejected"
+    assert payload["lifecycleEvents"][-1]["reasonCode"] == "access_denied"
+
+
+def test_safe_stop_windows_rejects_reused_pid_when_command_identity_mismatches(monkeypatch, tmp_path: Path) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(
+        json.dumps(
+            {
+                "run": {"pid": 43210, "cwd": str(tmp_path.resolve()), "runId": "uat-run"},
+                "runtime": {
+                    "ownedByHarness": True,
+                    "processStartTime": "2026-07-05T00:00:00+00:00",
+                    "command": f'"{sys.executable}" "{tmp_path / "main.py"}" --serve-only --port 8000',
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness.os, "name", "nt", raising=False)
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
+    monkeypatch.setattr(harness, "process_start_time", lambda _pid: "2026-07-05T00:00:00+00:00")
+    monkeypatch.setattr(harness, "process_cwd", lambda _pid: None)
+    monkeypatch.setattr(harness, "process_command", lambda _pid: '"C:\\Python\\python.exe" other.py --serve-only')
+    monkeypatch.setattr(harness, "_terminate_pid", lambda _pid: pytest.fail("command mismatch process must not be terminated"))
+
+    result = harness.stop_runtime_from_evidence(evidence_path)
+
+    assert result["status"] == "rejected"
+    assert result["reasonCode"] == "pid_command_mismatch"
+
+
+def test_safe_stop_windows_allows_matching_command_identity_and_terminates(monkeypatch, tmp_path: Path) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    expected_command = f'"{sys.executable}" "{tmp_path / "main.py"}" --serve-only --port 8000'
+    evidence_path.write_text(
+        json.dumps(
+            {
+                "run": {"pid": 43210, "cwd": str(tmp_path.resolve()), "runId": "uat-run"},
+                "runtime": {
+                    "ownedByHarness": True,
+                    "processStartTime": "2026-07-05T00:00:00+00:00",
+                    "command": expected_command,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    terminated: list[int] = []
+    monkeypatch.setattr(harness.os, "name", "nt", raising=False)
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
+    monkeypatch.setattr(harness, "process_start_time", lambda _pid: "2026-07-05T00:00:00+00:00")
+    monkeypatch.setattr(harness, "process_cwd", lambda _pid: None)
+    monkeypatch.setattr(harness, "process_command", lambda _pid: expected_command)
+    monkeypatch.setattr(harness, "_terminate_pid", lambda pid: terminated.append(pid))
+
+    result = harness.stop_runtime_from_evidence(evidence_path)
+
+    assert result["status"] == "stopped"
+    assert result["reasonCode"] == "task_owned_pid_terminated"
+    assert terminated == [43210]
 
 
 def test_stop_owned_runtime_reports_already_absent() -> None:
@@ -727,6 +835,41 @@ def test_direct_script_help_entrypoint_runs_from_repo_root() -> None:
 
     assert result.returncode == 0
     assert "deterministic local UAT runtime" in result.stdout
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only integration proof")
+def test_stop_from_evidence_windows_can_terminate_owned_child_with_recorded_identity(tmp_path: Path) -> None:
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"], cwd=tmp_path)
+    try:
+        process_start_time = harness.process_start_time(child.pid)
+        process_command = harness.process_command(child.pid)
+        assert process_start_time
+        assert process_command
+
+        evidence_path = tmp_path / "evidence.json"
+        evidence_path.write_text(
+            json.dumps(
+                {
+                    "run": {"pid": child.pid, "cwd": str(tmp_path.resolve()), "runId": "uat-run"},
+                    "runtime": {
+                        "ownedByHarness": True,
+                        "processStartTime": process_start_time,
+                        "command": process_command,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        result = harness.stop_runtime_from_evidence(evidence_path)
+
+        assert result["status"] == "stopped"
+        child.wait(timeout=10)
+        assert child.poll() is not None
+    finally:
+        if child.poll() is None:
+            child.terminate()
+            child.wait(timeout=10)
 
 
 def _import_guard_script(argv: list[str]) -> str:
