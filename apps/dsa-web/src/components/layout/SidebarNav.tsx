@@ -15,6 +15,7 @@ import {
   CircuitBoard,
   ChevronDown,
   DatabaseZap,
+  Droplets,
   FlaskConical,
   FileCheck2,
   Gauge,
@@ -23,6 +24,7 @@ import {
   LogOut,
   Moon,
   Radar,
+  RefreshCcw,
   Search,
   ListChecks,
   Settings2,
@@ -118,6 +120,8 @@ const ROUTE_ICON_BY_KEY: Record<CoreProductRouteKey, React.ComponentType<{ class
   home: Activity,
   'decision-cockpit': Gauge,
   'market-overview': Activity,
+  'liquidity-monitor': Droplets,
+  'rotation-radar': RefreshCcw,
   'research-radar': Radar,
   'stock-structure': BarChart3,
   scanner: Radar,
@@ -588,13 +592,19 @@ function useSidebarNavView({
         className={cn(
           showAsDrawerChild
             ? 'shell-drawer-action'
-            : 'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-[var(--overlay-hover)] hover:text-[color:var(--wolfy-text-primary)]',
-          routeActive ? 'is-active text-[color:var(--wolfy-text-primary)]' : '',
+            : 'flex min-w-0 items-center rounded-md px-2.5 py-1.5 text-left text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-[var(--overlay-hover)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--sage)]',
+          routeActive
+            ? showAsDrawerChild
+              ? 'is-active text-[color:var(--wolfy-text-primary)]'
+              : 'is-active bg-[color:color-mix(in_srgb,var(--sage)_14%,transparent)] font-semibold text-[color:var(--sage-deep)]'
+            : '',
         )}
       >
-        <span className={showAsDrawerChild ? 'shell-nav-item__icon' : 'inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]'} aria-hidden="true">
-          <Icon className="size-4" />
-        </span>
+        {showAsDrawerChild ? (
+          <span className="shell-nav-item__icon" aria-hidden="true">
+            <Icon className="size-4" />
+          </span>
+        ) : null}
         <span className={showAsDrawerChild ? 'shell-nav-item__copy' : 'min-w-0 truncate'}>
           <span className={showAsDrawerChild ? 'shell-nav-item__label' : 'truncate'}>{label}</span>
         </span>
@@ -684,7 +694,7 @@ function useSidebarNavView({
             id={menuId}
             role="menu"
             data-testid={menuTestId}
-            className="absolute left-0 top-full z-20 mt-2 flex min-w-[17rem] max-w-[min(24rem,calc(100vw-2rem))] flex-col gap-1 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--theme-floating-bg)] p-2 shadow-[var(--shadow-tight)]"
+            className="absolute left-0 top-full z-20 mt-1.5 flex min-w-[11.5rem] max-w-[min(18rem,calc(100vw-2rem))] flex-col gap-0.5 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--theme-floating-bg)] p-1.5 shadow-[var(--shadow-tight)]"
             onKeyDown={(event) => handleNavGroupMenuKeyDown(event, groupKey)}
           >
             {groupRoutes.map((route, index) => renderGroupChildLink(route, groupKey, index, {
