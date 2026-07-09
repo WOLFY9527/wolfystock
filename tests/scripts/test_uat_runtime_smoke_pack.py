@@ -50,6 +50,13 @@ def _local_provenance() -> dict[str, object]:
     }
 
 
+def _auth_status_payload(*, auth_enabled: bool, logged_in: bool = False) -> dict[str, object]:
+    return {
+        "authEnabled": auth_enabled,
+        "loggedIn": logged_in,
+    }
+
+
 def _admin_status_payload() -> dict[str, object]:
     return {
         "buildProvenance": {
@@ -103,10 +110,18 @@ def _surface_readiness_payload() -> dict[str, object]:
     }
 
 
-def _route_responses(base_url: str) -> dict[tuple[str, ...], _FakeResponse]:
+def _route_responses(
+    base_url: str,
+    *,
+    auth_enabled: bool,
+    logged_in: bool = False,
+) -> dict[tuple[str, ...], _FakeResponse]:
     return {
         ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
-        ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": False}),
+        (
+            "GET",
+            f"{base_url}/api/v1/auth/status",
+        ): _FakeResponse(200, payload=_auth_status_payload(auth_enabled=auth_enabled, logged_in=logged_in)),
         ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
         ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
         ("GET", f"{base_url}/api/v1/stocks/AAPL/evidence"): _FakeResponse(200, payload={"items": []}),
@@ -136,7 +151,7 @@ def test_probe_runtime_bundle_accepts_matching_root_asset_and_public_routes() ->
                 text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
             ),
             ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
-            **_route_responses(base_url),
+            **_route_responses(base_url, auth_enabled=True, logged_in=True),
             ("GET", f"{base_url}/api/v1/admin/ops/status"): _FakeResponse(200, payload=_admin_status_payload()),
             ("GET", f"{base_url}/api/v1/admin/ops/surface-readiness"): _FakeResponse(200, payload=_surface_readiness_payload()),
         }
@@ -159,8 +174,24 @@ def test_probe_runtime_bundle_accepts_matching_root_asset_and_public_routes() ->
     assert report["checks"]["runtimeBundle"]["status"] == "PASS"
     assert report["checks"]["publicRoutes"]["status"] == "PASS"
     assert report["checks"]["publicRoutes"]["failingRoutes"] == []
+    assert report["checks"]["runtimeAuthMode"]["mode"] == "auth_enabled"
     assert report["checks"]["authenticatedRoutes"]["status"] == "PASS"
+    assert report["checks"]["authenticatedRoutes"]["expectationMode"] == "authenticated_success_expected"
     assert report["checks"]["authenticatedRoutes"]["failingRoutes"] == []
+    assert report["checks"]["authenticatedRoutes"]["authenticatedSessionRoutes"] == [
+        {
+            "method": "GET",
+            "path": "/api/v1/research/radar",
+            "anonymousHttpStatus": 401,
+            "httpStatus": 200,
+        },
+        {
+            "method": "GET",
+            "path": "/api/v1/scanner/themes",
+            "anonymousHttpStatus": 401,
+            "httpStatus": 200,
+        },
+    ]
     assert report["checks"]["authenticatedRoutes"]["publiclyAvailableRoutes"] == []
     assert report["checks"]["authenticatedRoutes"]["noAuthPolicyMismatchRoutes"] == []
     output = json.dumps(report, ensure_ascii=False, sort_keys=True)
@@ -176,7 +207,7 @@ def test_runtime_bundle_fails_when_served_asset_does_not_match_expected_bundle()
                 text='<html><head><script type="module" crossorigin src="/assets/index-Stale999.js"></script></head></html>',
             ),
             ("GET", f"{base_url}/assets/index-Stale999.js"): _FakeResponse(200, text="console.log('stale');"),
-            **_route_responses(base_url),
+            **_route_responses(base_url, auth_enabled=True),
         }
     )
 
@@ -204,7 +235,7 @@ def test_partial_when_admin_status_json_is_present_but_surface_readiness_is_unve
                 text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
             ),
             ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
-            **_route_responses(base_url),
+            **_route_responses(base_url, auth_enabled=True),
         }
     )
 
@@ -234,7 +265,7 @@ def test_fail_when_live_admin_status_returns_unauthorized() -> None:
                 text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
             ),
             ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
-            **_route_responses(base_url),
+            **_route_responses(base_url, auth_enabled=True, logged_in=True),
             ("GET", f"{base_url}/api/v1/admin/ops/status"): _FakeResponse(401, payload={"error": "unauthorized"}),
             ("GET", f"{base_url}/api/v1/admin/ops/surface-readiness"): _FakeResponse(
                 401,
@@ -268,7 +299,10 @@ def test_unauthenticated_authenticated_routes_are_partial_not_fail() -> None:
             ),
             ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
             ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
-            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": False}),
+            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(
+                200,
+                payload=_auth_status_payload(auth_enabled=True, logged_in=False),
+            ),
             ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/evidence"): _FakeResponse(200, payload={"items": []}),
@@ -294,7 +328,9 @@ def test_unauthenticated_authenticated_routes_are_partial_not_fail() -> None:
     assert report["summaryStatus"] == "PARTIAL"
     assert report["exitCode"] == 1
     assert report["checks"]["publicRoutes"]["status"] == "PASS"
+    assert report["checks"]["runtimeAuthMode"]["mode"] == "auth_enabled"
     assert report["checks"]["authenticatedRoutes"]["status"] == "PARTIAL"
+    assert report["checks"]["authenticatedRoutes"]["expectationMode"] == "unauthenticated_rejection_expected"
     assert report["checks"]["authenticatedRoutes"]["reasonCodes"] == ["authenticated_routes_auth_required"]
     assert report["checks"]["authenticatedRoutes"]["failingRoutes"] == []
     assert report["checks"]["authenticatedRoutes"]["authRequiredRoutes"] == [
@@ -315,6 +351,107 @@ def test_unauthenticated_authenticated_routes_are_partial_not_fail() -> None:
     assert report["checks"]["authenticatedRoutes"]["noAuthPolicyMismatchRoutes"] == []
 
 
+def test_auth_disabled_runtime_treats_open_protected_routes_as_expected() -> None:
+    base_url = "http://127.0.0.1:8000"
+    client = _FakeClient(
+        {
+            ("GET", f"{base_url}/"): _FakeResponse(
+                200,
+                text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
+            ),
+            ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
+            ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
+            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(
+                200,
+                payload=_auth_status_payload(auth_enabled=False, logged_in=False),
+            ),
+            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
+            ("GET", f"{base_url}/api/v1/research/radar"): _FakeResponse(200, payload={"items": []}),
+            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(200, payload={"themes": []}),
+        }
+    )
+
+    report = smoke.run_runtime_smoke(
+        base_url=base_url,
+        client=client,
+        git_head="e2a90b4bd5fd1f84a1e44abde7f2b23da6a16590",
+        local_build_result=smoke.VerificationResult(ok=True, payload=_local_provenance()),
+        admin_status_payload=_admin_status_payload(),
+        surface_readiness_payload=_surface_readiness_payload(),
+        auth_headers=None,
+    )
+
+    assert report["summaryStatus"] == "PASS"
+    assert report["checks"]["runtimeAuthMode"]["mode"] == "auth_disabled"
+    assert report["checks"]["runtimeAuthMode"]["authEnabled"] is False
+    assert report["checks"]["authenticatedRoutes"]["status"] == "PASS"
+    assert report["checks"]["authenticatedRoutes"]["expectationMode"] == "auth_disabled_open"
+    assert report["checks"]["authenticatedRoutes"]["authDisabledOpenRoutes"] == [
+        {
+            "method": "GET",
+            "path": "/api/v1/research/radar",
+            "anonymousHttpStatus": 200,
+            "httpStatus": 200,
+        },
+        {
+            "method": "GET",
+            "path": "/api/v1/scanner/themes",
+            "anonymousHttpStatus": 200,
+            "httpStatus": 200,
+        },
+    ]
+    assert report["checks"]["authenticatedRoutes"]["failingRoutes"] == []
+
+
+def test_auth_disabled_runtime_still_fails_when_protected_route_rejects() -> None:
+    base_url = "http://127.0.0.1:8000"
+    client = _FakeClient(
+        {
+            ("GET", f"{base_url}/"): _FakeResponse(
+                200,
+                text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
+            ),
+            ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
+            ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
+            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(
+                200,
+                payload=_auth_status_payload(auth_enabled=False, logged_in=False),
+            ),
+            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
+            ("GET", f"{base_url}/api/v1/research/radar"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(200, payload={"themes": []}),
+        }
+    )
+
+    report = smoke.run_runtime_smoke(
+        base_url=base_url,
+        client=client,
+        git_head="e2a90b4bd5fd1f84a1e44abde7f2b23da6a16590",
+        local_build_result=smoke.VerificationResult(ok=True, payload=_local_provenance()),
+        admin_status_payload=_admin_status_payload(),
+        surface_readiness_payload=_surface_readiness_payload(),
+        auth_headers=None,
+    )
+
+    assert report["summaryStatus"] == "FAIL"
+    assert report["checks"]["runtimeAuthMode"]["mode"] == "auth_disabled"
+    assert report["checks"]["authenticatedRoutes"]["status"] == "FAIL"
+    assert report["checks"]["authenticatedRoutes"]["reasonCodes"] == [
+        "auth_disabled_route_rejected",
+        "auth_disabled_route_unavailable",
+    ]
+    assert report["checks"]["authenticatedRoutes"]["failingRoutes"] == [
+        {
+            "method": "GET",
+            "path": "/api/v1/research/radar",
+            "anonymousHttpStatus": 401,
+            "httpStatus": 401,
+        }
+    ]
+
+
 def test_true_public_route_failure_still_fails_smoke() -> None:
     base_url = "http://127.0.0.1:8000"
     client = _FakeClient(
@@ -325,7 +462,10 @@ def test_true_public_route_failure_still_fails_smoke() -> None:
             ),
             ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
             ("GET", f"{base_url}/api/health"): _FakeResponse(503, payload={"status": "down"}),
-            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": False}),
+            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(
+                200,
+                payload=_auth_status_payload(auth_enabled=True, logged_in=False),
+            ),
             ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/evidence"): _FakeResponse(200, payload={"items": []}),
@@ -366,7 +506,10 @@ def test_authenticated_routes_pass_with_supplied_auth_headers() -> None:
             ),
             ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
             ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
-            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": True}),
+            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(
+                200,
+                payload=_auth_status_payload(auth_enabled=True, logged_in=True),
+            ),
             ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/evidence"): _FakeResponse(200, payload={"items": []}),
@@ -393,6 +536,7 @@ def test_authenticated_routes_pass_with_supplied_auth_headers() -> None:
 
     assert report["summaryStatus"] == "PASS"
     assert report["checks"]["authenticatedRoutes"]["status"] == "PASS"
+    assert report["checks"]["authenticatedRoutes"]["expectationMode"] == "authenticated_success_expected"
     assert report["checks"]["authenticatedRoutes"]["checkedRoutes"] == [
         {
             "method": "GET",
@@ -419,7 +563,10 @@ def test_authenticated_routes_fail_when_auth_supplied_but_route_unavailable() ->
             ),
             ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
             ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
-            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": True}),
+            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(
+                200,
+                payload=_auth_status_payload(auth_enabled=True, logged_in=True),
+            ),
             ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
             ("GET", f"{base_url}/api/v1/stocks/AAPL/evidence"): _FakeResponse(200, payload={"items": []}),
@@ -465,7 +612,7 @@ def test_authenticated_routes_fail_when_noauth_request_is_publicly_available() -
                 text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
             ),
             ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
-            **_route_responses(base_url),
+            **_route_responses(base_url, auth_enabled=True),
             ("GET", f"{base_url}/api/v1/research/radar"): _FakeResponse(200, payload={"items": []}),
         }
     )
@@ -500,7 +647,7 @@ def test_authenticated_routes_fail_when_noauth_request_is_rate_limited() -> None
                 text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
             ),
             ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
-            **_route_responses(base_url),
+            **_route_responses(base_url, auth_enabled=True),
             ("GET", f"{base_url}/api/v1/research/radar"): _FakeResponse(429, payload={"error": "rate_limited"}),
         }
     )
@@ -534,6 +681,41 @@ def test_verify_surface_readiness_payload_accepts_bounded_contract() -> None:
     assert result.payload["metadata"]["contract"] == "backend_surface_contract_parity_v1"
 
 
+def test_runtime_auth_mode_fails_closed_when_auth_status_payload_is_ambiguous() -> None:
+    base_url = "http://127.0.0.1:8000"
+    client = _FakeClient(
+        {
+            ("GET", f"{base_url}/"): _FakeResponse(
+                200,
+                text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
+            ),
+            ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
+            ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
+            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"loggedIn": False}),
+            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
+            ("GET", f"{base_url}/api/v1/research/radar"): _FakeResponse(200, payload={"items": []}),
+            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(200, payload={"themes": []}),
+        }
+    )
+
+    report = smoke.run_runtime_smoke(
+        base_url=base_url,
+        client=client,
+        git_head="e2a90b4bd5fd1f84a1e44abde7f2b23da6a16590",
+        local_build_result=smoke.VerificationResult(ok=True, payload=_local_provenance()),
+        admin_status_payload=_admin_status_payload(),
+        surface_readiness_payload=_surface_readiness_payload(),
+        auth_headers=None,
+    )
+
+    assert report["summaryStatus"] == "FAIL"
+    assert report["checks"]["runtimeAuthMode"]["status"] == "FAIL"
+    assert report["checks"]["runtimeAuthMode"]["reasonCodes"] == ["runtime_auth_mode_missing"]
+    assert report["checks"]["authenticatedRoutes"]["status"] == "FAIL"
+    assert report["checks"]["authenticatedRoutes"]["reasonCodes"] == ["runtime_auth_mode_unverified"]
+
+
 def test_main_supports_json_stdout_with_admin_status_file(monkeypatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     status_path = tmp_path / "admin-status.json"
     status_path.write_text(json.dumps(_admin_status_payload()), encoding="utf-8")
@@ -555,7 +737,7 @@ def test_main_supports_json_stdout_with_admin_status_file(monkeypatch, tmp_path:
                     text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
                 ),
                 ("GET", "http://127.0.0.1:8000/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="ok"),
-                **_route_responses("http://127.0.0.1:8000"),
+                **_route_responses("http://127.0.0.1:8000", auth_enabled=True),
             }
         ),
     )
@@ -566,6 +748,7 @@ def test_main_supports_json_stdout_with_admin_status_file(monkeypatch, tmp_path:
     payload = json.loads(capsys.readouterr().out)
     assert payload["summaryStatus"] == "PARTIAL"
     assert payload["checks"]["adminOpsStatus"]["status"] == "PASS"
+    assert payload["checks"]["runtimeAuthMode"]["mode"] == "auth_enabled"
     assert payload["checks"]["authenticatedRoutes"]["status"] == "PARTIAL"
 
 

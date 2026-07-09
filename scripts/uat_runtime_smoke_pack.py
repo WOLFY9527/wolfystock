@@ -234,17 +234,87 @@ def _verify_public_routes(*, base_url: str, client: Any) -> dict[str, Any]:
     }
 
 
+def _probe_runtime_auth_mode(*, base_url: str, client: Any) -> dict[str, Any]:
+    status_code, payload = _fetch_json(
+        client,
+        method="GET",
+        url=_join_url(base_url, "/api/v1/auth/status"),
+    )
+    if status_code != 200 or payload is None:
+        return {
+            "status": "FAIL",
+            "reasonCodes": ["runtime_auth_status_unavailable"],
+            "source": "live",
+            "httpStatus": status_code,
+            "mode": None,
+            "authEnabled": None,
+            "loggedIn": None,
+        }
+
+    auth_enabled = payload.get("authEnabled")
+    logged_in = payload.get("loggedIn")
+    if not isinstance(auth_enabled, bool):
+        return {
+            "status": "FAIL",
+            "reasonCodes": ["runtime_auth_mode_missing"],
+            "source": "live",
+            "httpStatus": status_code,
+            "mode": None,
+            "authEnabled": auth_enabled,
+            "loggedIn": logged_in if isinstance(logged_in, bool) else None,
+        }
+
+    return {
+        "status": "PASS",
+        "reasonCodes": [],
+        "source": "live",
+        "httpStatus": status_code,
+        "mode": "auth_enabled" if auth_enabled else "auth_disabled",
+        "authEnabled": auth_enabled,
+        "loggedIn": logged_in if isinstance(logged_in, bool) else None,
+    }
+
+
 def _verify_authenticated_routes(
     *,
     base_url: str,
     client: Any,
+    runtime_auth_mode: dict[str, Any],
     auth_headers: dict[str, str] | None,
 ) -> dict[str, Any]:
     checked_routes: list[dict[str, Any]] = []
     failing_routes: list[dict[str, Any]] = []
     auth_required_routes: list[dict[str, Any]] = []
+    auth_disabled_open_routes: list[dict[str, Any]] = []
+    authenticated_session_routes: list[dict[str, Any]] = []
     publicly_available_routes: list[dict[str, Any]] = []
     noauth_policy_mismatch_routes: list[dict[str, Any]] = []
+    runtime_mode = str(runtime_auth_mode.get("mode") or "").strip()
+    runtime_mode_ok = runtime_auth_mode.get("status") == "PASS" and runtime_mode in {"auth_enabled", "auth_disabled"}
+    expectation_mode = "unknown"
+
+    if not runtime_mode_ok:
+        return {
+            "status": "FAIL",
+            "reasonCodes": ["runtime_auth_mode_unverified"],
+            "expectationMode": expectation_mode,
+            "runtimeAuthMode": runtime_mode or None,
+            "checkedRoutes": checked_routes,
+            "failingRoutes": failing_routes,
+            "authRequiredRoutes": auth_required_routes,
+            "authDisabledOpenRoutes": auth_disabled_open_routes,
+            "authenticatedSessionRoutes": authenticated_session_routes,
+            "publiclyAvailableRoutes": publicly_available_routes,
+            "noAuthPolicyMismatchRoutes": noauth_policy_mismatch_routes,
+        }
+
+    if runtime_mode == "auth_disabled":
+        expectation_mode = "auth_disabled_open"
+    elif auth_headers:
+        expectation_mode = "authenticated_success_expected"
+    else:
+        expectation_mode = "unauthenticated_rejection_expected"
+
     for method, path in AUTHENTICATED_ROUTE_SPECS:
         url = _join_url(base_url, path)
         anonymous_response = client.request(method, url)
@@ -254,14 +324,14 @@ def _verify_authenticated_routes(
             "path": path,
             "anonymousHttpStatus": anonymous_status_code,
         }
-        anonymous_policy_mismatch = anonymous_status_code not in {401, 403}
-        if anonymous_policy_mismatch:
+        anonymous_policy_mismatch = runtime_mode == "auth_enabled" and anonymous_status_code not in {401, 403}
+        if runtime_mode == "auth_enabled" and anonymous_policy_mismatch:
             anonymous_route_result = {"method": method, "path": path, "httpStatus": anonymous_status_code}
             noauth_policy_mismatch_routes.append(anonymous_route_result)
             if _is_success_status(anonymous_status_code):
                 publicly_available_routes.append(anonymous_route_result)
 
-        if auth_headers:
+        if runtime_mode == "auth_enabled" and auth_headers:
             response = client.request(method, url, headers=auth_headers)
             status_code = int(response.status_code)
             route_result["httpStatus"] = status_code
@@ -270,16 +340,37 @@ def _verify_authenticated_routes(
             route_result["httpStatus"] = status_code
 
         checked_routes.append(route_result)
-        if _is_success_status(status_code):
+        if runtime_mode == "auth_disabled":
+            if _is_success_status(status_code):
+                auth_disabled_open_routes.append(route_result)
+                continue
+            failing_routes.append(route_result)
+            continue
+
+        if auth_headers and _is_success_status(status_code):
+            authenticated_session_routes.append(route_result)
             continue
         if not auth_headers and status_code in {401, 403}:
             auth_required_routes.append(route_result)
             continue
         if not auth_headers and anonymous_policy_mismatch:
             continue
+        if _is_success_status(status_code):
+            continue
         failing_routes.append(route_result)
 
-    if noauth_policy_mismatch_routes or failing_routes:
+    if runtime_mode == "auth_disabled":
+        if failing_routes:
+            reason_codes = []
+            if any(int(route.get("httpStatus") or 0) in {401, 403} for route in failing_routes):
+                reason_codes.append("auth_disabled_route_rejected")
+            if any(not _is_success_status(int(route.get("httpStatus") or 0)) for route in failing_routes):
+                reason_codes.append("auth_disabled_route_unavailable")
+            status = "FAIL"
+        else:
+            reason_codes = []
+            status = "PASS"
+    elif noauth_policy_mismatch_routes or failing_routes:
         status = "FAIL"
         reason_codes = []
         if publicly_available_routes:
@@ -298,9 +389,13 @@ def _verify_authenticated_routes(
     return {
         "status": status,
         "reasonCodes": reason_codes,
+        "expectationMode": expectation_mode,
+        "runtimeAuthMode": runtime_mode,
         "checkedRoutes": checked_routes,
         "failingRoutes": failing_routes,
         "authRequiredRoutes": auth_required_routes,
+        "authDisabledOpenRoutes": auth_disabled_open_routes,
+        "authenticatedSessionRoutes": authenticated_session_routes,
         "publiclyAvailableRoutes": publicly_available_routes,
         "noAuthPolicyMismatchRoutes": noauth_policy_mismatch_routes,
     }
@@ -437,11 +532,22 @@ def run_runtime_smoke(
 
     runtime_bundle_check = {"status": "FAIL", "reasonCodes": ["local_build_unverified"]}
     public_routes_check = {"status": "FAIL", "reasonCodes": ["local_build_unverified"], "failingRoutes": []}
+    runtime_auth_mode_check = {
+        "status": "FAIL",
+        "reasonCodes": ["local_build_unverified"],
+        "mode": None,
+        "authEnabled": None,
+        "loggedIn": None,
+    }
     authenticated_routes_check = {
         "status": "FAIL",
         "reasonCodes": ["local_build_unverified"],
+        "expectationMode": "unknown",
+        "runtimeAuthMode": None,
         "failingRoutes": [],
         "authRequiredRoutes": [],
+        "authDisabledOpenRoutes": [],
+        "authenticatedSessionRoutes": [],
         "publiclyAvailableRoutes": [],
         "noAuthPolicyMismatchRoutes": [],
     }
@@ -455,9 +561,11 @@ def run_runtime_smoke(
             local_payload=local_build_result.payload,
         )
         public_routes_check = _verify_public_routes(base_url=base_url, client=client)
+        runtime_auth_mode_check = _probe_runtime_auth_mode(base_url=base_url, client=client)
         authenticated_routes_check = _verify_authenticated_routes(
             base_url=base_url,
             client=client,
+            runtime_auth_mode=runtime_auth_mode_check,
             auth_headers=auth_headers,
         )
         admin_check = _evaluate_admin_status(
@@ -478,6 +586,7 @@ def run_runtime_smoke(
         "localBuild": local_build_check,
         "runtimeBundle": runtime_bundle_check,
         "publicRoutes": public_routes_check,
+        "runtimeAuthMode": runtime_auth_mode_check,
         "authenticatedRoutes": authenticated_routes_check,
         "adminOpsStatus": admin_check,
         "surfaceReadiness": surface_check,
@@ -513,9 +622,21 @@ def _print_human_summary(report: dict[str, Any]) -> None:
     print(f"UAT runtime smoke: {report['summaryStatus']}")
     print(f"Base URL: {report['baseUrl']}")
     print(f"Git HEAD: {report.get('gitHead') or 'unknown'}")
-    for key in ("localBuild", "runtimeBundle", "publicRoutes", "authenticatedRoutes", "adminOpsStatus", "surfaceReadiness"):
+    for key in (
+        "localBuild",
+        "runtimeBundle",
+        "publicRoutes",
+        "runtimeAuthMode",
+        "authenticatedRoutes",
+        "adminOpsStatus",
+        "surfaceReadiness",
+    ):
         check = report["checks"][key]
         reason_codes = ", ".join(check.get("reasonCodes") or []) or "none"
+        if key == "runtimeAuthMode":
+            mode = check.get("mode") or "unknown"
+            print(f"- {key}: {check['status']} ({reason_codes}; mode={mode})")
+            continue
         print(f"- {key}: {check['status']} ({reason_codes})")
 
 
