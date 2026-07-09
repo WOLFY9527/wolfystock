@@ -2941,7 +2941,8 @@ export const marketApi = {
 export type MarketTemperatureTrend = 'improving' | 'stable' | 'cooling' | 'rising' | 'falling';
 
 export type MarketTemperatureScore = {
-  value: number;
+  /** Missing score is unknown evidence, not mid-scale 50. Observed 0 remains 0. */
+  value: number | null;
   label: string;
   trend: MarketTemperatureTrend;
   description: string;
@@ -3249,17 +3250,59 @@ export type MarketTemperatureResponse = {
 };
 
 const DEFAULT_MARKET_TEMPERATURE_SCORE: MarketTemperatureScore = {
-  value: 50,
+  // Missing temperature score must not materialize mid-scale 50 as evidence.
+  value: null,
   label: '数据不足',
   trend: 'stable',
   description: '数据待补',
 };
 
-function normalizeMarketTemperatureScore(score?: Partial<MarketTemperatureScore>): MarketTemperatureScore {
+function normalizeMarketTemperatureScore(score?: Partial<MarketTemperatureScore> | null): MarketTemperatureScore {
+  const rawValue = score?.value;
+  const value = typeof rawValue === 'number' && Number.isFinite(rawValue) ? rawValue : null;
   return {
-    ...DEFAULT_MARKET_TEMPERATURE_SCORE,
-    ...score,
+    value,
+    label: score?.label || DEFAULT_MARKET_TEMPERATURE_SCORE.label,
+    trend: score?.trend || DEFAULT_MARKET_TEMPERATURE_SCORE.trend,
+    description: score?.description || DEFAULT_MARKET_TEMPERATURE_SCORE.description,
   };
+}
+
+/**
+ * Fail-closed reliability gate for market temperature evidence.
+ * Null/missing confidence or input counts are not threshold passes.
+ */
+export function isMarketTemperatureReliable(data: Pick<
+  MarketTemperatureResponse,
+  | 'temperatureAvailable'
+  | 'conclusionAllowed'
+  | 'isReliable'
+  | 'confidence'
+  | 'reliableInputCount'
+  | 'requiredReliableInputCount'
+>): boolean {
+  if (
+    data.temperatureAvailable === false
+    || data.conclusionAllowed === false
+    || data.isReliable === false
+  ) {
+    return false;
+  }
+
+  if (typeof data.confidence !== 'number' || !Number.isFinite(data.confidence) || data.confidence < 0.45) {
+    return false;
+  }
+
+  const requiredReliableInputCount = data.requiredReliableInputCount ?? 3;
+  if (
+    typeof data.reliableInputCount !== 'number'
+    || !Number.isFinite(data.reliableInputCount)
+    || data.reliableInputCount < requiredReliableInputCount
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 function normalizeMarketRegimeEvidenceItem(
@@ -3604,9 +3647,14 @@ export function normalizeMarketTemperatureResponse(
     && scores.macroPressure
     && scores.liquidity,
   );
-  const inferredReliable = payload?.confidence != null
-    ? payload.confidence >= 0.45 && (payload.reliableInputCount == null || payload.reliableInputCount >= 3)
-    : false;
+  // Fail closed: missing confidence or sample coverage is not sufficient reliability evidence.
+  const requiredReliableInputCount = payload?.requiredReliableInputCount ?? 3;
+  const inferredReliable = typeof payload?.confidence === 'number'
+    && Number.isFinite(payload.confidence)
+    && payload.confidence >= 0.45
+    && typeof payload?.reliableInputCount === 'number'
+    && Number.isFinite(payload.reliableInputCount)
+    && payload.reliableInputCount >= requiredReliableInputCount;
   const temperatureAvailable = payload?.temperatureAvailable ?? payload?.isReliable ?? inferredReliable;
   const conclusionAllowed = payload?.conclusionAllowed ?? temperatureAvailable;
   const isReliable = (

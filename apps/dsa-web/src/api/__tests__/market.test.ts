@@ -655,6 +655,110 @@ describe('market temperature evidence normalization', () => {
     expect(payload.asOf).toBeUndefined();
   });
 
+  it('does not materialize mid-scale 50 when temperature score evidence is missing', () => {
+    const payload = marketModule.normalizeMarketTemperatureResponse({
+      source: 'unavailable',
+      temperatureAvailable: false,
+      conclusionAllowed: false,
+      isReliable: false,
+      scores: undefined,
+    });
+
+    expect(payload.scores.overall.value).toBeNull();
+    expect(payload.scores.usRiskAppetite.value).toBeNull();
+    expect(payload.scores.cnMoneyEffect.value).toBeNull();
+    expect(payload.scores.macroPressure.value).toBeNull();
+    expect(payload.scores.liquidity.value).toBeNull();
+    expect(payload.scores.overall.label).toBe('数据不足');
+    expect(payload.temperatureAvailable).toBe(false);
+    expect(payload.isReliable).toBe(false);
+  });
+
+  it('preserves observed temperature score zero rather than treating it as missing', () => {
+    const payload = marketModule.normalizeMarketTemperatureResponse({
+      source: 'computed',
+      updatedAt: '2026-06-01T00:00:00Z',
+      temperatureAvailable: true,
+      isReliable: true,
+      confidence: 0.8,
+      reliableInputCount: 5,
+      scores: {
+        overall: { value: 0, label: 'extreme cold', trend: 'cooling', description: 'observed zero' },
+        usRiskAppetite: { value: 0, label: 'extreme cold', trend: 'cooling', description: 'observed zero' },
+        cnMoneyEffect: { value: 0, label: 'extreme cold', trend: 'cooling', description: 'observed zero' },
+        macroPressure: { value: 0, label: 'extreme cold', trend: 'cooling', description: 'observed zero' },
+        liquidity: { value: 0, label: 'extreme cold', trend: 'cooling', description: 'observed zero' },
+      },
+    });
+
+    expect(payload.scores.overall.value).toBe(0);
+    expect(payload.scores.liquidity.value).toBe(0);
+  });
+
+  it('fails closed when reliability evidence is null or incomplete', () => {
+    expect(marketModule.isMarketTemperatureReliable({
+      temperatureAvailable: true,
+      conclusionAllowed: true,
+      isReliable: true,
+      confidence: null as unknown as undefined,
+      reliableInputCount: 5,
+    })).toBe(false);
+
+    expect(marketModule.isMarketTemperatureReliable({
+      temperatureAvailable: true,
+      conclusionAllowed: true,
+      isReliable: true,
+      confidence: 0.9,
+      reliableInputCount: undefined,
+    })).toBe(false);
+
+    expect(marketModule.isMarketTemperatureReliable({
+      temperatureAvailable: true,
+      conclusionAllowed: true,
+      isReliable: true,
+      confidence: 0.9,
+      reliableInputCount: 2,
+      requiredReliableInputCount: 3,
+    })).toBe(false);
+
+    expect(marketModule.isMarketTemperatureReliable({
+      temperatureAvailable: true,
+      conclusionAllowed: true,
+      isReliable: true,
+      confidence: 0.9,
+      reliableInputCount: 4,
+      requiredReliableInputCount: 3,
+    })).toBe(true);
+
+    expect(marketModule.isMarketTemperatureReliable({
+      temperatureAvailable: false,
+      conclusionAllowed: true,
+      isReliable: true,
+      confidence: 0.9,
+      reliableInputCount: 5,
+    })).toBe(false);
+  });
+
+  it('does not infer temperature reliability from confidence alone when input count is missing', () => {
+    const payload = marketModule.normalizeMarketTemperatureResponse({
+      source: 'computed',
+      updatedAt: '2026-06-01T00:00:00Z',
+      confidence: 0.9,
+      // reliableInputCount intentionally omitted
+      scores: {
+        overall: { value: 62, label: 'warm', trend: 'stable', description: 'warm' },
+        usRiskAppetite: { value: 62, label: 'warm', trend: 'stable', description: 'warm' },
+        cnMoneyEffect: { value: 62, label: 'warm', trend: 'stable', description: 'warm' },
+        macroPressure: { value: 40, label: 'low', trend: 'stable', description: 'low' },
+        liquidity: { value: 55, label: 'ok', trend: 'stable', description: 'ok' },
+      },
+    });
+
+    expect(payload.isReliable).toBe(false);
+    expect(payload.temperatureAvailable).toBe(false);
+    expect(payload.conclusionAllowed).toBe(false);
+  });
+
   it('preserves missing actionability confidence as unknown rather than zero', () => {
     const payload = marketModule.normalizeMarketTemperatureResponse({
       source: 'computed',
