@@ -316,6 +316,39 @@ class MarketCryptoApiTestCase(unittest.TestCase):
         self.assertEqual(payload["items"][0]["trend"], [70000.0, 71000.0])
         self.assertEqual(payload["items"][0]["hover_details"][0], "24H +1.50%")
 
+    def test_fetch_crypto_market_snapshot_preserves_missing_price_as_unavailable(self) -> None:
+        service = MarketOverviewService()
+        updated_at = datetime(2026, 4, 30, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+
+        with (
+            patch("src.services.market_overview_service.fetch_binance_ticker_snapshot") as ticker_fetch,
+            patch.object(service, "_fetch_binance_kline_histories", return_value={}),
+            patch.object(service, "_fetch_binance_funding_items", return_value=[]),
+            patch("src.services.market_overview_service._now_iso", return_value=updated_at),
+        ):
+            ticker_fetch.return_value = [
+                {
+                    "symbol": "BTCUSDT",
+                    "lastPrice": None,
+                    "priceChangePercent": None,
+                    "quoteVolume": None,
+                    "highPrice": None,
+                    "lowPrice": None,
+                }
+            ]
+
+            payload = service._fetch_crypto_market_snapshot()
+
+        item = payload["items"][0]
+        self.assertEqual(item["symbol"], "BTC")
+        self.assertIsNone(item["price"])
+        self.assertIsNone(item["value"])
+        self.assertIsNone(item["change"])
+        self.assertEqual(item["trend"], [])
+        self.assertTrue(item["isUnavailable"])
+        self.assertEqual(item["freshness"], "unavailable")
+        self.assertEqual(item["unavailableReason"], "missing_last_price")
+
     def test_get_crypto_service_owns_public_payload_after_binance_transport_calls(self) -> None:
         service = MarketOverviewService()
         ticker_rows = [

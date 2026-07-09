@@ -6203,15 +6203,38 @@ class MarketOverviewService:
             })
             normalized["sourceFreshnessEvidence"] = source_evidence
         normalized = normalize_vix_quote_metadata(normalized)
+        volatility_snapshot = normalized.get("volatilityAuthoritySnapshot")
+        final_freshness = normalized_freshness
+        final_is_proxy = bool(proxy_source)
+        if isinstance(volatility_snapshot, Mapping):
+            final_freshness = self._normalize_market_overview_freshness_state(normalized.get("freshness"))
+            normalized["freshness"] = final_freshness
+            normalized["freshnessState"] = final_freshness
+            final_is_proxy = bool(
+                proxy_source
+                or normalized.get("isProxy")
+                or normalized.get("sourceAuthorityState") == "proxy"
+                or volatility_snapshot.get("proxyFallback")
+            )
+        final_degradation_reason = self._degradation_reason_for_freshness(
+            normalized,
+            final_freshness,
+            is_proxy=final_is_proxy,
+        )
+        normalized["sourceConfidence"] = self._source_confidence_for_freshness(
+            normalized,
+            final_freshness,
+            is_proxy=final_is_proxy,
+        )
         normalized = {**normalized, **self._source_trust_meta(normalized)}
         normalized = {**normalized, **self._source_activation_meta(normalized)}
-        if degradation_reason:
-            normalized["degradationReason"] = degradation_reason
+        if final_degradation_reason:
+            normalized["degradationReason"] = final_degradation_reason
         normalized["providerFreshness"] = self._consumer_provider_freshness(
             normalized,
-            freshness=normalized_freshness,
-            is_proxy=proxy_source,
-            degradation_reason=degradation_reason,
+            freshness=final_freshness,
+            is_proxy=final_is_proxy,
+            degradation_reason=final_degradation_reason,
         )
         return normalized
 
@@ -6315,19 +6338,22 @@ class MarketOverviewService:
         for row in ticker_rows:
             symbol = str(row.get("symbol") or "")
             short_symbol, label = labels[symbol]
-            price = self._clean_number(row.get("lastPrice")) or 0.0
-            change = self._clean_number(row.get("priceChangePercent")) or 0.0
+            price = self._clean_number(row.get("lastPrice"))
+            change = self._clean_number(row.get("priceChangePercent"))
             quote_volume = self._clean_number(row.get("quoteVolume"))
             high = self._clean_number(row.get("highPrice"))
             low = self._clean_number(row.get("lowPrice"))
             range_percent = self._percent_change(low, high) if high is not None and low is not None else None
-            trend = history_map.get(symbol) or [price]
+            missing_price = price is None
+            trend = history_map.get(symbol) or ([] if missing_price else [price])
             week_change = self._percent_change(trend[0], trend[-1]) if len(trend) > 1 else None
-            items.append({
+            item = {
                 "symbol": short_symbol,
                 "label": label,
-                "price": round(price, 2),
-                "change": round(change, 2),
+                "price": round(price, 2) if price is not None else None,
+                "value": round(price, 2) if price is not None else None,
+                "change": round(change, 2) if change is not None else None,
+                "changePercent": round(change, 2) if change is not None else None,
                 "change_text": None,
                 "trend": [round(value, 2) for value in trend],
                 "hover_details": [
@@ -6341,7 +6367,14 @@ class MarketOverviewService:
                 "source": "binance",
                 "last_update": last_update,
                 "error": None,
-            })
+            }
+            if missing_price:
+                item.update({
+                    "freshness": "unavailable",
+                    "isUnavailable": True,
+                    "unavailableReason": "missing_last_price",
+                })
+            items.append(item)
         funding_items = self._fetch_binance_funding_items(labels, last_update)
         items.extend(funding_items)
         funding_symbols = {item.get("symbol") for item in funding_items}
