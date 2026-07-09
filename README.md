@@ -79,16 +79,28 @@ npm run build
 
 ## Validation
 
-- Backend: `./scripts/ci_gate.sh`, or at minimum
+> Shell note: commands using `./scripts/*.sh` and `$(git rev-parse HEAD)`
+> are POSIX-shell (bash/sh) syntax. On Windows run them from Git Bash, WSL,
+> or any shell that provides a POSIX `sh`, e.g. `bash scripts/ci_gate.sh`.
+> PowerShell uses the same `$(...)` subexpression syntax for
+> `git rev-parse HEAD`, so the UAT commands below also work in PowerShell.
+
+- Backend (POSIX shell): `./scripts/ci_gate.sh`, or at minimum
   `python -m py_compile <changed_python_files>` plus focused tests.
 - Web: `cd apps/dsa-web && npm ci && npm run lint && npm run build`.
 - Desktop: build Web first, then build the Electron app when feasible.
 - AI/docs governance: `python scripts/build_ai_project_manual.py --check` and
   `python scripts/check_ai_assets.py`.
 
-Local UAT runtime:
+Local UAT runtime (POSIX shell / Git Bash):
 
 ```bash
+python scripts/uat_runtime_harness.py --expected-sha "$(git rev-parse HEAD)"
+```
+
+Local UAT runtime (PowerShell):
+
+```powershell
 python scripts/uat_runtime_harness.py --expected-sha "$(git rev-parse HEAD)"
 ```
 
@@ -111,6 +123,12 @@ read-only machine-readable preflight against the run evidence:
 python scripts/uat_runtime_harness.py --preflight --expected-sha "$(git rev-parse HEAD)" --evidence-path output/runtime-verification/<run-id>-evidence.json --json
 ```
 
+PowerShell equivalent for the preflight:
+
+```powershell
+python scripts/uat_runtime_harness.py --preflight --expected-sha "$(git rev-parse HEAD)" --evidence-path output/runtime-verification/<run-id>-evidence.json --json
+```
+
 The preflight checks evidence status, SHA, PID liveness, PID port ownership,
 CWD, served asset identity, direct no-proxy HTTP, run start timestamp, and the
 run log path. Lifecycle cleanup is also evidence-bound:
@@ -125,6 +143,12 @@ and never kills unrelated listeners or browser processes.
 To seed deterministic non-production consumer test accounts, opt in explicitly:
 
 ```bash
+python scripts/uat_runtime_harness.py --expected-sha "$(git rev-parse HEAD)" --prepare-uat-accounts
+```
+
+PowerShell equivalent for account seeding:
+
+```powershell
 python scripts/uat_runtime_harness.py --expected-sha "$(git rev-parse HEAD)" --prepare-uat-accounts
 ```
 

@@ -78,6 +78,10 @@ python scripts/build_ai_project_manual.py --check
 python scripts/check_ai_assets.py
 ```
 
+> Shell 说明：`scripts/*.sh` 与 `$(git rev-parse HEAD)` 是 POSIX shell
+> （bash/sh）语法。Windows 请在 Git Bash、WSL 或提供 POSIX `sh` 的shell 中运行，
+> 例如 `bash scripts/ci_gate.sh`。PowerShell 同样支持 `$(...)` 子表达式语法。
+
 ## AI 协作资产
 
 - `CLAUDE.md` 必须保持为指向 `AGENTS.md` 的软链接。
