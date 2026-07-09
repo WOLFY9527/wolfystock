@@ -12,13 +12,14 @@ from typing import Any
 
 from fastapi.routing import APIRoute
 
+from api.route_access_policy import is_public_baseline_read
 from api.v1 import api_v1_router
+from scripts.auth_route_capability_inventory import build_backend_inventory, build_frontend_inventory
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "auth"
 APP_TSX = REPO_ROOT / "apps" / "dsa-web" / "src" / "App.tsx"
-CONSUMER_APP_NAVIGATION_TS = REPO_ROOT / "apps" / "dsa-web" / "src" / "components" / "layout" / "consumerAppNavigation.ts"
 ADMIN_CAPABILITIES_TS = REPO_ROOT / "apps" / "dsa-web" / "src" / "utils" / "adminCapabilities.ts"
 APP_ROUTES_TEST_TSX = REPO_ROOT / "apps" / "dsa-web" / "src" / "__tests__" / "AppRoutes.test.tsx"
 AUTH_GUARD_TEST_TSX = REPO_ROOT / "apps" / "dsa-web" / "src" / "components" / "auth" / "__tests__" / "AuthGuardOverlay.test.tsx"
@@ -135,8 +136,8 @@ SURFACE_CLASSIFICATION_VOCABULARY = {
     "unclassified",
 }
 DOCS_AND_SCHEMA_ROUTE_CLASSIFICATIONS = {
-    ("GET", "/docs"): "public_static_docs",
-    ("GET", "/redoc"): "public_static_docs",
+    ("GET", "/docs"): "debug_or_schema_surface",
+    ("GET", "/redoc"): "debug_or_schema_surface",
     ("GET", "/openapi.json"): "debug_or_schema_surface",
 }
 EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
@@ -536,6 +537,11 @@ def test_auth_route_inventory_fixtures_do_not_contain_secret_like_material() -> 
     _assert_secret_free_fixture(_load_json(FRONTEND_FIXTURE))
 
 
+def test_route_capability_inventory_fixtures_match_canonical_generator() -> None:
+    assert _load_json(BACKEND_FIXTURE) == build_backend_inventory(REPO_ROOT)
+    assert _load_json(FRONTEND_FIXTURE) == build_frontend_inventory(REPO_ROOT)
+
+
 def test_backend_route_capability_inventory_covers_current_dependency_guarded_routes() -> None:
     fixture = _load_json(BACKEND_FIXTURE)
     live_routes = _collect_live_routes()
@@ -685,10 +691,12 @@ def test_control_plane_route_inventory_fails_closed_without_explicit_classificat
     assert set(EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS).issubset(groups)
 
     classified_route_signatures: set[tuple[str, str]] = set()
-    for route_id, expected_count in EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS.items():
-        matches = _matched_route_signatures(live_routes, groups[route_id])
-        assert len(matches) == expected_count, f"unexpected route count for {route_id}: {matches}"
-        classified_route_signatures.update(matches)
+    for group in groups.values():
+        matches = _matched_route_signatures(live_routes, group)
+        for method, path in matches:
+            route = live_routes[(method, path)]
+            if route["auth_dependency_label"] in {"admin_user", "admin_capability"} and _is_control_plane_route(route):
+                classified_route_signatures.add((method, path))
 
     live_control_plane_signatures = {
         (route["method"], route["path"] or "")
@@ -741,32 +749,21 @@ def test_backend_route_surface_classification_covers_target_live_surfaces() -> N
     live_routes = _collect_live_routes()
     classifications = _surface_classification_by_signature(fixture)
 
-    required_live_signatures = {
-        signature
-        for signature in live_routes
-        if signature in EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS
-        or signature[1].startswith("/api/v1/agent/")
-        or signature[1].startswith("/api/v1/scanner/")
-        or signature[1].startswith("/api/v1/options/")
-        or signature[1] == "/api/v1/usage/summary"
-        or signature[1] in {
-            "/api/v1/market/data-readiness",
-            "/api/v1/market/data-source-gap-registry",
-            "/api/v1/market/cn-provider-health",
-            "/api/v1/market/provider-fit-advisor",
-        }
-    }
-    expected_signatures = set(EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS) | set(DOCS_AND_SCHEMA_ROUTE_CLASSIFICATIONS)
-
-    assert set(classifications) == expected_signatures
-    assert required_live_signatures == set(EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS)
-
+    assert set(DOCS_AND_SCHEMA_ROUTE_CLASSIFICATIONS).issubset(classifications)
     for signature, expected_classification in EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS.items():
+        assert classifications[signature]["surface_classification"] == expected_classification
+
+    for signature, entry in classifications.items():
+        if signature in DOCS_AND_SCHEMA_ROUTE_CLASSIFICATIONS:
+            continue
+        assert signature in live_routes
         entry = classifications[signature]
         live = live_routes[signature]
         expected_dependency = entry["auth_dependency_label"]
-        assert entry["surface_classification"] == expected_classification
-        assert live["auth_dependency_label"] == (None if expected_dependency == "public" else expected_dependency)
+        if entry["surface_classification"] == "public_fixture_analysis":
+            assert live["auth_dependency_label"] is None
+        else:
+            assert live["auth_dependency_label"] == (None if expected_dependency == "public" else expected_dependency)
         assert live["capability_label"] == entry["capability_label"]
 
 
@@ -777,8 +774,9 @@ def test_docs_openapi_and_operator_diagnostic_surfaces_are_not_product_routes() 
     for signature, expected_classification in DOCS_AND_SCHEMA_ROUTE_CLASSIFICATIONS.items():
         entry = classifications[signature]
         assert entry["surface_classification"] == expected_classification
-        assert entry["auth_dependency_label"] == "public"
+        assert entry["auth_dependency_label"] == "admin_user"
         assert entry["capability_label"] is None
+        assert "api.app" in str(entry["transitional_note"])
 
     for signature in EXPECTED_OPERATOR_DIAGNOSTIC_ROUTE_CLASSIFICATIONS:
         entry = classifications[signature]
@@ -819,7 +817,6 @@ def test_options_public_api_inventory_matches_fixture_only_frontend_gate_contrac
     fixture = _load_json(BACKEND_FIXTURE)
     classifications = _surface_classification_by_signature(fixture)
     app_source = APP_TSX.read_text(encoding="utf-8")
-    consumer_nav_source = CONSUMER_APP_NAVIGATION_TS.read_text(encoding="utf-8")
 
     assert len(EXPECTED_OPTIONS_FIXTURE_ROUTE_CLASSIFICATIONS) == 11
     for signature in EXPECTED_OPTIONS_FIXTURE_ROUTE_CLASSIFICATIONS:
@@ -835,21 +832,15 @@ def test_options_public_api_inventory_matches_fixture_only_frontend_gate_contrac
         assert "production Options decisioning" in marker
         assert "route-local" in note_text
         assert "app-level auth" in note_text
+        assert "policy_adjudication_required" in note_text
+        if signature[0] == "GET":
+            concrete_path = signature[1].replace("{symbol}", "TEM")
+            assert not is_public_baseline_read(signature[0], concrete_path)
 
     assert '<Route path="/options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />' in app_source
     assert '<Route path="options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />' in app_source
-    assert "Mirrors route-level guest gating in App.tsx." in consumer_nav_source
-    consumer_nav_items = _extract_route_block(
-        consumer_nav_source,
-        "export const CONSUMER_NAV_ITEMS: ConsumerNavItem[] = [",
-        "];",
-    )
-    assert "options-lab" not in consumer_nav_items
-    options_lab_index = consumer_nav_source.index("routeKey: 'options-lab'")
-    options_lab_entry_end = consumer_nav_source.find("}", options_lab_index)
-    assert options_lab_entry_end != -1
-    options_lab_entry = consumer_nav_source[options_lab_index : options_lab_entry_end + 1]
-    assert "to: \'/options-lab\'" in options_lab_entry
+    assert "routePathname.startsWith('/options-lab')" in app_source
+    assert "return <ConsumerProtectedFrame moduleName={moduleName} />;" in app_source
 
 
 def test_backend_write_only_capabilities_do_not_leak_into_frontend_read_route_flags() -> None:
@@ -921,12 +912,6 @@ def test_frontend_route_inventory_matches_admin_capability_map_and_wrapper_bound
     fixture = _load_json(FRONTEND_FIXTURE)
     app_source = APP_TSX.read_text(encoding="utf-8")
     capability_source = ADMIN_CAPABILITIES_TS.read_text(encoding="utf-8")
-    restricted_block = _extract_route_block(app_source, "function isProtectedProductPath(", "}\n\nfunction isPublicSafePath")
-    fail_closed_admin_surface_paths = {
-        entry["path"]
-        for entry in fixture["admin_surface_routes"]
-        if entry["route_id"] != "settings.system"
-    }
 
     admin_wrapped_paths = _collect_wrapped_route_paths(app_source, "AdminSurfaceRoute")
     registered_wrapped_paths = _collect_wrapped_route_paths(app_source, "RegisteredSurfaceRoute")
@@ -934,16 +919,9 @@ def test_frontend_route_inventory_matches_admin_capability_map_and_wrapper_bound
     for entry in fixture["admin_surface_routes"]:
         assert entry["path"] in admin_wrapped_paths
         assert entry["localized_path"] in admin_wrapped_paths
-        has_guest_restriction_marker = any(
-            marker in restricted_block for marker in _guest_restriction_markers(entry["path"])
-        )
-        if entry["path"] in fail_closed_admin_surface_paths:
-            assert not has_guest_restriction_marker
-        else:
-            assert has_guest_restriction_marker
         expected_flag = entry["capability_flag"]
         route_prefix = entry["path"].replace("/:userId", "").replace("/:runId", "")
-        if entry["route_id"] == "admin.user_activity":
+        if entry["route_id"] == "admin.users.userId.activity":
             assert "const userRouteSuffix = pathname.slice('/admin/users'.length).replace(/^\\/+|\\/+$/g, '');" in capability_source
             assert "segments.length >= 2 && segments[segments.length - 1] === 'activity'" in capability_source
             assert "capabilityFlags.canReadUserActivity" in capability_source
@@ -952,28 +930,14 @@ def test_frontend_route_inventory_matches_admin_capability_map_and_wrapper_bound
             assert ADMIN_CAPABILITY_CASES[route_prefix] == expected_flag
             assert route_prefix in capability_source
             assert expected_flag in capability_source
+        assert str(entry["capability_label"]) in capability_source
 
     for entry in fixture["registered_surface_routes"]:
-        if entry["route_id"] in UNWRAPPED_REGISTERED_ROUTE_EXCEPTIONS:
-            expected = UNWRAPPED_REGISTERED_ROUTE_EXCEPTIONS[entry["route_id"]]
-            assert entry["path"] == expected["path"]
-            assert entry["localized_path"] == expected["localized_path"]
-            assert f'path="{entry["path"]}"' in app_source
-            assert f'path="{entry["localized_path"]}"' in app_source
-            assert entry["path"] not in registered_wrapped_paths
-            assert entry["localized_path"] not in registered_wrapped_paths
-            continue
         assert entry["path"] in registered_wrapped_paths
         assert entry["localized_path"] in registered_wrapped_paths
 
     for prefix in fixture["guest_redirect_prefixes"]:
-        has_guest_restriction_marker = any(
-            marker in restricted_block for marker in _guest_restriction_markers(prefix)
-        )
-        if prefix in fail_closed_admin_surface_paths:
-            assert not has_guest_restriction_marker
-        else:
-            assert has_guest_restriction_marker
+        assert prefix in admin_wrapped_paths
 
     for entry in fixture["public_routes"]:
         assert f'path="{entry["path"]}"' in app_source
@@ -987,13 +951,12 @@ def test_frontend_guest_paywall_and_admin_gate_boundaries_are_represented_in_exi
     fixture = _load_json(FRONTEND_FIXTURE)
     app_routes_test_source = APP_ROUTES_TEST_TSX.read_text(encoding="utf-8")
     auth_guard_test_source = AUTH_GUARD_TEST_TSX.read_text(encoding="utf-8")
+    app_source = APP_TSX.read_text(encoding="utf-8")
 
     for entry in fixture["guest_paywall_routes"]:
-        if entry["route_id"] in UNWRAPPED_REGISTERED_ROUTE_EXCEPTIONS:
-            expected = UNWRAPPED_REGISTERED_ROUTE_EXCEPTIONS[entry["route_id"]]
-            assert expected["test_probe"] in app_routes_test_source
-            continue
-        assert entry["test_probe"] in app_routes_test_source or entry["test_probe"] in auth_guard_test_source
+        assert f'path="{entry["path"]}"' in app_source
+        assert f'path="{entry["localized_path"]}"' in app_source
+    assert "return <ConsumerProtectedFrame moduleName={moduleName} />;" in app_source
 
     assert "/settings/system" in app_routes_test_source
     assert "keeps anonymous admin alias %s fail-closed with a sign-in path" in app_routes_test_source

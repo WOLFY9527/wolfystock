@@ -72,8 +72,8 @@ FORBIDDEN_ADVICE_MARKERS = (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROUTE_CLASSIFICATION_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "auth" / "backend_route_capability_inventory.json"
 DOCS_AND_SCHEMA_CLASSIFICATIONS = {
-    ("GET", "/docs"): "public_static_docs",
-    ("GET", "/redoc"): "public_static_docs",
+    ("GET", "/docs"): "debug_or_schema_surface",
+    ("GET", "/redoc"): "debug_or_schema_surface",
     ("GET", "/openapi.json"): "debug_or_schema_surface",
 }
 LEGACY_UNSUPPORTED_OPENAPI_PATH = "/api/v1/openapi.json"

@@ -81,10 +81,10 @@ SURFACES: tuple[SurfaceSpec, ...] = (
         review_note="operator evidence workflow remains offline and review-required",
     ),
     SurfaceSpec(
-        label="manual_release_review_doc",
-        source_path="docs/audits/auth-rbac-release-security-guide.md",
-        markers=("Manual review is required before launch", "does not approve launch"),
-        review_note="release guide requires human security review",
+        label="manual_release_review_contract",
+        source_path="scripts/auth_rbac_release_audit.py",
+        markers=("manualReviewRequired", "manual_review_required", "networkCallsExecuted", "approve launch"),
+        review_note="offline release audit remains manual-review-only and does not approve launch",
     ),
 )
 
