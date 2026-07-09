@@ -11,6 +11,11 @@ type WorkspacePageHeaderProps = {
   contentClassName?: string;
   titleClassName?: string;
   descriptionClassName?: string;
+  /**
+   * `compact` is for boundary/gate surfaces that need route identity without
+   * marketing-scale hero typography. Default leaves normal workbench headers unchanged.
+   */
+  density?: 'default' | 'compact';
 };
 
 export const WorkspacePageHeader: React.FC<WorkspacePageHeaderProps> = ({
@@ -23,8 +28,16 @@ export const WorkspacePageHeader: React.FC<WorkspacePageHeaderProps> = ({
   contentClassName,
   titleClassName,
   descriptionClassName,
+  density = 'default',
 }) => (
-  <header className={cn('workspace-header-panel', className)}>
+  <header
+    className={cn(
+      'workspace-header-panel',
+      density === 'compact' && 'workspace-header-panel--compact',
+      className,
+    )}
+    data-header-density={density}
+  >
     <div className={cn('workspace-header-layout', contentClassName)}>
       <div className="workspace-header-copy">
         {eyebrow ? (

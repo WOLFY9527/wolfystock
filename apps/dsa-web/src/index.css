@@ -6748,6 +6748,43 @@ body::after {
   text-transform: none;
 }
 
+/* Explicit compact density for gate / boundary surfaces only.
+   Normal workbench headers keep marketing-scale display titles. */
+.workspace-header-panel--compact {
+  padding: 0.35rem 0 0.55rem;
+  border-radius: 0;
+  background: transparent;
+  border-width: 0 0 1px;
+  border-style: solid;
+  border-color: hsl(var(--border-muted-hsl) / 0.45);
+  backdrop-filter: none;
+}
+
+.workspace-header-panel--compact .workspace-header-title {
+  margin-top: 0.28rem;
+  max-width: none;
+  font-size: clamp(1.05rem, 1.5vw, 1.25rem);
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.workspace-header-panel--compact .workspace-header-eyebrow {
+  letter-spacing: 0.16em;
+  font-size: 0.625rem;
+}
+
+.workspace-header-panel--compact .workspace-header-description {
+  margin-top: 0.4rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.workspace-header-panel--compact .workspace-header-layout {
+  gap: 0.5rem;
+  align-items: start;
+}
+
 .workspace-header-description {
   margin-top: 0.9rem;
   max-width: 60rem;
@@ -8882,6 +8919,32 @@ html[data-theme-style='paper'] .workspace-header-title {
   color: var(--wolfy-text-primary);
 }
 
+html[data-theme-style='paper'] .workspace-header-panel--compact {
+  border-color: var(--line);
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  border-radius: 0;
+  border-width: 0 0 1px;
+  padding: 2px 0 8px;
+}
+
+html[data-theme-style='paper'] .workspace-header-panel--compact .workspace-header-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.05rem, 1.6vw, 1.25rem);
+  font-weight: 680;
+  letter-spacing: 0;
+  line-height: 1.25;
+  max-width: none;
+  color: var(--wolfy-text-primary);
+}
+
+html[data-theme-style='paper'] .workspace-header-panel--compact .workspace-header-eyebrow {
+  color: var(--sage-deep);
+  letter-spacing: 0.14em;
+  font-size: 0.625rem;
+}
+
 html[data-theme-style='paper'] .workspace-header-description,
 html[data-theme-style='paper'] .workspace-header-actions-note {
   color: var(--wolfy-text-muted);
@@ -9740,6 +9803,10 @@ html[data-theme-style='paper'] [data-testid='home-bento-dashboard']::after {
     font-size: 37px;
   }
 
+  html[data-theme-style='paper'] .workspace-header-panel--compact .workspace-header-title {
+    font-size: 1.0625rem;
+  }
+
   html[data-theme-style='paper'] .shell-stock-search--header {
     width: 13rem;
   }
@@ -10253,5 +10320,259 @@ html[data-theme-style='paper'] [data-testid='home-bento-dashboard']::after {
 
   .research-observation-head {
     padding-inline: 0.75rem;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Access gate shared composition (G016)
+   Gate/boundary surfaces only — not normal workbench page headers.
+   --------------------------------------------------------------------------- */
+
+.access-gate {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  max-width: 48rem;
+}
+
+.access-gate-identity {
+  margin: 0;
+}
+
+.access-gate-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem 1.1rem 1.15rem;
+}
+
+.access-gate-state-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--theme-panel-radius-md, 12px);
+  border: 1px solid var(--state-warning-border, rgb(151 103 49 / 0.38));
+  background: var(--state-warning-bg, rgb(212 165 116 / 0.16));
+}
+
+.access-gate-state-icon {
+  display: flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--state-warning-border, rgb(151 103 49 / 0.38));
+  background: var(--state-warning-bg-strong, rgb(212 165 116 / 0.24));
+  color: var(--state-warning-text, #5a3a18);
+}
+
+.access-gate-state-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 12rem;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.access-gate-status-pill {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 1.75rem;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--state-warning-border, rgb(151 103 49 / 0.38));
+  background: var(--state-warning-bg-strong, rgb(212 165 116 / 0.24));
+  padding: 0.2rem 0.7rem;
+  color: var(--state-warning-text, #5a3a18);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.access-gate-status-marker {
+  font-size: 0.625rem;
+  line-height: 1;
+}
+
+.access-gate-state-summary {
+  margin: 0;
+  color: var(--wolfy-text-primary, var(--text-primary));
+  font-size: 0.9375rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.access-gate-section-label {
+  margin: 0 0 0.3rem;
+  color: var(--sage-deep, #365d3d);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.625rem;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.access-gate-reason-body {
+  margin: 0;
+  color: var(--wolfy-text-secondary, var(--text-secondary));
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.access-gate-boundary-list {
+  margin: 0;
+  display: grid;
+  gap: 0.45rem;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 768px) {
+  .access-gate-boundary-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.access-gate-boundary-item {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-start;
+  border-radius: var(--theme-panel-radius-md, 12px);
+  border: 1px solid var(--theme-panel-subtle-border, var(--line));
+  background: var(--surface-2, rgb(255 253 248 / 0.72));
+  padding: 0.55rem 0.7rem;
+  color: var(--wolfy-text-secondary, var(--text-secondary));
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.access-gate-boundary-marker {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+  color: var(--state-warning-text, #5a3a18);
+  font-size: 0.55rem;
+  line-height: 1.4;
+}
+
+.access-gate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.access-gate-action {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: var(--theme-button-radius, 10px);
+  padding: 0.45rem 0.95rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+.access-gate-action:focus-visible {
+  outline: 2px solid var(--sage-deep, #365d3d);
+  outline-offset: 2px;
+}
+
+.access-gate-action--primary {
+  border: 1px solid var(--theme-button-primary-border, var(--sage-deep, #365d3d));
+  background: var(--theme-button-primary-bg, var(--sage-deep, #365d3d));
+  color: var(--theme-button-primary-text, var(--wolfy-inverse-text, #fbf8f3));
+}
+
+.access-gate-action--primary:hover {
+  filter: brightness(0.96);
+}
+
+.access-gate-action--secondary {
+  border: 1px solid var(--border-muted, var(--line));
+  background: var(--pill-bg, transparent);
+  color: var(--wolfy-text-primary, var(--text-primary));
+}
+
+.access-gate-action--secondary:hover {
+  border-color: var(--border-strong, var(--line));
+  background: var(--pill-active-bg, rgb(107 143 113 / 0.12));
+}
+
+.access-gate-action--tertiary {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--wolfy-text-secondary, var(--text-secondary));
+  min-height: 2.25rem;
+  padding-inline: 0.45rem;
+}
+
+.access-gate-action--tertiary:hover {
+  color: var(--wolfy-text-primary, var(--text-primary));
+}
+
+.access-gate-note {
+  margin: 0;
+  color: var(--wolfy-text-muted, var(--text-dim));
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+html[data-theme-style='paper'] .access-gate-panel {
+  border-color: var(--line);
+  background: rgb(251 248 243 / 0.92);
+  box-shadow: var(--shadow, none);
+}
+
+html[data-theme-style='paper'] .access-gate-state-summary {
+  color: var(--wolfy-text-primary);
+}
+
+html[data-theme-style='paper'] .access-gate-reason-body,
+html[data-theme-style='paper'] .access-gate-boundary-item {
+  color: var(--wolfy-text-secondary);
+}
+
+html[data-theme-style='paper'] .access-gate-action--primary {
+  border-color: var(--sage-deep);
+  background: var(--sage-deep);
+  color: var(--wolfy-inverse-text, #fbf8f3);
+}
+
+html[data-theme-style='paper'] .access-gate-action--secondary {
+  border-color: var(--line);
+  color: var(--wolfy-text-primary);
+}
+
+@media (max-width: 640px) {
+  .access-gate {
+    gap: 0.7rem;
+  }
+
+  .access-gate-panel {
+    gap: 0.75rem;
+    padding: 0.85rem 0.9rem 1rem;
+  }
+
+  .access-gate-state-band {
+    padding: 0.65rem 0.75rem;
+  }
+
+  .access-gate-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .access-gate-action {
+    width: 100%;
   }
 }
