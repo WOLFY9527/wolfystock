@@ -114,10 +114,10 @@ function ScannerVisualSummaryBar({
 }) {
   const total = segments.reduce((sum, segment) => sum + segment.count, 0);
   if (!total) {
-    return <div data-testid={testId} className="h-2 rounded-full bg-white/[0.05]" />;
+    return <div data-testid={testId} className="h-2 rounded-full bg-[var(--wolfy-surface-input)]" />;
   }
   return (
-    <div data-testid={testId} className="flex h-2 overflow-hidden rounded-full bg-white/[0.05]">
+    <div data-testid={testId} className="flex h-2 overflow-hidden rounded-full bg-[var(--wolfy-surface-input)]">
       {segments.map((segment) => (
         <span
           key={segment.key}
@@ -151,10 +151,10 @@ export function PillTagGroup({
 
   return (
     <fieldset className={compact ? 'flex min-w-0 flex-col gap-1 md:flex-row md:items-center md:gap-2' : 'flex min-w-0 flex-col gap-1.5'}>
-      <legend className={compact ? 'shrink-0 text-[10px] uppercase tracking-[0.16em] text-white/40' : 'text-[10px] uppercase tracking-[0.16em] text-white/40'}>{label}</legend>
+      <legend className={compact ? 'shrink-0 text-[10px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]' : 'text-[10px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]'}>{label}</legend>
       <div
         className={isMarketGroup
-          ? 'ui-scroll-x-quiet flex min-w-0 max-w-full rounded-xl border border-white/5 bg-black/40 p-1'
+          ? 'ui-scroll-x-quiet flex min-w-0 max-w-full rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-1'
           : 'flex min-w-0 flex-wrap gap-1.5'}
         data-testid={testId}
       >
@@ -167,11 +167,11 @@ export function PillTagGroup({
               aria-pressed={isActive}
               className={isActive
                 ? isMarketGroup
-                  ? 'min-w-0 shrink-0 rounded-lg bg-white/10 px-3 py-1 text-xs font-bold text-white shadow-[0_2px_10px_rgba(0,0,0,0.5)] transition-all'
-                  : 'min-w-0 rounded-full border border-white/10 bg-white/10 px-2.5 py-1 text-xs text-white transition-colors'
+                  ? 'min-w-0 shrink-0 rounded-lg border border-[color:color-mix(in_srgb,var(--sage-deep)_42%,transparent)] bg-[color:color-mix(in_srgb,var(--sage)_14%,var(--wolfy-surface-panel))] px-3 py-1 text-xs font-bold text-[color:var(--wolfy-text-primary)] shadow-[inset_0_-2px_0_0_var(--sage-deep)] transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-border-focus)]'
+                  : 'min-w-0 rounded-full border border-[color:color-mix(in_srgb,var(--sage-deep)_42%,transparent)] bg-[color:color-mix(in_srgb,var(--sage)_12%,var(--wolfy-surface-panel))] px-2.5 py-1 text-xs font-semibold text-[color:var(--wolfy-text-primary)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-border-focus)]'
                 : isMarketGroup
-                  ? 'min-w-0 shrink-0 rounded-lg bg-transparent px-3 py-1 text-xs font-medium text-white/40 transition-all hover:text-white/70'
-                  : 'min-w-0 rounded-full border border-white/5 bg-transparent px-2.5 py-1 text-xs text-white/50 transition-colors hover:bg-white/[0.05]'}
+                  ? 'min-w-0 shrink-0 rounded-lg border border-transparent bg-transparent px-3 py-1 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-all hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-border-focus)]'
+                  : 'min-w-0 rounded-full border border-[color:var(--wolfy-border-subtle)] bg-transparent px-2.5 py-1 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-[var(--wolfy-surface-input)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-border-focus)]'}
               onClick={() => onChange(option.value)}
             >
               <span className="ui-truncate block max-w-full">{option.label}</span>
@@ -244,12 +244,12 @@ export function ScannerResultHistorySummary({
     .filter((item, index, array): item is NonNullable<typeof item> => Boolean(item) && array.findIndex((other) => other?.title === item?.title) === index);
 
   return (
-    <section data-testid="scanner-result-history-summary" className="shrink-0 border-b border-white/5 px-3 py-2">
+    <section data-testid="scanner-result-history-summary" className="shrink-0 border-b border-[color:var(--wolfy-border-subtle)] px-3 py-2">
       <TerminalPanel dense className="grid gap-2 p-2.5">
         <div className="flex min-w-0 items-center justify-between gap-2">
           <div className="min-w-0">
-            <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'en' ? 'Result history' : '结果历史'}</h3>
-            <p className="mt-0.5 truncate text-[11px] text-white/42">{language === 'en' ? 'Current run, latest run, and previous comparable run' : '本次扫描、最近扫描与上次扫描对比'}</p>
+            <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Result history' : '结果历史'}</h3>
+            <p className="mt-0.5 truncate text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Current run, latest run, and previous comparable run' : '本次扫描、最近扫描与上次扫描对比'}</p>
           </div>
         </div>
         {visibleSummaries.length ? (
@@ -257,15 +257,15 @@ export function ScannerResultHistorySummary({
             {visibleSummaries.map((summary) => (
               <TerminalNestedBlock key={summary.title} className="min-w-0 p-2.5" data-testid={`scanner-run-summary-${summary.title}`}>
                 <div className="flex min-w-0 items-center justify-between gap-2">
-                  <span className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{summary.title}</span>
-                  <TerminalChip variant="neutral" className="shrink-0 px-1.5 py-0.5 text-[10px] font-sans text-white/62">{summary.statusLabel}</TerminalChip>
+                  <span className="truncate text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{summary.title}</span>
+                  <TerminalChip variant="neutral" className="shrink-0 px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">{summary.statusLabel}</TerminalChip>
                 </div>
                 {summary.unavailable ? (
                   <div className="mt-2 rounded-lg border border-amber-300/15 bg-amber-300/[0.045] px-2.5 py-2 text-[11px] leading-relaxed">
                     <p className="font-semibold text-amber-100/90">
                       {summary.unavailableTitle || (language === 'en' ? 'Candidate set unavailable' : '候选集暂不可用')}
                     </p>
-                    <p className="mt-1 text-white/55">
+                    <p className="mt-1 text-[color:var(--wolfy-text-secondary)]">
                       {summary.unavailableBody || (language === 'en' ? 'Run data is unavailable.' : '运行数据暂不可用。')}
                     </p>
                   </div>
@@ -279,8 +279,8 @@ export function ScannerResultHistorySummary({
                     <FieldChip label="耗时" value={summary.durationLabel} />
                   </div>
                 )}
-                <p className="mt-2 truncate text-[11px] text-white/42">
-                  运行时间：<span className="font-mono text-white/58">{summary.runTimeLabel}</span>
+                <p className="mt-2 truncate text-[11px] text-[color:var(--wolfy-text-muted)]">
+                  运行时间：<span className="font-mono text-[color:var(--wolfy-text-secondary)]">{summary.runTimeLabel}</span>
                   {summary.errorSummary ? <span className="text-rose-200/80"> · {summary.errorSummary}</span> : null}
                 </p>
               </TerminalNestedBlock>
@@ -367,10 +367,10 @@ export function ScannerVisualEvidenceSummaryPanel({
     <TerminalPanel dense data-testid="scanner-visual-evidence-summary" className="mb-3 grid gap-3 p-3">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">
+          <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
             {language === 'en' ? 'Visual evidence' : '视觉证据'}
           </h3>
-          <p className="mt-0.5 text-[11px] text-white/42">
+          <p className="mt-0.5 text-[11px] text-[color:var(--wolfy-text-muted)]">
             {language === 'en'
               ? `Compact view across ${model.totalRows} ranked rows without changing row order.`
               : `基于 ${model.totalRows} 条候选的紧凑分布，不改变原有排序。`}
@@ -386,17 +386,17 @@ export function ScannerVisualEvidenceSummaryPanel({
       </div>
       <div className="grid gap-3 lg:grid-cols-3">
         {sections.map((section) => (
-          <div key={section.key} className="grid gap-2 rounded-xl border border-white/8 bg-white/[0.02] p-2.5">
+          <div key={section.key} className="grid gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-2.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">{section.title}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{section.title}</span>
             </div>
             <ScannerVisualSummaryBar segments={section.segments} testId={section.testId} />
-            <div className="flex min-w-0 flex-wrap gap-1.5 text-[10px] text-white/55">
+            <div className="flex min-w-0 flex-wrap gap-1.5 text-[10px] text-[color:var(--wolfy-text-secondary)]">
               {section.segments.map((segment) => (
-                <span key={segment.key} className="inline-flex items-center gap-1 rounded-md border border-white/8 bg-white/[0.03] px-1.5 py-0.5">
+                <span key={segment.key} className="inline-flex items-center gap-1 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-1.5 py-0.5">
                   <span className={`h-1.5 w-1.5 rounded-full ${segment.toneClassName}`} />
                   <span>{segment.label}</span>
-                  <span className="font-mono text-white/78">{segment.count}</span>
+                  <span className="font-mono text-[color:var(--wolfy-text-primary)]">{segment.count}</span>
                 </span>
               ))}
             </div>
@@ -404,8 +404,8 @@ export function ScannerVisualEvidenceSummaryPanel({
         ))}
       </div>
       {model.nextEvidenceLabel ? (
-        <p data-testid="scanner-visual-next-evidence" className="text-xs leading-relaxed text-white/58">
-          <span className="text-white/40">{language === 'en' ? 'Next evidence:' : '下一步证据：'}</span>
+        <p data-testid="scanner-visual-next-evidence" className="text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
+          <span className="text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Next evidence:' : '下一步证据：'}</span>
           {model.nextEvidenceLabel}
         </p>
       ) : null}
@@ -442,10 +442,10 @@ export function ScannerHistoryFallbackPanel({
   return (
     <TerminalPanel dense data-testid="scanner-empty-history-fallback" className="grid gap-3 p-3">
       <div className="min-w-0">
-        <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">
+        <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
           {language === 'en' ? 'No candidate this run' : '本次暂无候选'}
         </h3>
-        <p className="mt-0.5 text-[11px] text-white/42">
+        <p className="mt-0.5 text-[11px] text-[color:var(--wolfy-text-muted)]">
           {language === 'en'
             ? 'Review latest scan summary'
             : '查看最近扫描摘要'}
@@ -456,15 +456,15 @@ export function ScannerHistoryFallbackPanel({
           {summaries.map((summary) => (
             <TerminalNestedBlock key={summary.title} className="min-w-0 p-2.5" data-testid={`scanner-empty-summary-${summary.title}`}>
               <div className="flex min-w-0 items-center justify-between gap-2">
-                <span className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{summary.title}</span>
-                <TerminalChip variant="neutral" className="shrink-0 px-1.5 py-0.5 text-[10px] font-sans text-white/62">{summary.statusLabel}</TerminalChip>
+                <span className="truncate text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{summary.title}</span>
+                <TerminalChip variant="neutral" className="shrink-0 px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">{summary.statusLabel}</TerminalChip>
               </div>
               {summary.unavailable ? (
                 <div className="mt-2 rounded-lg border border-amber-300/15 bg-amber-300/[0.045] px-2.5 py-2 text-[11px] leading-relaxed">
                   <p className="font-semibold text-amber-100/90">
                     {summary.unavailableTitle || (language === 'en' ? 'Candidate set unavailable' : '候选集暂不可用')}
                   </p>
-                  <p className="mt-1 text-white/55">
+                  <p className="mt-1 text-[color:var(--wolfy-text-secondary)]">
                     {summary.unavailableBody || (language === 'en' ? 'Run data is unavailable.' : '运行数据暂不可用。')}
                   </p>
                 </div>
@@ -555,42 +555,42 @@ export function ScannerConclusionBand({
           </TerminalChip>
         </div>
         <div className="mt-3 min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
             {language === 'en' ? 'Candidate discovery surface' : '候选发现工作台'}
           </p>
           <div className="mt-1 flex min-w-0 flex-wrap items-end gap-2">
-            <h2 className="truncate text-xl font-semibold text-white md:text-2xl">{model.title}</h2>
-            <span className="text-xs text-white/44">
+            <h2 className="truncate text-xl font-semibold text-[color:var(--wolfy-text-primary)] md:text-2xl">{model.title}</h2>
+            <span className="text-xs text-[color:var(--wolfy-text-muted)]">
               {language === 'en' ? 'Candidates' : '候选'} {model.candidateCount}
             </span>
           </div>
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/64">
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[color:var(--wolfy-text-secondary)]">
             {model.detail}
           </p>
         </div>
       </div>
-      <div className="grid gap-2 rounded-2xl border border-white/8 bg-white/[0.02] p-3">
+      <div className="grid gap-2 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
             {language === 'en' ? 'Primary cue' : '当前提示'}
           </p>
-          <p className="mt-1 text-sm leading-relaxed text-white/72">
+          <p className="mt-1 text-sm leading-relaxed text-[color:var(--wolfy-text-primary)]">
             {primaryCue}
           </p>
         </div>
         {trustNotice ? (
-          <div className="border-t border-white/8 pt-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+          <div className="border-t border-[color:var(--wolfy-border-subtle)] pt-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
               {language === 'en' ? 'Data cue' : '数据提示'}
             </p>
-            <p className="mt-1 text-xs leading-relaxed text-white/58">
+            <p className="mt-1 text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
               {trustNotice}
             </p>
           </div>
         ) : null}
         {dataReadinessChips.length || nextDataLabel ? (
-          <div className="border-t border-white/8 pt-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+          <div className="border-t border-[color:var(--wolfy-border-subtle)] pt-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
               {language === 'en' ? 'Data readiness' : '数据就绪'}
             </p>
             {dataReadinessChips.length ? (
@@ -601,7 +601,7 @@ export function ScannerConclusionBand({
               </div>
             ) : null}
             {nextDataLabel ? (
-              <p className="mt-1 text-xs leading-relaxed text-white/58">
+              <p className="mt-1 text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
                 {nextDataLabel}
               </p>
             ) : null}
@@ -648,10 +648,10 @@ export function ScannerWorkflowSummaryPanel({
   return (
     <TerminalPanel dense data-testid="scanner-workflow-summary" className="mb-3 grid gap-2.5 p-3">
       <div className="min-w-0">
-        <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+        <h3 className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
           {language === 'en' ? 'Scanner workflow' : '扫描流程'}
         </h3>
-        <p className="mt-0.5 text-[11px] text-white/46">
+        <p className="mt-0.5 text-[11px] text-[color:var(--wolfy-text-muted)]">
           {language === 'en'
             ? 'Read the market context first, confirm the current candidate evidence, then compare ranked rows.'
             : '先确认市场上下文，再看当前候选证据，最后对比排名主表。'}
@@ -660,10 +660,10 @@ export function ScannerWorkflowSummaryPanel({
       <div className="grid gap-2.5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)_minmax(0,0.9fr)]">
         <TerminalNestedBlock data-testid="scanner-workflow-step-topdown" className="grid gap-2 p-2.5">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+            <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-primary)]">
               {workflowStepLabel} 1
             </TerminalChip>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
               {topDownTitle}
             </span>
             {contextSummary ? (
@@ -672,7 +672,7 @@ export function ScannerWorkflowSummaryPanel({
               </TerminalChip>
             ) : null}
           </div>
-          <p className="text-xs leading-relaxed text-white/68">
+          <p className="text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
             {contextSummary?.summaryLine || (language === 'en'
               ? 'Market context remains unavailable, so the scanner stays research-only.'
               : '市场上下文暂不可用，因此当前扫描保持研究观察边界。')}
@@ -680,7 +680,7 @@ export function ScannerWorkflowSummaryPanel({
           {contextSummary?.chips?.length ? (
             <div className="flex min-w-0 flex-wrap gap-1.5">
               {contextSummary.chips.slice(0, 4).map((chip) => (
-                <TerminalChip key={chip.key} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                <TerminalChip key={chip.key} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-primary)]">
                   {chip.label}
                 </TerminalChip>
               ))}
@@ -690,10 +690,10 @@ export function ScannerWorkflowSummaryPanel({
 
         <TerminalNestedBlock data-testid="scanner-workflow-step-focus-candidate" className="grid gap-2 p-2.5">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+            <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-primary)]">
               {workflowStepLabel} 2
             </TerminalChip>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
               {focusTitle}
             </span>
           </div>
@@ -717,7 +717,7 @@ export function ScannerWorkflowSummaryPanel({
               testId="scanner-workflow-candidate-summary"
             />
           ) : candidate.reasonSummary ? (
-            <p className="text-[11px] leading-relaxed text-white/58">
+            <p className="text-[11px] leading-relaxed text-[color:var(--wolfy-text-secondary)]">
               {safeScannerWorkflowText(candidate.reasonSummary, language)}
             </p>
           ) : null}
@@ -735,14 +735,14 @@ export function ScannerWorkflowSummaryPanel({
 
         <TerminalNestedBlock data-testid="scanner-workflow-step-ranked-rows" className="grid gap-2 p-2.5">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+            <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-primary)]">
               {workflowStepLabel} 3
             </TerminalChip>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
               {rankedRowsTitle}
             </span>
           </div>
-          <p className="text-xs leading-relaxed text-white/64">
+          <p className="text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
             {language === 'en'
               ? 'Keep the ranked table as the comparison surface, then open detailed notes only when a row needs follow-up.'
               : '保持排名主表作为对比主面板，只有需要跟进某一行时再展开详细说明。'}

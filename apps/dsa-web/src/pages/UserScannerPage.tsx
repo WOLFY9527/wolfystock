@@ -4013,6 +4013,7 @@ const UserScannerPage: React.FC = () => {
       <div
         ref={surfaceRef}
         data-testid="scanner-ranking-board-page"
+        data-product-surface="scanner"
         aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
         aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
         className={getSafariReadySurfaceClassName(

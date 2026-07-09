@@ -116,6 +116,26 @@ describe('Shell', () => {
     });
   });
 
+  it('exposes a keyboard skip link targeting the main content landmark', async () => {
+    render(
+      <MemoryRouter initialEntries={['/market-overview']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const skipLink = screen.getByTestId('shell-skip-link');
+    expect(skipLink).toHaveAttribute('href', '#main-content');
+    expect(skipLink).toHaveTextContent(translate('zh', 'shell.skipToContent'));
+    expect(skipLink).toHaveClass('shell-skip-link');
+    const main = document.getElementById('main-content');
+    expect(main?.tagName).toBe('MAIN');
+    expect(main).toHaveAttribute('tabindex', '-1');
+  });
+
   it('renders the streamlined navigation with the restored theme control', async () => {
     render(
       <MemoryRouter initialEntries={['/market-overview']}>

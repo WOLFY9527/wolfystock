@@ -65,6 +65,27 @@ describe('StatusBadge', () => {
     );
   });
 
+  it('keeps soft warning/info chips on shared state text tokens', () => {
+    render(
+      <>
+        <StatusBadge status="warning" label="降级" />
+        <StatusBadge status="partial" label="部分可用" />
+        <StatusBadge status="info" label="信息" />
+      </>,
+    );
+
+    expect(screen.getByText('降级')).toHaveClass(
+      'bg-[var(--state-warning-bg)]',
+      'text-[color:var(--state-warning-text)]',
+    );
+    expect(screen.getByText('部分可用')).toHaveClass(
+      'text-[color:var(--state-warning-text)]',
+    );
+    expect(screen.getByText('信息')).toHaveClass(
+      'text-[color:var(--state-info-text)]',
+    );
+  });
+
   it('does not render skipped as 成功', () => {
     render(<StatusBadge status="not_needed" />);
     expect(screen.getByText('跳过')).toBeInTheDocument();
