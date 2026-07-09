@@ -90,6 +90,7 @@ EXPECTED_T1463_MIGRATED_ROUTE_CAPABILITIES = {
     ("GET", "/api/v1/usage/summary"): "cost:observability:read",
 }
 EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS = {
+    "agent.operator_diagnostics": 3,
     "agent.admin_send": 1,
     "scanner.admin_watchlists_and_status": 3,
     "usage.admin_summary": 1,
@@ -525,6 +526,9 @@ def _is_control_plane_route(route: dict[str, str | None]) -> bool:
         "/api/v1/quant/duckdb/compare-runtime-context",
         "/api/v1/quant/duckdb/coverage",
         "/api/v1/quant/duckdb/benchmark",
+        "/api/v1/agent/status",
+        "/api/v1/agent/models",
+        "/api/v1/agent/provider-health",
         "/api/v1/market/data-readiness",
         "/api/v1/market/data-source-gap-registry",
         "/api/v1/market/cn-provider-health",
@@ -781,14 +785,10 @@ def test_docs_openapi_and_operator_diagnostic_surfaces_are_not_product_routes() 
     for signature in EXPECTED_OPERATOR_DIAGNOSTIC_ROUTE_CLASSIFICATIONS:
         entry = classifications[signature]
         assert entry["surface_classification"] == "operator_diagnostic"
-        if signature[1].startswith("/api/v1/market/"):
-            assert entry["auth_dependency_label"] == "admin_capability"
-            assert entry["capability_label"] == "ops:providers:read"
-            assert entry["no_go_marker"] is None
-            assert entry["transitional_note"]
-        else:
-            assert entry["auth_dependency_label"] == "public"
-            assert "NO-GO" in entry["no_go_marker"]
+        assert entry["auth_dependency_label"] == "admin_capability"
+        assert entry["capability_label"] == "ops:providers:read"
+        assert entry["no_go_marker"] is None
+        assert entry["transitional_note"]
 
     for signature, expected_capability in EXPECTED_T1463_MIGRATED_ROUTE_CAPABILITIES.items():
         entry = classifications[signature]

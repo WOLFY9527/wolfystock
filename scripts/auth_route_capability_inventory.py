@@ -106,7 +106,9 @@ PUBLIC_SAMPLE_SPECS = [
 
 ROUTE_GROUP_SPECS = [
     ("agent.member_surface", "agent", "authenticated_user", None, "^/api/v1/agent/(?:stock-research|chat|chat/sessions(?:/\\{session_id\\})?|chat/stream)$", ["GET", "POST", "DELETE"], None),
+    ("agent.operator_diagnostics", "agent_operator_diagnostics", "admin_capability", "ops:providers:read", "^/api/v1/agent/(?:status|models|provider-health)$", ["GET"], "Agent readiness, model topology, and provider health diagnostics are provider-read admin surfaces."),
     ("agent.admin_send", "agent_admin_send", "admin_capability", "ops:notifications:write", "^/api/v1/agent/chat/send$", ["POST"], None),
+    ("market.scenario_baseline.member_surface", "market_scenario_baseline", "authenticated_user", None, "^/api/v1/market/scenario-lab/baseline-snapshots(?:/latest|/\\{snapshot_id\\})?$", ["GET", "POST"], "Scenario durable baseline endpoints are authenticated-user scoped; evaluation remains separately non-persistent."),
     ("analysis.member_surface", "analysis", "authenticated_user", None, "^/api/v1/analysis/(?:analyze|tasks(?:/\\{task_id\\}/progress|/stream)?|status/\\{task_id\\}(?:/poll)?)$", ["GET", "POST"], None),
     ("history.member_surface", "history", "authenticated_user", None, "^/api/v1/history(?:/\\{record_id\\}(?:/(?:news|markdown))?)?$", ["GET", "DELETE"], None),
     ("backtest.member_surface", "backtest", "authenticated_user", None, "^/api/v1/backtest/(?:run|prepare-samples|sample-status|runs|results|performance(?:/\\{code\\})?|samples/clear|results/clear|rule/(?:parse|parameter-sweep|run|universe-jobs(?:/\\{job_id\\}(?:/(?:run|status|diagnostics|results))?)?|runs(?:/\\{run_id\\}(?:/(?:status|support-bundle-manifest|export-index|support-bundle-reproducibility-manifest|execution-trace\\.json|execution-trace\\.csv|cancel|robustness-evidence\\.json|regime-attribution-readiness\\.json|execution-model-metadata\\.json|oos-parameter-readiness\\.json))?)?|compare))$", ["GET", "POST"], None),
@@ -317,10 +319,14 @@ def _surface_classification_for_route(route: dict[str, str | None]) -> tuple[str
     auth_label = route["auth_dependency_label"]
     if path.startswith("/api/v1/options/"):
         return "public_fixture_analysis", OPTION_FIXTURE_MARKER, OPTION_POLICY_NOTE
-    if path.startswith("/api/v1/agent/") and auth_label is None:
+    if path.startswith("/api/v1/agent/"):
         if path in {"/api/v1/agent/status", "/api/v1/agent/models", "/api/v1/agent/provider-health"}:
-            return "operator_diagnostic", f"TODO/NO-GO: {path} metadata is not public-ingress safe while route-level auth remains absent.", "Classifies readiness metadata only; no agent behavior changes."
-        return "unclassified", "TODO/NO-GO: decide whether agent skill discovery is public metadata, member-only product metadata, or operator diagnostic metadata.", "Listed explicitly so unknown agent metadata is not silently treated as safe."
+            if auth_label == "admin_capability":
+                return "operator_diagnostic", None, "Provider-read admin capability gate preserves agent operator diagnostics outside member product surfaces."
+            if auth_label is None:
+                return "operator_diagnostic", f"TODO/NO-GO: {path} metadata is not public-ingress safe while route-level auth remains absent.", "Classifies readiness metadata only; no agent behavior changes."
+        if auth_label is None:
+            return "unclassified", "TODO/NO-GO: decide whether agent skill discovery is public metadata, member-only product metadata, or operator diagnostic metadata.", "Listed explicitly so unknown agent metadata is not silently treated as safe."
     if auth_label == "admin_capability":
         if path in {
             "/api/v1/market/data-readiness",
