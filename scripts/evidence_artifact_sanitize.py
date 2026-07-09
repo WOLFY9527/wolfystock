@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
+import tempfile
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -400,9 +402,95 @@ def _load_json(path: Path) -> Any:
         raise SystemExit(f"[FAIL] input file is not readable JSON: {path_label(path)}")
 
 
-def _write_json(path: Path, payload: Any) -> None:
+def _default_output_path(input_path: Path) -> Path:
+    suffix = input_path.suffix
+    if suffix:
+        return input_path.with_name(f"{input_path.stem}.sanitized{suffix}")
+    return input_path.with_name(f"{input_path.name}.sanitized")
+
+
+def _canonical_path(path: Path) -> Path:
+    return path.expanduser().resolve(strict=False)
+
+
+def _paths_alias(left: Path, right: Path) -> bool:
+    try:
+        if left.exists() and right.exists() and left.samefile(right):
+            return True
+    except OSError:
+        pass
+    return _canonical_path(left) == _canonical_path(right)
+
+
+def _destination_exists(path: Path) -> bool:
+    return path.exists() or path.is_symlink()
+
+
+def _in_place_write_path(input_path: Path) -> Path:
+    if not input_path.is_symlink():
+        return input_path
+    try:
+        return input_path.resolve(strict=True)
+    except OSError as exc:
+        raise SystemExit(f"[FAIL] input file not found: {path_label(input_path)}") from exc
+
+
+def _serialized_json(payload: Any) -> str:
+    return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+def _fsync_parent_directory(path: Path) -> None:
+    if os.name == "nt":
+        return
+    try:
+        directory_fd = os.open(path.parent, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def _write_text_atomic(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except OSError as exc:
+        if temp_path is not None:
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+        raise SystemExit(f"[FAIL] write failed: {path_label(path)}") from exc
+
+    try:
+        os.replace(temp_path, path)
+        temp_path = None
+        _fsync_parent_directory(path)
+    except OSError as exc:
+        if temp_path is not None:
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+        raise SystemExit(f"[FAIL] replacement failed: {path_label(path)}") from exc
+
+
+def _write_json_atomic(path: Path, payload: Any) -> None:
+    _write_text_atomic(path, _serialized_json(payload))
 
 
 def _build_report(
@@ -436,13 +524,21 @@ def _print_report(report: dict[str, Any]) -> None:
 
 def _sanitize_command(args: argparse.Namespace) -> int:
     input_path = Path(args.input)
-    output_path = input_path if args.in_place else Path(args.output)
-    if not args.in_place and input_path.resolve() == output_path.resolve():
-        raise SystemExit("[FAIL] output must differ from input unless --in-place is supplied")
+    output_path = input_path if args.in_place else Path(args.output) if args.output else _default_output_path(input_path)
+
+    if args.in_place and args.output:
+        raise SystemExit("[FAIL] --in-place cannot be combined with --output")
+    if args.in_place and args.overwrite:
+        raise SystemExit("[FAIL] --overwrite cannot be combined with --in-place")
+    if not args.in_place and _paths_alias(input_path, output_path):
+        raise SystemExit("[FAIL] input/output alias rejected; use --in-place for explicit source mutation")
+    if not args.in_place and _destination_exists(output_path) and not args.overwrite:
+        raise SystemExit("[FAIL] output already exists; pass --overwrite to replace it")
 
     payload = _load_json(input_path)
     findings = _collect_findings(payload)
-    _write_json(output_path, _sanitize_value(payload))
+    write_path = _in_place_write_path(input_path) if args.in_place else output_path
+    _write_json_atomic(write_path, _sanitize_value(payload))
     report = _build_report(
         mode="sanitize",
         input_path=input_path,
@@ -475,9 +571,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sanitize = subparsers.add_parser("sanitize", help="write a redacted JSON copy and print bounded findings")
     sanitize.add_argument("--input", required=True, help="Operator-provided JSON artifact path.")
-    output_group = sanitize.add_mutually_exclusive_group(required=True)
-    output_group.add_argument("--output", help="Separate sanitized JSON output path.")
-    output_group.add_argument("--in-place", action="store_true", help="Overwrite the input artifact with the sanitized copy.")
+    sanitize.add_argument("--output", help="Separate sanitized JSON output path. Defaults to a sibling *.sanitized* path.")
+    sanitize.add_argument("--in-place", action="store_true", help="Overwrite the input artifact with the sanitized copy.")
+    sanitize.add_argument("--overwrite", action="store_true", help="Explicitly replace an existing non-in-place output path.")
     sanitize.add_argument("--fail-on-findings", action="store_true", help="Exit non-zero when unsafe markers were found.")
     sanitize.set_defaults(func=_sanitize_command)
 
