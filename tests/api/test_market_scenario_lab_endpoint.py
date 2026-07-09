@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from api.deps import CurrentUser, get_optional_current_user
 from api.v1.endpoints import market
 from src.repositories.scenario_baseline_snapshot_repository import ScenarioBaselineSnapshotStorageError
-from src.storage import DatabaseManager
+from src.storage import DatabaseManager, ScenarioBaselineSnapshotRow
 
 
 FORBIDDEN_PUBLIC_TERMS = (
@@ -777,6 +777,55 @@ def test_market_scenario_lab_baseline_snapshot_create_and_readback_are_explicit_
     assert other_user_latest.json()["ownerScope"] == {"type": "user", "value": "user-b"}
 
 
+def test_market_scenario_lab_durable_create_idempotent_retry_conflict_is_409_and_non_destructive(
+    tmp_path: Path,
+) -> None:
+    db = _snapshot_db(tmp_path)
+    client = _client(snapshot_db_manager=db, current_user=_make_user("user-a", "alice"))
+    original_payload = _baseline_snapshot_create_payload("baseline-api-idempotency")
+
+    create_response = client.post(
+        "/api/v1/market/scenario-lab/baseline-snapshots",
+        json=original_payload,
+    )
+    retry_response = client.post(
+        "/api/v1/market/scenario-lab/baseline-snapshots",
+        json=original_payload,
+    )
+
+    assert create_response.status_code == 200
+    assert retry_response.status_code == 200
+    created = create_response.json()
+    assert retry_response.json() == created
+
+    conflicting_payload = copy.deepcopy(original_payload)
+    conflicting_payload["asOf"] = "2026-07-07T09:45:00Z"
+    conflicting_payload["source"]["asOf"] = "2026-07-07T09:45:00Z"
+    conflicting_response = client.post(
+        "/api/v1/market/scenario-lab/baseline-snapshots",
+        json=conflicting_payload,
+    )
+
+    assert conflicting_response.status_code == 409
+    assert conflicting_response.json()["detail"]["error"] == "scenario_baseline_snapshot_conflict"
+
+    by_id_response = client.get("/api/v1/market/scenario-lab/baseline-snapshots/baseline-api-idempotency")
+    latest_response = client.get(
+        "/api/v1/market/scenario-lab/baseline-snapshots/latest",
+        params={"scopeType": "market", "scopeValue": "US"},
+    )
+    assert by_id_response.status_code == 200
+    assert latest_response.status_code == 200
+    assert by_id_response.json() == created
+    assert latest_response.json() == created
+
+    with db.get_session() as session:
+        rows = session.query(ScenarioBaselineSnapshotRow).all()
+    assert len(rows) == 1
+    assert rows[0].snapshot_id == "baseline-api-idempotency"
+    assert rows[0].content_hash == created["contentHash"]
+
+
 def test_market_scenario_lab_durable_create_preserves_domain_not_available_without_storage_500(
     tmp_path: Path,
 ) -> None:
@@ -839,7 +888,12 @@ def test_market_scenario_lab_durable_create_maps_domain_validation_distinct_from
     )
 
     assert storage_response.status_code == 500
-    assert storage_response.json()["detail"]["error"] == "scenario_baseline_snapshot_storage_unavailable"
+    assert storage_response.status_code not in {409, 422}
+    storage_payload = storage_response.json()
+    assert storage_payload["detail"]["error"] == "scenario_baseline_snapshot_storage_unavailable"
+    assert "snapshotId" not in storage_payload
+    assert "contentHash" not in storage_payload
+    assert "contentVersionRef" not in storage_payload
 
 
 def test_market_scenario_lab_evaluation_does_not_persist_request_supplied_baseline(tmp_path: Path) -> None:
