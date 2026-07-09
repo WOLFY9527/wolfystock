@@ -84,15 +84,15 @@ const LazyNotificationChannelsConfig = lazy(async () => {
 const LazySystemLogsConfig = lazy(() => import('../components/settings/SystemLogsConfig'));
 const LazyDataSourceLibraryDrawer = lazy(() => import('../components/settings/DataSourceLibraryDrawer'));
 
-const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-white/10 bg-white/[0.02] p-1';
+const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-1';
 const SEGMENT_BUTTON_CLASS = 'rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors';
 const CONSOLE_NAV_BUTTON_CLASS = 'w-full rounded-xl px-3 py-2 text-left text-sm transition-colors';
-const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
-const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
-const DRAWER_PANEL_CLASS = 'rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3';
-const DRAWER_SECTION_CLASS = 'rounded-xl border border-white/5 bg-white/[0.015] p-4';
-const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-6 flex cursor-pointer list-none items-center gap-1.5 border-t border-white/5 pt-4 text-xs text-white/30 transition-colors hover:text-white [&::-webkit-details-marker]:hidden';
-const SETTINGS_DRAWER_GHOST_FORM_SCOPE_CLASS = '[&_.input-surface]:!rounded-lg [&_.input-surface]:!border-white/5 [&_.input-surface]:!bg-white/[0.02] [&_.input-surface]:!py-2 [&_.input-surface]:!text-sm [&_.input-surface]:!text-white [&_.input-surface]:!transition-all [&_.input-surface]:placeholder:!text-white/20 [&_.input-surface]:focus:!border-indigo-500/50 [&_.input-surface]:focus:!bg-white/[0.05] [&_.input-surface]:focus:!outline-none [&_.input-surface]:focus:!ring-1 [&_.input-surface]:focus:!ring-indigo-500/50 [&_.theme-field-label]:!mb-1.5 [&_.theme-field-label]:!block [&_.theme-field-label]:!text-[10px] [&_.theme-field-label]:!font-bold [&_.theme-field-label]:!uppercase [&_.theme-field-label]:!tracking-widest [&_.theme-field-label]:!text-white/40';
+const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-[var(--wolfy-surface-input)] border border-[color:var(--wolfy-border-subtle)] hover:bg-[var(--wolfy-surface-input)] text-xs transition-colors';
+const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)] border border-[color:var(--wolfy-border-subtle)]';
+const DRAWER_PANEL_CLASS = 'rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-4 py-3';
+const DRAWER_SECTION_CLASS = 'rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-white/[0.015] p-4';
+const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-6 flex cursor-pointer list-none items-center gap-1.5 border-t border-[color:var(--wolfy-border-subtle)] pt-4 text-xs text-[color:var(--wolfy-text-muted)] transition-colors hover:text-[color:var(--wolfy-text-primary)] [&::-webkit-details-marker]:hidden';
+const SETTINGS_DRAWER_GHOST_FORM_SCOPE_CLASS = '[&_.input-surface]:!rounded-lg [&_.input-surface]:!border-[color:var(--wolfy-border-subtle)] [&_.input-surface]:!bg-[var(--wolfy-surface-console)] [&_.input-surface]:!py-2 [&_.input-surface]:!text-sm [&_.input-surface]:!text-[color:var(--wolfy-text-primary)] [&_.input-surface]:!transition-all [&_.input-surface]:placeholder:!text-[color:var(--wolfy-text-muted)] [&_.input-surface]:focus:!border-indigo-500/50 [&_.input-surface]:focus:!bg-[var(--wolfy-surface-input)] [&_.input-surface]:focus:!outline-none [&_.input-surface]:focus:!ring-1 [&_.input-surface]:focus:!ring-indigo-500/50 [&_.theme-field-label]:!mb-1.5 [&_.theme-field-label]:!block [&_.theme-field-label]:!text-[10px] [&_.theme-field-label]:!font-bold [&_.theme-field-label]:!uppercase [&_.theme-field-label]:!tracking-widest [&_.theme-field-label]:!text-[color:var(--wolfy-text-muted)]';
 
 const resolveDraftStateValue = <T,>(
   draftState: DraftState<T>,
@@ -153,10 +153,10 @@ const SettingsDomainPanelFallback: React.FC<{
     role="status"
     aria-live="polite"
     data-testid="settings-domain-panel-loading"
-    className="overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02]"
+    className="overflow-hidden rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]"
   >
-    <div className="border-b border-white/5 p-4 sm:px-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
+    <div className="border-b border-[color:var(--wolfy-border-subtle)] p-4 sm:px-5">
+      <h2 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{title}</h2>
       <p className="mt-1 text-xs text-secondary-text">{description}</p>
     </div>
     <div className="space-y-3 p-4 sm:px-5">
@@ -2311,7 +2311,7 @@ const SettingsPage: React.FC = () => {
         >
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-1">
-              <p className="mb-4 px-3 text-xs font-bold uppercase tracking-[0.22em] text-white/40">{operationsCenterTitle}</p>
+              <p className="mb-4 px-3 text-xs font-bold uppercase tracking-[0.22em] text-[color:var(--wolfy-text-muted)]">{operationsCenterTitle}</p>
               {panelNavItems.map((panel) => {
                 const nav = panelNavItems.find((item) => item.domain === panel.domain);
                 if (!nav) {
@@ -2323,8 +2323,8 @@ const SettingsPage: React.FC = () => {
                     key={panel.domain}
                     type="button"
                     className={isActive
-                      ? `${CONSOLE_NAV_BUTTON_CLASS} border border-white/10 bg-white/[0.08] font-medium text-white`
-                      : `${CONSOLE_NAV_BUTTON_CLASS} border border-transparent text-white/60 hover:border-white/8 hover:bg-white/[0.02] hover:text-white`}
+                      ? `${CONSOLE_NAV_BUTTON_CLASS} border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] font-medium text-[color:var(--wolfy-text-primary)]`
+                      : `${CONSOLE_NAV_BUTTON_CLASS} border border-transparent text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-border-subtle)] hover:bg-[var(--wolfy-surface-console)] hover:text-[color:var(--wolfy-text-primary)]`}
                     onClick={() => handleSelectPanel(panel.domain)}
                   >
                     <span className="block">{nav.title}</span>
@@ -2333,7 +2333,7 @@ const SettingsPage: React.FC = () => {
               })}
             </div>
 
-            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-3">
+            <div className="rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
               <SettingsCategoryNav
                 categories={domainCategories}
                 itemsByCategory={itemsByCategory}
@@ -2483,7 +2483,7 @@ const SettingsPage: React.FC = () => {
                   {!isDesktopViewport ? (
                     <Disclosure
                       summary={`${t('settings.categoriesTitle')} · ${activeCategoryLabel}`}
-                      className="rounded-2xl border border-white/5 bg-white/[0.02]"
+                      className="rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]"
                       bodyClassName="space-y-3"
                     >
                       <SettingsCategoryNav
@@ -2560,7 +2560,7 @@ const SettingsPage: React.FC = () => {
                       </GlassCard>
                     </SettingsSectionCard>
                   ) : (
-                    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
+                    <div className="rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-5">
                       <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.22em]">{rawFieldsSectionTitle}</p>
                       <p className="mt-2 text-sm font-semibold text-foreground">
                         {t('settings.noItems')}
@@ -2670,7 +2670,7 @@ const SettingsPage: React.FC = () => {
               type="button"
               className={showRuntimeExecutionSummary
                 ? `${SEGMENT_BUTTON_CLASS} bg-white text-black`
-                : `${SEGMENT_BUTTON_CLASS} text-secondary-text hover:bg-white/[0.05] hover:text-white`}
+                : `${SEGMENT_BUTTON_CLASS} text-secondary-text hover:bg-[var(--wolfy-surface-input)] hover:text-[color:var(--wolfy-text-primary)]`}
               onClick={() => setShowRuntimeExecutionSummary(true)}
               disabled={adminLocked || isSaving}
             >
@@ -2680,7 +2680,7 @@ const SettingsPage: React.FC = () => {
               type="button"
               className={!showRuntimeExecutionSummary
                 ? `${SEGMENT_BUTTON_CLASS} bg-white text-black`
-                : `${SEGMENT_BUTTON_CLASS} text-secondary-text hover:bg-white/[0.05] hover:text-white`}
+                : `${SEGMENT_BUTTON_CLASS} text-secondary-text hover:bg-[var(--wolfy-surface-input)] hover:text-[color:var(--wolfy-text-primary)]`}
               onClick={() => setShowRuntimeExecutionSummary(false)}
               disabled={adminLocked || isSaving}
             >
@@ -3411,7 +3411,7 @@ const SettingsPage: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <span aria-hidden="true" className="size-2 rounded-full bg-cyan-300/80 animate-pulse" />
                   <div className="space-y-1">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200/80">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--state-info-text)]/80">
                       高级渠道终端
                     </p>
                     <p className="text-xs text-secondary-text">正在按需加载高级渠道终端…</p>

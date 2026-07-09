@@ -292,7 +292,7 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
       description={copy.description}
       className="border-white/6 bg-white/[0.025]"
     >
-      <div className="rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
+      <div className="rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-black/20 px-4 py-3">
         <p className="text-sm font-semibold text-foreground">{copy.surfaceTitle}</p>
         <p className="mt-1 text-xs leading-5 text-secondary-text">
           {copy.body}
@@ -318,7 +318,7 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
           return (
             <GlassCard
               key={channel.id}
-              className="flex min-h-[280px] flex-col justify-between gap-4 border-white/5 bg-white/[0.018] p-4"
+              className="flex min-h-[280px] flex-col justify-between gap-4 border-[color:var(--wolfy-border-subtle)] bg-white/[0.018] p-4"
               data-testid={`notification-channel-card-${channel.id}`}
             >
               <div>
@@ -330,7 +330,7 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
                   <span
                     className={configuredCount > 0
                       ? 'rounded-full border border-emerald-300/20 px-2 py-1 text-[11px] font-semibold text-emerald-200'
-                      : 'rounded-full border border-white/10 px-2 py-1 text-[11px] font-semibold text-muted-text'}
+                      : 'rounded-full border border-[color:var(--wolfy-border-subtle)] px-2 py-1 text-[11px] font-semibold text-muted-text'}
                   >
                     {statusText}
                   </span>
@@ -359,7 +359,7 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
                     if (field.kind === 'switch') {
                       const checked = fieldValue.trim().toLowerCase() !== 'false';
                       return (
-                        <label key={field.key} className="inline-flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-black/20 px-3 py-2">
+                        <label key={field.key} className="inline-flex items-center justify-between gap-3 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-black/20 px-3 py-2">
                           <span className="text-xs font-medium text-secondary-text">{fieldLabel(field)}</span>
                           <input
                             id={fieldId}
@@ -392,7 +392,7 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--wolfy-border-subtle)] pt-3">
                 <span className="text-xs text-muted-text">{copy.testUnavailable}</span>
                 <Button
                   type="button"

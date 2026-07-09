@@ -129,7 +129,7 @@ const MATRIX_SUMMARY_DEFAULTS = {
 const ADMIN_SECTION_HEADING_CLASSNAME =
   '[&_[data-terminal-primitive=section-header]_p]:text-[12px] [&_[data-terminal-primitive=section-header]_p]:font-medium [&_[data-terminal-primitive=section-header]_h2]:text-lg [&_[data-terminal-primitive=section-header]_h2]:font-semibold md:[&_[data-terminal-primitive=section-header]_h2]:text-xl';
 const ADMIN_PROVIDER_OPERATIONS_PAGE_CLASSNAME =
-  'market-provider-operations-page flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-x-clip overflow-y-auto no-scrollbar text-white [&_a]:[overflow-wrap:anywhere] [&_dd]:min-w-0 [&_dd]:[overflow-wrap:anywhere] [&_p]:min-w-0 [&_p]:[overflow-wrap:anywhere] [&_[data-terminal-primitive=chip]]:min-w-0 [&_[data-terminal-primitive=chip]]:whitespace-normal [&_[data-terminal-primitive=chip]]:[overflow-wrap:anywhere] [&_[data-terminal-primitive=disclosure]]:min-w-0 [&_[data-terminal-primitive=disclosure]]:max-w-full [&_[data-terminal-primitive=disclosure]_h3]:whitespace-normal [&_[data-terminal-primitive=disclosure]_h3]:overflow-visible [&_[data-terminal-primitive=disclosure]_h3]:[overflow-wrap:anywhere] [&_[data-terminal-primitive=disclosure]_p]:whitespace-normal [&_[data-terminal-primitive=disclosure]_p]:overflow-visible [&_[data-terminal-primitive=disclosure]_p]:[overflow-wrap:anywhere] [&_[data-terminal-primitive=nested-block]]:min-w-0 [&_[data-terminal-primitive=panel]]:min-w-0';
+  'market-provider-operations-page flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-x-clip overflow-y-auto no-scrollbar text-[color:var(--wolfy-text-primary)] [&_a]:[overflow-wrap:anywhere] [&_dd]:min-w-0 [&_dd]:[overflow-wrap:anywhere] [&_p]:min-w-0 [&_p]:[overflow-wrap:anywhere] [&_[data-terminal-primitive=chip]]:min-w-0 [&_[data-terminal-primitive=chip]]:whitespace-normal [&_[data-terminal-primitive=chip]]:[overflow-wrap:anywhere] [&_[data-terminal-primitive=disclosure]]:min-w-0 [&_[data-terminal-primitive=disclosure]]:max-w-full [&_[data-terminal-primitive=disclosure]_h3]:whitespace-normal [&_[data-terminal-primitive=disclosure]_h3]:overflow-visible [&_[data-terminal-primitive=disclosure]_h3]:[overflow-wrap:anywhere] [&_[data-terminal-primitive=disclosure]_p]:whitespace-normal [&_[data-terminal-primitive=disclosure]_p]:overflow-visible [&_[data-terminal-primitive=disclosure]_p]:[overflow-wrap:anywhere] [&_[data-terminal-primitive=nested-block]]:min-w-0 [&_[data-terminal-primitive=panel]]:min-w-0';
 const ADMIN_TABLE_SCROLL_REGION_CLASSNAME =
   'min-w-0 max-w-full overflow-x-auto overscroll-x-contain [contain:inline-size] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] [-webkit-overflow-scrolling:touch]';
 const ADMIN_TABLE_IDENTITY_CLASSNAME = 'min-w-0 whitespace-normal [overflow-wrap:anywhere]';
@@ -357,18 +357,18 @@ const ConsumerEvidenceImpactMatrix: React.FC<{
   });
 
   return (
-    <TerminalNestedBlock data-testid="market-provider-consumer-evidence-matrix" className="mt-4 bg-black/10 px-3 py-3">
+    <TerminalNestedBlock data-testid="market-provider-consumer-evidence-matrix" className="mt-4 bg-[var(--wolfy-surface-input)] px-3 py-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">admin 诊断视图</p>
-          <p className="mt-1 text-sm font-semibold text-white/82">消费者证据影响矩阵</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">admin 诊断视图</p>
+          <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">消费者证据影响矩阵</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
           <TerminalChip variant="neutral">{formatNumber(sortedItems.length, 0)} 个 consumer surface</TerminalChip>
           <TerminalChip variant="info">provider-free</TerminalChip>
         </div>
       </div>
-      <p className="mt-2 text-[11px] leading-5 text-white/48">
+      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
         只读汇总现有 consumer evidence readiness 对各产品面的影响。这里显示的是 admin 诊断字段，consumer 页面应继续保留既有 bounded copy，不直接投射本矩阵原文。
       </p>
       <div className="mt-3 grid gap-2">
@@ -380,7 +380,7 @@ const ConsumerEvidenceImpactMatrix: React.FC<{
               key={`${item.surface}:${item.evidenceFamily}`}
               data-testid={`market-provider-consumer-evidence-row-${consumerEvidenceItemKey(item)}`}
               className={cn(
-                'rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-3',
+                'rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3',
                 isFocused ? 'border-cyan-200/20 bg-cyan-300/[0.035]' : '',
               )}
             >
@@ -390,9 +390,9 @@ const ConsumerEvidenceImpactMatrix: React.FC<{
                     <TerminalChip variant={consumerEvidenceReadinessVariant(item.readinessState)}>
                       {consumerEvidenceReadinessLabel(item.readinessState)}
                     </TerminalChip>
-                    <p className={cn('text-xs font-semibold text-white/84', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{surfaceLabel(item.surface)}</p>
+                    <p className={cn('text-xs font-semibold text-[color:var(--wolfy-text-primary)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{surfaceLabel(item.surface)}</p>
                   </div>
-                  <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'mt-1 text-[11px] text-white/48')}>{sanitizeCodeLabel(item.evidenceFamily)}</p>
+                  <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]')}>{sanitizeCodeLabel(item.evidenceFamily)}</p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   <TerminalChip variant="caution">缺失 {formatNumber(item.missingInputs.length, 0)}</TerminalChip>
@@ -402,20 +402,20 @@ const ConsumerEvidenceImpactMatrix: React.FC<{
                 </div>
               </div>
               <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-                <div className="min-w-0 space-y-1.5 text-[11px] leading-5 text-white/58">
-                  <p><span className="text-white/36">置信原因：</span>{sanitizeOperatorText(item.confidenceCapReason)}</p>
-                  <p><span className="text-white/36">来源原因：</span>{sanitizeOperatorText(item.sourceAuthorityReason)}</p>
-                  <p><span className="text-white/36">时效原因：</span>{sanitizeOperatorText(item.freshnessReason)}</p>
+                <div className="min-w-0 space-y-1.5 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+                  <p><span className="text-[color:var(--wolfy-text-muted)]">置信原因：</span>{sanitizeOperatorText(item.confidenceCapReason)}</p>
+                  <p><span className="text-[color:var(--wolfy-text-muted)]">来源原因：</span>{sanitizeOperatorText(item.sourceAuthorityReason)}</p>
+                  <p><span className="text-[color:var(--wolfy-text-muted)]">时效原因：</span>{sanitizeOperatorText(item.freshnessReason)}</p>
                 </div>
-                <div className="min-w-0 space-y-1.5 text-[11px] leading-5 text-white/58">
+                <div className="min-w-0 space-y-1.5 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                   <p>
-                    <span className="text-white/36">受影响 consumer route：</span>
+                    <span className="text-[color:var(--wolfy-text-muted)]">受影响 consumer route：</span>
                     {route ? (
-                      <a href={route.href} className="text-cyan-100/82 underline underline-offset-2">{route.label}</a>
+                      <a href={route.href} className="text-[color:var(--state-info-text)] underline underline-offset-2">{route.label}</a>
                     ) : '暂无映射'}
                   </p>
-                  <p><span className="text-white/36">下一诊断：</span>{sanitizeOperatorText(item.nextDiagnostic)}</p>
-                  <p><span className="text-white/36">Consumer-safe summary：</span>{sanitizeOperatorText(item.consumerSafeSummary)}</p>
+                  <p><span className="text-[color:var(--wolfy-text-muted)]">下一诊断：</span>{sanitizeOperatorText(item.nextDiagnostic)}</p>
+                  <p><span className="text-[color:var(--wolfy-text-muted)]">Consumer-safe summary：</span>{sanitizeOperatorText(item.consumerSafeSummary)}</p>
                 </div>
               </div>
             </div>
@@ -1880,8 +1880,8 @@ const TickflowEntitlementRow: React.FC<{ projection: TickflowProjection }> = ({ 
     <TerminalNestedBlock className="px-3 py-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-widest text-white/35">TickFlow A股宽度</p>
-          <p className="mt-1 text-sm font-semibold text-white">权限诊断</p>
+          <p className="text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">TickFlow A股宽度</p>
+          <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">权限诊断</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
           <TerminalChip variant={tickflowCredentialVariant(projection.credentialState || projection.status)}>{keyBadge}</TerminalChip>
@@ -1924,7 +1924,7 @@ const DrillLink: React.FC<{ drill?: AdminLogDrillThrough; className?: string }> 
       href={href}
       aria-label={`${drill.label}（打开筛选后的 Admin Logs）`}
       title={`${drill.label}（打开筛选后的 Admin Logs）`}
-      className={cn('inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-semibold text-white/62 transition hover:border-cyan-300/25 hover:text-cyan-100', className)}
+      className={cn('inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)] transition hover:border-cyan-300/25 hover:text-[color:var(--state-info-text)]', className)}
     >
       {drill.label}
       <ExternalLink className="h-3 w-3" aria-hidden="true" />
@@ -2063,7 +2063,7 @@ const ProviderActivationVerifierPanel: React.FC<{
           </div>
         ) : <TerminalChip variant="neutral">待读取</TerminalChip>}
       />
-      <p className="mt-2 text-[11px] leading-5 text-white/50">
+      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
         Operator-only activation path for real-data beta readiness. This panel shows provider names, blocked surfaces, freshness/cache posture, and next checks without secret values or raw diagnostics.
       </p>
       {error ? <ApiErrorAlert error={error} className="mt-4" /> : null}
@@ -2083,25 +2083,25 @@ const ProviderActivationVerifierPanel: React.FC<{
               <TerminalNestedBlock key={item.capabilityId} className="px-3 py-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'text-[10px] font-semibold uppercase tracking-[0.14em] text-white/36')}>
+                    <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]')}>
                       {sanitizeCodeLabel(item.capabilityId)}
                     </p>
-                    <p className={cn('mt-1 text-sm font-semibold text-white', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sanitizeOperatorText(item.provider, 'Unknown provider')}</p>
-                    <p className={cn('mt-1 text-[11px] leading-5 text-white/54', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sanitizeOperatorText(item.dataClass, 'Unknown data class')}</p>
+                    <p className={cn('mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sanitizeOperatorText(item.provider, 'Unknown provider')}</p>
+                    <p className={cn('mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sanitizeOperatorText(item.dataClass, 'Unknown data class')}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <TerminalChip variant={activationStatusVariant(item.status)}>{activationStatusLabel(item.status)}</TerminalChip>
                     <TerminalChip variant="neutral">{sanitizeCodeLabel(item.freshnessCacheStatus?.state || 'unknown')}</TerminalChip>
                   </div>
                 </div>
-                <p className={cn('mt-2 text-[11px] leading-5 text-white/58', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sanitizeOperatorText(item.userFacingImpact)}</p>
-                <p className={cn('mt-1 text-[11px] leading-5 text-white/70', ADMIN_TABLE_IDENTITY_CLASSNAME)}>Next action: {sanitizeOperatorText(item.adminNextAction)}</p>
+                <p className={cn('mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sanitizeOperatorText(item.userFacingImpact)}</p>
+                <p className={cn('mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-secondary)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>Next action: {sanitizeOperatorText(item.adminNextAction)}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {item.blockedProductSurfaces.map((surface) => (
                     <TerminalChip key={`${item.capabilityId}-${surface}`} variant="neutral">{sanitizeOperatorText(surface)}</TerminalChip>
                   ))}
                 </div>
-                <p className={cn('mt-2 text-[10px] leading-4 text-white/38', ADMIN_TABLE_IDENTITY_CLASSNAME)}>Check: {sanitizeOperatorText(item.minimumValidationCheck)}</p>
+                <p className={cn('mt-2 text-[10px] leading-4 text-[color:var(--wolfy-text-muted)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>Check: {sanitizeOperatorText(item.minimumValidationCheck)}</p>
               </TerminalNestedBlock>
             ))}
           </TerminalDenseList>
@@ -2145,7 +2145,7 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
           </div>
         )}
       />
-      <p className="mt-2 text-[11px] leading-5 text-white/46">
+      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
         只读展示现有 DATA-113 admin dry-run endpoint，把当前 OHLCV runtime/cache/seed readiness 汇总成 operator checklist。默认关闭是正常安全状态，不代表故障；consumer 页面不会显示这些 provider/ops 内部说明，本页也不发起外部网络调用或缓存写入。
       </p>
 
@@ -2165,22 +2165,22 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
 
       {preflight ? (
         <div className="mt-4 grid gap-2 md:grid-cols-4">
-          <div className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-2.5">
-            <p className="text-[11px] text-white/42">代表样本</p>
-            <p className="mt-1 text-sm font-semibold text-white/82">
+          <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
+            <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">代表样本</p>
+            <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
               CN {formatNumber(preflight.representativeSymbols.cn.length, 0)} · US {formatNumber(preflight.representativeSymbols.us.length, 0)}
             </p>
           </div>
-          <div className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-2.5">
-            <p className="text-[11px] text-white/42">缓存命中</p>
-            <p className="mt-1 text-sm font-semibold text-white/82">{formatNumber(hitCount, 0)} / {formatNumber(symbols.length, 0)}</p>
+          <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
+            <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">缓存命中</p>
+            <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{formatNumber(hitCount, 0)} / {formatNumber(symbols.length, 0)}</p>
           </div>
-          <div className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-2.5">
-            <p className="text-[11px] text-white/42">缺少复权</p>
-            <p className="mt-1 text-sm font-semibold text-white/82">{formatNumber(missingAdjustmentCount, 0)} 个样本</p>
+          <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
+            <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">缺少复权</p>
+            <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{formatNumber(missingAdjustmentCount, 0)} 个样本</p>
           </div>
-          <div className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-2.5">
-            <p className="text-[11px] text-white/42">seed 控制</p>
+          <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
+            <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">seed 控制</p>
             <button
               type="button"
               disabled={!seedMutationAllowed}
@@ -2188,8 +2188,8 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
               className={cn(
                 'mt-1 min-h-8 rounded-md border px-2.5 py-1 text-[11px] font-semibold',
                 seedMutationAllowed
-                  ? 'border-amber-200/30 bg-amber-300/10 text-amber-100'
-                  : 'cursor-not-allowed border-white/[0.06] bg-white/[0.025] text-white/44',
+                  ? 'border-amber-200/30 bg-amber-300/10 text-[color:var(--state-warning-text)]'
+                  : 'cursor-not-allowed border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]',
               )}
             >
               {seedMutationAllowed ? '显式 seed 已允许' : 'seed 按钮禁用'}
@@ -2201,12 +2201,12 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
       {preflight ? (
         <div
           data-testid="historical-ohlcv-activation-checklist"
-          className="mt-4 rounded-lg border border-white/[0.07] bg-white/[0.025] p-3"
+          className="mt-4 rounded-lg border border-white/[0.07] bg-[var(--wolfy-surface-input)] p-3"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">admin/operator only</p>
-              <p className="mt-1 text-sm font-semibold text-white/84">当前激活动作、starter symbols 与解锁工作流</p>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">admin/operator only</p>
+              <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">当前激活动作、starter symbols 与解锁工作流</p>
             </div>
             <div className="flex flex-wrap gap-1.5">
               <TerminalChip variant="neutral">consumer safe</TerminalChip>
@@ -2222,12 +2222,12 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
               <TerminalNestedBlock
                 key={item.market}
                 data-testid={`historical-ohlcv-activation-market-${item.market}`}
-                className="bg-black/10 px-3 py-3"
+                className="bg-[var(--wolfy-surface-input)] px-3 py-3"
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">{historicalMarketLabel(item.market)}</p>
-                    <p className={cn('mt-1 text-sm font-semibold text-white/84', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sanitizeOperatorText(item.currentStatusSummary)}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{historicalMarketLabel(item.market)}</p>
+                    <p className={cn('mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sanitizeOperatorText(item.currentStatusSummary)}</p>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     <TerminalChip variant={historicalStateVariant(item.state)}>{sanitizeCodeLabel(item.state)}</TerminalChip>
@@ -2239,10 +2239,10 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
                     </TerminalChip>
                   </div>
                 </div>
-                <p className={cn('mt-2 text-[11px] leading-5 text-white/56', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sanitizeOperatorText(item.nextStepSummary)}</p>
+                <p className={cn('mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sanitizeOperatorText(item.nextStepSummary)}</p>
                 <div className="mt-3 grid gap-2 xl:grid-cols-2">
                   <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/32">Required runtime flags</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">Required runtime flags</p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {item.requiredRuntimeFlags.map((flag) => (
                         <TerminalChip key={flag} variant="neutral">{sanitizeCodeLabel(flag)}</TerminalChip>
@@ -2251,7 +2251,7 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
                     </div>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/32">Workflow unlocks</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">Workflow unlocks</p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {item.workflowUnlocks.map((workflow) => (
                         <TerminalChip key={workflow} variant="info">{sanitizeCodeLabel(workflow)}</TerminalChip>
@@ -2261,25 +2261,25 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
                 </div>
                 <div className="mt-3 grid gap-2 xl:grid-cols-2">
                   <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/32">Recommended first symbols</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">Recommended first symbols</p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {item.recommendedFirstSymbols.map((symbol) => (
                         <TerminalChip key={symbol} variant="success">{sanitizeCodeLabel(symbol)}</TerminalChip>
                       ))}
                     </div>
                   </div>
-                  <div className="min-w-0 text-[11px] leading-5 text-white/58">
-                    <p><span className="text-white/34">缓存命中：</span>{formatNumber(item.cacheSummary.cachedSymbolCount, 0)} / {formatNumber(item.cacheSummary.totalSymbols, 0)}</p>
-                    <p><span className="text-white/34">就绪样本：</span>{formatNumber(item.cacheSummary.readySymbolCount, 0)}</p>
-                    <p><span className="text-white/34">过期样本：</span>{formatNumber(item.cacheSummary.staleSymbolCount, 0)}</p>
-                    <p><span className="text-white/34">缺少复权：</span>{formatNumber(item.cacheSummary.missingAdjustmentCount, 0)}</p>
-                    <p><span className="text-white/34">safe failure：</span>{formatNumber(item.cacheSummary.failedSafelyCount, 0)}</p>
+                  <div className="min-w-0 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+                    <p><span className="text-[color:var(--wolfy-text-muted)]">缓存命中：</span>{formatNumber(item.cacheSummary.cachedSymbolCount, 0)} / {formatNumber(item.cacheSummary.totalSymbols, 0)}</p>
+                    <p><span className="text-[color:var(--wolfy-text-muted)]">就绪样本：</span>{formatNumber(item.cacheSummary.readySymbolCount, 0)}</p>
+                    <p><span className="text-[color:var(--wolfy-text-muted)]">过期样本：</span>{formatNumber(item.cacheSummary.staleSymbolCount, 0)}</p>
+                    <p><span className="text-[color:var(--wolfy-text-muted)]">缺少复权：</span>{formatNumber(item.cacheSummary.missingAdjustmentCount, 0)}</p>
+                    <p><span className="text-[color:var(--wolfy-text-muted)]">safe failure：</span>{formatNumber(item.cacheSummary.failedSafelyCount, 0)}</p>
                   </div>
                 </div>
                 {item.availableSeedActions.length ? (
                   <div className="mt-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/32">Available seed actions</p>
-                    <div className="mt-2 space-y-1.5 text-[11px] leading-5 text-white/60">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">Available seed actions</p>
+                    <div className="mt-2 space-y-1.5 text-[11px] leading-5 text-[color:var(--wolfy-text-secondary)]">
                       {item.availableSeedActions.map((action) => (
                         <p key={action} className={ADMIN_TABLE_IDENTITY_CLASSNAME}>{sanitizeOperatorText(action)}</p>
                       ))}
@@ -2295,11 +2295,11 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
       {markets.length ? (
         <div className="mt-4 grid gap-3">
           {markets.map((market) => (
-            <TerminalNestedBlock key={market.market} className="bg-black/10 px-3 py-3">
+            <TerminalNestedBlock key={market.market} className="bg-[var(--wolfy-surface-input)] px-3 py-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">{historicalMarketLabel(market.market)}</p>
-                  <p className="mt-1 text-sm font-semibold text-white/84">代表缓存状态</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{historicalMarketLabel(market.market)}</p>
+                  <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">代表缓存状态</p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   <TerminalChip variant={market.runtimeEnabled ? 'success' : 'neutral'}>{historicalRuntimeLabel(market.runtimeEnabled)}</TerminalChip>
@@ -2314,8 +2314,8 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
               >
                 <table className="w-full min-w-[48rem] table-fixed">
                   <caption className="sr-only">历史 OHLCV 样本缓存状态</caption>
-                  <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
-                    <tr className="border-b border-white/5 text-left">
+                  <thead className="bg-[var(--wolfy-surface-input)] text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
+                    <tr className="border-b border-[color:var(--wolfy-border-subtle)] text-left">
                       <th scope="col" className="px-3 py-3 font-medium">Symbol</th>
                       <th scope="col" className="px-3 py-3 font-medium">缓存</th>
                       <th scope="col" className="px-3 py-3 font-medium">Bars</th>
@@ -2329,8 +2329,8 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
                       <tr key={`${market.market}-${symbol.symbol}`} className="border-b border-white/[0.04] align-top">
                         <th scope="row" className="px-3 py-3 text-left font-normal">
                           <div className="min-w-0">
-                            <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'text-sm font-semibold text-white/86')}>{sanitizeCodeLabel(symbol.symbol)}</p>
-                            <p className="mt-1 text-[11px] text-white/38">{historicalDataStateLabel(symbol.dataState)}</p>
+                            <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'text-sm font-semibold text-[color:var(--wolfy-text-primary)]')}>{sanitizeCodeLabel(symbol.symbol)}</p>
+                            <p className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{historicalDataStateLabel(symbol.dataState)}</p>
                           </div>
                         </th>
                         <td className="px-3 py-3">
@@ -2340,8 +2340,8 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
                             <TerminalChip variant={symbol.dependencyAvailable === false ? 'caution' : 'success'}>{historicalDependencyLabel(symbol.dependencyAvailable)}</TerminalChip>
                           </div>
                         </td>
-                        <td className="px-3 py-3 font-mono text-sm text-white/78">{formatNumber(symbol.cachedBars, 0)}</td>
-                        <td className="px-3 py-3 text-[11px] leading-5 text-white/58">
+                        <td className="px-3 py-3 font-mono text-sm text-[color:var(--wolfy-text-secondary)]">{formatNumber(symbol.cachedBars, 0)}</td>
+                        <td className="px-3 py-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                           {historicalFreshnessLabel(symbol.freshnessState, symbol.latestBarDate)}
                         </td>
                         <td className="px-3 py-3">
@@ -2349,7 +2349,7 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
                             {historicalAdjustmentLabel(symbol.adjustmentState)}
                           </TerminalChip>
                         </td>
-                        <td className="px-3 py-3 text-[11px] leading-5 text-white/62">
+                        <td className="px-3 py-3 text-[11px] leading-5 text-[color:var(--wolfy-text-secondary)]">
                           <div className="flex flex-wrap gap-1.5">
                             <TerminalChip variant={historicalStateVariant(symbol.nextAction?.state || symbol.dataState)}>
                               {sanitizeCodeLabel(symbol.nextAction?.state || symbol.dataState)}
@@ -2402,22 +2402,22 @@ const ProviderOpsTopSummary: React.FC<{
   ] as const;
 
   return (
-    <div data-testid="market-provider-readability-summary" className="mt-5 rounded-lg border border-white/[0.07] bg-white/[0.025] p-3">
+    <div data-testid="market-provider-readability-summary" className="mt-5 rounded-lg border border-white/[0.07] bg-[var(--wolfy-surface-input)] p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">首屏摘要</p>
-          <p className="mt-1 text-sm font-semibold text-white/84">先确认状态、缺口、观察边界和影响页面</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">首屏摘要</p>
+          <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">先确认状态、缺口、观察边界和影响页面</p>
         </div>
         <TerminalChip variant="info">不改变数据源语义</TerminalChip>
       </div>
       <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-4">
         {summaryItems.map((item) => (
-          <div key={item.label} className="min-w-0 rounded-md border border-white/[0.06] bg-black/10 px-3 py-2.5">
+          <div key={item.label} className="min-w-0 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] font-medium text-white/50">{item.label}</p>
+              <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{item.label}</p>
               <TerminalChip variant={item.variant}>{item.value}</TerminalChip>
             </div>
-            <p className={cn('mt-2 text-xs leading-5 text-white/72', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{item.detail}</p>
+            <p className={cn('mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{item.detail}</p>
           </div>
         ))}
       </div>
@@ -2429,11 +2429,11 @@ const ProviderOpsActionQueue: React.FC<{
   items: ProviderOpsActionQueueItem[];
   isLoading: boolean;
 }> = ({ items, isLoading }) => (
-  <div data-testid="market-provider-action-queue" className="mt-3 rounded-lg border border-white/[0.07] bg-black/10 px-3 py-3">
+  <div data-testid="market-provider-action-queue" className="mt-3 rounded-lg border border-white/[0.07] bg-[var(--wolfy-surface-input)] px-3 py-3">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">L1 行动队列</p>
-        <p className="mt-1 text-sm font-semibold text-white/84">优先处理少量阻断和注意项</p>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">L1 行动队列</p>
+        <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">优先处理少量阻断和注意项</p>
       </div>
       <TerminalChip variant={items.length ? 'caution' : 'success'}>
         {isLoading ? '读取中' : items.length ? `${formatNumber(items.length, 0)} 项` : '暂无待办'}
@@ -2441,21 +2441,21 @@ const ProviderOpsActionQueue: React.FC<{
     </div>
     <div className="mt-3 grid gap-2">
       {isLoading && !items.length ? (
-        <p className="text-[11px] leading-5 text-white/40">正在汇总行动队列；不触发额外 provider 调用。</p>
+        <p className="text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">正在汇总行动队列；不触发额外 provider 调用。</p>
       ) : null}
       {!isLoading && !items.length ? (
-        <p className="text-[11px] leading-5 text-white/44">当前没有需要置顶处理的 provider 缺口；继续保持只读观察。</p>
+        <p className="text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">当前没有需要置顶处理的 provider 缺口；继续保持只读观察。</p>
       ) : null}
       {items.map((item) => (
-        <div key={item.key} className="grid min-w-0 gap-2 rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2.5 md:grid-cols-[minmax(0,0.95fr)_minmax(0,0.7fr)_minmax(0,1.35fr)] md:items-center">
+        <div key={item.key} className="grid min-w-0 gap-2 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5 md:grid-cols-[minmax(0,0.95fr)_minmax(0,0.7fr)_minmax(0,1.35fr)] md:items-center">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5">
               <TerminalChip variant={disclosureSeverityVariant(item.severity)}>{disclosureSeverityLabel(item.severity)}</TerminalChip>
-              <p className={cn('text-xs font-semibold text-white/82', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{item.title}</p>
+              <p className={cn('text-xs font-semibold text-[color:var(--wolfy-text-primary)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{item.title}</p>
             </div>
           </div>
-          <p className={cn('text-[11px] leading-5 text-white/52', ADMIN_TABLE_IDENTITY_CLASSNAME)}>影响：{item.scope}</p>
-          <p className="min-w-0 text-[11px] leading-5 text-white/62">下一步：{item.action}</p>
+          <p className={cn('text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>影响：{item.scope}</p>
+          <p className="min-w-0 text-[11px] leading-5 text-[color:var(--wolfy-text-secondary)]">下一步：{item.action}</p>
         </div>
       ))}
     </div>
@@ -2469,11 +2469,11 @@ const AdminDataRoadmapPanel: React.FC<{
   const totalRows = DATA_ROADMAP_SURFACES.reduce((count, surface) => count + rowsBySurface[surface.id].length, 0);
 
   return (
-    <div data-testid="admin-data-roadmap-panel" className="mt-4 rounded-lg border border-white/[0.07] bg-black/10 px-3 py-3">
+    <div data-testid="admin-data-roadmap-panel" className="mt-4 rounded-lg border border-white/[0.07] bg-[var(--wolfy-surface-input)] px-3 py-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">L1 data roadmap</p>
-          <p className="mt-1 text-sm font-semibold text-white/84">专业数据能力路线图</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">L1 data roadmap</p>
+          <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">专业数据能力路线图</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
           <TerminalChip variant="info">admin-only</TerminalChip>
@@ -2482,16 +2482,16 @@ const AdminDataRoadmapPanel: React.FC<{
           </TerminalChip>
         </div>
       </div>
-      <p className="mt-2 text-[11px] leading-5 text-white/48">
+      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
         汇总现有 registry、provider matrix、readiness checks、历史 OHLCV preflight 与 consumer evidence readiness；只展示 operator-safe 状态、数据类别、时效/缓存状态和下一步，不展示内部标识、缓存标识、原始载荷或 provider 异常细节。
       </p>
 
       {isLoading && !totalRows ? (
-        <p className="mt-3 text-[11px] leading-5 text-white/38">正在合成路线图；不会触发 live provider 调用。</p>
+        <p className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">正在合成路线图；不会触发 live provider 调用。</p>
       ) : null}
 
       {!isLoading && !totalRows ? (
-        <p className="mt-3 text-[11px] leading-5 text-white/38">当前没有可展示的 roadmap 行；不在前端推断缺失数据。</p>
+        <p className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">当前没有可展示的 roadmap 行；不在前端推断缺失数据。</p>
       ) : null}
 
       <div className="mt-3 grid gap-3">
@@ -2501,12 +2501,12 @@ const AdminDataRoadmapPanel: React.FC<{
             <TerminalNestedBlock
               key={surface.id}
               data-testid={`admin-data-roadmap-surface-${surface.id}`}
-              className="min-w-0 bg-white/[0.025] px-3 py-3"
+              className="min-w-0 bg-[var(--wolfy-surface-input)] px-3 py-3"
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold text-white/84">{surface.label}</p>
-                  <p className="mt-1 text-[11px] leading-5 text-white/44">{surface.description}</p>
+                  <p className="text-xs font-semibold text-[color:var(--wolfy-text-primary)]">{surface.label}</p>
+                  <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{surface.description}</p>
                 </div>
                 <TerminalChip variant={rows.length ? 'neutral' : 'caution'}>{formatNumber(rows.length, 0)} rows</TerminalChip>
               </div>
@@ -2519,8 +2519,8 @@ const AdminDataRoadmapPanel: React.FC<{
                 >
                   <table className="w-full min-w-[58rem] table-fixed">
                     <caption className="sr-only">{surface.label} 专业数据路线图</caption>
-                    <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
-                      <tr className="border-b border-white/5 text-left">
+                    <thead className="bg-[var(--wolfy-surface-input)] text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
+                      <tr className="border-b border-[color:var(--wolfy-border-subtle)] text-left">
                         <th scope="col" className="w-[18%] px-3 py-3 font-medium">Capability</th>
                         <th scope="col" className="w-[14%] px-3 py-3 font-medium">Status</th>
                         <th scope="col" className="w-[18%] px-3 py-3 font-medium">Provider/data class</th>
@@ -2532,21 +2532,21 @@ const AdminDataRoadmapPanel: React.FC<{
                     <tbody>
                       {rows.map((row) => (
                         <tr key={row.key} className="border-b border-white/[0.04] align-top">
-                          <th scope="row" className={cn('px-3 py-3 text-left text-xs font-semibold leading-5 text-white/82', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.capabilityLabel}</th>
+                          <th scope="row" className={cn('px-3 py-3 text-left text-xs font-semibold leading-5 text-[color:var(--wolfy-text-primary)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.capabilityLabel}</th>
                           <td className="px-3 py-3">
                             <TerminalChip variant={row.statusVariant}>{row.status}</TerminalChip>
                           </td>
-                          <td className={cn('px-3 py-3 text-[11px] leading-5 text-white/54', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.providerClass}</td>
-                          <td className={cn('px-3 py-3 text-[11px] leading-5 text-white/54', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.freshnessState}</td>
-                          <td className={cn('px-3 py-3 text-[11px] leading-5 text-white/62', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.operatorAction}</td>
-                          <td className={cn('px-3 py-3 text-[11px] leading-5 text-white/54', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.surfaceUnlocked}</td>
+                          <td className={cn('px-3 py-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.providerClass}</td>
+                          <td className={cn('px-3 py-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.freshnessState}</td>
+                          <td className={cn('px-3 py-3 text-[11px] leading-5 text-[color:var(--wolfy-text-secondary)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.operatorAction}</td>
+                          <td className={cn('px-3 py-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.surfaceUnlocked}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </TerminalDenseTable>
               ) : (
-                <p className="mt-3 text-[11px] leading-5 text-white/38">暂无显式 roadmap 行；保持缺失态，不用前端补假数据。</p>
+                <p className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">暂无显式 roadmap 行；保持缺失态，不用前端补假数据。</p>
               )}
             </TerminalNestedBlock>
           );
@@ -2561,11 +2561,11 @@ const SourceGapBoard: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ row
     {SOURCE_GAP_CAPABILITIES.map((capability) => {
       const gapRows = sourceGapRowsForCapability(rows, capability);
       return (
-        <TerminalNestedBlock key={capability.id} className="min-w-0 bg-black/10">
+        <TerminalNestedBlock key={capability.id} className="min-w-0 bg-[var(--wolfy-surface-input)]">
           <div className="flex min-w-0 items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">优先级路线图</p>
-              <p className={cn('mt-1 text-sm font-semibold text-white/82', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{capability.title}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">优先级路线图</p>
+              <p className={cn('mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{capability.title}</p>
             </div>
             <TerminalChip variant={gapRows.length ? 'caution' : 'success'}>
               {gapRows.length ? `${gapRows.length} 项待补齐` : '已清空'}
@@ -2575,8 +2575,8 @@ const SourceGapBoard: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ row
             {gapRows.length ? gapRows.map((row) => {
               const badges = sourceGapBadges(row);
               return (
-                <div key={`${capability.id}-${row.providerId}`} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2">
-                  <p className={cn('text-xs font-semibold text-white/78', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sourceGapName(row)}</p>
+                <div key={`${capability.id}-${row.providerId}`} className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
+                  <p className={cn('text-xs font-semibold text-[color:var(--wolfy-text-secondary)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sourceGapName(row)}</p>
                   {badges.length ? (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {badges.map((badge) => (
@@ -2584,25 +2584,25 @@ const SourceGapBoard: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ row
                       ))}
                     </div>
                   ) : null}
-                  <p className="mt-1 text-[11px] leading-5 text-white/48">
+                  <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                     当前为什么不可用：{marketIntelligenceReasonLabel(row.missingProviderReason || row.degradationReason || row.runtimeState, 'zh')}
                   </p>
-                  <p className="mt-1 text-[11px] leading-5 text-white/48">
+                  <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                     解锁能力：{sourceGapImpact(row)}
                   </p>
-                  <p className="mt-1 text-[11px] leading-5 text-white/48">
+                  <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                     当前状态：{sourceGapCurrentState(row)}
                   </p>
-                  <p className="mt-1 text-[11px] leading-5 text-white/48">
+                  <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                     所需工作：{sourceGapRequiredWork(row)}
                   </p>
-                  <p className="mt-1 text-[11px] font-semibold text-amber-100/72">
+                  <p className="mt-1 text-[11px] font-semibold text-[color:var(--state-warning-text)]">
                     阻断评分级结论：{sourceGapBlocksScoreGrade(row) ? '是' : '否'}
                   </p>
                 </div>
               );
             }) : (
-              <p className="text-[11px] leading-5 text-white/38">当前没有可见的阻断项。</p>
+              <p className="text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">当前没有可见的阻断项。</p>
             )}
           </div>
         </TerminalNestedBlock>
@@ -2618,7 +2618,7 @@ const SourceGapDisclosure: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = (
     <TerminalNestedBlock
       data-testid="market-provider-source-gap-disclosure"
       data-open={open ? 'true' : 'false'}
-      className="mt-4 bg-black/10 px-2.5 py-2"
+      className="mt-4 bg-[var(--wolfy-surface-input)] px-2.5 py-2"
     >
       <div className="flex min-w-0 items-center justify-between gap-2">
         <div className="min-w-0">
@@ -2673,18 +2673,18 @@ const ProviderSetupChecklistPanel: React.FC<{
     groups.push({ surface, items, severity });
   }
   return (
-    <TerminalNestedBlock data-testid="market-provider-setup-checklist" className="mt-4 bg-black/10 px-3 py-3">
+    <TerminalNestedBlock data-testid="market-provider-setup-checklist" className="mt-4 bg-[var(--wolfy-surface-input)] px-3 py-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">Beta readiness</p>
-          <p className="mt-1 text-sm font-semibold text-white/82">数据源配置清单</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">Beta readiness</p>
+          <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">数据源配置清单</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
           <TerminalChip variant="neutral">{formatNumber(groups.length, 0)} 个产品面</TerminalChip>
           <TerminalChip variant="info">{formatNumber(entries.length, 0)} 个配置项</TerminalChip>
         </div>
       </div>
-      <p className="mt-2 text-[11px] leading-5 text-white/48">
+      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
         只读展示现有数据源缺口会影响哪些产品面、缺少哪类依赖，以及下一步应沿哪个既有配置路径处理；仅用于诊断/观察/配置指引，是否进入评分仍由既有 source-confidence gates 决定。
       </p>
       <div data-testid="market-provider-beta-readiness-checklist" className="mt-3 grid gap-2">
@@ -2692,12 +2692,12 @@ const ProviderSetupChecklistPanel: React.FC<{
           <div
             key={item.key}
             data-testid={`market-provider-beta-readiness-${item.key}`}
-            className="grid min-w-0 gap-2 rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2.5 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.25fr)]"
+            className="grid min-w-0 gap-2 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.25fr)]"
           >
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
                 <TerminalChip variant={disclosureSeverityVariant(item.severity)}>{disclosureSeverityLabel(item.severity)}</TerminalChip>
-                <p className={cn('text-xs font-semibold text-white/84', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{item.title}</p>
+                <p className={cn('text-xs font-semibold text-[color:var(--wolfy-text-primary)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{item.title}</p>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {item.badges.map((badge) => (
@@ -2706,8 +2706,8 @@ const ProviderSetupChecklistPanel: React.FC<{
               </div>
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] leading-5 text-white/56">{item.detail}</p>
-              <p className="mt-1 text-[11px] leading-5 text-white/66">下一步：{item.nextStep}</p>
+              <p className="text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{item.detail}</p>
+              <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-secondary)]">下一步：{item.nextStep}</p>
             </div>
           </div>
         ))}
@@ -2715,20 +2715,20 @@ const ProviderSetupChecklistPanel: React.FC<{
       {surfaceFocus ? (
         <div
           data-testid="market-provider-setup-surface-focus"
-          className="mt-3 rounded-md border border-cyan-200/12 bg-cyan-300/[0.035] px-3 py-2 text-[11px] leading-5 text-white/56"
+          className="mt-3 rounded-md border border-cyan-200/12 bg-cyan-300/[0.035] px-3 py-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]"
         >
-          <span className="font-semibold text-cyan-100/82">已按 {surfaceFocus.label} 聚焦：</span>
+          <span className="font-semibold text-[color:var(--state-info-text)]">已按 {surfaceFocus.label} 聚焦：</span>
           {' '}
           默认只标记该产品面，细节仍需按需展开，避免首屏变成完整清单墙。以下清单来自现有 productAffectedSurfaces，用于确认覆盖缺口；仅改善数据覆盖披露，不会改变评分规则。
         </div>
       ) : null}
 
       {isLoading && !entries.length ? (
-        <p className="mt-3 text-[11px] leading-5 text-white/38">正在汇总配置清单；仍然只读，不触发数据源运行时。</p>
+        <p className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">正在汇总配置清单；仍然只读，不触发数据源运行时。</p>
       ) : null}
 
       {!isLoading && !groups.length ? (
-        <p className="mt-3 text-[11px] leading-5 text-white/38">当前没有额外配置阻断项；完整矩阵与技术诊断仍保留在下方。</p>
+        <p className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">当前没有额外配置阻断项；完整矩阵与技术诊断仍保留在下方。</p>
       ) : null}
 
       {groups.length ? (
@@ -2740,14 +2740,14 @@ const ProviderSetupChecklistPanel: React.FC<{
               title={group.surface}
               summary={`${formatNumber(group.items.length, 0)} 项 · ${disclosureSeverityLabel(group.severity)} · 默认折叠`}
               className={cn(
-                'bg-white/[0.025]',
+                'bg-[var(--wolfy-surface-input)]',
                 surfaceFocus?.label === group.surface ? 'border-cyan-200/20 bg-cyan-300/[0.035]' : '',
               )}
             >
               <div className="space-y-2">
                 {group.items.map((entry) => (
-                  <div key={entry.key} className="rounded-md border border-white/[0.05] bg-black/10 px-3 py-2.5">
-                    <p className="text-xs font-semibold text-white/78">{entry.title}</p>
+                  <div key={entry.key} className="rounded-md border border-white/[0.05] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
+                    <p className="text-xs font-semibold text-[color:var(--wolfy-text-secondary)]">{entry.title}</p>
                     {entry.badges.length ? (
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {entry.badges.map((badge) => (
@@ -2757,10 +2757,10 @@ const ProviderSetupChecklistPanel: React.FC<{
                         ))}
                       </div>
                     ) : null}
-                    <p className="mt-2 text-[11px] leading-5 text-white/54">
+                    <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                       影响说明：{entry.whyItMatters}
                     </p>
-                    <p className="mt-1 text-[11px] leading-5 text-white/62">
+                    <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-secondary)]">
                       安全下一步：{entry.safeNextStep}
                     </p>
                   </div>
@@ -2802,7 +2802,7 @@ const ProviderOperationsMatrixPanel: React.FC<{
           </div>
         )}
       />
-      <p className="mt-2 text-[11px] leading-5 text-white/42">
+      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
         先看哪些缺口真正阻断了产品首屏结论，再按需展开完整数据源矩阵。这里仍保持只读，不触发数据源运行时，不展示密钥、原始 URL、原始载荷或本地路径。
       </p>
 
@@ -2842,11 +2842,11 @@ const ProviderOperationsMatrixPanel: React.FC<{
             data-testid="market-provider-matrix-disclosure"
             title="L4 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）"
             summary={`默认折叠 · ${formatNumber(rows.length, 0)} 行 · ${formatNumber(summary.paidDataLikelyRequiredRows, 0)} 行含付费/配额线索 · 原因代码仅限 L4`}
-            className="mt-2 bg-black/10"
+            className="mt-2 bg-[var(--wolfy-surface-input)]"
           >
-            <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[11px] leading-5 text-white/54 sm:hidden">
+            <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-3 py-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)] sm:hidden">
               <span>左右滑动查看完整矩阵列</span>
-              <span className="shrink-0 text-white/38">滚动仅限表格区域</span>
+              <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">滚动仅限表格区域</span>
             </div>
             <TerminalDenseTable
               data-testid="market-provider-matrix-table-shell"
@@ -2857,8 +2857,8 @@ const ProviderOperationsMatrixPanel: React.FC<{
             >
               <table className="w-full min-w-[52rem] table-fixed">
                 <caption className="sr-only">完整数据源矩阵</caption>
-                <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
-                  <tr className="border-b border-white/5 text-left">
+                <thead className="bg-[var(--wolfy-surface-input)] text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
+                  <tr className="border-b border-[color:var(--wolfy-border-subtle)] text-left">
                     <th scope="col" className="px-3 py-3 font-medium">数据源</th>
                     <th scope="col" className="px-3 py-3 font-medium">来源</th>
                     <th scope="col" className="px-3 py-3 font-medium">就绪状态</th>
@@ -2873,8 +2873,8 @@ const ProviderOperationsMatrixPanel: React.FC<{
                       <tr key={row.providerId} className="border-b border-white/[0.04] align-top">
                         <th scope="row" className="px-3 py-3 text-left font-normal">
                           <div className="min-w-0">
-                            <p className={cn(ADMIN_TABLE_IDENTITY_CLASSNAME, 'text-sm font-semibold text-white')}>{row.providerName || row.providerId}</p>
-                            <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'mt-1 text-[11px] text-white/42')}>{row.providerId}</p>
+                            <p className={cn(ADMIN_TABLE_IDENTITY_CLASSNAME, 'text-sm font-semibold text-[color:var(--wolfy-text-primary)]')}>{row.providerName || row.providerId}</p>
+                            <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]')}>{row.providerId}</p>
                           </div>
                         </th>
                         <td className="px-3 py-3">
@@ -2913,7 +2913,7 @@ const ProviderOperationsMatrixPanel: React.FC<{
                               ))}
                             </div>
                           ) : (
-                            <p className="text-[11px] text-white/42">暂无数据</p>
+                            <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">暂无数据</p>
                           )}
                         </td>
                       </tr>
@@ -3102,7 +3102,7 @@ const DataSourceAcquisitionActionPackControls: React.FC<{
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2" data-testid="data-acquisition-action-pack-controls">
-      <p className="min-w-0 text-[11px] leading-5 text-white/48">
+      <p className="min-w-0 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
         {disabled
           ? unavailableCopy
           : '导出接入行动包：工程 / 数据接入规划 JSON，包含授权、证据、契约与保护域复核队列。'}
@@ -3140,24 +3140,24 @@ const DataSourceAcquisitionActionPackControls: React.FC<{
 const DataSourceAcquisitionWorkbenchActionRow: React.FC<{
   action: DataSourceAcquisitionWorkbenchAction;
 }> = ({ action }) => (
-  <div className="rounded-md border border-white/[0.05] bg-white/[0.025] px-3 py-2.5">
+  <div className="rounded-md border border-white/[0.05] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
     <div className="flex flex-wrap items-center gap-1.5">
       <TerminalChip variant={action.priority.variant}>{action.priority.label}</TerminalChip>
       <TerminalChip variant={action.primaryBlockerType.variant}>{action.primaryBlockerType.label}</TerminalChip>
       <TerminalChip variant="neutral">影响面 {formatNumber(action.affectedSurfaceCount, 0)}</TerminalChip>
     </div>
-    <p className="mt-2 text-xs font-semibold text-white/84">{action.familyLabel}</p>
-    <dl className="mt-2 grid gap-1.5 text-[11px] leading-5 text-white/58">
+    <p className="mt-2 text-xs font-semibold text-[color:var(--wolfy-text-primary)]">{action.familyLabel}</p>
+    <dl className="mt-2 grid gap-1.5 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
       <div>
-        <dt className="text-white/34">下一步</dt>
+        <dt className="text-[color:var(--wolfy-text-muted)]">下一步</dt>
         <dd>{action.nextConcreteStep}</dd>
       </div>
       <div>
-        <dt className="text-white/34">影响面</dt>
+        <dt className="text-[color:var(--wolfy-text-muted)]">影响面</dt>
         <dd>{action.affectedSurfaces.join('、')}</dd>
       </div>
       <div>
-        <dt className="text-white/34">所需证据</dt>
+        <dt className="text-[color:var(--wolfy-text-muted)]">所需证据</dt>
         <dd>{action.requiredEvidence.join('、')}</dd>
       </div>
     </dl>
@@ -3168,13 +3168,13 @@ const DataSourceAcquisitionWorkbenchLaneBlock: React.FC<{
   lane: DataSourceAcquisitionWorkbenchLane;
 }> = ({ lane }) => (
   <div
-    className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-3"
+    className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3"
     data-testid={`data-source-acquisition-workbench-lane-${lane.key}`}
   >
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div className="min-w-0">
-        <p className="text-xs font-semibold text-white/82">{lane.label}</p>
-        <p className="mt-1 text-[11px] leading-5 text-white/48">{lane.description}</p>
+        <p className="text-xs font-semibold text-[color:var(--wolfy-text-primary)]">{lane.label}</p>
+        <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{lane.description}</p>
       </div>
       <TerminalChip variant={lane.variant}>{formatNumber(lane.count, 0)} 项</TerminalChip>
     </div>
@@ -3188,7 +3188,7 @@ const DataSourceAcquisitionWorkbenchLaneBlock: React.FC<{
         ))}
       </div>
     ) : (
-      <p className="mt-3 text-[11px] leading-5 text-white/48">{lane.emptyCopy}</p>
+      <p className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{lane.emptyCopy}</p>
     )}
   </div>
 );
@@ -3198,13 +3198,13 @@ const DataSourceAcquisitionWorkbench: React.FC<{
   unavailableReason?: string | null;
 }> = ({ view, unavailableReason }) => (
   <TerminalNestedBlock
-    className="mt-4 bg-black/10 px-3 py-3"
+    className="mt-4 bg-[var(--wolfy-surface-input)] px-3 py-3"
     data-testid="data-source-acquisition-workbench"
   >
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
-        <p className="text-sm font-semibold text-white/86">接入执行工作台</p>
-        <p className="mt-1 text-[11px] leading-5 text-white/48">
+        <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">接入执行工作台</p>
+        <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
           从优先队列、行动计划和影响矩阵派生，只用于工程补数排程；不生成交易指令或方向判断。
         </p>
       </div>
@@ -3220,23 +3220,23 @@ const DataSourceAcquisitionWorkbench: React.FC<{
     ) : (
       <>
         <div className="mt-3 grid gap-2 md:grid-cols-3">
-          <div className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
-            <p className="text-[10px] font-medium text-white/42">阻断/缺失/部分家族</p>
-            <p className="mt-1 text-lg font-semibold text-white/88">{formatNumber(view.blockedMissingPartialFamilyCount, 0)}</p>
+          <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
+            <p className="text-[10px] font-medium text-[color:var(--wolfy-text-muted)]">阻断/缺失/部分家族</p>
+            <p className="mt-1 text-lg font-semibold text-[color:var(--wolfy-text-primary)]">{formatNumber(view.blockedMissingPartialFamilyCount, 0)}</p>
           </div>
-          <div className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
-            <p className="text-[10px] font-medium text-white/42">待处理队列</p>
-            <p className="mt-1 text-lg font-semibold text-white/88">{formatNumber(view.urgentQueueCount, 0)}</p>
+          <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
+            <p className="text-[10px] font-medium text-[color:var(--wolfy-text-muted)]">待处理队列</p>
+            <p className="mt-1 text-lg font-semibold text-[color:var(--wolfy-text-primary)]">{formatNumber(view.urgentQueueCount, 0)}</p>
           </div>
-          <div className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
-            <p className="text-[10px] font-medium text-white/42">未知/待补证字段</p>
-            <p className="mt-1 text-lg font-semibold text-white/88">{formatNumber(view.unknownFieldCount, 0)}</p>
+          <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
+            <p className="text-[10px] font-medium text-[color:var(--wolfy-text-muted)]">未知/待补证字段</p>
+            <p className="mt-1 text-lg font-semibold text-[color:var(--wolfy-text-primary)]">{formatNumber(view.unknownFieldCount, 0)}</p>
           </div>
         </div>
 
         <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">blocker type</p>
+          <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">blocker type</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {view.blockerTypeCounts.map((count) => (
                 <TerminalChip key={count.key} variant={count.variant}>
@@ -3245,8 +3245,8 @@ const DataSourceAcquisitionWorkbench: React.FC<{
               ))}
             </div>
           </div>
-          <div className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">priority</p>
+          <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">priority</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {view.priorityCounts.map((count) => (
                 <TerminalChip key={count.key} variant={count.variant}>
@@ -3263,13 +3263,13 @@ const DataSourceAcquisitionWorkbench: React.FC<{
 
         <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <div
-            className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-3"
+            className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3"
             data-testid="data-source-acquisition-workbench-top-actions"
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <p className="text-[10px] font-medium uppercase tracking-widest text-white/34">next actions</p>
-                <p className="mt-1 text-xs font-semibold text-white/78">前三项下一步</p>
+                <p className="text-[10px] font-medium uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">next actions</p>
+                <p className="mt-1 text-xs font-semibold text-[color:var(--wolfy-text-secondary)]">前三项下一步</p>
               </div>
               <TerminalChip variant="neutral">{formatNumber(view.topNextActions.length, 0)} 项</TerminalChip>
             </div>
@@ -3280,7 +3280,7 @@ const DataSourceAcquisitionWorkbench: React.FC<{
                 ))}
               </div>
             ) : (
-              <p className="mt-3 text-[11px] leading-5 text-white/48">
+              <p className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                 暂无可排序下一步；保持待补证，不推断 ready。
               </p>
             )}
@@ -3325,7 +3325,7 @@ const DataSourceGapRegistryPanel: React.FC<{
           </div>
         )}
       />
-      <p className="mt-2 text-[11px] leading-5 text-white/46">
+      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
         只消费后端数据源缺口登记表，展示数据家族、状态、权限、时效、证据和下一步；缺字段统一保持待补证，不在前端推断就绪。
       </p>
 
@@ -3354,13 +3354,13 @@ const DataSourceGapRegistryPanel: React.FC<{
             unavailableReason={actionPackUnavailableReason}
           />
           <TerminalNestedBlock
-            className="mt-4 bg-black/10 px-3 py-3"
+            className="mt-4 bg-[var(--wolfy-surface-input)] px-3 py-3"
             data-testid="data-source-acquisition-priority-queue"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white/86">数据接入优先队列</p>
-                <p className="mt-1 text-[11px] leading-5 text-white/48">
+                <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">数据接入优先队列</p>
+                <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                   工程补数排序，只用于定位接入、授权、证据和保护域复核，不生成交易指令。
                 </p>
               </div>
@@ -3390,9 +3390,9 @@ const DataSourceGapRegistryPanel: React.FC<{
               ['仅观察', view.summary.observationOnlyCount, 'neutral'],
               ['计划中', view.summary.plannedCount, 'neutral'],
             ].map(([label, value, variant]) => (
-              <div key={String(label)} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
-                <p className="text-[10px] font-medium text-white/42">{label}</p>
-                <p className="mt-1 text-sm font-semibold text-white/84">{formatNumber(Number(value), 0)}</p>
+              <div key={String(label)} className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
+                <p className="text-[10px] font-medium text-[color:var(--wolfy-text-muted)]">{label}</p>
+                <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{formatNumber(Number(value), 0)}</p>
                 <TerminalChip variant={variant as 'neutral' | 'success' | 'caution' | 'danger' | 'info'}>{String(label)}</TerminalChip>
               </div>
             ))}
@@ -3413,13 +3413,13 @@ const DataSourceGapRegistryPanel: React.FC<{
           <DataSourceAcquisitionWorkbench view={view.workbench} />
 
           <TerminalNestedBlock
-            className="mt-4 bg-black/10 px-3 py-3"
+            className="mt-4 bg-[var(--wolfy-surface-input)] px-3 py-3"
             data-testid="data-source-acquisition-priority-queue"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white/86">数据接入优先队列</p>
-                <p className="mt-1 text-[11px] leading-5 text-white/48">
+                <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">数据接入优先队列</p>
+                <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                   工程补数排序，只用于定位接入、授权、证据和保护域复核，不生成交易指令。
                 </p>
               </div>
@@ -3437,7 +3437,7 @@ const DataSourceGapRegistryPanel: React.FC<{
                 {acquisitionQueue.map((item) => (
                   <div
                     key={`${item.familyKey}-acquisition-priority`}
-                    className="rounded-md border border-white/[0.05] bg-white/[0.025] px-3 py-2.5"
+                    className="rounded-md border border-white/[0.05] bg-[var(--wolfy-surface-input)] px-3 py-2.5"
                     data-testid={`data-source-acquisition-priority-${item.familyKey}`}
                   >
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -3449,8 +3449,8 @@ const DataSourceGapRegistryPanel: React.FC<{
                     </div>
                     <div className="mt-2 grid gap-2 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-white/82">{item.familyLabel}</p>
-                        <p className="mt-1 text-[11px] leading-5 text-white/52">{item.priorityReason}</p>
+                        <p className="text-xs font-semibold text-[color:var(--wolfy-text-primary)]">{item.familyLabel}</p>
+                        <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{item.priorityReason}</p>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           <TerminalChip variant="neutral">影响面 {formatNumber(item.affectedSurfaceCount, 0)}</TerminalChip>
                           <TerminalChip variant={item.blockedOrDegradedCapabilityCount > 0 ? 'caution' : 'neutral'}>
@@ -3458,17 +3458,17 @@ const DataSourceGapRegistryPanel: React.FC<{
                           </TerminalChip>
                         </div>
                       </div>
-                      <dl className="grid gap-1.5 text-[11px] leading-5 text-white/58">
+                      <dl className="grid gap-1.5 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                         <div>
-                          <dt className="text-white/34">下一步</dt>
+                          <dt className="text-[color:var(--wolfy-text-muted)]">下一步</dt>
                           <dd>{item.nextConcreteStep}</dd>
                         </div>
                         <div>
-                          <dt className="text-white/34">所需证据</dt>
+                          <dt className="text-[color:var(--wolfy-text-muted)]">所需证据</dt>
                           <dd>{item.requiredEvidence.join('、')}</dd>
                         </div>
                         <div>
-                          <dt className="text-white/34">边界</dt>
+                          <dt className="text-[color:var(--wolfy-text-muted)]">边界</dt>
                           <dd>{item.consumerSafeWarning}</dd>
                         </div>
                       </dl>
@@ -3477,7 +3477,7 @@ const DataSourceGapRegistryPanel: React.FC<{
                 ))}
               </div>
             ) : (
-              <p className="mt-3 text-[11px] leading-5 text-white/48">
+              <p className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                 优先队列待补证；前端不根据缺失字段推断接入顺序或 readiness。
               </p>
             )}
@@ -3488,12 +3488,12 @@ const DataSourceGapRegistryPanel: React.FC<{
               <TerminalNestedBlock
                 key={group.groupId}
                 data-testid={`data-source-gap-registry-group-${group.groupId}`}
-                className="bg-black/10 px-3 py-3"
+                className="bg-[var(--wolfy-surface-input)] px-3 py-3"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white/86">{group.groupLabel}</p>
-                    <p className="mt-1 text-[11px] leading-5 text-white/48">{group.groupDescription}</p>
+                    <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{group.groupLabel}</p>
+                    <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{group.groupDescription}</p>
                   </div>
                   <TerminalChip variant="neutral">{formatNumber(group.families.length, 0)} 个家族</TerminalChip>
                 </div>
@@ -3504,7 +3504,7 @@ const DataSourceGapRegistryPanel: React.FC<{
                       data-testid={`data-source-gap-registry-row-${family.familyKey}`}
                       title={family.familyLabel}
                       summary={`${family.status.label} · 权限 ${family.authorityState.label} · 时效 ${family.freshnessState.label}`}
-                      className="bg-white/[0.025]"
+                      className="bg-[var(--wolfy-surface-input)]"
                     >
                       <div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
                         <div className="min-w-0">
@@ -3513,17 +3513,17 @@ const DataSourceGapRegistryPanel: React.FC<{
                             <TerminalChip variant={family.authorityState.variant}>权限 {family.authorityState.label}</TerminalChip>
                             <TerminalChip variant={family.freshnessState.variant}>时效 {family.freshnessState.label}</TerminalChip>
                           </div>
-                          <dl className="mt-3 grid gap-2 text-[11px] leading-5 text-white/58">
+                          <dl className="mt-3 grid gap-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                             <div>
-                              <dt className="text-white/34">Family key</dt>
-                              <dd className="break-all font-mono text-white/54">{family.familyKey}</dd>
+                              <dt className="text-[color:var(--wolfy-text-muted)]">Family key</dt>
+                              <dd className="break-all font-mono text-[color:var(--wolfy-text-muted)]">{family.familyKey}</dd>
                             </div>
                             <div>
-                              <dt className="text-white/34">消费者标签</dt>
+                              <dt className="text-[color:var(--wolfy-text-muted)]">消费者标签</dt>
                               <dd>{family.familyLabel}</dd>
                             </div>
                             <div>
-                              <dt className="text-white/34">安全说明</dt>
+                              <dt className="text-[color:var(--wolfy-text-muted)]">安全说明</dt>
                               <dd>{family.consumerSafeDescription}</dd>
                             </div>
                           </dl>
@@ -3533,23 +3533,23 @@ const DataSourceGapRegistryPanel: React.FC<{
                             className="grid gap-2 sm:grid-cols-2"
                             data-testid={`data-source-gap-registry-permissions-${family.familyKey}`}
                           >
-                            <div className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-2">
-                              <p className="text-[10px] font-medium text-white/36">Provider hydration</p>
+                            <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
+                              <p className="text-[10px] font-medium text-[color:var(--wolfy-text-muted)]">Provider hydration</p>
                               <TerminalChip variant={family.dataHydrationVariant}>补数权限 {family.dataHydrationAllowed}</TerminalChip>
                             </div>
-                            <div className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-2">
-                              <p className="text-[10px] font-medium text-white/36">Score / trading authority</p>
+                            <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
+                              <p className="text-[10px] font-medium text-[color:var(--wolfy-text-muted)]">Score / trading authority</p>
                               <TerminalChip variant={family.scoreTradingAuthorityVariant}>计分/交易权限 {family.scoreTradingAuthorityAllowed}</TerminalChip>
                             </div>
                           </div>
                           <div
-                            className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-3"
+                            className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3"
                             data-testid={`data-source-gap-registry-impact-matrix-${family.familyKey}`}
                           >
                             <div className="flex flex-wrap items-start justify-between gap-2">
                               <div>
-                                <p className="text-[10px] font-medium uppercase tracking-widest text-white/34">surface impact</p>
-                                <p className="mt-1 text-xs font-semibold text-white/78">影响产品面与研究能力</p>
+                                <p className="text-[10px] font-medium uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">surface impact</p>
+                                <p className="mt-1 text-xs font-semibold text-[color:var(--wolfy-text-secondary)]">影响产品面与研究能力</p>
                               </div>
                               <TerminalChip variant="neutral">{formatNumber(family.surfaceImpactMatrix.length, 0)} 个影响项</TerminalChip>
                             </div>
@@ -3558,23 +3558,23 @@ const DataSourceGapRegistryPanel: React.FC<{
                                 {family.surfaceImpactMatrix.map((impact) => (
                                   <div
                                     key={`${family.familyKey}-${impact.surfaceKey}-${impact.affectedCapability}`}
-                                    className="rounded-md border border-white/[0.05] bg-white/[0.025] px-3 py-2.5"
+                                    className="rounded-md border border-white/[0.05] bg-[var(--wolfy-surface-input)] px-3 py-2.5"
                                   >
                                     <div className="flex flex-wrap items-center gap-1.5">
                                       <TerminalChip variant={impact.impactState.variant}>{impact.impactState.label}</TerminalChip>
-                                      <p className="text-xs font-semibold text-white/82">{impact.surfaceLabel}</p>
+                                      <p className="text-xs font-semibold text-[color:var(--wolfy-text-primary)]">{impact.surfaceLabel}</p>
                                     </div>
-                                    <dl className="mt-2 grid gap-1.5 text-[11px] leading-5 text-white/58">
+                                    <dl className="mt-2 grid gap-1.5 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                                       <div>
-                                        <dt className="text-white/34">影响能力</dt>
+                                        <dt className="text-[color:var(--wolfy-text-muted)]">影响能力</dt>
                                         <dd>{impact.affectedCapability}</dd>
                                       </div>
                                       <div>
-                                        <dt className="text-white/34">影响原因</dt>
+                                        <dt className="text-[color:var(--wolfy-text-muted)]">影响原因</dt>
                                         <dd>{impact.impactReason}</dd>
                                       </div>
                                       <div>
-                                        <dt className="text-white/34">下一证据步骤</dt>
+                                        <dt className="text-[color:var(--wolfy-text-muted)]">下一证据步骤</dt>
                                         <dd>{impact.nextEvidenceStep}</dd>
                                       </div>
                                     </dl>
@@ -3582,19 +3582,19 @@ const DataSourceGapRegistryPanel: React.FC<{
                                 ))}
                               </div>
                             ) : (
-                              <p className="mt-3 text-[11px] leading-5 text-white/48">
+                              <p className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                                 影响产品面待补证；前端不根据缺失字段推断解锁、降级或阻断状态。
                               </p>
                             )}
                           </div>
                           <div
-                            className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-3"
+                            className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3"
                             data-testid={`data-source-gap-registry-action-plan-${family.familyKey}`}
                           >
                             <div className="flex flex-wrap items-start justify-between gap-2">
                               <div>
-                                <p className="text-[10px] font-medium uppercase tracking-widest text-white/34">action plan</p>
-                                <p className="mt-1 text-xs font-semibold text-white/78">
+                                <p className="text-[10px] font-medium uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">action plan</p>
+                                <p className="mt-1 text-xs font-semibold text-[color:var(--wolfy-text-secondary)]">
                                   {family.integrationActionPlan.length === 1
                                     && family.integrationActionPlan[0].actionLabel === '行动项待复核'
                                     ? '行动计划待补证'
@@ -3607,7 +3607,7 @@ const DataSourceGapRegistryPanel: React.FC<{
                               {family.integrationActionPlan.map((action) => (
                                 <div
                                   key={`${family.familyKey}-${action.actionKey}`}
-                                  className="rounded-md border border-white/[0.05] bg-white/[0.025] px-3 py-2.5"
+                                  className="rounded-md border border-white/[0.05] bg-[var(--wolfy-surface-input)] px-3 py-2.5"
                                 >
                                   <div className="flex flex-wrap items-center gap-1.5">
                                     <TerminalChip variant={action.priority.variant}>{action.priority.label}</TerminalChip>
@@ -3620,26 +3620,26 @@ const DataSourceGapRegistryPanel: React.FC<{
                                       {action.protectedDomainReview}
                                     </TerminalChip>
                                   </div>
-                                  <p className="mt-2 text-xs font-semibold text-white/82">{action.actionLabel}</p>
-                                  <dl className="mt-2 grid gap-1.5 text-[11px] leading-5 text-white/58">
+                                  <p className="mt-2 text-xs font-semibold text-[color:var(--wolfy-text-primary)]">{action.actionLabel}</p>
+                                  <dl className="mt-2 grid gap-1.5 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                                     <div>
-                                      <dt className="text-white/34">原因</dt>
+                                      <dt className="text-[color:var(--wolfy-text-muted)]">原因</dt>
                                       <dd>{action.reason}</dd>
                                     </div>
                                     <div>
-                                      <dt className="text-white/34">所需证据</dt>
+                                      <dt className="text-[color:var(--wolfy-text-muted)]">所需证据</dt>
                                       <dd>{action.requiredEvidence.join('、')}</dd>
                                     </div>
                                     <div>
-                                      <dt className="text-white/34">阻断项</dt>
+                                      <dt className="text-[color:var(--wolfy-text-muted)]">阻断项</dt>
                                       <dd>{action.blockedBy.join('、')}</dd>
                                     </div>
                                     <div>
-                                      <dt className="text-white/34">影响面 / 能力</dt>
+                                      <dt className="text-[color:var(--wolfy-text-muted)]">影响面 / 能力</dt>
                                       <dd>{action.affectedSurfacesOrCapabilities.join('、')}</dd>
                                     </div>
                                     <div>
-                                      <dt className="text-white/34">下一步</dt>
+                                      <dt className="text-[color:var(--wolfy-text-muted)]">下一步</dt>
                                       <dd>{action.nextConcreteStep}</dd>
                                     </div>
                                   </dl>
@@ -3647,21 +3647,21 @@ const DataSourceGapRegistryPanel: React.FC<{
                               ))}
                             </div>
                           </div>
-                          <dl className="grid gap-2 text-[11px] leading-5 text-white/58">
+                          <dl className="grid gap-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                             <div>
-                              <dt className="text-white/34">权益 / 授权阻断</dt>
+                              <dt className="text-[color:var(--wolfy-text-muted)]">权益 / 授权阻断</dt>
                               <dd>{family.entitlementOrLicensingBlocker}</dd>
                             </div>
                             <div>
-                              <dt className="text-white/34">集成阻断</dt>
+                              <dt className="text-[color:var(--wolfy-text-muted)]">集成阻断</dt>
                               <dd>{family.integrationBlocker}</dd>
                             </div>
                             <div>
-                              <dt className="text-white/34">来源证据状态</dt>
+                              <dt className="text-[color:var(--wolfy-text-muted)]">来源证据状态</dt>
                               <dd>{family.sourceEvidenceState}</dd>
                             </div>
                             <div>
-                              <dt className="text-white/34">下一集成步骤</dt>
+                              <dt className="text-[color:var(--wolfy-text-muted)]">下一集成步骤</dt>
                               <dd>{family.nextIntegrationStep}</dd>
                             </div>
                           </dl>
@@ -3702,8 +3702,8 @@ const ProviderOperationsTable: React.FC<{
         >
           <table className="w-full min-w-[44rem] table-fixed">
             <caption className="sr-only">数据源运维只读快照</caption>
-            <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
-              <tr className="border-b border-white/5 text-left">
+            <thead className="bg-[var(--wolfy-surface-input)] text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
+              <tr className="border-b border-[color:var(--wolfy-border-subtle)] text-left">
                 <th scope="col" className="px-3 py-3 font-medium">数据源</th>
                 <th scope="col" className="px-3 py-3 font-medium">状态</th>
                 <th scope="col" className="px-3 py-3 font-medium">新鲜度</th>
@@ -3718,11 +3718,11 @@ const ProviderOperationsTable: React.FC<{
                 const selected = key === selectedKey;
                 const status = normalizeStatus(item.status);
                 return (
-                  <tr key={key} className={cn('border-b border-white/[0.04] align-top', selected ? 'bg-white/[0.03]' : 'bg-transparent')}>
+                  <tr key={key} className={cn('border-b border-white/[0.04] align-top', selected ? 'bg-[var(--wolfy-surface-input)]' : 'bg-transparent')}>
                     <th scope="row" className="px-3 py-3 text-left font-normal">
                       <div className="min-w-0">
-                        <p className={cn(ADMIN_TABLE_IDENTITY_CLASSNAME, 'text-sm font-semibold text-white')}>{providerLabel(item)}</p>
-                        <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'mt-1 text-[11px] text-white/42')}>{item.provider} · {item.domain}</p>
+                        <p className={cn(ADMIN_TABLE_IDENTITY_CLASSNAME, 'text-sm font-semibold text-[color:var(--wolfy-text-primary)]')}>{providerLabel(item)}</p>
+                        <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]')}>{item.provider} · {item.domain}</p>
                       </div>
                     </th>
                     <td className="px-3 py-3">
@@ -3734,14 +3734,14 @@ const ProviderOperationsTable: React.FC<{
                     <td className="px-3 py-3">
                       <div className="space-y-1">
                         <DataFreshnessBadge status={status as MarketProviderHealthStatus} />
-                        <p className="text-[11px] text-white/42">{formatDisplayDate(item.updatedAt, '待统计')}</p>
+                        <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{formatDisplayDate(item.updatedAt, '待统计')}</p>
                       </div>
                     </td>
                     <td className="px-3 py-3">
                       <TerminalChip variant={circuitVariant(item)}>{circuitLabel(item)}</TerminalChip>
                     </td>
                     <td className="px-3 py-3">
-                      <p className={cn('line-clamp-2 text-[11px] leading-5 text-white/60', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{lastFailureLabel(item)}</p>
+                      <p className={cn('line-clamp-2 text-[11px] leading-5 text-[color:var(--wolfy-text-secondary)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{lastFailureLabel(item)}</p>
                     </td>
                     <td className={cn('px-3 py-3', ADMIN_PROVIDER_ACTION_COLUMN_CLASSNAME)}>
                       <TerminalButton
@@ -3768,7 +3768,7 @@ const ProviderDetailsPanel: React.FC<{ item: MarketProviderOperationItem | null 
     <TerminalSectionHeader eyebrow="L3 诊断抽屉" title={item ? providerLabel(item) : '选择数据源'} />
     {item ? (
       <>
-        <p className="mt-3 text-[11px] leading-5 text-white/46">
+        <p className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
           已通过表格行“查看诊断”打开；行级状态仍保留在左侧表格，这里只展示所选数据源的 bounded 诊断摘要。
         </p>
         <div className="mt-4 grid grid-cols-2 gap-3">
@@ -3786,12 +3786,12 @@ const ProviderDetailsPanel: React.FC<{ item: MarketProviderOperationItem | null 
         </div>
         <TerminalDenseList className="mt-4">
           <TerminalNestedBlock className="px-3 py-2">
-            <p className="text-[10px] uppercase tracking-widest text-white/35">数据源 ID</p>
-            <p data-testid="market-provider-detail-provider-id" className="mt-1 max-w-full break-all font-mono text-[11px] text-white/65">{item.provider}</p>
+            <p className="text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">数据源 ID</p>
+            <p data-testid="market-provider-detail-provider-id" className="mt-1 max-w-full break-all font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{item.provider}</p>
           </TerminalNestedBlock>
           <TerminalNestedBlock className="px-3 py-2">
-            <p className="text-[10px] uppercase tracking-widest text-white/35">接口引用</p>
-            <p data-testid="market-provider-detail-endpoint" className="mt-1 max-w-full break-words text-[11px] text-white/65">
+            <p className="text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">接口引用</p>
+            <p data-testid="market-provider-detail-endpoint" className="mt-1 max-w-full break-words text-[11px] text-[color:var(--wolfy-text-muted)]">
               已脱敏，仅保留产品面诊断引用
             </p>
           </TerminalNestedBlock>
@@ -3820,15 +3820,15 @@ const CacheStatesPanel: React.FC<{ cacheStates: MarketProviderCacheState[] }> = 
               <TerminalNestedBlock key={state.cacheKey}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'text-[11px] text-white/72')}>{state.cacheKey}</p>
-                    <p className="mt-1 text-[11px] text-white/42">
+                    <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'text-[11px] text-[color:var(--wolfy-text-secondary)]')}>{state.cacheKey}</p>
+                    <p className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
                       TTL {formatCountLabel(state.ttlSeconds, '待统计')}s · 读取 {formatDisplayDate(state.fetchedAt, '待统计')}
                     </p>
                   </div>
                   <TerminalChip variant={statusChipVariant(status)}>{statusLabel(status)}</TerminalChip>
                 </div>
                 {state.lastError ? (
-                  <p className="mt-2 text-[11px] leading-5 text-white/58">{sanitizeOperatorText(state.lastError)}</p>
+                  <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{sanitizeOperatorText(state.lastError)}</p>
                 ) : null}
               </TerminalNestedBlock>
             );
@@ -3854,16 +3854,16 @@ const EventRollupsPanel: React.FC<{ eventRollups: MarketProviderEventRollup[] }>
               <TerminalNestedBlock key={`${rollup.provider}-${rollup.endpoint || rollup.card || rollup.latestLogEventId}`}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className={cn('text-sm font-semibold text-white', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{rollup.provider}</p>
-                    <p className="mt-1 text-[11px] text-white/42">{rollup.card || rollup.category || '市场数据源'}</p>
+                    <p className={cn('text-sm font-semibold text-[color:var(--wolfy-text-primary)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{rollup.provider}</p>
+                    <p className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{rollup.card || rollup.category || '市场数据源'}</p>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     <TerminalChip variant={rollup.failureCount > 0 ? 'danger' : 'neutral'}>失败 {formatCountLabel(rollup.failureCount, '0')}</TerminalChip>
                     <TerminalChip variant={rollup.fallbackCount > 0 ? 'caution' : 'neutral'}>失败率 {failureRateLabel}</TerminalChip>
                   </div>
                 </div>
-                <p className="mt-2 text-[11px] leading-5 text-white/58">{primaryReason}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-white/42">
+                <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{primaryReason}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-[color:var(--wolfy-text-muted)]">
                   <span>{formatDisplayDate(rollup.latestStartedAt, '待统计')}</span>
                   <DrillLink drill={rollup.adminLogDrillThrough} />
                 </div>
@@ -3897,7 +3897,7 @@ const DiagnosticsPanel: React.FC<{
           </div>
         )}
       />
-      <p className="mt-2 text-[11px] leading-5 text-white/46">
+      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
         这里只汇总既有付费/缺口/限制线索，并保留到 Admin Logs 的下钻入口；不新增配额 API，不扩展原始 provider 载荷。
       </p>
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
@@ -3924,16 +3924,16 @@ const DiagnosticsPanel: React.FC<{
       >
         <div className="grid gap-4 xl:grid-cols-3">
           <TerminalNestedBlock>
-            <p className="text-[10px] uppercase tracking-widest text-white/35">限制代码</p>
-            <ul className="mt-2 space-y-1 text-[11px] leading-5 text-white/58">
+            <p className="text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">限制代码</p>
+            <ul className="mt-2 space-y-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
               {response.limitations.length ? response.limitations.map((limitation) => (
                 <li key={limitation} className="break-words font-mono">{limitation}</li>
-              )) : <li className="text-white/40">暂无原始限制代码</li>}
+              )) : <li className="text-[color:var(--wolfy-text-muted)]">暂无原始限制代码</li>}
             </ul>
           </TerminalNestedBlock>
           <TerminalNestedBlock className="xl:col-span-2">
-            <p className="text-[10px] uppercase tracking-widest text-white/35">JSON</p>
-            <pre className="mt-2 max-h-72 overflow-y-auto no-scrollbar whitespace-pre-wrap break-words text-[11px] leading-5 text-white/58">
+            <p className="text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">JSON</p>
+            <pre className="mt-2 max-h-72 overflow-y-auto no-scrollbar whitespace-pre-wrap break-words text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
               {JSON.stringify({
                 summary: safeMetadataSummary(response),
                 selectedProvider: selectedItem ? {
@@ -3972,7 +3972,7 @@ const ProfessionalCapabilityAdminSummaryPanel: React.FC<{
           </div>
         )}
       />
-      <p className="mt-2 text-[11px] leading-5 text-white/46">
+      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
         读取 admin-gated 专业能力登记表，只显示能力覆盖、状态和安全来源摘要；不展示 provider class、请求追踪、缓存键或原始 payload。
       </p>
       {isLoading && !registry ? (
@@ -3999,22 +3999,22 @@ const ProfessionalCapabilityAdminSummaryPanel: React.FC<{
           </div>
           <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {view.categories.map((category) => (
-              <TerminalNestedBlock key={category.categoryKey} className="bg-black/10">
+              <TerminalNestedBlock key={category.categoryKey} className="bg-[var(--wolfy-surface-input)]">
                 <div className="flex min-w-0 items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white/84">{category.label}</p>
-                    <p className="mt-1 text-[11px] leading-5 text-white/46">{category.description}</p>
+                    <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{category.label}</p>
+                    <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{category.description}</p>
                   </div>
                   <TerminalChip variant="neutral">{formatNumber(category.items.length, 0)} 项</TerminalChip>
                 </div>
                 <div className="mt-3 grid gap-2">
                   {category.items.slice(0, 3).map((item) => (
-                    <div key={item.capabilityId} className="rounded-md border border-white/[0.05] bg-white/[0.025] px-3 py-2">
+                    <div key={item.capabilityId} className="rounded-md border border-white/[0.05] bg-[var(--wolfy-surface-input)] px-3 py-2">
                       <div className="flex min-w-0 items-start justify-between gap-2">
-                        <p className={cn('text-xs font-semibold text-white/78', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{item.label}</p>
+                        <p className={cn('text-xs font-semibold text-[color:var(--wolfy-text-secondary)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{item.label}</p>
                         <TerminalChip variant={item.status.variant}>{item.status.label}</TerminalChip>
                       </div>
-                      <p className={cn('mt-1 text-[11px] leading-5 text-white/46', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{item.sourceLabel}</p>
+                      <p className={cn('mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{item.sourceLabel}</p>
                     </div>
                   ))}
                 </div>
@@ -4058,8 +4058,8 @@ const MarketDataReadinessPanel: React.FC<{
         <TerminalNestedBlock className="px-3 py-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-widest text-white/35">representative symbols</p>
-              <p className="mt-1 text-sm font-semibold text-white">代表样本</p>
+              <p className="text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">representative symbols</p>
+              <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">代表样本</p>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {data?.representativeSymbols?.length ? data.representativeSymbols.map((symbol) => (
@@ -4072,19 +4072,19 @@ const MarketDataReadinessPanel: React.FC<{
               <Input
                 aria-label="代表符号"
                 label="代表符号"
-                labelClassName="mb-1.5 block text-[11px] font-normal text-white/42"
+                labelClassName="mb-1.5 block text-[11px] font-normal text-[color:var(--wolfy-text-muted)]"
                 type="text"
                 value={symbolInput}
                 onChange={(event) => onSymbolInputChange(event.target.value)}
                 placeholder="AAPL, SPY, BTC-USD"
-                className="h-10 px-3 text-white placeholder:text-white/28"
+                className="h-10 px-3 text-[color:var(--wolfy-text-primary)] placeholder:text-[color:var(--wolfy-text-muted)]"
               />
             </div>
             <TerminalButton variant="secondary" className="min-h-10 md:min-w-28" onClick={onSymbolSubmit} disabled={isLoading}>
               更新样本
             </TerminalButton>
           </div>
-          <p className="mt-2 text-[11px] leading-5 text-white/42">只发送可选代表符号参数到 `/api/v1/market/data-readiness`，不触发数据源运行时，也不读取密钥值。</p>
+          <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">只发送可选代表符号参数到 `/api/v1/market/data-readiness`，不触发数据源运行时，也不读取密钥值。</p>
         </TerminalNestedBlock>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <TerminalMetric label="只读诊断" value={data?.diagnosticOnly === false ? '否' : '是'} valueClassName="text-sm" />
@@ -4120,7 +4120,7 @@ const MarketDataReadinessPanel: React.FC<{
                 title={group.title}
                 summary={`${formatNumber(group.items.length, 0)} 项 · ${hasBlockingOrWarning ? '默认展开' : '默认折叠'} · ${group.description}`}
                 defaultOpen={hasBlockingOrWarning}
-                className="bg-black/10"
+                className="bg-[var(--wolfy-surface-input)]"
               >
               <TerminalDenseList>
                 {group.items.map((check) => {
@@ -4129,8 +4129,8 @@ const MarketDataReadinessPanel: React.FC<{
                     <TerminalNestedBlock key={check.id} className="px-3 py-2.5">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">就绪检查</p>
-                          <p className="mt-1 text-sm font-semibold text-white">{readinessCheckName(check)}</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">就绪检查</p>
+                          <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{readinessCheckName(check)}</p>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           <TerminalChip variant={readinessStatusVariant(check.status)}>{readinessStatusLabel(check.status)}</TerminalChip>
@@ -4142,8 +4142,8 @@ const MarketDataReadinessPanel: React.FC<{
                           ) : null}
                         </div>
                       </div>
-                      <p className="mt-2 text-[11px] leading-5 text-white/62">{readinessCheckMessage(check)}</p>
-                      <p className="mt-1 text-[11px] leading-5 text-white/54">下一步：{readinessCheckGuidance(check)}</p>
+                      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-secondary)]">{readinessCheckMessage(check)}</p>
+                      <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">下一步：{readinessCheckGuidance(check)}</p>
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {resolveChecklistReadinessSurfaces(check).map((surface) => (
                           <TerminalChip key={`${check.id}-${surface}`} variant="neutral">{surface}</TerminalChip>
@@ -4152,16 +4152,16 @@ const MarketDataReadinessPanel: React.FC<{
                       <TerminalDisclosure
                         title="L4 已脱敏样本差异：诊断 ID / 影响面 / 样本缺口"
                         summary="默认折叠 · 原始诊断 ID、影响面与样本差异摘要只在 L4 展开"
-                        className="mt-2 bg-black/10"
+                        className="mt-2 bg-[var(--wolfy-surface-input)]"
                       >
-                        <div className="space-y-2 text-[11px] leading-5 text-white/50">
-                          <p><span className="text-white/34">诊断 ID：</span><span className={ADMIN_TABLE_MONO_IDENTITY_CLASSNAME}>{sanitizeCodeLabel(check.id)}</span></p>
+                        <div className="space-y-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+                          <p><span className="text-[color:var(--wolfy-text-muted)]">诊断 ID：</span><span className={ADMIN_TABLE_MONO_IDENTITY_CLASSNAME}>{sanitizeCodeLabel(check.id)}</span></p>
                           <div className="flex flex-wrap gap-1.5">
                             {check.affectsSurfaces.map((surface) => (
                               <TerminalChip key={`${check.id}-${surface}`} variant="neutral">{surfaceLabel(surface)}</TerminalChip>
                             ))}
                           </div>
-                          {facts.length ? <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'text-white/42')}>{facts.join(' · ')}</p> : null}
+                          {facts.length ? <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'text-[color:var(--wolfy-text-muted)]')}>{facts.join(' · ')}</p> : null}
                         </div>
                       </TerminalDisclosure>
                     </TerminalNestedBlock>
@@ -4180,10 +4180,10 @@ const MarketDataReadinessPanel: React.FC<{
 const LoadingOperationsState: React.FC = () => (
   <TerminalPanel as="section" role="status" aria-label="正在读取市场数据源运维快照">
     <div className="flex items-center gap-3">
-      <Activity className="h-4 w-4 animate-pulse text-cyan-200" aria-hidden="true" />
+      <Activity className="h-4 w-4 animate-pulse text-[color:var(--state-info-text)]" aria-hidden="true" />
       <div>
-        <p className="text-sm font-semibold text-white">正在读取只读运维快照</p>
-        <p className="mt-1 text-xs text-white/46">不会触发外部 provider 调用，也不会变更缓存。</p>
+        <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">正在读取只读运维快照</p>
+        <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">不会触发外部 provider 调用，也不会变更缓存。</p>
       </div>
     </div>
     <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -4196,7 +4196,7 @@ const LoadingOperationsState: React.FC = () => (
 
 const EmptyErrorState: React.FC = () => (
   <TerminalPanel as="section">
-    <div className="flex items-center gap-2 text-sm text-white/50">
+    <div className="flex items-center gap-2 text-sm text-[color:var(--wolfy-text-muted)]">
       <Activity className="h-4 w-4" aria-hidden="true" />
       运维快照暂不可用
     </div>
@@ -4456,22 +4456,25 @@ const MarketProviderOperationsPage: React.FC = () => {
             title="数据源维护路线图"
             action={<ReadOnlyBadges response={response} />}
           />
-          <p className="mt-3 max-w-4xl text-sm leading-6 text-white/54">
+          <p className="mt-3 max-w-4xl text-sm leading-6 text-[color:var(--wolfy-text-muted)]">
             {isLoading
               ? '正在读取数据源维护快照'
               : `先看路线图与阻断项，再按需下钻健康、熔断、失败率与缓存。生成 ${formatDisplayDate(response?.generatedAt, '待统计')} · 窗口 ${response?.window?.key || '24h'} · 只读快照`}
           </p>
           <AdminOpsL0OverviewStrip
             dataTestId="market-provider-l0-overview-strip"
-            className="mt-5"
+            className="mt-4"
             systemTrustState={l0TrustState}
             impact={l0Impact}
             recommendedAction={l0RecommendedAction}
             evidenceRef="路线图 / 本地行情就绪诊断 / Admin Logs"
             lastUpdated={formatDisplayDate(response?.generatedAt, '待统计')}
           />
+          {/* First viewport prioritizes blocked / degraded / needs-action before drill chrome */}
+          <ProviderOpsTopSummary data={topSummary} isLoading={isLoading || isMatrixLoading || isReadinessLoading} />
+          <ProviderOpsActionQueue items={actionQueueItems} isLoading={isLoading || isMatrixLoading || isReadinessLoading} />
           <AdminDrillThroughStrip
-            className="mt-4"
+            className="mt-3"
             items={[
               {
                 label: '查看相关日志',
@@ -4504,8 +4507,6 @@ const MarketProviderOperationsPage: React.FC = () => {
               },
             ]}
           />
-          <ProviderOpsTopSummary data={topSummary} isLoading={isLoading || isMatrixLoading || isReadinessLoading} />
-          <ProviderOpsActionQueue items={actionQueueItems} isLoading={isLoading || isMatrixLoading || isReadinessLoading} />
           <AdminDataRoadmapPanel
             rowsBySurface={dataRoadmapRowsBySurface}
             isLoading={isLoading || isMatrixLoading || isReadinessLoading || isHistoricalOhlcvPreflightLoading || isProfessionalCapabilityLoading}

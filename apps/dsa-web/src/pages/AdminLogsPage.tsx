@@ -628,9 +628,13 @@ function storageStatusLabel(value: string | undefined, locale: AdminLogsLanguage
 
 function storageStatusTone(value: string | undefined): string {
   const normalized = String(value || 'ok').toLowerCase();
-  if (normalized === 'critical') return 'border-rose-300/35 bg-rose-500/14 text-rose-100';
-  if (normalized === 'warning') return 'border-amber-300/30 bg-amber-400/12 text-amber-100';
-  return 'border-emerald-300/25 bg-emerald-400/10 text-emerald-100';
+  if (normalized === 'critical') {
+    return 'border-[color:color-mix(in_srgb,var(--wolfy-market-down)_32%,var(--wolfy-border-subtle))] bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_8%,var(--wolfy-surface-console))] text-[color:var(--wolfy-market-down)]';
+  }
+  if (normalized === 'warning') {
+    return 'border-[color:color-mix(in_srgb,var(--state-warning-border)_70%,var(--wolfy-border-subtle))] bg-[color:color-mix(in_srgb,var(--state-warning-bg)_55%,var(--wolfy-surface-console))] text-[color:var(--state-warning-text)]';
+  }
+  return 'border-[color:color-mix(in_srgb,var(--wolfy-market-up)_28%,var(--wolfy-border-subtle))] bg-[color:color-mix(in_srgb,var(--wolfy-market-up)_8%,var(--wolfy-surface-console))] text-[color:var(--wolfy-market-up)]';
 }
 
 function statusFilterLabel(value: (typeof STATUS_FILTER_OPTIONS)[number], locale: AdminLogsLanguage): string {
@@ -846,9 +850,13 @@ function healthStatusLabel(status: unknown, locale: AdminLogsLanguage): string {
 
 function healthStatusTone(status: unknown): string {
   const normalized = String(status || 'healthy').trim().toLowerCase();
-  if (normalized === 'failing') return 'border-rose-300/30 bg-rose-500/10 text-rose-100';
-  if (normalized === 'degraded') return 'border-amber-300/28 bg-amber-400/10 text-amber-100';
-  return 'border-emerald-300/25 bg-emerald-400/10 text-emerald-100';
+  if (normalized === 'failing') {
+    return 'border-[color:color-mix(in_srgb,var(--wolfy-market-down)_32%,var(--wolfy-border-subtle))] bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_8%,var(--wolfy-surface-console))] text-[color:var(--wolfy-market-down)]';
+  }
+  if (normalized === 'degraded') {
+    return 'border-[color:color-mix(in_srgb,var(--state-warning-border)_70%,var(--wolfy-border-subtle))] bg-[color:color-mix(in_srgb,var(--state-warning-bg)_55%,var(--wolfy-surface-console))] text-[color:var(--state-warning-text)]';
+  }
+  return 'border-[color:color-mix(in_srgb,var(--wolfy-market-up)_28%,var(--wolfy-border-subtle))] bg-[color:color-mix(in_srgb,var(--wolfy-market-up)_8%,var(--wolfy-surface-console))] text-[color:var(--wolfy-market-up)]';
 }
 
 function friendlyRawStatusLabel(value: unknown, locale: AdminLogsLanguage): string {
@@ -976,10 +984,10 @@ function SeverityChip({
   className?: string;
 }) {
   const textToneClass = severity === 'failed'
-    ? 'text-rose-100'
+    ? 'text-[color:var(--wolfy-market-down)]'
     : severity === 'degraded'
-      ? 'text-amber-100'
-      : 'text-emerald-100';
+      ? 'text-[color:var(--state-warning-text)]'
+      : 'text-[color:var(--wolfy-market-up)]';
   const extraClassName = className ? ` ${className}` : '';
   return (
     <TerminalChip
@@ -1282,7 +1290,7 @@ function JsonBlock({ value }: { value: unknown }) {
     return <span>{String(value)}</span>;
   }
   return (
-    <pre className="mt-2 max-h-44 overflow-auto no-scrollbar rounded-xl border border-white/[0.02] bg-black/30 p-3 text-[11px] leading-5 text-white/68">
+    <pre className="mt-2 max-h-44 overflow-auto no-scrollbar rounded-xl border border-white/[0.02] bg-[var(--wolfy-surface-input)] p-3 text-[11px] leading-5 text-[color:var(--wolfy-text-secondary)]">
       {JSON.stringify(sanitizeDisplayValue(value), null, 2)}
     </pre>
   );
@@ -1315,8 +1323,8 @@ function AdminLogsTerminalSection({
     >
       <div className="flex min-w-0 items-center justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{title}</h3>
-          {summary ? <p className="mt-0.5 truncate text-[11px] text-white/38">{summary}</p> : null}
+          <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{title}</h3>
+          {summary ? <p className="mt-0.5 truncate text-[11px] text-[color:var(--wolfy-text-muted)]">{summary}</p> : null}
         </div>
         <TerminalButton
           type="button"
@@ -1361,11 +1369,11 @@ function CallCard({
       </div>
       <div className="grid gap-4 text-xs text-secondary-text lg:grid-cols-2">
         <div>
-          <p className="text-[10px] uppercase tracking-[0.18em] text-white/36">{locale === 'zh' ? '请求参数' : 'Request'}</p>
+          <p className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{locale === 'zh' ? '请求参数' : 'Request'}</p>
           <JsonBlock value={item.request || item.params || item.requestParams} />
         </div>
         <div>
-          <p className="text-[10px] uppercase tracking-[0.18em] text-white/36">{locale === 'zh' ? '响应' : 'Response'}</p>
+          <p className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{locale === 'zh' ? '响应' : 'Response'}</p>
           <JsonBlock value={item.response || item.result} />
         </div>
         {type === 'llm' ? (
@@ -2028,15 +2036,16 @@ const AdminLogsPage: React.FC = () => {
     <section data-testid="admin-logs-workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-x-hidden">
       <TerminalPageShell data-testid="admin-logs-page-shell" className="min-h-0 flex-1 overflow-x-hidden py-5 md:py-6">
         <TerminalPanel as="section" data-testid="admin-logs-header-panel" className="overflow-hidden">
-          <div className="flex min-w-0 flex-col gap-4">
+          <div className="flex min-w-0 flex-col gap-3">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-emerald-200/70">{locale === 'zh' ? 'WolfyStock 运维追踪' : 'WolfyStock Ops Trace'}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--wolfy-text-muted)]">{locale === 'zh' ? 'WolfyStock 运维追踪' : 'WolfyStock Ops Trace'}</p>
               <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{t('adminLogs.pageTitle')}</h1>
               <p className="mt-1 max-w-4xl text-xs leading-5 text-secondary-text">
                 {locale === 'zh' ? '业务事件优先，原始日志与调试细节留在高级标签。' : t('adminLogs.pageSubtitle')}
               </p>
             </div>
 
+            {/* Failure / severity summary leads; equal-weight purpose tiles removed */}
             <AdminOpsL0OverviewStrip
               dataTestId="admin-logs-l0-overview-strip"
               className="mt-1"
@@ -2047,56 +2056,37 @@ const AdminLogsPage: React.FC = () => {
               evidenceRef={operatorEvidenceRef}
               lastUpdated={formatDateTime(latestOverviewTimestamp, locale)}
             />
-            <AdminDrillThroughStrip
-              className="mt-4"
-              items={[
-                {
-                  label: '查看数据源维护',
-                  target: 'marketProviders',
-                  evidenceType: '页面聚焦',
-                  reason: '从症状回看数据源矩阵、来源缺口与就绪检查。',
-                  params: { surface: 'market_overview' },
-                },
-                {
-                  label: '查看熔断与配额',
-                  target: 'providerCircuits',
-                  evidenceType: '熔断窗口',
-                  reason: '继续核对数据源熔断、配额和探测事件。',
-                  params: { since: sinceFilter },
-                },
-                {
-                  label: '查看成本观测',
-                  target: 'cost',
-                  evidenceType: '成本观察窗口',
-                  reason: '确认成本、本地存储响应与重复调用是否同步异常。',
-                  params: { area: 'provider', window: sinceFilter },
-                },
-              ]}
-            />
             {drillHighlight ? (
-              <TerminalNotice data-testid="admin-logs-drill-highlight" variant="info" className="mt-3">
+              <TerminalNotice data-testid="admin-logs-drill-highlight" variant="info" className="mt-1">
                 已从安全引用预填筛选，当前高亮事件引用：{drillHighlight}
               </TerminalNotice>
             ) : null}
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <TerminalMetric
-                label={locale === 'zh' ? '页面用途' : 'Purpose'}
-                value={locale === 'zh' ? '定位失败与审计线索' : 'Find failures and audit trails'}
-                subvalue={locale === 'zh' ? '业务事件、状态、操作者、来源' : 'Business events, status, actor, source'}
-                valueClassName="text-sm font-semibold tracking-normal"
-              />
-              <TerminalMetric
-                label={locale === 'zh' ? '当前状态' : 'Current state'}
-                value={operatorCurrentState}
-                subvalue={`${healthStatusLabel(healthSummary.status, locale)} · ${healthSummary.warningEvents} ${locale === 'zh' ? '个警告' : 'warnings'}`}
-                valueClassName="text-sm font-semibold tracking-normal"
-              />
-              <TerminalMetric
-                label={locale === 'zh' ? '下一步' : 'Next action'}
-                value={operatorNextAction}
-                subvalue={locale === 'zh' ? '清理与原始日志保持二级入口' : 'Cleanup and raw logs stay secondary'}
-                valueClassName="text-sm font-semibold tracking-normal"
-              />
+
+            {/* Compact purpose / state / next line (not equal-weight card wall) */}
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs leading-5" data-testid="admin-logs-purpose-line">
+              <p className="min-w-0 text-[color:var(--wolfy-text-muted)]">
+                <span className="font-medium text-[color:var(--wolfy-text-secondary)]">
+                  {locale === 'zh' ? '页面用途' : 'Purpose'}
+                </span>
+                {': '}
+                <span className="text-[color:var(--wolfy-text-primary)]">
+                  {locale === 'zh' ? '定位失败与审计线索' : 'Find failures and audit trails'}
+                </span>
+              </p>
+              <p className="min-w-0 text-[color:var(--wolfy-text-muted)]">
+                <span className="font-medium text-[color:var(--wolfy-text-secondary)]">
+                  {locale === 'zh' ? '当前状态' : 'Current state'}
+                </span>
+                {': '}
+                <span className="text-[color:var(--wolfy-text-primary)]">{operatorCurrentState}</span>
+              </p>
+              <p className="min-w-0 text-[color:var(--wolfy-text-muted)]">
+                <span className="font-medium text-[color:var(--wolfy-text-secondary)]">
+                  {locale === 'zh' ? '下一步' : 'Next action'}
+                </span>
+                {': '}
+                <span className="text-[color:var(--wolfy-text-primary)]">{operatorNextAction}</span>
+              </p>
             </div>
 
             <div role="tablist" aria-label={locale === 'zh' ? '日志视图' : 'Log views'} className="flex max-w-full gap-2 overflow-x-auto no-scrollbar pb-1 sm:flex-wrap sm:overflow-visible">
@@ -2109,7 +2099,7 @@ const AdminLogsPage: React.FC = () => {
                     role="tab"
                     aria-selected={isActive}
                     variant={isActive ? 'compact' : 'secondary'}
-                    className={`shrink-0 px-3 py-1.5 text-xs font-semibold ${isActive ? 'border-emerald-300/45 bg-emerald-400/14 text-emerald-50 hover:bg-emerald-400/18 hover:text-emerald-50' : 'text-secondary-text'}`}
+                    className={`shrink-0 px-3 py-1.5 text-xs font-semibold ${isActive ? 'border-[color:color-mix(in_srgb,var(--wolfy-market-up)_40%,var(--wolfy-border-subtle))] bg-[color:color-mix(in_srgb,var(--wolfy-market-up)_12%,var(--wolfy-surface-input))] text-[color:var(--wolfy-text-primary)]' : 'text-secondary-text'}`}
                     onClick={() => setActiveTab(tab)}
                   >
                     {tabLabel(tab, locale)}
@@ -2190,7 +2180,7 @@ const AdminLogsPage: React.FC = () => {
                   role="switch"
                   aria-checked={showDebugLogs}
                   aria-label={locale === 'zh' ? '显示调试日志' : 'Show debug logs'}
-                  className="flex h-9 min-w-0 items-center gap-2 rounded-lg border border-white/8 bg-white/[0.035] px-3 text-xs text-secondary-text transition hover:border-white/15 hover:bg-white/[0.055]"
+                  className="flex h-9 min-w-0 items-center gap-2 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-white/[0.035] px-3 text-xs text-secondary-text transition hover:border-white/15 hover:bg-white/[0.055]"
                   onMouseDown={(event) => {
                     event.preventDefault();
                     skipDebugClickRef.current = true;
@@ -2205,7 +2195,7 @@ const AdminLogsPage: React.FC = () => {
                   }}
                 >
                   <span
-                    className={`relative h-4 w-8 rounded-full border transition ${showDebugLogs ? 'border-cyan-300/60 bg-cyan-400/35' : 'border-white/15 bg-black/30'}`}
+                    className={`relative h-4 w-8 rounded-full border transition ${showDebugLogs ? 'border-cyan-300/60 bg-cyan-400/35' : 'border-white/15 bg-[var(--wolfy-surface-input)]'}`}
                     aria-hidden="true"
                   >
                     <span className={`absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-white transition ${showDebugLogs ? 'left-[1.05rem]' : 'left-0.5'}`} />
@@ -2295,7 +2285,7 @@ const AdminLogsPage: React.FC = () => {
 
             <div className="min-w-0 space-y-2">
               <TerminalNotice variant={storageSummary?.status === 'critical' ? 'danger' : storageSummary?.status === 'warning' ? 'caution' : 'neutral'}>
-                <p className="font-medium text-white/88">{locale === 'zh' ? '清理建议' : 'Cleanup guidance'}</p>
+                <p className="font-medium text-[color:var(--wolfy-text-primary)]">{locale === 'zh' ? '清理建议' : 'Cleanup guidance'}</p>
                 <p className="mt-1">{localizedRecommendedCleanupAction(storageSummary?.recommendedCleanupAction, locale)}</p>
                 <p className="mt-1 text-[11px] opacity-80">
                   {locale === 'zh'
@@ -2305,7 +2295,7 @@ const AdminLogsPage: React.FC = () => {
                 {storageSummary && ['warning', 'critical'].includes(String(storageSummary.status)) ? (
                   <a
                     href="/admin/notifications"
-                    className="mt-1 inline-flex text-[11px] font-semibold text-emerald-100 underline-offset-4 hover:underline"
+                    className="mt-1 inline-flex text-[11px] font-semibold text-[color:var(--wolfy-market-up)] underline-offset-4 hover:underline"
                   >
                     {locale === 'zh' ? '配置管理员通知通道' : 'Configure Admin notification channels'}
                   </a>
@@ -2427,7 +2417,7 @@ const AdminLogsPage: React.FC = () => {
                 {locale === 'zh' ? '没有观察到重复的数据源不可用、响应超时、备用链路激活、数据过期或部分数据问题。' : 'No repeated provider unavailable, timeout, fallback, stale, or partial degraded issue was observed.'}
               </TerminalEmptyState>
             ) : (
-              <TerminalDenseList className="mt-3 gap-0 overflow-hidden rounded-xl border border-white/6 bg-black/15">
+              <TerminalDenseList className="mt-3 gap-0 overflow-hidden rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]">
                 {operatorIssueItems.map((item) => {
                   const title = operatorSummarySafeText(item.issueTitle, locale, locale === 'zh' ? '运维问题' : 'Operator issue');
                   const guidance = operatorSummarySafeText(item.operatorGuidance, locale, locale === 'zh' ? '检查相关配置与最近失败原因。' : 'Check related configuration and recent failure reasons.');
@@ -2459,7 +2449,7 @@ const AdminLogsPage: React.FC = () => {
                     <div
                       key={item.issueId}
                       data-testid="operator-issue-row"
-                      className="grid gap-3 border-b border-white/6 px-3 py-2.5 last:border-b-0 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1.1fr)_minmax(10rem,0.9fr)_auto]"
+                      className="grid gap-3 border-b border-[color:var(--wolfy-border-subtle)] px-3 py-2.5 last:border-b-0 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1.1fr)_minmax(10rem,0.9fr)_auto]"
                     >
                       <div className="min-w-0">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -2515,7 +2505,7 @@ const AdminLogsPage: React.FC = () => {
                 {locale === 'zh' ? '未观察到需要额外 support timeline 的缺失或降级数据样本。' : 'No missing or degraded data sample in this window needs extra support-timeline triage.'}
               </TerminalEmptyState>
             ) : (
-              <TerminalDenseList className="mt-3 gap-0 overflow-hidden rounded-xl border border-white/6 bg-black/15">
+              <TerminalDenseList className="mt-3 gap-0 overflow-hidden rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]">
                 {dataMissingItems.map((item) => {
                   const sampleBusinessEventId = item.sampleBusinessEventIds[0];
                   const sampleEvent = sampleBusinessEventId
@@ -2525,7 +2515,7 @@ const AdminLogsPage: React.FC = () => {
                   return (
                     <div
                       key={`${item.affectedSurface}-${item.missingDomain}-${item.reasonCode}`}
-                      className="grid gap-3 border-b border-white/6 px-3 py-2.5 last:border-b-0 lg:grid-cols-[minmax(10rem,1fr)_minmax(12rem,1.25fr)_minmax(10rem,1fr)_auto]"
+                      className="grid gap-3 border-b border-[color:var(--wolfy-border-subtle)] px-3 py-2.5 last:border-b-0 lg:grid-cols-[minmax(10rem,1fr)_minmax(12rem,1.25fr)_minmax(10rem,1fr)_auto]"
                     >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-foreground" title={text(item.symbol || item.affectedSurface)}>{text(item.symbol || item.affectedSurface)}</p>
@@ -2646,7 +2636,7 @@ const AdminLogsPage: React.FC = () => {
                       <article
                         key={`${item.id}-mobile`}
                         data-testid="business-event-mobile-card"
-                        className="min-w-0 rounded-xl border border-white/6 bg-black/15 p-3"
+                        className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3"
                       >
                         <div className="flex min-w-0 items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -2674,9 +2664,9 @@ const AdminLogsPage: React.FC = () => {
                     );
                   })}
                 </div>
-                <TerminalDenseList data-testid="business-events-table-shell" className="-mx-4 mt-3 hidden gap-0 overflow-x-auto overflow-y-hidden overscroll-x-contain px-4 no-scrollbar rounded-xl border border-white/6 bg-black/15 sm:mx-0 sm:px-0 md:flex">
+                <TerminalDenseList data-testid="business-events-table-shell" className="-mx-4 mt-3 hidden gap-0 overflow-x-auto overflow-y-hidden overscroll-x-contain px-4 no-scrollbar rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] sm:mx-0 sm:px-0 md:flex">
                 <div data-testid="business-events-table-inner" className="min-w-[44rem]">
-                  <div className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
+                  <div className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] gap-3 border-b border-[color:var(--wolfy-border-subtle)] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)] md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
                     <div>{locale === 'zh' ? '时间' : 'Time'}</div>
                     <div>{locale === 'zh' ? '事件' : 'Event'}</div>
                     <div>{locale === 'zh' ? '状态 / 严重度' : 'Status / Severity'}</div>
@@ -2737,7 +2727,7 @@ const AdminLogsPage: React.FC = () => {
                       );
                     })}
                   </div>
-                  <div data-testid="admin-logs-pagination" className="flex flex-wrap items-center justify-between gap-3 border-t border-white/6 px-3 py-2.5">
+                  <div data-testid="admin-logs-pagination" className="flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--wolfy-border-subtle)] px-3 py-2.5">
                     <p className="text-xs text-muted-text">{locale === 'zh' ? `第 ${Math.floor(pageOffset / PAGE_SIZE) + 1} 页` : `Page ${Math.floor(pageOffset / PAGE_SIZE) + 1}`}</p>
                     <div className="flex gap-2">
                       <TerminalButton type="button" variant="compact" className="px-3 py-1 text-xs" disabled={pageOffset <= 0 || isLoadingList} onClick={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}>
@@ -2757,9 +2747,9 @@ const AdminLogsPage: React.FC = () => {
               {t('adminLogs.noSessionsBody')}
             </TerminalEmptyState>
           ) : (
-            <TerminalDenseTable data-testid="raw-logs-table-shell" className="-mx-4 mt-3 relative overflow-x-auto overscroll-x-contain px-4 border-white/6 bg-black/15 sm:mx-0 sm:px-0">
+            <TerminalDenseTable data-testid="raw-logs-table-shell" className="-mx-4 mt-3 relative overflow-x-auto overscroll-x-contain px-4 border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] sm:mx-0 sm:px-0">
               <div data-testid="raw-logs-table-inner" className="min-w-[880px]">
-                <div className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+                <div className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] gap-3 border-b border-[color:var(--wolfy-border-subtle)] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
                   <div>{locale === 'zh' ? '时间' : 'Time'}</div>
                   <div>{locale === 'zh' ? '级别' : 'level'}</div>
                   <div>{locale === 'zh' ? '分类' : 'category'}</div>
@@ -2801,6 +2791,33 @@ const AdminLogsPage: React.FC = () => {
             </TerminalDenseTable>
           )}
         </TerminalPanel>
+
+        <AdminDrillThroughStrip
+          className="mt-1"
+          items={[
+            {
+              label: '查看数据源维护',
+              target: 'marketProviders',
+              evidenceType: '页面聚焦',
+              reason: '从症状回看数据源矩阵、来源缺口与就绪检查。',
+              params: { surface: 'market_overview' },
+            },
+            {
+              label: '查看熔断与配额',
+              target: 'providerCircuits',
+              evidenceType: '熔断窗口',
+              reason: '继续核对数据源熔断、配额和探测事件。',
+              params: { since: sinceFilter },
+            },
+            {
+              label: '查看成本观测',
+              target: 'cost',
+              evidenceType: '成本观察窗口',
+              reason: '确认成本、本地存储响应与重复调用是否同步异常。',
+              params: { area: 'provider', window: sinceFilter },
+            },
+          ]}
+        />
       </TerminalPageShell>
 
       <Drawer
@@ -2817,7 +2834,7 @@ const AdminLogsPage: React.FC = () => {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <div className="mb-3 flex items-center gap-2">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-bold text-emerald-100">{text(businessDetail.category).slice(0, 1).toUpperCase()}</span>
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-white/[0.04] text-sm font-bold text-[color:var(--wolfy-market-up)]">{text(businessDetail.category).slice(0, 1).toUpperCase()}</span>
                     <StatusChip status={drawerStatus} locale={locale} />
                     <SeverityChip severity={businessSeverity} locale={locale} />
                   </div>
@@ -2869,7 +2886,7 @@ const AdminLogsPage: React.FC = () => {
                 </TerminalPanel>
               </div>
               <div className="mt-4">
-                <AdminLogsTerminalSection title={locale === 'zh' ? '元数据' : 'Metadata'} defaultOpen={false} className="bg-black/20 px-3 py-3">
+                <AdminLogsTerminalSection title={locale === 'zh' ? '元数据' : 'Metadata'} defaultOpen={false} className="bg-[var(--wolfy-surface-input)] px-3 py-3">
                   <JsonBlock value={businessDetail.metadata || {}} />
                 </AdminLogsTerminalSection>
               </div>
@@ -2901,7 +2918,7 @@ const AdminLogsPage: React.FC = () => {
                 {businessSteps.length ? businessSteps.map((step: ExecutionStep, index: number) => {
                   const status = normalizeStatus(step.status);
                   return (
-                    <AdminLogsTerminalSection key={`${step.name}-${index}`} title={`${operatorSafeText(step.label || step.name, locale)} · ${formatDuration(step.durationMs)}`} summary={operatorSafeText([step.category, step.provider, step.model, step.endpoint || step.apiPath].map((value) => String(value || '').trim()).filter(Boolean).join(' · '), locale, '--')} defaultOpen={index === 0 || status === 'failed' || status === 'error' || status === 'skipped' || status === 'unknown'} className="bg-black/20 px-3 py-3 text-xs">
+                    <AdminLogsTerminalSection key={`${step.name}-${index}`} title={`${operatorSafeText(step.label || step.name, locale)} · ${formatDuration(step.durationMs)}`} summary={operatorSafeText([step.category, step.provider, step.model, step.endpoint || step.apiPath].map((value) => String(value || '').trim()).filter(Boolean).join(' · '), locale, '--')} defaultOpen={index === 0 || status === 'failed' || status === 'error' || status === 'skipped' || status === 'unknown'} className="bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs">
                       <div className="mb-3 flex justify-end">
                         <StatusChip status={status} locale={locale} />
                       </div>
@@ -2912,7 +2929,7 @@ const AdminLogsPage: React.FC = () => {
                         <p>{locale === 'zh' ? '错误类型' : 'Error type'}: <span className="text-foreground">{text(step.errorType)}</span></p>
                         <p className="md:col-span-2">{locale === 'zh' ? '消息' : 'Message'}: <span className="text-foreground">{operatorSafeText(status === 'skipped' ? (step.message || skippedReasonLabel(step.reason, locale)) : (step.errorMessage || step.message), locale)}</span></p>
                         <div className="md:col-span-2">
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-white/36">{locale === 'zh' ? '元数据' : 'metadata'}</p>
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{locale === 'zh' ? '元数据' : 'metadata'}</p>
                           <JsonBlock value={step.metadata || {}} />
                         </div>
                       </div>
@@ -2930,7 +2947,7 @@ const AdminLogsPage: React.FC = () => {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <div className="mb-3 flex items-center gap-2">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-bold text-emerald-100">{operationIcon(drawerOperationType)}</span>
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-white/[0.04] text-sm font-bold text-[color:var(--wolfy-market-up)]">{operationIcon(drawerOperationType)}</span>
                     <StatusChip status={drawerStatus} locale={locale} />
                     <SeverityChip severity={rawSeverity} locale={locale} />
                   </div>
@@ -3172,9 +3189,9 @@ const AdminLogsPage: React.FC = () => {
               action={<TerminalChip variant="neutral">{countLabel(incidentTimeline?.items.length || 0, 'item', 'items', '条', locale)}</TerminalChip>}
             />
             {incidentTimeline?.items.length ? (
-              <TerminalDenseList className="mt-3 gap-0 overflow-hidden rounded-xl border border-white/6 bg-black/15">
+              <TerminalDenseList className="mt-3 gap-0 overflow-hidden rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]">
                 {incidentTimeline.items.map((item: AdminIncidentTimelineItem) => (
-                  <div key={item.id} className="grid gap-3 border-b border-white/6 px-3 py-2.5 last:border-b-0 lg:grid-cols-[7rem_minmax(0,1fr)_auto]">
+                  <div key={item.id} className="grid gap-3 border-b border-[color:var(--wolfy-border-subtle)] px-3 py-2.5 last:border-b-0 lg:grid-cols-[7rem_minmax(0,1fr)_auto]">
                     <div className="min-w-0">
                       <p className="truncate text-xs text-secondary-text" title={formatDateTime(item.timestamp, locale)}>{formatDateTime(item.timestamp, locale)}</p>
                       <p className="mt-1 truncate text-[11px] text-muted-text">{incidentKindLabel(item.kind, locale)}</p>

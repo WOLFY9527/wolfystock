@@ -37,7 +37,7 @@ const DEFAULT_LOOKBACK_DAYS = 5;
 const DEFAULT_BENCHMARK_SYMBOL_LIMIT = 2;
 const BUTTON_CLASS = 'rounded-lg px-3 py-1.5 text-xs';
 const CHIP_CLASS = 'inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-semibold';
-const PANEL_CLASS = 'rounded-xl border border-white/5 bg-black/20 p-3';
+const PANEL_CLASS = 'rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-black/20 p-3';
 
 function parseSymbolInput(value: string): string[] {
   return Array.from(new Set(
@@ -85,10 +85,10 @@ function detailWithCompactPaths<T extends { databasePath?: string | null; parque
 }
 
 const MetricTile: React.FC<{ label: string; value: string; detail?: string }> = ({ label, value, detail }) => (
-  <div className="min-w-0 rounded-xl border border-white/5 bg-white/[0.02] p-3">
-    <p className="truncate text-[10px] font-semibold uppercase text-white/35">{label}</p>
-    <p className="mt-2 truncate text-sm font-semibold text-white tabular-nums">{value}</p>
-    {detail ? <p className="mt-1 truncate text-[11px] text-white/45">{detail}</p> : null}
+  <div className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
+    <p className="truncate text-[10px] font-semibold uppercase text-[color:var(--wolfy-text-muted)]">{label}</p>
+    <p className="mt-2 truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)] tabular-nums">{value}</p>
+    {detail ? <p className="mt-1 truncate text-[11px] text-[color:var(--wolfy-text-muted)]">{detail}</p> : null}
   </div>
 );
 
@@ -97,12 +97,12 @@ const SummaryLine: React.FC<{ label: string; value: string; tone?: 'normal' | 'g
   value,
   tone = 'normal',
 }) => (
-  <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-white/[0.02] px-2 py-1.5 text-xs">
-    <span className="shrink-0 text-white/40">{label}</span>
+  <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-[var(--wolfy-surface-console)] px-2 py-1.5 text-xs">
+    <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{label}</span>
     <span
       className={cn(
         'min-w-0 truncate text-right tabular-nums',
-        tone === 'good' ? 'text-emerald-300' : tone === 'warn' ? 'text-amber-300' : tone === 'muted' ? 'text-white/35' : 'text-white/70',
+        tone === 'good' ? 'text-[color:var(--wolfy-market-up)]' : tone === 'warn' ? 'text-[color:var(--state-warning-text)]' : tone === 'muted' ? 'text-[color:var(--wolfy-text-muted)]' : 'text-[color:var(--wolfy-text-secondary)]',
       )}
     >
       {value}
@@ -226,16 +226,16 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase text-cyan-300">DuckDB 诊断</p>
           <h3 className="mt-1 text-sm font-semibold text-foreground">可选量化引擎控制面</h3>
-          <p className="mt-1 max-w-3xl text-xs leading-5 text-white/45">
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
             诊断用途，不影响生产运行路径；不会接管扫描器、回测、组合、行情、AI 或通知。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className={cn(CHIP_CLASS, disabled ? 'border-cyan-300/15 bg-cyan-300/[0.05] text-cyan-200' : 'border-emerald-300/20 bg-emerald-300/[0.06] text-emerald-300')}>
+          <span className={cn(CHIP_CLASS, disabled ? 'border-cyan-300/15 bg-cyan-300/[0.05] text-[color:var(--state-info-text)]' : 'border-emerald-300/20 bg-emerald-300/[0.06] text-[color:var(--wolfy-market-up)]')}>
             {enabledDescriptor.label}
           </span>
-          <span className={cn(CHIP_CLASS, 'border-white/10 bg-white/[0.03] text-white/50')}>可选能力</span>
-          <span className={cn(CHIP_CLASS, 'border-white/10 bg-white/[0.03] text-white/50')}>{noWriteLabel}</span>
+          <span className={cn(CHIP_CLASS, 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]')}>可选能力</span>
+          <span className={cn(CHIP_CLASS, 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]')}>{noWriteLabel}</span>
         </div>
       </div>
 
@@ -289,20 +289,20 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
               显式构建因子
             </Button>
           </div>
-          {disabled ? <p className="mt-2 text-[11px] leading-5 text-cyan-200">未启用 / 可选能力 / 未写入文件。</p> : null}
-          {message ? <p className="mt-2 text-[11px] leading-5 text-white/45" role="status">{message}</p> : null}
+          {disabled ? <p className="mt-2 text-[11px] leading-5 text-[color:var(--state-info-text)]">未启用 / 可选能力 / 未写入文件。</p> : null}
+          {message ? <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]" role="status">{message}</p> : null}
         </div>
       </div>
 
       <FactorResearchReportPanel />
 
       <Disclosure
-        summary={<span className="text-xs font-semibold text-white/55">开发者细节</span>}
-        className="mt-3 rounded-xl border border-white/5 bg-white/[0.02]"
+        summary={<span className="text-xs font-semibold text-[color:var(--wolfy-text-muted)]">开发者细节</span>}
+        className="mt-3 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]"
         summaryClassName="px-3 py-2"
         bodyClassName="px-3 pb-3"
       >
-        <pre className="max-h-64 overflow-y-auto no-scrollbar whitespace-pre-wrap break-words rounded-lg bg-black/30 p-3 text-[11px] leading-5 text-white/45">
+        <pre className="max-h-64 overflow-y-auto no-scrollbar whitespace-pre-wrap break-words rounded-lg bg-black/30 p-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
           {stringifyDetail({
             health: detailWithCompactPaths(health),
             coverage: detailWithCompactPaths(coverage),

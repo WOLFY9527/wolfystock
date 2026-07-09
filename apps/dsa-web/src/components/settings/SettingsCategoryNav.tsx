@@ -26,14 +26,14 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
   const activeButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
-    activeButtonRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    activeButtonRef.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }, [activeCategory]);
 
   return (
     <div className="flex h-full flex-col gap-1">
       {!hideHeader ? (
         <div className="px-3 pb-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/36">{t('settings.categoriesTitle')}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{t('settings.categoriesTitle')}</p>
         </div>
       ) : null}
 
@@ -52,8 +52,8 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
               className={cn(
                 'scroll-m-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]',
                 isActive
-                  ? 'bg-white/[0.05] text-white'
-                  : 'text-white/60 hover:bg-white/[0.02] hover:text-white',
+                  ? 'bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-primary)]'
+                  : 'text-[color:var(--wolfy-text-secondary)] hover:bg-[var(--wolfy-surface-console)] hover:text-[color:var(--wolfy-text-primary)]',
                 disabled ? 'pointer-events-none opacity-60' : '',
               )}
               onClick={() => {
@@ -65,13 +65,13 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
               disabled={disabled}
             >
               <div className="min-w-0 flex-1">
-                <p className={cn('text-[12px] font-semibold tracking-wide uppercase', isActive ? 'text-white' : 'text-inherit')}>
+                <p className={cn('text-[12px] font-semibold tracking-wide uppercase', isActive ? 'text-[color:var(--wolfy-text-primary)]' : 'text-inherit')}>
                   {title}
                 </p>
               </div>
               <span className={cn(
                 'ml-3 rounded px-1.5 py-0.5 text-[10px] font-mono',
-                isActive ? 'bg-white/[0.08] text-white/70' : 'bg-white/[0.03] text-white/40',
+                isActive ? 'bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)]' : 'bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]',
               )}
               >
                 {count}

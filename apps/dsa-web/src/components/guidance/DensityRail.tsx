@@ -20,7 +20,7 @@ const VALUE_TONE_CLASS: Record<NonNullable<DensityRailItem['tone']>, string> = {
   negative: 'text-rose-200',
   caution: 'text-amber-100',
   info: 'text-cyan-100',
-  neutral: 'text-white/82',
+  neutral: 'text-[color:var(--wolfy-text-primary)]',
 };
 
 export function DensityRail({
@@ -37,15 +37,15 @@ export function DensityRail({
       )}
       aria-label={title}
     >
-      <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/38">{title}</p>
+      <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{title}</p>
       <dl className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-1">
         {items.map((item) => (
-          <div key={item.id} className="rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2.5">
-            <dt className="text-[11px] leading-4 text-white/40">{item.label}</dt>
+          <div key={item.id} className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
+            <dt className="text-[11px] leading-4 text-[color:var(--wolfy-text-muted)]">{item.label}</dt>
             <dd className={cn('mt-1 break-words text-sm font-semibold leading-5', VALUE_TONE_CLASS[item.tone ?? 'neutral'])}>
               {item.value}
             </dd>
-            {item.helper ? <dd className="mt-1 text-xs leading-5 text-white/36">{item.helper}</dd> : null}
+            {item.helper ? <dd className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{item.helper}</dd> : null}
           </div>
         ))}
       </dl>

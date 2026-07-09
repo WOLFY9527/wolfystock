@@ -130,11 +130,11 @@ const ENTITY_TYPE_OPTIONS = [
   { value: 'provider_operation', label: '数据源运维' },
 ];
 
-const TERMINAL_LINK_ACTION_CLASSNAME = 'inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70 transition-all duration-300 hover:border-white/20 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]';
-const TERMINAL_DISABLED_TAB_CLASSNAME = 'inline-flex min-h-9 shrink-0 items-center rounded-lg border border-white/8 bg-white/[0.02] px-3 py-1.5 text-xs font-medium text-white/25';
-const TERMINAL_IDLE_TAB_CLASSNAME = 'border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20 hover:bg-white/[0.07] hover:text-white';
-const TERMINAL_ACTIVE_TAB_CLASSNAME = 'border-cyan-300/20 bg-cyan-400/5 text-cyan-100 shadow-[0_0_0_1px_rgba(34,211,238,0.04)]';
-const TERMINAL_ACTIVE_TOGGLE_CLASSNAME = 'border-cyan-300/20 bg-cyan-400/5 text-cyan-100 hover:border-cyan-300/30 hover:bg-cyan-400/10 hover:text-cyan-50';
+const TERMINAL_LINK_ACTION_CLASSNAME = 'inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-1.5 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-all duration-300 hover:border-[color:var(--wolfy-divider)] hover:bg-[var(--wolfy-surface-input)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]';
+const TERMINAL_DISABLED_TAB_CLASSNAME = 'inline-flex min-h-9 shrink-0 items-center rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-3 py-1.5 text-xs font-medium text-[color:var(--wolfy-text-muted)]';
+const TERMINAL_IDLE_TAB_CLASSNAME = 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-divider)] hover:bg-[var(--wolfy-surface-input)] hover:text-[color:var(--wolfy-text-primary)]';
+const TERMINAL_ACTIVE_TAB_CLASSNAME = 'border-cyan-300/20 bg-cyan-400/5 text-[color:var(--state-info-text)] shadow-[0_0_0_1px_rgba(34,211,238,0.04)]';
+const TERMINAL_ACTIVE_TOGGLE_CLASSNAME = 'border-cyan-300/20 bg-cyan-400/5 text-[color:var(--state-info-text)] hover:border-cyan-300/30 hover:bg-cyan-400/10 hover:text-[color:var(--wolfy-text-primary)]';
 
 function text(value: unknown, fallback = '--'): string {
   const normalized = String(value ?? '').trim();
@@ -187,10 +187,10 @@ function statusChipVariant(value?: string | null): TerminalChipVariant {
 
 function metricValueTone(tone: 'neutral' | 'good' | 'warn' | 'danger' | 'info' = 'neutral'): string {
   return {
-    neutral: 'text-white',
-    good: 'text-emerald-300',
-    warn: 'text-amber-300',
-    danger: 'text-rose-300',
+    neutral: 'text-[color:var(--wolfy-text-primary)]',
+    good: 'text-[color:var(--wolfy-market-up)]',
+    warn: 'text-[color:var(--state-warning-text)]',
+    danger: 'text-[color:var(--wolfy-market-down)]',
     info: 'text-cyan-300',
   }[tone];
 }
@@ -252,7 +252,7 @@ function freshSecurityActionState(): SecurityActionFormState {
 }
 
 const LoadingBar: React.FC<{ className?: string }> = ({ className }) => (
-  <div aria-hidden="true" className={cn('animate-pulse rounded-full bg-white/[0.08]', className)} />
+  <div aria-hidden="true" className={cn('animate-pulse rounded-full bg-[var(--wolfy-surface-input)]', className)} />
 );
 
 const LoadingNestedCard: React.FC<{ className?: string; 'data-testid'?: string }> = ({ className, 'data-testid': dataTestId }) => (
@@ -328,7 +328,7 @@ const PageHeader: React.FC<{
                 </div>
               )}
             />
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/52">
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--wolfy-text-muted)]">
               账号、会话、组合投影与审计线索共用同一套紧凑支持界面节奏；敏感凭证材料、原始会话标识和底层调试载荷默认不进入界面。
             </p>
           </div>
@@ -370,18 +370,18 @@ const UserRow: React.FC<{ user: AdminUserListItem; locale: 'zh' | 'en'; canReadO
   const href = locale === 'en' ? `/en/admin/users/${encodeURIComponent(user.id)}` : `/zh/admin/users/${encodeURIComponent(user.id)}`;
   const adminLogs = canReadOpsLogs ? adminLogHref(user.links?.adminLogs, locale) : null;
   return (
-    <TerminalNestedBlock className="min-w-0 transition hover:border-white/10 hover:bg-white/[0.03]">
+    <TerminalNestedBlock className="min-w-0 transition hover:border-[color:var(--wolfy-border-subtle)] hover:bg-[var(--wolfy-surface-input)]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <Link to={href} className="group inline-flex min-w-0 items-center gap-2">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-cyan-300/15 bg-cyan-400/10 text-cyan-100">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-cyan-300/15 bg-cyan-400/10 text-[color:var(--state-info-text)]">
               <UserRound className="h-4 w-4" aria-hidden="true" />
             </span>
             <span className="min-w-0">
-              <span className="block truncate text-base font-semibold text-white group-hover:text-cyan-100">
+              <span className="block truncate text-base font-semibold text-[color:var(--wolfy-text-primary)] group-hover:text-[color:var(--wolfy-text-primary)]">
                 {text(user.displayName || user.username)}
               </span>
-              <span className="block truncate font-mono text-[11px] text-white/42">{user.id}</span>
+              <span className="block truncate font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{user.id}</span>
             </span>
           </Link>
         </div>
@@ -390,18 +390,18 @@ const UserRow: React.FC<{ user: AdminUserListItem; locale: 'zh' | 'en'; canReadO
           <TerminalChip variant="neutral">{user.role === 'admin' ? '管理员' : user.role}</TerminalChip>
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-4">
-        <p className="min-w-0">密码 <span className="block truncate text-white/70">{passwordStateLabel(user.passwordState)}</span></p>
-        <p className="min-w-0">活跃会话 <span className="block font-mono text-white/70">{user.sessionSummary.activeCount}</span></p>
-        <p className="min-w-0">最近活动 <span className="block truncate font-mono text-white/70">{formatDate(user.lastSeenAt)}</span></p>
-        <p className="min-w-0">创建时间 <span className="block truncate font-mono text-white/70">{formatDate(user.createdAt)}</span></p>
+      <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] text-[color:var(--wolfy-text-muted)] md:grid-cols-4">
+        <p className="min-w-0">密码 <span className="block truncate text-[color:var(--wolfy-text-secondary)]">{passwordStateLabel(user.passwordState)}</span></p>
+        <p className="min-w-0">活跃会话 <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">{user.sessionSummary.activeCount}</span></p>
+        <p className="min-w-0">最近活动 <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{formatDate(user.lastSeenAt)}</span></p>
+        <p className="min-w-0">创建时间 <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{formatDate(user.createdAt)}</span></p>
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 flex-wrap gap-1.5">
           {user.riskBadges.length > 0 ? user.riskBadges.map((badge) => (
             <TerminalChip key={`${badge.code}-${badge.label}`} variant={riskChipVariant(badge.severity)}>{badge.label}</TerminalChip>
           )) : (
-            <span className="text-xs text-white/38">暂无风险标签</span>
+            <span className="text-xs text-[color:var(--wolfy-text-muted)]">暂无风险标签</span>
           )}
         </div>
         {adminLogs ? (
@@ -482,7 +482,7 @@ const DirectoryView: React.FC<{
           </TerminalNotice>
           {state.error ? (
             <div className="mt-4">
-              <p className="mb-2 text-sm font-semibold text-rose-100">读取用户目录失败</p>
+              <p className="mb-2 text-sm font-semibold text-[color:var(--wolfy-market-down)]">读取用户目录失败</p>
               <ApiErrorAlert error={state.error} />
             </div>
           ) : null}
@@ -563,14 +563,14 @@ const SessionList: React.FC<{ sessions: AdminSessionSummary[] }> = ({ sessions }
         {sessions.map((session) => (
           <TerminalNestedBlock key={session.sessionHandle}>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-mono text-sm font-semibold text-white">{session.sessionHandle}</span>
+              <span className="font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{session.sessionHandle}</span>
               <TerminalChip variant={statusChipVariant(session.status)}>{statusLabel(session.status)}</TerminalChip>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-4">
-              <p>创建 <span className="block truncate font-mono text-white/68">{formatDate(session.createdAt)}</span></p>
-              <p>最近 <span className="block truncate font-mono text-white/68">{formatDate(session.lastSeenAt)}</span></p>
-              <p>过期 <span className="block truncate font-mono text-white/68">{formatDate(session.expiresAt)}</span></p>
-              <p>撤销 <span className="block truncate font-mono text-white/68">{formatDate(session.revokedAt)}</span></p>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-[color:var(--wolfy-text-muted)] md:grid-cols-4">
+              <p>创建 <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{formatDate(session.createdAt)}</span></p>
+              <p>最近 <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{formatDate(session.lastSeenAt)}</span></p>
+              <p>过期 <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{formatDate(session.expiresAt)}</span></p>
+              <p>撤销 <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{formatDate(session.revokedAt)}</span></p>
             </div>
           </TerminalNestedBlock>
         ))}
@@ -585,7 +585,7 @@ const FuturePlaceholders: React.FC = () => (
     <div className="mt-4 grid gap-3">
       <TerminalNotice variant="neutral">安全控制只保留本阶段允许的只读与显式确认能力，不扩展到重置密码或 RBAC 变更。</TerminalNotice>
       <TerminalDisclosure title="L4 后续阶段占位：组合 / 分析 / 扫描 / 回测" summary="默认收起 · 原始数据库与 prompt 不开放">
-        <div className="grid gap-2 text-xs leading-5 text-white/48">
+        <div className="grid gap-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
           <p>组合、分析、Scanner、Backtest 管理视图等待独立后端合同。</p>
           <p>原始数据库浏览器、原始 prompt、provider 载荷与堆栈明细不在本阶段展示。</p>
         </div>
@@ -612,7 +612,7 @@ const PortfolioTab: React.FC<{
             title="组合只读总览"
             action={<TerminalChip variant="info">只读投影</TerminalChip>}
           />
-          <p className="mt-3 max-w-2xl text-xs leading-5 text-white/46">仅展示账户、估值、持仓和账本活动的安全投影；不会触发同步、导入、重放、汇率刷新或组合数据修改。</p>
+          <p className="mt-3 max-w-2xl text-xs leading-5 text-[color:var(--wolfy-text-muted)]">仅展示账户、估值、持仓和账本活动的安全投影；不会触发同步、导入、重放、汇率刷新或组合数据修改。</p>
           {summaryState.error ? (
             <div className="mt-4">
               <ApiErrorAlert error={summaryState.error} />
@@ -644,15 +644,15 @@ const PortfolioTab: React.FC<{
                       <TerminalNestedBlock key={account.id}>
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-white">{account.name}</p>
-                            <p className="mt-1 truncate font-mono text-[11px] text-white/42">{text(account.brokerAccountHandle, '已脱敏')}</p>
+                            <p className="truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{account.name}</p>
+                            <p className="mt-1 truncate font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{text(account.brokerAccountHandle, '已脱敏')}</p>
                           </div>
                           <TerminalChip variant={statusChipVariant(account.isActive ? 'active' : 'inactive')}>{account.isActive ? '活跃' : '停用'}</TerminalChip>
                         </div>
-                        <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-white/44">
-                          <span>券商 <b className="block truncate text-white/70">{text(account.broker)}</b></span>
-                          <span>市场 <b className="block truncate text-white/70">{text(account.market)}</b></span>
-                          <span>币种 <b className="block truncate text-white/70">{text(account.baseCurrency)}</b></span>
+                        <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-[color:var(--wolfy-text-muted)]">
+                          <span>券商 <b className="block truncate text-[color:var(--wolfy-text-secondary)]">{text(account.broker)}</b></span>
+                          <span>市场 <b className="block truncate text-[color:var(--wolfy-text-secondary)]">{text(account.market)}</b></span>
+                          <span>币种 <b className="block truncate text-[color:var(--wolfy-text-secondary)]">{text(account.baseCurrency)}</b></span>
                         </div>
                       </TerminalNestedBlock>
                     ))}
@@ -700,25 +700,25 @@ const PortfolioTab: React.FC<{
                   >
                     <div className="flex min-w-0 items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="font-mono text-base font-semibold text-white">{item.symbol}</p>
-                        <p className="mt-1 text-sm leading-6 text-white/54">{item.accountName}</p>
+                        <p className="font-mono text-base font-semibold text-[color:var(--wolfy-text-primary)]">{item.symbol}</p>
+                        <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-muted)]">{item.accountName}</p>
                       </div>
-                      <p className={cn('shrink-0 text-right font-mono text-sm', item.unrealizedPnlBase >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
+                      <p className={cn('shrink-0 text-right font-mono text-sm', item.unrealizedPnlBase >= 0 ? 'text-[color:var(--wolfy-market-up)]' : 'text-[color:var(--wolfy-market-down)]')}>
                         {formatCurrency(item.unrealizedPnlBase, { currency: item.valuationCurrency || item.currency || 'USD' })}
                       </p>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <div className="min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.025] px-2.5 py-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">数量</p>
-                        <p className="mt-1 font-mono text-sm text-white/72">{compactNumber(item.quantity)}</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">数量</p>
+                        <p className="mt-1 font-mono text-sm text-[color:var(--wolfy-text-secondary)]">{compactNumber(item.quantity)}</p>
                       </div>
                       <div className="min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.025] px-2.5 py-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">市值</p>
-                        <p className="mt-1 break-words font-mono text-sm text-white/72">{formatCurrency(item.marketValueBase, { currency: item.valuationCurrency || item.currency || 'USD' })}</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">市值</p>
+                        <p className="mt-1 break-words font-mono text-sm text-[color:var(--wolfy-text-secondary)]">{formatCurrency(item.marketValueBase, { currency: item.valuationCurrency || item.currency || 'USD' })}</p>
                       </div>
                       <div className="col-span-2 min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.025] px-2.5 py-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">汇率状态</p>
-                        <p className="mt-1 text-sm leading-6 text-white/62">{item.fxStatus}</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">汇率状态</p>
+                        <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{item.fxStatus}</p>
                       </div>
                     </div>
                   </article>
@@ -726,7 +726,7 @@ const PortfolioTab: React.FC<{
               </div>
               <TerminalDenseTable className="mt-4 hidden border-white/6 bg-black/15 md:block">
                 <table className="w-full min-w-[620px] text-left text-xs">
-                  <thead className="text-white/34">
+                  <thead className="text-[color:var(--wolfy-text-muted)]">
                     <tr>
                       <th className="py-2 pr-3">标的</th>
                       <th className="py-2 pr-3">账户</th>
@@ -736,14 +736,14 @@ const PortfolioTab: React.FC<{
                       <th className="py-2">汇率</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5 text-white/62">
+                  <tbody className="divide-y divide-white/5 text-[color:var(--wolfy-text-secondary)]">
                     {holdings.map((item) => (
                       <tr key={`${item.accountId}-${item.symbol}`}>
-                        <td className="py-3 pr-3 font-mono text-white">{item.symbol}</td>
+                        <td className="py-3 pr-3 font-mono text-[color:var(--wolfy-text-primary)]">{item.symbol}</td>
                         <td className="py-3 pr-3">{item.accountName}</td>
                         <td className="py-3 pr-3 font-mono">{compactNumber(item.quantity)}</td>
                         <td className="py-3 pr-3 font-mono">{formatCurrency(item.marketValueBase, { currency: item.valuationCurrency || item.currency || 'USD' })}</td>
-                        <td className={cn('py-3 pr-3 font-mono', item.unrealizedPnlBase >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{formatCurrency(item.unrealizedPnlBase, { currency: item.valuationCurrency || item.currency || 'USD' })}</td>
+                        <td className={cn('py-3 pr-3 font-mono', item.unrealizedPnlBase >= 0 ? 'text-[color:var(--wolfy-market-up)]' : 'text-[color:var(--wolfy-market-down)]')}>{formatCurrency(item.unrealizedPnlBase, { currency: item.valuationCurrency || item.currency || 'USD' })}</td>
                         <td className="py-3">{item.fxStatus}</td>
                       </tr>
                     ))}
@@ -768,12 +768,12 @@ const PortfolioTab: React.FC<{
                 <TerminalNestedBlock key={item.idHash}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate font-mono text-sm font-semibold text-white">{item.symbol || item.type}</p>
-                      <p className="mt-1 text-[11px] text-white/42">{item.accountName} · {formatDate(item.eventDate)}</p>
+                      <p className="truncate font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.symbol || item.type}</p>
+                      <p className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{item.accountName} · {formatDate(item.eventDate)}</p>
                     </div>
                     <TerminalChip variant="neutral">{item.type}</TerminalChip>
                   </div>
-                  <p className="mt-2 truncate text-[11px] text-white/50">
+                  <p className="mt-2 truncate text-[11px] text-[color:var(--wolfy-text-muted)]">
                     {text(item.side || item.direction || item.actionType, 'activity')} · 数量 {text(item.quantity)} · 金额 {text(item.amount)}
                   </p>
                 </TerminalNestedBlock>
@@ -813,7 +813,7 @@ const SecurityActionCard: React.FC<{
         title={title}
         action={<TerminalChip variant={available ? (danger ? 'danger' : 'caution') : 'neutral'}>{available ? '可执行' : '当前状态不可用'}</TerminalChip>}
       />
-      <p className="mt-3 max-w-xl text-xs leading-5 text-white/46">{description}</p>
+      <p className="mt-3 max-w-xl text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{description}</p>
       <TerminalNotice variant={danger ? 'danger' : 'neutral'} className="mt-3">
         操作需要填写审计原因并输入确认短语；响应仅返回脱敏结果和审计事件编号。
       </TerminalNotice>
@@ -846,7 +846,7 @@ const SecurityActionCard: React.FC<{
         <TerminalButton type="button" variant={danger ? 'danger' : 'secondary'} disabled={!canSubmit} onClick={onSubmit}>
           {buttonLabel}
         </TerminalButton>
-        {!available ? <span className="text-xs text-white/35">账户当前状态不适用该操作。</span> : null}
+        {!available ? <span className="text-xs text-[color:var(--wolfy-text-muted)]">账户当前状态不适用该操作。</span> : null}
       </div>
       {state.error ? (
         <div className="mt-4">
@@ -859,7 +859,7 @@ const SecurityActionCard: React.FC<{
             <TerminalChip variant="success">已记录审计结果</TerminalChip>
             <p>状态: {statusLabel(state.result.status)} · 会话撤销 {state.result.sessionsRevoked}</p>
           </div>
-          {state.result.auditEventId ? <p className="mt-1 font-mono text-emerald-100">{state.result.auditEventId}</p> : null}
+          {state.result.auditEventId ? <p className="mt-1 font-mono text-[color:var(--wolfy-market-up)]">{state.result.auditEventId}</p> : null}
         </TerminalNotice>
       ) : null}
     </TerminalNestedBlock>
@@ -888,7 +888,7 @@ const SecurityTab: React.FC<{
             安全状态查看和控制操作都会被审计；响应不会返回敏感凭证字段、原始会话标识或底层调试材料。
           </TerminalNotice>
           <TerminalDisclosure title="L4 后续安全能力占位：密码重置 / 权限治理" summary="默认收起 · 不改变当前审计与权限边界" className="mt-4">
-            <div className="grid gap-2 text-xs text-white/42">
+            <div className="grid gap-2 text-xs text-[color:var(--wolfy-text-muted)]">
               <p>reset-password 后续阶段，不在本次实现。</p>
               <p>force-password-change 后续阶段，不在本次实现。</p>
               <p>unlock / RBAC capability model 后续阶段，不在本次实现。</p>
@@ -965,23 +965,23 @@ const DetailOverview: React.FC<{ detail: AdminUserDetailResponse; locale: 'zh' |
               </div>
             )}
           />
-          <p className="mt-1 truncate font-mono text-xs text-white/42">{user.id}</p>
+          <p className="mt-1 truncate font-mono text-xs text-[color:var(--wolfy-text-muted)]">{user.id}</p>
           <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
             <TerminalMetric label="活跃会话" value={user.sessionSummary.activeCount} valueClassName={cn('text-xl font-semibold', metricValueTone('good'))} />
             <TerminalMetric label="过期会话" value={user.sessionSummary.expiredCount} valueClassName={cn('text-xl font-semibold', metricValueTone('warn'))} />
             <TerminalMetric label="撤销会话" value={user.sessionSummary.revokedCount} valueClassName={cn('text-xl font-semibold', metricValueTone('info'))} />
             <TerminalMetric label="密码状态" value={passwordStateLabel(user.passwordState)} valueClassName={cn('text-xl font-semibold', metricValueTone(user.passwordState === 'unset' ? 'warn' : 'neutral'))} />
           </div>
-          <div className="mt-5 grid grid-cols-1 gap-3 text-sm text-white/52 md:grid-cols-2">
-            <TerminalNestedBlock>创建时间 <span className="block font-mono text-white/72">{formatDate(user.createdAt)}</span></TerminalNestedBlock>
-            <TerminalNestedBlock>更新时间 <span className="block font-mono text-white/72">{formatDate(user.updatedAt)}</span></TerminalNestedBlock>
-            <TerminalNestedBlock>最近活动 <span className="block font-mono text-white/72">{formatDate(user.lastSeenAt)}</span></TerminalNestedBlock>
-            <TerminalNestedBlock>下一会话过期 <span className="block font-mono text-white/72">{formatDate(user.sessionSummary.nextExpiresAt)}</span></TerminalNestedBlock>
+          <div className="mt-5 grid grid-cols-1 gap-3 text-sm text-[color:var(--wolfy-text-muted)] md:grid-cols-2">
+            <TerminalNestedBlock>创建时间 <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">{formatDate(user.createdAt)}</span></TerminalNestedBlock>
+            <TerminalNestedBlock>更新时间 <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">{formatDate(user.updatedAt)}</span></TerminalNestedBlock>
+            <TerminalNestedBlock>最近活动 <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">{formatDate(user.lastSeenAt)}</span></TerminalNestedBlock>
+            <TerminalNestedBlock>下一会话过期 <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">{formatDate(user.sessionSummary.nextExpiresAt)}</span></TerminalNestedBlock>
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
             {user.riskBadges.length > 0 ? user.riskBadges.map((badge) => (
               <TerminalChip key={badge.code} variant={riskChipVariant(badge.severity)}>{badge.label}</TerminalChip>
-            )) : <span className="text-xs text-white/38">暂无风险标签</span>}
+            )) : <span className="text-xs text-[color:var(--wolfy-text-muted)]">暂无风险标签</span>}
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
             {adminLogs ? (
@@ -1065,9 +1065,9 @@ const ActivityEventCard: React.FC<{ event: AdminActivityEvent }> = ({ event }) =
       <div className="pl-7">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="font-mono text-[11px] text-white/42">{formatDate(event.timestamp)}</p>
-            <h3 className="mt-1 truncate text-base font-semibold text-white">{event.action}</h3>
-            <p className="mt-1 truncate text-sm text-white/50">
+            <p className="font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{formatDate(event.timestamp)}</p>
+            <h3 className="mt-1 truncate text-base font-semibold text-[color:var(--wolfy-text-primary)]">{event.action}</h3>
+            <p className="mt-1 truncate text-sm text-[color:var(--wolfy-text-muted)]">
               {text(event.actor.label || event.actor.type)} {'->'} {text(event.entity.label || event.entity.symbol || event.entity.type)}
             </p>
           </div>
@@ -1076,27 +1076,27 @@ const ActivityEventCard: React.FC<{ event: AdminActivityEvent }> = ({ event }) =
             <TerminalChip variant={statusChipVariant(event.status)}>{statusLabel(event.status)}</TerminalChip>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-4">
-          <p>对象 <span className="block truncate text-white/68">{event.entity.type}</span></p>
-          <p>结果 <span className="block truncate text-white/68">{statusLabel(event.outcome)}</span></p>
-          <p>请求哈希 <span className="block truncate font-mono text-white/68">{text(event.requestIdHash)}</span></p>
-          <p>会话哈希 <span className="block truncate font-mono text-white/68">{text(event.sessionIdHash)}</span></p>
+        <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] text-[color:var(--wolfy-text-muted)] md:grid-cols-4">
+          <p>对象 <span className="block truncate text-[color:var(--wolfy-text-secondary)]">{event.entity.type}</span></p>
+          <p>结果 <span className="block truncate text-[color:var(--wolfy-text-secondary)]">{statusLabel(event.outcome)}</span></p>
+          <p>请求哈希 <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{text(event.requestIdHash)}</span></p>
+          <p>会话哈希 <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{text(event.sessionIdHash)}</span></p>
         </div>
         <TerminalDisclosure title="L3 脱敏元数据：可见字段与已屏蔽计数" summary={`默认收起 · ${entries.length} 个可见字段 · ${hiddenCount} 个已屏蔽`} className="mt-4">
           {entries.length === 0 && hiddenCount === 0 ? (
-            <p className="text-xs text-white/42">暂无可展示元数据</p>
+            <p className="text-xs text-[color:var(--wolfy-text-muted)]">暂无可展示元数据</p>
           ) : (
-            <dl className="grid gap-2 text-[11px] leading-5 text-white/50 sm:grid-cols-2">
+            <dl className="grid gap-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)] sm:grid-cols-2">
               {entries.map(([key, value]) => (
                 <div key={key} className="min-w-0">
-                  <dt className="truncate text-white/34">{key}</dt>
-                  <dd className="break-words font-mono text-white/62">{value}</dd>
+                  <dt className="truncate text-[color:var(--wolfy-text-muted)]">{key}</dt>
+                  <dd className="break-words font-mono text-[color:var(--wolfy-text-secondary)]">{value}</dd>
                 </div>
               ))}
               {hiddenCount > 0 ? (
                 <div className="min-w-0">
-                  <dt className="text-white/34">脱敏</dt>
-                  <dd className="text-amber-100/72">{hiddenCount} 个敏感字段已屏蔽</dd>
+                  <dt className="text-[color:var(--wolfy-text-muted)]">脱敏</dt>
+                  <dd className="text-[color:var(--state-warning-text)]">{hiddenCount} 个敏感字段已屏蔽</dd>
                 </div>
               ) : null}
             </dl>
@@ -1131,7 +1131,7 @@ const ActivityTimeline: React.FC<{
           ) : null}
           {state.error ? (
             <div className="mt-4">
-              <p className="mb-2 text-sm font-semibold text-rose-100">读取活动时间线失败</p>
+              <p className="mb-2 text-sm font-semibold text-[color:var(--wolfy-market-down)]">读取活动时间线失败</p>
               <ApiErrorAlert error={state.error} />
             </div>
           ) : null}
@@ -1363,7 +1363,7 @@ const AdminUsersPage: React.FC = () => {
     if (detailState.error) {
       return (
         <TerminalPanel as="section">
-          <p className="mb-2 text-sm font-semibold text-rose-100">读取用户详情失败</p>
+          <p className="mb-2 text-sm font-semibold text-[color:var(--wolfy-market-down)]">读取用户详情失败</p>
           <ApiErrorAlert error={detailState.error} />
           <TerminalButton type="button" variant="secondary" className="mt-4 w-fit px-3 text-sm" onClick={() => navigate(directoryPath)}>
             返回用户目录
@@ -1453,7 +1453,7 @@ const AdminUsersPage: React.FC = () => {
         <TerminalNotice variant="caution">
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-200" aria-hidden="true" />
-            <p className="text-xs leading-5 text-white/46">
+            <p className="text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
               本页面只展示账号、会话和活动的安全投影；凭证材料、原始会话材料、底层调试载荷、模型上下文、第三方原始响应和异常堆栈均不进入界面。
             </p>
           </div>

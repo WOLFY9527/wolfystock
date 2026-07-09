@@ -25,8 +25,8 @@ type ApiSourceCardProps = {
   onValidate: () => void;
 };
 
-const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
-const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
+const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-[var(--wolfy-surface-input)] border border-[color:var(--wolfy-border-subtle)] hover:bg-[var(--wolfy-surface-input)] text-xs transition-colors';
+const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)] border border-[color:var(--wolfy-border-subtle)]';
 const EMPTY_TEXT_LIST: string[] = [];
 
 export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
@@ -53,7 +53,7 @@ export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
   onValidate,
 }) => (
   <div
-    className="flex items-center justify-between gap-4 border-b border-white/5 py-3 transition-colors hover:bg-white/[0.02]"
+    className="flex items-center justify-between gap-4 border-b border-[color:var(--wolfy-border-subtle)] py-3 transition-colors hover:bg-[var(--wolfy-surface-console)]"
     data-testid={testId}
     data-layout="row"
   >
@@ -65,8 +65,8 @@ export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
         aria-hidden="true"
       />
       <div className="min-w-0">
-        <p className="w-48 truncate text-sm font-bold text-white">{label}</p>
-        <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-white/30">{kindLabel}</p>
+        <p className="w-48 truncate text-sm font-bold text-[color:var(--wolfy-text-primary)]">{label}</p>
+        <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">{kindLabel}</p>
       </div>
     </div>
 
@@ -82,7 +82,7 @@ export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
           </span>
         ))}
       </div>
-      <div className="mt-1 flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/35">
+      <div className="mt-1 flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
         <span className="truncate">{statusText}</span>
         <span className="truncate">{validationMessage}</span>
         <span className="truncate">{usedByText}</span>
@@ -91,7 +91,7 @@ export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
       </div>
       <div className="mt-2 grid gap-2 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <div className="min-w-0">
-          <p className="mb-1 text-[10px] font-bold uppercase text-white/35">{impactLabel}</p>
+          <p className="mb-1 text-[10px] font-bold uppercase text-[color:var(--wolfy-text-muted)]">{impactLabel}</p>
           <div className="flex flex-wrap gap-1.5">
             {impactSurfaces.map((surface) => (
               <span key={`${testId}-surface-${surface}`} className={GHOST_TAG_CLASS}>
@@ -113,7 +113,7 @@ export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
               </span>
             ))}
           </div>
-          <p className="mt-1 text-[11px] text-white/45">{impactEvidenceText}</p>
+          <p className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{impactEvidenceText}</p>
         </div>
       </div>
     </div>

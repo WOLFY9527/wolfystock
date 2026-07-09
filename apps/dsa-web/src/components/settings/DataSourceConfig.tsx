@@ -38,10 +38,10 @@ type DataSourceConfigProps = {
   surfaceFocus?: ProductSetupSurface | null;
 };
 
-const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
-const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
-const SECTION_HEADER_CLASS = 'mt-8 mb-3 border-b border-white/10 pb-2 text-xs font-bold uppercase tracking-[0.2em] text-white/30 first:mt-0';
-const ROW_CLASS = 'flex items-center justify-between gap-4 border-b border-white/5 py-3 transition-colors hover:bg-white/[0.02]';
+const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-[var(--wolfy-surface-input)] border border-[color:var(--wolfy-border-subtle)] hover:bg-[var(--wolfy-surface-input)] text-xs transition-colors';
+const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)] border border-[color:var(--wolfy-border-subtle)]';
+const SECTION_HEADER_CLASS = 'mt-8 mb-3 border-b border-[color:var(--wolfy-border-subtle)] pb-2 text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--wolfy-text-muted)] first:mt-0';
+const ROW_CLASS = 'flex items-center justify-between gap-4 border-b border-[color:var(--wolfy-border-subtle)] py-3 transition-colors hover:bg-[var(--wolfy-surface-console)]';
 
 const priorityLabel = (index: number): string => {
   if (index === 0) return 'P1';
@@ -122,16 +122,16 @@ const CoverageGapsPanel: React.FC<{ gaps: DataCoverageGapView[]; t: TranslateFn 
     </div>
     <div className="mt-3 grid gap-2 md:grid-cols-2" data-testid="data-coverage-gaps">
       {gaps.map((gap) => (
-        <div key={gap.key} className="min-w-0 border-t border-white/5 pt-2">
+        <div key={gap.key} className="min-w-0 border-t border-[color:var(--wolfy-border-subtle)] pt-2">
           <div className="flex flex-wrap gap-1.5">
             {gap.surfaces.map((surface) => (
               <span key={`${gap.key}-${surface}`} className={GHOST_TAG_CLASS}>{surface}</span>
             ))}
           </div>
-          <p className="mt-1 text-xs font-semibold text-white/70">
+          <p className="mt-1 text-xs font-semibold text-[color:var(--wolfy-text-secondary)]">
             {t('settings.dataCoverageGapMissingProviderLabel')}: {gap.missing}
           </p>
-          <p className="mt-1 text-[11px] text-white/40">
+          <p className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
             {t('settings.dataCoverageGapImproveLabel')}: {gap.impact}
           </p>
         </div>
@@ -195,8 +195,8 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
               <div className="flex min-w-[13rem] items-center gap-3">
                 <StatusDot active={group.values.length > 0} />
                 <div className="min-w-0">
-                  <p className="w-48 truncate text-sm font-bold text-white">{group.role}</p>
-                  <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-white/30">
+                  <p className="w-48 truncate text-sm font-bold text-[color:var(--wolfy-text-primary)]">{group.role}</p>
+                  <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
                     {group.available.length
                       ? t('settings.dataRoutingSelectableCount', { count: group.available.length })
                       : t('settings.dataSourceNoUsableSources')}
@@ -219,7 +219,7 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
                     </span>
                   ))}
                 </div>
-                <p className="mt-1 truncate text-[11px] text-white/35">
+                <p className="mt-1 truncate text-[11px] text-[color:var(--wolfy-text-muted)]">
                   {group.values.length
                     ? group.values.map((source) => prettySourceLabel(source)).join(' -> ')
                     : (group.available.length

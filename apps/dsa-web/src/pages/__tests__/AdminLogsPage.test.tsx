@@ -762,8 +762,8 @@ describe('AdminLogsPage', () => {
     const fallbackRow = fallbackRowLabel.closest('[data-testid="business-event-row"]');
     expect(fallbackRow).not.toBeNull();
     expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill')).toHaveTextContent('降级');
-    expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill')).toHaveClass('text-amber-100');
-    expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill')).not.toHaveClass('text-rose-100');
+    expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill').className).toContain('state-warning-text');
+    expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill').className).not.toContain('wolfy-market-down');
     expect(screen.getAllByText('市场情绪模块').length).toBeGreaterThan(0);
     expect(screen.getAllByText('失败 · 无步骤明细').length).toBeGreaterThan(0);
     expect(screen.queryByText('成功 0 · 跳过 0 · 失败 0 · 未确认 0')).not.toBeInTheDocument();

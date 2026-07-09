@@ -12,6 +12,7 @@ import {
 } from '../api/adminOpsStatus';
 import AdminOpsL0OverviewStrip from '../components/admin/AdminOpsL0OverviewStrip';
 import {
+  TerminalButton,
   TerminalChip,
   TerminalMetric,
   TerminalNestedBlock,
@@ -21,6 +22,10 @@ import {
   TerminalPanel,
 } from '../components/terminal/TerminalPrimitives';
 import { cn } from '../utils/cn';
+
+const TEXT_PRIMARY = 'text-[color:var(--wolfy-text-primary)]';
+const TEXT_SECONDARY = 'text-[color:var(--wolfy-text-secondary)]';
+const TEXT_MUTED = 'text-[color:var(--wolfy-text-muted)]';
 
 function boolChip(value: boolean, trueLabel: string, falseLabel: string, invert = false) {
   const variant = value
@@ -88,10 +93,10 @@ function ScannerUniverseReadinessPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <ShieldAlert className="size-4 text-amber-200" />
-            <h2 className="text-sm font-semibold text-white">Scanner universe readiness</h2>
+            <ShieldAlert className="size-4 text-[color:var(--state-warning-text)]" aria-hidden="true" />
+            <h2 className={cn('text-sm font-semibold', TEXT_PRIMARY)}>Scanner universe readiness</h2>
           </div>
-          <p className="mt-1 text-xs leading-5 text-white/54">
+          <p className={cn('mt-1 text-xs leading-5', TEXT_MUTED)}>
             Admin-only view of bounded US/CN scanner universe readiness and the existing safe refresh request.
           </p>
         </div>
@@ -128,7 +133,7 @@ function ScannerUniverseReadinessPanel({
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/34">
+                  <p className={cn('text-[11px] font-semibold uppercase tracking-[0.16em]', TEXT_MUTED)}>
                     {market.toUpperCase()} scanner universe
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -139,16 +144,17 @@ function ScannerUniverseReadinessPanel({
                     <TerminalChip variant="neutral">{readiness?.profile || 'profile unknown'}</TerminalChip>
                   </div>
                 </div>
-                <button
+                <TerminalButton
                   type="button"
+                  variant="secondary"
                   aria-label={`Request ${market.toUpperCase()} scanner universe refresh`}
                   disabled={isRefreshing}
                   onClick={() => onRefresh(market)}
-                  className="inline-flex min-h-[40px] items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.03] px-3 text-xs font-medium text-white/74 transition-colors hover:border-white/18 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  className="min-h-[40px] px-3 text-xs"
                 >
-                  <RefreshCw className={cn('size-4', isRefreshing ? 'animate-spin' : '')} />
+                  <RefreshCw className={cn('size-4', isRefreshing ? 'animate-spin' : '')} aria-hidden="true" />
                   <span>{isRefreshing ? 'Requesting' : 'Request refresh'}</span>
-                </button>
+                </TerminalButton>
               </div>
 
               <div className="grid gap-2 md:grid-cols-3">
@@ -169,52 +175,52 @@ function ScannerUniverseReadinessPanel({
 
               <div className="grid gap-3 md:grid-cols-2">
                 <TerminalNestedBlock className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">Affected surfaces</p>
-                  <p className="mt-2 text-xs leading-5 text-white/68">
+                  <p className={cn('text-[10px] font-semibold uppercase tracking-[0.16em]', TEXT_MUTED)}>Affected surfaces</p>
+                  <p className={cn('mt-2 text-xs leading-5', TEXT_SECONDARY)}>
                     {(affectedSurfaces.length ? affectedSurfaces : ['Scanner', 'Research Radar']).join(' / ')}
                   </p>
                 </TerminalNestedBlock>
                 <TerminalNestedBlock className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">Blocking surfaces</p>
-                  <p className="mt-2 text-xs leading-5 text-white/68">
+                  <p className={cn('text-[10px] font-semibold uppercase tracking-[0.16em]', TEXT_MUTED)}>Blocking surfaces</p>
+                  <p className={cn('mt-2 text-xs leading-5', TEXT_SECONDARY)}>
                     {(blockingSurfaces.length ? blockingSurfaces : ['none reported']).join(' / ')}
                   </p>
                 </TerminalNestedBlock>
                 <TerminalNestedBlock className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">Missing families</p>
-                  <p className="mt-2 break-words font-mono text-[11px] leading-5 text-white/68">
+                  <p className={cn('text-[10px] font-semibold uppercase tracking-[0.16em]', TEXT_MUTED)}>Missing families</p>
+                  <p className={cn('mt-2 break-words font-mono text-[11px] leading-5', TEXT_SECONDARY)}>
                     {(missingFamilies.length ? missingFamilies : ['none reported']).join(', ')}
                   </p>
                 </TerminalNestedBlock>
                 <TerminalNestedBlock className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">Data classes</p>
-                  <p className="mt-2 break-words font-mono text-[11px] leading-5 text-white/68">
+                  <p className={cn('text-[10px] font-semibold uppercase tracking-[0.16em]', TEXT_MUTED)}>Data classes</p>
+                  <p className={cn('mt-2 break-words font-mono text-[11px] leading-5', TEXT_SECONDARY)}>
                     available: {(availableClasses.length ? availableClasses : ['none reported']).join(', ')}
                   </p>
-                  <p className="mt-1 break-words font-mono text-[11px] leading-5 text-white/52">
+                  <p className={cn('mt-1 break-words font-mono text-[11px] leading-5', TEXT_MUTED)}>
                     missing: {(missingClasses.length ? missingClasses : ['none reported']).join(', ')}
                   </p>
                 </TerminalNestedBlock>
               </div>
 
               <TerminalNestedBlock className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">Next operator step</p>
-                <p className="mt-2 text-xs leading-5 text-white/72">{readiness?.nextOperatorAction || 'No operator step reported.'}</p>
+                <p className={cn('text-[10px] font-semibold uppercase tracking-[0.16em]', TEXT_MUTED)}>Next operator step</p>
+                <p className={cn('mt-2 text-xs leading-5', TEXT_SECONDARY)}>{readiness?.nextOperatorAction || 'No operator step reported.'}</p>
                 {readiness?.candidateGenerationBlockers?.length ? (
-                  <p className="mt-1 break-words font-mono text-[11px] leading-5 text-white/50">
+                  <p className={cn('mt-1 break-words font-mono text-[11px] leading-5', TEXT_MUTED)}>
                     blockers: {readiness.candidateGenerationBlockers.join(', ')}
                   </p>
                 ) : null}
               </TerminalNestedBlock>
 
               {refresh ? (
-                <TerminalNestedBlock data-testid={`admin-scanner-universe-refresh-${market}`} className="min-w-0 border-amber-300/18">
+                <TerminalNestedBlock data-testid={`admin-scanner-universe-refresh-${market}`} className="min-w-0 border-[color:color-mix(in_srgb,var(--state-warning-border)_80%,var(--wolfy-border-subtle))]">
                   <div className="flex flex-wrap gap-1.5">
                     <TerminalChip variant={scannerStatusVariant(refresh.status)}>{refresh.status}</TerminalChip>
                     <TerminalChip variant="caution">{refresh.actionStatus}</TerminalChip>
                     {boolChip(refresh.refreshExecuted, 'Refresh executed', 'Refresh deferred', true)}
                   </div>
-                  <p className="mt-2 text-xs leading-5 text-white/68">{refresh.nextOperatorAction}</p>
+                  <p className={cn('mt-2 text-xs leading-5', TEXT_SECONDARY)}>{refresh.nextOperatorAction}</p>
                 </TerminalNestedBlock>
               ) : null}
             </TerminalPanel>
@@ -225,109 +231,91 @@ function ScannerUniverseReadinessPanel({
   );
 }
 
-function StatusBadgeRow({ domain }: { domain: AdminOpsCockpitDomain }) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {boolChip(domain.foundationLanded, 'Foundation landed', 'Foundation partial')}
-      {boolChip(domain.evidenceToolingPresent, 'Evidence tooling present', 'Evidence tooling missing')}
-      {boolChip(domain.realOperatorEvidenceMissing, 'Real evidence missing', 'Real evidence present', true)}
-      {boolChip(domain.approvalRequired, 'Manual approval required', 'Approval not required', true)}
-      {boolChip(domain.publicLaunchNoGo, 'Public launch NO-GO', 'Public launch cleared', true)}
-    </div>
-  );
-}
-
-function DomainCard({ domain }: { domain: AdminOpsCockpitDomain }) {
-  const evidenceRefs = compactItems(domain.evidenceRefs, 3);
-  const blockerRefs = compactItems(domain.blockerRefs, 2);
-  const nextActions = compactItems(domain.safeNextActions, 2);
-  const proposals = domain.followUpProposals.slice(0, 1);
+function DomainStatusList({ domains }: { domains: AdminOpsCockpitDomain[] }) {
+  if (domains.length === 0) return null;
 
   return (
-    <TerminalPanel
-      as="article"
-      data-testid="admin-launch-cockpit-domain-card"
-      className="min-w-0 space-y-4"
-    >
-      <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/34">
-            {domain.domainKey}
-          </p>
-          <h2 className="mt-1 text-base font-semibold text-white">{domain.label}</h2>
-          <p className="mt-1 text-xs leading-5 text-white/58">{domain.statusLabel}</p>
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-1.5 xl:justify-end">
-          <TerminalChip variant={priorityVariant(domain.priorityTier)}>#{domain.priorityRank}</TerminalChip>
-          <TerminalChip variant={priorityVariant(domain.priorityTier)}>{domain.priorityTier}</TerminalChip>
-          <TerminalChip variant={domainStatusVariant(domain)} className="justify-center">
-            {domain.publicLaunchNoGo ? 'NO-GO' : domain.status}
-          </TerminalChip>
-        </div>
+    <section data-testid="admin-launch-cockpit-domain-grid" className="space-y-3">
+      <div className="flex items-center gap-2">
+        <FileText className={cn('size-4', TEXT_MUTED)} aria-hidden="true" />
+        <h2 className={cn('text-sm font-semibold', TEXT_PRIMARY)}>Domain readiness queue</h2>
       </div>
-
-      <StatusBadgeRow domain={domain} />
-
-      <TerminalNestedBlock className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">Recommended next action</p>
-        <p className="mt-2 text-xs leading-5 text-white/72">{domain.recommendedNextAction}</p>
-        <p className="mt-1 text-[11px] leading-5 text-white/52">{domain.blockingReasonSummary}</p>
-      </TerminalNestedBlock>
-
-      <div className="grid gap-3 lg:grid-cols-3">
-        <TerminalNestedBlock className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">Evidence refs</p>
-          <div className="mt-2 space-y-1.5">
-            {evidenceRefs.map((item) => (
-              <p key={item} className="break-words font-mono text-[11px] leading-5 text-white/68">{item}</p>
-            ))}
-          </div>
-        </TerminalNestedBlock>
-        <TerminalNestedBlock className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">Blocker refs</p>
-          <div className="mt-2 space-y-1.5">
-            {blockerRefs.map((item) => (
-              <p key={item} className="break-words font-mono text-[11px] leading-5 text-white/68">{item}</p>
-            ))}
-          </div>
-        </TerminalNestedBlock>
-        <TerminalNestedBlock className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">Safe next actions</p>
-          <div className="mt-2 space-y-1.5">
-            {nextActions.map((item) => (
-              <p key={item} className="text-xs leading-5 text-white/68">{item}</p>
-            ))}
-          </div>
-        </TerminalNestedBlock>
-      </div>
-
-      {proposals.length > 0 ? (
-        <div className="rounded-lg border border-amber-300/16 bg-amber-300/[0.04] p-3">
-          <div className="flex items-center gap-2 text-xs font-semibold text-amber-100">
-            <ShieldAlert className="size-4" />
-            <span>Approval-required follow-up</span>
-          </div>
-          {proposals.map((proposal) => (
-            <div key={proposal.proposalKey} className="mt-2 space-y-1 text-xs leading-5 text-white/64">
-              <p className="font-medium text-white/82">{proposal.title}</p>
-              <p>Risk: {proposal.risk}</p>
-              {proposal.likelyFiles.slice(0, 2).map((file) => (
-                <p key={file} className="break-words font-mono text-[11px] text-white/58">{file}</p>
-              ))}
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      <Link
-        to={domain.detailRoute}
-        className="inline-flex min-h-[40px] items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.03] px-3 text-xs font-medium text-white/74 transition-colors hover:border-white/18 hover:text-white"
-      >
-        <FileText className="size-4" />
-        <span>Open read-only detail</span>
-        <ArrowRight className="size-4" />
-      </Link>
-    </TerminalPanel>
+      <ol className="space-y-2" aria-label="Launch domain readiness">
+        {domains.map((domain) => {
+          const evidenceRefs = compactItems(domain.evidenceRefs, 2);
+          const nextActions = compactItems(domain.safeNextActions, 1);
+          const proposals = domain.followUpProposals.slice(0, 1);
+          return (
+            <li key={domain.domainKey}>
+              <article
+                data-testid="admin-launch-cockpit-domain-card"
+                className={cn(
+                  'min-w-0 rounded-lg border px-3 py-3',
+                  domain.publicLaunchNoGo
+                    ? 'border-[color:color-mix(in_srgb,var(--wolfy-market-down)_30%,var(--wolfy-border-subtle))] bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_5%,var(--wolfy-surface-console))]'
+                    : 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]',
+                )}
+              >
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span aria-hidden="true" className={cn('text-xs font-semibold', domain.publicLaunchNoGo ? 'text-[color:var(--wolfy-market-down)]' : TEXT_MUTED)}>
+                        {domain.publicLaunchNoGo ? '■' : '○'}
+                      </span>
+                      <p className={cn('text-[11px] font-semibold uppercase tracking-[0.14em]', TEXT_MUTED)}>{domain.domainKey}</p>
+                      <TerminalChip variant={priorityVariant(domain.priorityTier)}>#{domain.priorityRank}</TerminalChip>
+                      <TerminalChip variant={priorityVariant(domain.priorityTier)}>{domain.priorityTier}</TerminalChip>
+                      <TerminalChip variant={domainStatusVariant(domain)}>
+                        {domain.publicLaunchNoGo ? 'NO-GO' : domain.status}
+                      </TerminalChip>
+                    </div>
+                    <h3 className={cn('mt-1.5 text-sm font-semibold', TEXT_PRIMARY)}>{domain.label}</h3>
+                    <p className={cn('mt-1 text-xs leading-5', TEXT_SECONDARY)}>{domain.statusLabel}</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {boolChip(domain.foundationLanded, 'Foundation landed', 'Foundation partial')}
+                      {boolChip(domain.evidenceToolingPresent, 'Evidence tooling present', 'Evidence tooling missing')}
+                      {boolChip(domain.realOperatorEvidenceMissing, 'Real evidence missing', 'Real evidence present', true)}
+                      {boolChip(domain.approvalRequired, 'Manual approval required', 'Approval not required', true)}
+                      {boolChip(domain.publicLaunchNoGo, 'Public launch NO-GO', 'Public launch cleared', true)}
+                    </div>
+                    <p className={cn('mt-2 text-xs leading-5', TEXT_PRIMARY)}>
+                      <span className={cn('mr-1 font-medium', TEXT_MUTED)}>Next:</span>
+                      {domain.recommendedNextAction}
+                    </p>
+                    <p className={cn('mt-1 text-[11px] leading-5', TEXT_MUTED)}>{domain.blockingReasonSummary}</p>
+                    {evidenceRefs.length ? (
+                      <p className={cn('mt-1 break-words font-mono text-[11px] leading-5', TEXT_MUTED)}>
+                        Evidence: {evidenceRefs.join(' · ')}
+                      </p>
+                    ) : null}
+                    {nextActions.length ? (
+                      <p className={cn('mt-1 text-[11px] leading-5', TEXT_SECONDARY)}>Safe action: {nextActions[0]}</p>
+                    ) : null}
+                    {proposals.map((proposal) => (
+                      <div key={proposal.proposalKey} className={cn('mt-2 rounded-md border border-[color:color-mix(in_srgb,var(--state-warning-border)_70%,var(--wolfy-border-subtle))] px-2.5 py-2 text-xs leading-5', TEXT_SECONDARY)}>
+                        <p className={cn('font-medium', TEXT_PRIMARY)}>{proposal.title}</p>
+                        <p className="mt-1">Risk: {proposal.risk}</p>
+                        {proposal.likelyFiles.slice(0, 2).map((file) => (
+                          <p key={file} className={cn('break-words font-mono text-[11px]', TEXT_MUTED)}>{file}</p>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                  <Link
+                    to={domain.detailRoute}
+                    className="inline-flex min-h-[40px] shrink-0 items-center gap-2 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
+                  >
+                    <FileText className="size-4" aria-hidden="true" />
+                    <span>Open read-only detail</span>
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </Link>
+                </div>
+              </article>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }
 
@@ -339,27 +327,55 @@ function MaintenanceQueue({ items }: { items: AdminOpsCockpitMaintenanceQueueIte
   return (
     <section data-testid="admin-launch-cockpit-maintenance-queue" className="space-y-3">
       <div className="flex items-center gap-2">
-        <ShieldAlert className="size-4 text-amber-200" />
-        <h2 className="text-sm font-semibold text-white">Recommended maintenance queue</h2>
+        <ShieldAlert className="size-4 text-[color:var(--state-warning-text)]" aria-hidden="true" />
+        <h2 className={cn('text-sm font-semibold', TEXT_PRIMARY)}>Recommended maintenance queue</h2>
       </div>
-      <div className="grid gap-3 lg:grid-cols-3">
-        {items.map((item) => (
-          <TerminalPanel
-            key={item.domainKey}
-            data-testid="admin-launch-cockpit-queue-item"
-            className="space-y-2"
-          >
-            <div className="flex flex-wrap items-center gap-1.5">
-              <TerminalChip variant={priorityVariant(item.priorityTier)}>#{item.priorityRank}</TerminalChip>
-              <TerminalChip variant={priorityVariant(item.priorityTier)}>{item.priorityTier}</TerminalChip>
-              <TerminalChip variant="neutral">{item.impactLevel}</TerminalChip>
-            </div>
-            <h3 className="text-sm font-semibold text-white">{item.label}</h3>
-            <p className="text-xs leading-5 text-white/66">{item.recommendedNextAction}</p>
-            <p className="text-[11px] leading-5 text-white/48">{item.blockingReasonSummary}</p>
-          </TerminalPanel>
+      <ol className="space-y-2" aria-label="Highest severity maintenance queue">
+        {items.map((item, index) => (
+          <li key={item.domainKey}>
+            <article
+              data-testid="admin-launch-cockpit-queue-item"
+              className={cn(
+                'rounded-lg border px-3 py-3',
+                item.priorityTier === 'critical'
+                  ? 'border-[color:color-mix(in_srgb,var(--wolfy-market-down)_32%,var(--wolfy-border-subtle))] bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_6%,var(--wolfy-surface-console))]'
+                  : 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]',
+              )}
+            >
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'flex h-6 w-6 items-center justify-center rounded-md border text-[11px] font-semibold',
+                    item.priorityTier === 'critical'
+                      ? 'border-[color:color-mix(in_srgb,var(--wolfy-market-down)_40%,transparent)] text-[color:var(--wolfy-market-down)]'
+                      : 'border-[color:var(--wolfy-border-subtle)] text-[color:var(--wolfy-text-muted)]',
+                  )}
+                >
+                  {index + 1}
+                </span>
+                <TerminalChip variant={priorityVariant(item.priorityTier)}>#{item.priorityRank}</TerminalChip>
+                <TerminalChip variant={priorityVariant(item.priorityTier)}>{item.priorityTier}</TerminalChip>
+                <TerminalChip variant="neutral">{item.impactLevel}</TerminalChip>
+                {item.priorityTier === 'critical' ? (
+                  <TerminalChip variant="danger">
+                    <span aria-hidden="true" className="mr-1">■</span>
+                    CRITICAL
+                  </TerminalChip>
+                ) : null}
+              </div>
+              <h3 className={cn('mt-2 text-sm font-semibold', TEXT_PRIMARY)} data-testid="admin-launch-cockpit-queue-title">
+                {item.label}
+              </h3>
+              <p className={cn('mt-1 text-xs leading-5', TEXT_SECONDARY)}>{item.recommendedNextAction}</p>
+              <p className={cn('mt-1 text-[11px] leading-5', TEXT_MUTED)}>{item.blockingReasonSummary}</p>
+              <p className={cn('mt-1 font-mono text-[11px] leading-5', TEXT_MUTED)}>
+                Owner: {item.ownerSurface} · Route: {item.remediationSurface}
+              </p>
+            </article>
+          </li>
         ))}
-      </div>
+      </ol>
     </section>
   );
 }
@@ -460,28 +476,63 @@ const AdminLaunchCockpitPage: React.FC = () => {
     }),
     [cockpit?.recommendedMaintenanceQueue],
   );
+  const publicLaunchBlocked = Boolean(cockpit?.publicLaunchNoGo ?? true);
 
   return (
     <TerminalPageShell
       data-testid="admin-launch-cockpit-page"
-      className="min-h-0 flex-1 overflow-x-hidden py-5 text-white md:py-6"
+      className="min-h-0 flex-1 overflow-x-hidden py-5 text-[color:var(--wolfy-text-primary)] md:py-6"
     >
       <TerminalPageHeading
         eyebrow="Admin/Ops private beta"
         title="Private Beta Launch Cockpit"
         action={(
           <div className="flex flex-wrap gap-2">
-            <TerminalChip variant="danger">Public launch NO-GO</TerminalChip>
+            <TerminalChip variant="danger">
+              <span aria-hidden="true" className="mr-1">■</span>
+              Public launch NO-GO
+            </TerminalChip>
             <TerminalChip variant="info">Read-only advisory</TerminalChip>
             <TerminalChip variant="neutral">No external calls</TerminalChip>
           </div>
         )}
       />
 
-      <p className="max-w-4xl text-sm leading-6 text-white/58">
+      <p className={cn('max-w-4xl text-sm leading-6', TEXT_MUTED)}>
         Operator view for readiness, evidence, blockers, and safe next actions. It does not approve launch,
         execute validators, change runtime behavior, send notifications, call providers, or run storage actions.
       </p>
+
+      {/* 1. Launch state / NO-GO — dominant operator signal */}
+      <TerminalPanel
+        data-testid="admin-launch-cockpit-nogo-banner"
+        className={cn(
+          'space-y-3',
+          publicLaunchBlocked
+            ? 'border-[color:color-mix(in_srgb,var(--wolfy-market-down)_36%,var(--wolfy-border-subtle))] bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_8%,var(--wolfy-surface-console))]'
+            : '',
+        )}
+      >
+        <div className="flex flex-wrap items-start gap-3">
+          <Ban className="mt-0.5 size-5 shrink-0 text-[color:var(--wolfy-market-down)]" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className={cn('text-[11px] font-semibold uppercase tracking-[0.16em]', TEXT_MUTED)}>Launch state</p>
+            <h2 className={cn('mt-1 text-base font-semibold md:text-lg', TEXT_PRIMARY)}>
+              {publicLaunchBlocked ? 'Public launch remains NO-GO' : 'Public launch cleared (advisory)'}
+            </h2>
+            <p className={cn('mt-1 text-sm leading-6', TEXT_SECONDARY)}>
+              {cockpit?.message || 'Public launch remains blocked pending operator evidence.'}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {boolChip(Boolean(cockpit?.publicLaunchApproved), 'Launch approved', 'Launch not approved', true)}
+              {boolChip(Boolean(cockpit?.liveEnforcement), 'Live enforcement on', 'Live enforcement off', true)}
+              {boolChip(Boolean(cockpit?.runtimeBehaviorChanged), 'Runtime changed', 'Runtime unchanged', true)}
+              <TerminalChip variant="danger">NO-GO domains: {String(counts.publicLaunchNoGoCount ?? 0)}</TerminalChip>
+              <TerminalChip variant="caution">Evidence missing: {String(counts.realEvidenceMissingCount ?? 0)}</TerminalChip>
+            </div>
+          </div>
+        </div>
+      </TerminalPanel>
 
       <AdminOpsL0OverviewStrip
         dataTestId="admin-launch-cockpit-l0-overview-strip"
@@ -511,18 +562,46 @@ const AdminLaunchCockpitPage: React.FC = () => {
         <TerminalMetric label="Approval required" value={String(counts.approvalRequiredCount ?? 0)} subvalue="manual review gate" />
       </div>
 
+      {/* 2. Highest severity issues */}
+      <section data-testid="admin-launch-cockpit-blockers" className="space-y-3">
+        <div className="flex items-center gap-2">
+          <ShieldAlert className="size-4 text-[color:var(--wolfy-market-down)]" aria-hidden="true" />
+          <h2 className={cn('text-sm font-semibold', TEXT_PRIMARY)}>NO-GO blockers</h2>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          {(cockpit?.blockers ?? []).map((blocker) => (
+            <TerminalPanel key={blocker.blockerKey} className="space-y-2 border-[color:color-mix(in_srgb,var(--wolfy-market-down)_28%,var(--wolfy-border-subtle))]">
+              <div className="flex flex-wrap items-center gap-2">
+                <TerminalChip variant="danger">
+                  <span aria-hidden="true" className="mr-1">■</span>
+                  {blocker.severity}
+                </TerminalChip>
+                <TerminalChip variant="caution">Approval required</TerminalChip>
+              </div>
+              <h3 className={cn('text-sm font-semibold', TEXT_PRIMARY)}>{blocker.title}</h3>
+              <p className={cn('text-xs leading-5', TEXT_SECONDARY)}>{blocker.nextAction}</p>
+              {compactItems(blocker.evidenceRefs, 2).map((item) => (
+                <p key={item} className={cn('break-words font-mono text-[11px] leading-5', TEXT_MUTED)}>{item}</p>
+              ))}
+            </TerminalPanel>
+          ))}
+        </div>
+      </section>
+
+      <MaintenanceQueue items={maintenanceQueue} />
+
       <TerminalPanel data-testid="admin-launch-cockpit-safety" className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Ban className="size-4 text-[color:var(--wolfy-market-down)]" />
-          <p className="text-sm font-semibold text-white">Invariant checks</p>
+          <Ban className="size-4 text-[color:var(--wolfy-market-down)]" aria-hidden="true" />
+          <p className={cn('text-sm font-semibold', TEXT_PRIMARY)}>Invariant checks</p>
           {boolChip(Boolean(cockpit?.publicLaunchApproved), 'Launch approved', 'Launch not approved', true)}
           {boolChip(Boolean(cockpit?.liveEnforcement), 'Live enforcement on', 'Live enforcement off', true)}
           {boolChip(Boolean(cockpit?.runtimeBehaviorChanged), 'Runtime changed', 'Runtime unchanged', true)}
         </div>
         <div className="grid gap-2 md:grid-cols-3">
           {Object.entries(cockpit?.unsafeActionStates ?? {}).map(([key, value]) => (
-            <TerminalNestedBlock key={key} className={cn('min-w-0', value ? 'border-red-300/20' : '')}>
-              <p className="break-words font-mono text-[11px] text-white/56">{key}</p>
+            <TerminalNestedBlock key={key} className={cn('min-w-0', value ? 'border-[color:color-mix(in_srgb,var(--wolfy-market-down)_28%,var(--wolfy-border-subtle))]' : '')}>
+              <p className={cn('break-words font-mono text-[11px]', TEXT_MUTED)}>{key}</p>
               <div className="mt-2">
                 {boolChip(Boolean(value), 'enabled', 'disabled', true)}
               </div>
@@ -531,7 +610,8 @@ const AdminLaunchCockpitPage: React.FC = () => {
         </div>
       </TerminalPanel>
 
-      <MaintenanceQueue items={maintenanceQueue} />
+      {/* 3–4. Ownership/domain queue + evidence */}
+      <DomainStatusList domains={sortedDomains} />
 
       <ScannerUniverseReadinessPanel
         readinessByMarket={scannerReadinessByMarket}
@@ -541,42 +621,15 @@ const AdminLaunchCockpitPage: React.FC = () => {
         loadFailed={scannerReadinessFailed}
       />
 
-      <section data-testid="admin-launch-cockpit-blockers" className="space-y-3">
-        <div className="flex items-center gap-2">
-          <ShieldAlert className="size-4 text-amber-200" />
-          <h2 className="text-sm font-semibold text-white">NO-GO blockers</h2>
-        </div>
-        <div className="grid gap-3 lg:grid-cols-2">
-          {(cockpit?.blockers ?? []).map((blocker) => (
-            <TerminalPanel key={blocker.blockerKey} className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <TerminalChip variant="danger">{blocker.severity}</TerminalChip>
-                <TerminalChip variant="caution">Approval required</TerminalChip>
-              </div>
-              <h3 className="text-sm font-semibold text-white">{blocker.title}</h3>
-              <p className="text-xs leading-5 text-white/62">{blocker.nextAction}</p>
-              {compactItems(blocker.evidenceRefs, 2).map((item) => (
-                <p key={item} className="break-words font-mono text-[11px] leading-5 text-white/52">{item}</p>
-              ))}
-            </TerminalPanel>
-          ))}
-        </div>
-      </section>
-
-      <section data-testid="admin-launch-cockpit-domain-grid" className="grid gap-4 xl:grid-cols-2">
-        {sortedDomains.map((domain) => (
-          <DomainCard key={domain.domainKey} domain={domain} />
-        ))}
-      </section>
-
+      {/* 5. Safe operator next actions */}
       <TerminalPanel className="space-y-2">
         <div className="flex items-center gap-2">
-          <CheckCircle2 className="size-4 text-[color:var(--wolfy-market-up)]" />
-          <p className="text-sm font-semibold text-white">Safe next actions</p>
+          <CheckCircle2 className="size-4 text-[color:var(--wolfy-market-up)]" aria-hidden="true" />
+          <p className={cn('text-sm font-semibold', TEXT_PRIMARY)}>Safe next actions</p>
         </div>
         <div className="grid gap-2 md:grid-cols-3">
           {(cockpit?.safeNextActions ?? []).map((item) => (
-            <TerminalNestedBlock key={item} className="text-xs leading-5 text-white/68">
+            <TerminalNestedBlock key={item} className={cn('text-xs leading-5', TEXT_SECONDARY)}>
               {item}
             </TerminalNestedBlock>
           ))}

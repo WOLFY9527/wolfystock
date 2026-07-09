@@ -158,7 +158,7 @@ const schemaReferenceGroups = [
 const AdminEvidenceWorkflowPage: React.FC = () => (
   <div
     data-testid="admin-evidence-workflow-page"
-    className="min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto no-scrollbar text-white"
+    className="min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto no-scrollbar text-[color:var(--wolfy-text-primary)]"
   >
     <TerminalPageShell className="py-5 md:py-6">
       <TerminalPanel as="section" className="relative overflow-hidden">
@@ -219,9 +219,9 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
           className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.42fr)]"
         >
           <div className="min-w-0 rounded-lg border border-amber-300/18 bg-amber-300/[0.04] p-4">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-100/62">L0 运维结论</p>
-            <h2 className="mt-2 text-lg font-semibold leading-7 text-white">等待人工复核</h2>
-            <p className="mt-2 text-sm leading-6 text-white/68">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--state-warning-text)]">L0 运维结论</p>
+            <h2 className="mt-2 text-lg font-semibold leading-7 text-[color:var(--wolfy-text-primary)]">等待人工复核</h2>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
               缺证据时保持 NO-GO；本页只展示复核路径，不提供审批动作。
             </p>
           </div>
@@ -239,11 +239,11 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
               key={value}
               data-testid="admin-evidence-module-status"
               aria-label={`${label}：${value}`}
-              className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2"
+              className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-white/[0.025] px-3 py-2"
             >
-              <p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-white/36">{label}</p>
-              <p className="mt-1 break-words font-mono text-[12px] font-semibold leading-5 text-white/86">{value}</p>
-              <p className="mt-1 text-[11px] leading-5 text-white/42">{note}</p>
+              <p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{label}</p>
+              <p className="mt-1 break-words font-mono text-[12px] font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">{value}</p>
+              <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{note}</p>
             </article>
           ))}
         </div>
@@ -263,10 +263,10 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
             {workflowSteps.map((step, index) => (
               <article key={step.label} className="min-w-0">
                 <TerminalNestedBlock className="flex items-start gap-4">
-                  <p className="w-8 shrink-0 font-mono text-[11px] text-white/36">{String(index + 1).padStart(2, '0')}</p>
+                  <p className="w-8 shrink-0 font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{String(index + 1).padStart(2, '0')}</p>
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-semibold leading-5 text-white/86">{step.label}</h3>
-                    <p className="mt-1 text-xs leading-5 text-white/42">{step.note}</p>
+                    <h3 className="text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">{step.label}</h3>
+                    <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{step.note}</p>
                   </div>
                 </TerminalNestedBlock>
               </article>
@@ -297,8 +297,8 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
               {localWorkspaceGuards.map((guard) => (
                 <TerminalNestedBlock key={guard.label} className="min-w-0">
-                  <p className="text-[11px] font-medium text-white/72">{guard.label}</p>
-                  <p className="mt-1 break-words font-mono text-[11px] text-cyan-100/66">{guard.value}</p>
+                  <p className="text-[11px] font-medium text-[color:var(--wolfy-text-secondary)]">{guard.label}</p>
+                  <p className="mt-1 break-words font-mono text-[11px] text-[color:var(--state-info-text)]">{guard.value}</p>
                 </TerminalNestedBlock>
               ))}
             </div>
@@ -333,14 +333,14 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
               >
                 <TerminalNestedBlock className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">参考卡</p>
-                    <h3 className="mt-2 text-sm font-semibold leading-5 text-white/88">{label}</h3>
-                    <p className="mt-3 break-all rounded-xl border border-white/[0.04] bg-white/[0.02] px-2.5 py-2 font-mono text-[11px] leading-5 text-cyan-100/78">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">参考卡</p>
+                    <h3 className="mt-2 text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">{label}</h3>
+                    <p className="mt-3 break-all rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-2.5 py-2 font-mono text-[11px] leading-5 text-[color:var(--state-info-text)]">
                       {docLabel}
                     </p>
-                    <p className="mt-3 text-xs leading-5 text-white/44">{stage}</p>
+                    <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{stage}</p>
                   </div>
-                  <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-cyan-300/15 bg-cyan-400/8 text-cyan-100">
+                  <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-cyan-300/15 bg-cyan-400/8 text-[color:var(--state-info-text)]">
                     <Icon className="h-4 w-4" aria-hidden="true" />
                   </span>
                 </TerminalNestedBlock>
@@ -373,26 +373,26 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
                 <TerminalNestedBlock className="min-w-0">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">证据类别</p>
-                      <h3 className="mt-2 text-sm font-semibold leading-5 text-white/88">{group.label}</h3>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">证据类别</p>
+                      <h3 className="mt-2 text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">{group.label}</h3>
                     </div>
                     <TerminalChip variant="info">本地校验</TerminalChip>
                   </div>
                   <dl className="mt-4 grid gap-3 text-xs leading-5 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto] md:items-start">
                     <div>
-                      <dt className="text-white/34">预期证据文件</dt>
-                      <dd className="mt-1 break-all font-mono text-white/74">{group.artifact}</dd>
+                      <dt className="text-[color:var(--wolfy-text-muted)]">预期证据文件</dt>
+                      <dd className="mt-1 break-all font-mono text-[color:var(--wolfy-text-secondary)]">{group.artifact}</dd>
                     </div>
                     <div>
-                      <dt className="text-white/34">validator / review stage</dt>
-                      <dd className="mt-1 break-all font-mono text-cyan-100/78">{group.validator}</dd>
+                      <dt className="text-[color:var(--wolfy-text-muted)]">validator / review stage</dt>
+                      <dd className="mt-1 break-all font-mono text-[color:var(--state-info-text)]">{group.validator}</dd>
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-1">
                       <TerminalNestedBlock className="px-2.5 py-2">
-                        <span className="font-mono text-[11px] text-amber-100/86">manual review required</span>
+                        <span className="font-mono text-[11px] text-[color:var(--state-warning-text)]">manual review required</span>
                       </TerminalNestedBlock>
                       <TerminalNestedBlock className="px-2.5 py-2">
-                        <span className="font-mono text-[11px] text-emerald-100/84">releaseApproved=false</span>
+                        <span className="font-mono text-[11px] text-[color:var(--wolfy-market-up)]/84">releaseApproved=false</span>
                       </TerminalNestedBlock>
                     </div>
                   </dl>
@@ -427,18 +427,18 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
                     aria-labelledby={`admin-evidence-command-${snippet.label}`}
                   >
                     <TerminalNestedBlock className="min-w-0">
-                      <p id={`admin-evidence-command-${snippet.label}`} className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/34">
+                      <p id={`admin-evidence-command-${snippet.label}`} className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--wolfy-text-muted)]">
                         {snippet.label}
                       </p>
                       <pre
                         tabIndex={0}
                         role="group"
                         aria-label={`可复制命令：${snippet.label}`}
-                        className="mt-3 max-w-full overflow-x-auto no-scrollbar whitespace-pre-wrap break-all rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 font-mono text-[11px] leading-5 text-cyan-100/86 outline-none transition-colors focus-visible:border-cyan-300/35 focus-visible:ring-2 focus-visible:ring-cyan-300/30"
+                        className="mt-3 max-w-full overflow-x-auto no-scrollbar whitespace-pre-wrap break-all rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3 font-mono text-[11px] leading-5 text-[color:var(--state-info-text)]/86 outline-none transition-colors focus-visible:border-cyan-300/35 focus-visible:ring-2 focus-visible:ring-cyan-300/30"
                       >
                         <code>{snippet.command}</code>
                       </pre>
-                      <p className="mt-3 text-xs leading-5 text-white/44">{snippet.note}</p>
+                      <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{snippet.note}</p>
                     </TerminalNestedBlock>
                   </article>
                 ))}
