@@ -200,6 +200,7 @@ type ScannerWorkbenchEmptyState = {
   title: string;
   body: string;
 };
+type ScannerWorkspaceState = 'idle' | 'loading' | 'blocked' | 'empty' | 'error' | 'ready';
 type ScannerSafeEmptyReason = {
   label: string;
   body: string;
@@ -1530,6 +1531,51 @@ function buildScannerSafeEmptyReason({
       ? `${countSummary} No review-ready candidate. Use history, retry, or adjust settings.`
       : `${countSummary} 未形成可复核候选，可查看历史、重试或调整设置。`,
   };
+}
+
+function resolveScannerWorkspaceState({
+  isRunning,
+  pageErrorSummary,
+  runDetail,
+  historyResolution,
+  dataReadinessView,
+  selectedCount,
+  language,
+}: {
+  isRunning: boolean;
+  pageErrorSummary: string | null;
+  runDetail: ScannerRunDetail | null;
+  historyResolution: ScannerHistoryResolution;
+  dataReadinessView: ScannerDataReadinessView | null;
+  selectedCount: number;
+  language: 'zh' | 'en';
+}): ScannerWorkspaceState {
+  if (pageErrorSummary) return 'error';
+  if (isRunning) return 'loading';
+  if (!runDetail && !historyResolution.hasLoaded) return 'loading';
+
+  const readinessBlocked = Boolean(
+    dataReadinessView?.isMeaningful
+    && dataReadinessView.stateLabel !== (language === 'en' ? 'Ready to scan' : '可扫描')
+    && (
+      dataReadinessView.stateLabel === (language === 'en' ? 'Data blocked' : '数据待补')
+      || Boolean(dataReadinessView.blockerLabel)
+    )
+    && selectedCount === 0,
+  );
+  if (readinessBlocked && !runDetail) return 'blocked';
+  if (readinessBlocked && runDetail && selectedCount === 0) return 'blocked';
+
+  if (runDetail) {
+    if (selectedCount > 0) return 'ready';
+    const runState = normalizeRunState(runDetail.status);
+    if (['failed', 'failure', 'error'].includes(runState)) return 'error';
+    return 'empty';
+  }
+
+  if (isCompletedEmptyHistoryRun(historyResolution.latestRun)) return 'empty';
+  if (historyResolution.latestRun) return 'loading';
+  return 'idle';
 }
 
 function buildScannerWorkbenchEmptyState({
@@ -3054,6 +3100,34 @@ const UserScannerPage: React.FC = () => {
     && !['failed', 'failure', 'error'].includes(normalizeRunState(runDetail.status)),
   );
   const scannerShouldHideEmptyRunCounts = scannerHasPseudoEmptyRun || scannerHasReadinessBlockedEmptyRun;
+  const scannerWorkspaceState = useMemo(
+    () => resolveScannerWorkspaceState({
+      isRunning,
+      pageErrorSummary: pageError
+        ? (isScannerAuthOrAccessError(pageError)
+          ? getScannerSafeApiErrorMessage(pageError, language)
+          : sanitizeScannerErrorSummary(pageError.message, language) || compactScannerStateLabel('failed', language))
+        : null,
+      runDetail,
+      historyResolution: {
+        hasLoaded: hasLoadedHistory,
+        latestRun: historyItems[0] || null,
+      },
+      dataReadinessView: scannerDataReadinessView,
+      selectedCount: currentSelectedCount,
+      language,
+    }),
+    [
+      currentSelectedCount,
+      hasLoadedHistory,
+      historyItems,
+      isRunning,
+      language,
+      pageError,
+      runDetail,
+      scannerDataReadinessView,
+    ],
+  );
   const recentRunSummary = useMemo(
     () => buildHistoryItemSummary(language === 'en' ? 'Latest scan' : '最近扫描', historyItems[0] || null, language),
     [historyItems, language],
@@ -3607,28 +3681,35 @@ const UserScannerPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
-          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-2 border-b border-[color:var(--wolfy-divider)] pb-2">
+        <div
+          data-testid={`scanner-candidate-research-stack-${getCandidateIdentity(candidate)}`}
+          data-discovery-role="inclusion-reason limitation next-research-handoff"
+          className="grid gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3"
+        >
+          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-2 border-b border-[color:var(--wolfy-divider)] pb-2" data-discovery-role="inclusion-reason">
             <span className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Why now' : '当前信号'}</span>
             <p className="min-w-0 text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
-              {summaryOverride || compactNotes[0] || candidate.reasonSummary || compactMetricItems[0]?.value || ai?.status || (language === 'en' ? 'No decision note' : '暂无结论')}
+              {summaryOverride || compactNotes[0] || candidate.reasonSummary || compactMetricItems[0]?.value || ai?.status || (language === 'en' ? 'Inclusion reason not reported' : '入选原因未报告')}
             </p>
           </div>
-          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-2 border-b border-[color:var(--wolfy-divider)] pb-2">
-            <span className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Risk' : '风险'}</span>
+          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-2 border-b border-[color:var(--wolfy-divider)] pb-2" data-discovery-role="limitation">
+            <span className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Limitation' : '限制'}</span>
             <p className="min-w-0 text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
-              {compactRiskNotes[0] || candidate.riskNotes?.[0] || (language === 'en' ? 'No risk note' : '暂无风险说明')}
+              {detailQualityNotice
+                || compactRiskNotes[0]
+                || candidate.riskNotes?.[0]
+                || (language === 'en' ? 'Limitation not reported' : '限制未报告')}
             </p>
           </div>
-          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-2">
-            <span className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Next' : '下一步'}</span>
+          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-2" data-discovery-role="next-research-handoff">
+            <span className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Next research' : '下一步研究'}</span>
             <div className="flex min-w-0 flex-wrap gap-1.5">
               {getEntryRange(candidate) ? <FieldChip label={language === 'en' ? 'Observation zone' : '观察区'} value={getEntryRange(candidate) || '--'} /> : null}
               {getTargetPrice(candidate) ? <FieldChip label={language === 'en' ? 'Reference range' : '参考区间'} value={getTargetPrice(candidate) || '--'} /> : null}
               {getStopLoss(candidate) ? <FieldChip label={language === 'en' ? 'Risk boundary' : '风险边界'} value={getStopLoss(candidate) || '--'} /> : null}
               {!getEntryRange(candidate) && !getTargetPrice(candidate) && !getStopLoss(candidate) ? (
                 <span className="text-xs text-[color:var(--wolfy-text-muted)]">
-                  {language === 'en' ? 'Watch next update before acting.' : '等待下次更新后再行动。'}
+                  {language === 'en' ? 'Open stock research or Watchlist for the next check.' : '打开个股研究或观察列表继续下一步检查。'}
                 </span>
               ) : null}
             </div>
@@ -4014,6 +4095,8 @@ const UserScannerPage: React.FC = () => {
         ref={surfaceRef}
         data-testid="scanner-ranking-board-page"
         data-product-surface="scanner"
+        data-scanner-workspace-state={scannerWorkspaceState}
+        data-discovery-sequence="configuration>readiness>run>results>inclusion-reason>limitation>next-research-handoff"
         aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
         aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
         className={getSafariReadySurfaceClassName(
@@ -4089,6 +4172,8 @@ const UserScannerPage: React.FC = () => {
 
               <section
                 data-testid="scanner-consumer-first-viewport"
+                data-discovery-role="readiness"
+                data-scanner-workspace-state={scannerWorkspaceState}
                 className="mx-3 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 shadow-sm"
                 aria-label={language === 'en' ? 'Scanner consumer summary' : '扫描器消费级摘要'}
               >
@@ -4391,6 +4476,7 @@ const UserScannerPage: React.FC = () => {
                   <section
                     data-testid="scanner-command-panel"
                     data-layout-zone="CommandBar"
+                    data-discovery-role="configuration run-action"
                     className="min-w-0 overflow-hidden rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]"
                   >
                   <DenseCommandBar
@@ -4617,6 +4703,8 @@ const UserScannerPage: React.FC = () => {
                   <section
                     data-testid="scanner-results-panel"
                     data-layout-zone="PrimaryWorkRegion"
+                    data-discovery-role="result-workspace"
+                    data-scanner-workspace-state={scannerWorkspaceState}
                     className="flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]"
                   >
                   <div data-testid="scanner-ranked-workbench" className="flex min-h-0 flex-1 min-w-0 flex-col">

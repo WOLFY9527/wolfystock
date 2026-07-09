@@ -1284,8 +1284,12 @@ describe('UserScannerPage', () => {
     await screen.findByTestId('scanner-result-row-NVDA');
     const firstViewport = screen.getByTestId('scanner-consumer-first-viewport');
     const hierarchy = screen.getByTestId('scanner-readiness-hierarchy');
+    const page = screen.getByTestId('scanner-ranking-board-page');
+    expect(page).toHaveAttribute('data-scanner-workspace-state');
+    expect(page.getAttribute('data-discovery-sequence') || '').toContain('configuration>readiness>run>results');
     expect(firstViewport).toHaveClass('bg-[var(--wolfy-surface-input)]');
     expect(firstViewport).not.toHaveClass('bg-white/[0.025]');
+    expect(firstViewport).toHaveAttribute('data-discovery-role', 'readiness');
     expect(hierarchy).toHaveTextContent('标的池成员');
     expect(hierarchy).toHaveTextContent('市场数据');
     expect(hierarchy).toHaveTextContent('候选生成');
