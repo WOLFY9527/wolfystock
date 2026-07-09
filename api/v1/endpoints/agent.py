@@ -169,13 +169,17 @@ class AgentProviderHealthResponse(BaseModel):
 
 
 @router.get("/status", response_model=AgentStatusResponse)
-async def get_agent_status():
+async def get_agent_status(
+    _: CurrentUser = Depends(require_admin_capability("ops:providers:read")),
+):
     """Return whether the Ask Stock experience should be exposed."""
     return AgentStatusResponse(enabled=get_config().is_agent_available())
 
 
 @router.get("/models", response_model=AgentModelsResponse)
-async def get_agent_models():
+async def get_agent_models(
+    _: CurrentUser = Depends(require_admin_capability("ops:providers:read")),
+):
     """Get configured Agent model deployments for frontend selection."""
     config = get_config()
     return AgentModelsResponse(
@@ -184,7 +188,9 @@ async def get_agent_models():
 
 
 @router.get("/provider-health", response_model=AgentProviderHealthResponse)
-async def get_agent_provider_health():
+async def get_agent_provider_health(
+    _: CurrentUser = Depends(require_admin_capability("ops:providers:read")),
+):
     """Get safe Agent provider readiness without exposing credentials."""
     return AgentProviderHealthResponse(**list_agent_provider_health(get_config()))
 

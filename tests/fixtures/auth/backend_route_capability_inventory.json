@@ -14,6 +14,17 @@
       "transitional_note": null
     },
     {
+      "route_id": "agent.operator_diagnostics",
+      "path_pattern": "^/api/v1/agent/(?:status|models|provider-health)$",
+      "methods": [
+        "GET"
+      ],
+      "surface": "agent_operator_diagnostics",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "transitional_note": "Agent readiness, model topology, and provider health diagnostics are provider-read admin surfaces."
+    },
+    {
       "route_id": "agent.admin_send",
       "path_pattern": "^/api/v1/agent/chat/send$",
       "methods": [
@@ -23,6 +34,18 @@
       "auth_dependency_label": "admin_capability",
       "capability_label": "ops:notifications:write",
       "transitional_note": null
+    },
+    {
+      "route_id": "market.scenario_baseline.member_surface",
+      "path_pattern": "^/api/v1/market/scenario-lab/baseline-snapshots(?:/latest|/\\{snapshot_id\\})?$",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "surface": "market_scenario_baseline",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "transitional_note": "Scenario durable baseline endpoints are authenticated-user scoped; evaluation remains separately non-persistent."
     },
     {
       "route_id": "analysis.member_surface",
@@ -955,20 +978,20 @@
       "path": "/api/v1/agent/models",
       "method": "GET",
       "surface_classification": "operator_diagnostic",
-      "auth_dependency_label": "public",
-      "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: /api/v1/agent/models metadata is not public-ingress safe while route-level auth remains absent.",
-      "transitional_note": "Classifies readiness metadata only; no agent behavior changes."
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Provider-read admin capability gate preserves agent operator diagnostics outside member product surfaces."
     },
     {
       "route_id": "api.v1.agent.provider_health",
       "path": "/api/v1/agent/provider-health",
       "method": "GET",
       "surface_classification": "operator_diagnostic",
-      "auth_dependency_label": "public",
-      "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: /api/v1/agent/provider-health metadata is not public-ingress safe while route-level auth remains absent.",
-      "transitional_note": "Classifies readiness metadata only; no agent behavior changes."
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Provider-read admin capability gate preserves agent operator diagnostics outside member product surfaces."
     },
     {
       "route_id": "api.v1.agent.skills",
@@ -985,10 +1008,10 @@
       "path": "/api/v1/agent/status",
       "method": "GET",
       "surface_classification": "operator_diagnostic",
-      "auth_dependency_label": "public",
-      "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: /api/v1/agent/status metadata is not public-ingress safe while route-level auth remains absent.",
-      "transitional_note": "Classifies readiness metadata only; no agent behavior changes."
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Provider-read admin capability gate preserves agent operator diagnostics outside member product surfaces."
     },
     {
       "route_id": "api.v1.agent.stock_research",
@@ -1234,20 +1257,20 @@
       "route_id": "api.v1.market.scenario_lab.baseline_snapshots.latest",
       "path": "/api/v1/market/scenario-lab/baseline-snapshots/latest",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
+      "no_go_marker": null,
       "transitional_note": null
     },
     {
       "route_id": "api.v1.market.scenario_lab.baseline_snapshots.snapshot_id",
       "path": "/api/v1/market/scenario-lab/baseline-snapshots/{snapshot_id}",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
+      "no_go_marker": null,
       "transitional_note": null
     },
     {
@@ -1844,10 +1867,10 @@
       "route_id": "api.v1.market.scenario_lab.baseline_snapshots",
       "path": "/api/v1/market/scenario-lab/baseline-snapshots",
       "method": "POST",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
+      "no_go_marker": null,
       "transitional_note": null
     },
     {

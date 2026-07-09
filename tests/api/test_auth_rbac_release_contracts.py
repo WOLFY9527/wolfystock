@@ -21,7 +21,7 @@ if str(REPO_ROOT) not in sys.path:
 import src.auth as auth
 from api.middlewares.auth import add_auth_middleware
 from api.v1 import api_v1_router
-from src.admin_rbac import SECURITY_ADMIN_ROLE
+from src.admin_rbac import OPS_ADMIN_ROLE, SECURITY_ADMIN_ROLE
 from src.auth import create_session
 from src.multi_user import ROLE_ADMIN, ROLE_USER
 from src.storage import AdminUserRole, DatabaseManager
@@ -98,6 +98,9 @@ ORDINARY_USER_FORBIDDEN_SURFACES = (
     ("market_provider_operations", "GET", "/api/v1/admin/market-providers/operations"),
 )
 CAPABILITY_GATED_DIAGNOSTIC_SURFACES = (
+    ("agent_status", "GET", "/api/v1/agent/status"),
+    ("agent_models", "GET", "/api/v1/agent/models"),
+    ("agent_provider_health", "GET", "/api/v1/agent/provider-health"),
     ("agent_chat_send", "POST", "/api/v1/agent/chat/send"),
     ("scanner_watchlist_today", "GET", "/api/v1/scanner/watchlists/today"),
     ("scanner_watchlist_recent", "GET", "/api/v1/scanner/watchlists/recent"),
@@ -148,6 +151,36 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "authenticated_member",
         "authenticated_user",
         None,
+        None,
+    ),
+    (
+        "agent_status_operator_diagnostic",
+        "GET",
+        "/api/v1/agent/status",
+        "/api/v1/agent/status",
+        "operator_diagnostic",
+        "admin_capability",
+        "ops:providers:read",
+        None,
+    ),
+    (
+        "agent_models_operator_diagnostic",
+        "GET",
+        "/api/v1/agent/models",
+        "/api/v1/agent/models",
+        "operator_diagnostic",
+        "admin_capability",
+        "ops:providers:read",
+        None,
+    ),
+    (
+        "agent_provider_health_operator_diagnostic",
+        "GET",
+        "/api/v1/agent/provider-health",
+        "/api/v1/agent/provider-health",
+        "operator_diagnostic",
+        "admin_capability",
+        "ops:providers:read",
         None,
     ),
     (
@@ -553,6 +586,35 @@ def test_adjacent_admin_capabilities_do_not_unlock_cost_or_provider_routes(
         denied_provider.json(),
         denied_market_provider_operations.json(),
     )
+
+
+def test_provider_read_admin_can_access_agent_operator_diagnostics_without_secrets(
+    auth_release_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db = auth_release_client
+    monkeypatch.setenv("WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED", "false")
+    _set_cookie_for_user(client, db, user_id="provider-admin", role=ROLE_ADMIN)
+    with db.get_session() as session:
+        session.add(AdminUserRole(user_id="provider-admin", role_key=OPS_ADMIN_ROLE))
+        session.commit()
+
+    responses = {
+        "status": client.get("/api/v1/agent/status"),
+        "models": client.get("/api/v1/agent/models"),
+        "provider_health": client.get("/api/v1/agent/provider-health"),
+    }
+
+    assert {label: response.status_code for label, response in responses.items()} == {
+        "status": 200,
+        "models": 200,
+        "provider_health": 200,
+    }
+    assert set(responses["status"].json()) == {"enabled"}
+    assert set(responses["models"].json()) == {"models"}
+    provider_health = responses["provider_health"].json()
+    assert {"routingMode", "currentProvider", "currentModel", "providers"} <= set(provider_health)
+    _assert_public_error_safe(*(response.json() for response in responses.values()))
 
 
 def test_role_only_legacy_admin_route_dependencies_are_cleared() -> None:
