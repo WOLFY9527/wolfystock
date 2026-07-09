@@ -1,7 +1,8 @@
 /**
- * WolfyStock shell phase 1 preserves routing, archive access, language
- * toggling and logout confirmation while aligning nav
- * controls to the shared Linear OS tokens.
+ * WolfyStock shell navigation: workflow-grouped research workbench IA.
+ * Major research capabilities live in named groups (Market / Research /
+ * Validate), not a generic More bucket. Archive, language, and logout
+ * controls remain on the shared paper shell tokens.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -20,7 +21,6 @@ import {
   Globe,
   LogIn,
   LogOut,
-  MoreHorizontal,
   Moon,
   Radar,
   Search,
@@ -42,9 +42,12 @@ import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { useThemeStyle } from '../theme/themeState';
 import {
-  PRIMARY_CONSUMER_ROUTES,
-  SECONDARY_CONSUMER_ROUTES,
+  CONSUMER_NAV_ARCHITECTURE,
+  CONSUMER_NAV_GROUPS,
+  getConsumerNavGroupRoutes,
+  getCoreProductRouteByKey,
   resolveCurrentConsumerRoute,
+  type ConsumerNavGroupKey,
   type CoreProductRoute,
   type CoreProductRouteKey,
 } from './coreProductRoutes';
@@ -125,15 +128,6 @@ const ROUTE_ICON_BY_KEY: Record<CoreProductRouteKey, React.ComponentType<{ class
   'options-lab': FlaskConical,
 };
 
-const SECONDARY_NAV_ORDER: CoreProductRouteKey[] = [
-  'scanner',
-  'backtest',
-  'scenario-lab',
-  'portfolio',
-  'decision-cockpit',
-  'options-lab',
-];
-
 function routeToNavItem(route: CoreProductRoute): NavItem {
   return {
     key: route.key,
@@ -142,12 +136,6 @@ function routeToNavItem(route: CoreProductRoute): NavItem {
     icon: ROUTE_ICON_BY_KEY[route.key],
   };
 }
-
-const NAV_ITEMS: NavItem[] = PRIMARY_CONSUMER_ROUTES.map(routeToNavItem);
-const MORE_NAV_ITEMS: NavItem[] = [...SECONDARY_CONSUMER_ROUTES]
-  .filter((route) => route.key !== 'home')
-  .sort((left, right) => SECONDARY_NAV_ORDER.indexOf(left.key) - SECONDARY_NAV_ORDER.indexOf(right.key))
-  .map(routeToNavItem);
 
 const HEADER_UTILITY_TEXT_CLASS = 'shell-header-action px-2.5 py-1 text-[11px] font-medium text-[color:var(--wolfy-text-muted)] transition-colors hover:text-[color:var(--wolfy-text-primary)]';
 const HEADER_UTILITY_DANGER_TEXT_CLASS = 'shell-header-action px-2.5 py-1 text-[11px] font-medium text-[color:var(--state-danger-text)] transition-colors hover:text-[color:var(--wolfy-text-primary)]';
@@ -286,22 +274,21 @@ function useSidebarNavView({
   const { colorMode, setColorMode } = useThemeStyle();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showAdminMenu, setShowAdminMenu] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [openNavGroup, setOpenNavGroup] = useState<ConsumerNavGroupKey | null>(null);
   const [stockSearchQuery, setStockSearchQuery] = useState('');
   const [stockSearchError, setStockSearchError] = useState('');
   const [stockSearchFocused, setStockSearchFocused] = useState(false);
   const adminMenuRef = useRef<HTMLDivElement | null>(null);
-  const moreMenuRef = useRef<HTMLDivElement | null>(null);
-  const moreButtonRef = useRef<HTMLButtonElement | null>(null);
-  const moreMenuItemRefs = useRef<Array<HTMLAnchorElement | null>>([]);
-  const moreMenuFocusIndexRef = useRef<number | null>(null);
+  const navGroupMenuRefs = useRef<Partial<Record<ConsumerNavGroupKey, HTMLDivElement | null>>>({});
+  const navGroupButtonRefs = useRef<Partial<Record<ConsumerNavGroupKey, HTMLButtonElement | null>>>({});
+  const navGroupItemRefs = useRef<Partial<Record<ConsumerNavGroupKey, Array<HTMLAnchorElement | null>>>>({});
+  const navGroupFocusIndexRef = useRef<{ group: ConsumerNavGroupKey; index: number } | null>(null);
   const stockSearchRef = useRef<HTMLInputElement | null>(null);
   const routeLocale = parseLocaleFromPathname(location.pathname);
   const currentConsumerRoute = resolveCurrentConsumerRoute(location.pathname);
   const adminNavCopy = resolveAdminNavCopy(language);
   const isAdminRoute = isAdminOpsRoute(location.pathname);
   const isDrawer = layout === 'drawer';
-  const moreMenuId = isDrawer ? 'shell-more-drawer-menu' : 'shell-more-header-menu';
   const stockSearchId = isDrawer ? 'shell-stock-search-drawer' : 'shell-stock-search-header';
   const signInLabel = t('nav.signIn');
   const consoleLabel = t('nav.independentConsole');
@@ -345,56 +332,69 @@ function useSidebarNavView({
   const hasAdminMenu = adminNavItems.length > 0;
   const adminNavGroups = groupAdminNavItems(adminNavItems, language);
   const showAdminPrimaryNav = isAdminRoute && hasAdminMenu;
+  const activeNavGroup = currentConsumerRoute?.navGroup ?? null;
 
   const handleAdminNavigate = () => {
     setShowAdminMenu(false);
-    setShowMoreMenu(false);
+    setOpenNavGroup(null);
     onNavigate?.();
   };
 
   const handleConsumerNavigate = () => {
-    moreMenuFocusIndexRef.current = null;
-    setShowMoreMenu(false);
+    navGroupFocusIndexRef.current = null;
+    setOpenNavGroup(null);
     setStockSearchFocused(false);
     onNavigate?.();
   };
 
-  const closeMoreMenu = (options?: { returnFocus?: boolean }) => {
-    moreMenuFocusIndexRef.current = null;
-    setShowMoreMenu(false);
-    if (options?.returnFocus) {
+  const closeNavGroupMenu = (options?: { returnFocus?: boolean; group?: ConsumerNavGroupKey | null }) => {
+    const groupToFocus = options?.group ?? openNavGroup;
+    navGroupFocusIndexRef.current = null;
+    setOpenNavGroup(null);
+    if (options?.returnFocus && groupToFocus) {
       window.setTimeout(() => {
-        moreButtonRef.current?.focus();
+        navGroupButtonRefs.current[groupToFocus]?.focus();
       }, 0);
     }
   };
 
-  const openMoreMenu = (focusIndex: number | null = null) => {
-    moreMenuFocusIndexRef.current = focusIndex;
-    setShowMoreMenu(true);
+  const openNavGroupMenu = (groupKey: ConsumerNavGroupKey, focusIndex: number | null = null) => {
+    if (focusIndex !== null) {
+      navGroupFocusIndexRef.current = { group: groupKey, index: focusIndex };
+    } else {
+      navGroupFocusIndexRef.current = null;
+    }
+    setOpenNavGroup(groupKey);
   };
 
-  const toggleMoreMenu = () => {
-    if (showMoreMenu) {
-      closeMoreMenu({ returnFocus: true });
+  const toggleNavGroupMenu = (groupKey: ConsumerNavGroupKey) => {
+    if (openNavGroup === groupKey) {
+      closeNavGroupMenu({ returnFocus: true, group: groupKey });
       return;
     }
-    openMoreMenu(null);
+    openNavGroupMenu(groupKey, null);
   };
 
-  const handleMoreButtonKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+  const handleNavGroupButtonKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    groupKey: ConsumerNavGroupKey,
+    itemCount: number,
+  ) => {
     if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown') {
       event.preventDefault();
-      openMoreMenu(0);
+      openNavGroupMenu(groupKey, 0);
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault();
-      openMoreMenu(Math.max(MORE_NAV_ITEMS.length - 1, 0));
+      openNavGroupMenu(groupKey, Math.max(itemCount - 1, 0));
     }
   };
 
-  const handleMoreMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const items = moreMenuItemRefs.current.filter(Boolean) as HTMLAnchorElement[];
+  const handleNavGroupMenuKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+    groupKey: ConsumerNavGroupKey,
+  ) => {
+    const items = (navGroupItemRefs.current[groupKey] || []).filter(Boolean) as HTMLAnchorElement[];
     if (!items.length) return;
 
     const activeIndex = items.findIndex((item) => item === document.activeElement);
@@ -422,7 +422,7 @@ function useSidebarNavView({
     }
     if (event.key === 'Escape') {
       event.preventDefault();
-      closeMoreMenu({ returnFocus: true });
+      closeNavGroupMenu({ returnFocus: true, group: groupKey });
     }
   };
 
@@ -470,20 +470,21 @@ function useSidebarNavView({
   }, [showAdminMenu]);
 
   useEffect(() => {
-    if (!showMoreMenu) {
+    if (!openNavGroup) {
       return undefined;
     }
 
     const handlePointerDown = (event: MouseEvent) => {
-      if (moreMenuRef.current?.contains(event.target as Node)) {
+      const menuRoot = navGroupMenuRefs.current[openNavGroup];
+      if (menuRoot?.contains(event.target as Node)) {
         return;
       }
-      closeMoreMenu({ returnFocus: true });
+      closeNavGroupMenu({ returnFocus: true, group: openNavGroup });
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        closeMoreMenu({ returnFocus: true });
+        closeNavGroupMenu({ returnFocus: true, group: openNavGroup });
       }
     };
 
@@ -493,21 +494,21 @@ function useSidebarNavView({
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [showMoreMenu]);
+  }, [openNavGroup]);
 
   useEffect(() => {
-    if (!showMoreMenu || moreMenuFocusIndexRef.current === null) {
+    if (!openNavGroup || !navGroupFocusIndexRef.current || navGroupFocusIndexRef.current.group !== openNavGroup) {
       return undefined;
     }
 
     const timer = window.setTimeout(() => {
-      const focusIndex = moreMenuFocusIndexRef.current;
-      if (focusIndex === null) return;
-      moreMenuItemRefs.current[focusIndex]?.focus();
+      const focusTarget = navGroupFocusIndexRef.current;
+      if (!focusTarget || focusTarget.group !== openNavGroup) return;
+      navGroupItemRefs.current[openNavGroup]?.[focusTarget.index]?.focus();
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [showMoreMenu]);
+  }, [openNavGroup]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -522,8 +523,10 @@ function useSidebarNavView({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const navLinks = NAV_ITEMS.map(({ key, labelKey, label: fixedLabel, to, icon: Icon }) => {
-    const label = fixedLabel ?? t(labelKey || key);
+  const renderDirectNavLink = (routeKey: CoreProductRouteKey) => {
+    const route = getCoreProductRouteByKey(routeKey);
+    const { key, labelKey, to, icon: Icon } = routeToNavItem(route);
+    const label = t(labelKey || key);
     const linkTarget = routeLocale ? buildLocalizedPath(to, routeLocale) : to;
     const routeActive = currentConsumerRoute?.key === key;
     return (
@@ -553,40 +556,154 @@ function useSidebarNavView({
         </span>
       </Link>
     );
-  });
+  };
 
-  const secondaryRouteActive = MORE_NAV_ITEMS.some((item) => currentConsumerRoute?.key === item.key);
-  const moreNavLinks = MORE_NAV_ITEMS.map(({ key, labelKey, label: fixedLabel, to, icon: Icon }) => {
-    const label = fixedLabel ?? t(labelKey || key);
+  const renderGroupChildLink = (
+    route: CoreProductRoute,
+    groupKey: ConsumerNavGroupKey,
+    index: number,
+    options: { menuOpen: boolean; showAsDrawerChild: boolean; ownsAriaCurrent?: boolean },
+  ) => {
+    const { key, labelKey, to, icon: Icon } = routeToNavItem(route);
+    const label = t(labelKey || key);
     const linkTarget = routeLocale ? buildLocalizedPath(to, routeLocale) : to;
     const routeActive = currentConsumerRoute?.key === key;
+    const { menuOpen, showAsDrawerChild, ownsAriaCurrent = false } = options;
+
     return (
       <Link
         key={key}
         to={linkTarget}
         ref={(node) => {
-          const index = MORE_NAV_ITEMS.findIndex((item) => item.key === key);
-          moreMenuItemRefs.current[index] = node;
+          if (!navGroupItemRefs.current[groupKey]) {
+            navGroupItemRefs.current[groupKey] = [];
+          }
+          navGroupItemRefs.current[groupKey]![index] = node;
         }}
-        tabIndex={showMoreMenu ? 0 : -1}
+        tabIndex={menuOpen || showAsDrawerChild ? 0 : -1}
         onClick={handleConsumerNavigate}
         aria-label={label}
+        aria-current={ownsAriaCurrent && routeActive ? 'page' : undefined}
         data-current-child={routeActive ? 'true' : undefined}
         className={cn(
-          isDrawer
+          showAsDrawerChild
             ? 'shell-drawer-action'
             : 'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-[var(--overlay-hover)] hover:text-[color:var(--wolfy-text-primary)]',
           routeActive ? 'is-active text-[color:var(--wolfy-text-primary)]' : '',
         )}
       >
-        <span className={isDrawer ? 'shell-nav-item__icon' : 'inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]'} aria-hidden="true">
+        <span className={showAsDrawerChild ? 'shell-nav-item__icon' : 'inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]'} aria-hidden="true">
           <Icon className="size-4" />
         </span>
-        <span className={isDrawer ? 'shell-nav-item__copy' : 'min-w-0 truncate'}>
-          <span className={isDrawer ? 'shell-nav-item__label' : 'truncate'}>{label}</span>
+        <span className={showAsDrawerChild ? 'shell-nav-item__copy' : 'min-w-0 truncate'}>
+          <span className={showAsDrawerChild ? 'shell-nav-item__label' : 'truncate'}>{label}</span>
         </span>
       </Link>
     );
+  };
+
+  const renderNavGroup = (groupKey: ConsumerNavGroupKey) => {
+    const groupDef = CONSUMER_NAV_GROUPS.find((item) => item.key === groupKey);
+    if (!groupDef) return null;
+    const groupRoutes = getConsumerNavGroupRoutes(groupKey);
+    const groupLabel = t(groupDef.labelKey);
+    const groupActive = activeNavGroup === groupKey;
+    const isOpen = openNavGroup === groupKey;
+    const menuId = isDrawer ? `shell-nav-group-drawer-${groupKey}` : `shell-nav-group-header-${groupKey}`;
+    const menuTestId = `shell-nav-group-menu-${groupKey}`;
+
+    if (isDrawer) {
+      // Mobile drawer: always expose grouped children so major tools stay discoverable.
+      return (
+        <div
+          key={groupKey}
+          className="space-y-2"
+          data-testid={`shell-nav-group-${groupKey}`}
+        >
+          <div
+            className={cn(
+              'px-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]',
+              groupActive ? 'text-[color:var(--sage-deep)]' : '',
+            )}
+            data-testid={`shell-nav-group-label-${groupKey}`}
+          >
+            {groupLabel}
+          </div>
+          <div
+            id={menuId}
+            role="group"
+            aria-label={groupLabel}
+            data-testid={menuTestId}
+            className="space-y-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-2"
+          >
+            {groupRoutes.map((route, index) => renderGroupChildLink(route, groupKey, index, {
+              menuOpen: true,
+              showAsDrawerChild: true,
+              // Drawer has no group trigger: active child owns aria-current.
+              ownsAriaCurrent: true,
+            }))}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        key={groupKey}
+        ref={(node) => {
+          navGroupMenuRefs.current[groupKey] = node;
+        }}
+        className="relative"
+        data-testid={`shell-nav-group-${groupKey}`}
+      >
+        <button
+          ref={(node) => {
+            navGroupButtonRefs.current[groupKey] = node;
+          }}
+          type="button"
+          className={cn(
+            'shell-header-link text-sm font-medium transition-colors',
+            (isOpen || groupActive) ? 'is-active font-bold' : '',
+          )}
+          onClick={() => toggleNavGroupMenu(groupKey)}
+          onKeyDown={(event) => handleNavGroupButtonKeyDown(event, groupKey, groupRoutes.length)}
+          aria-haspopup="menu"
+          aria-expanded={isOpen}
+          aria-controls={menuId}
+          aria-label={groupLabel}
+          aria-current={groupActive ? 'page' : undefined}
+          data-testid={`shell-nav-group-trigger-${groupKey}`}
+        >
+          <span className="shell-header-link__label inline-flex items-center gap-1.5">
+            <span>{groupLabel}</span>
+            <ChevronDown className={cn('size-3.5 transition-transform', isOpen ? 'rotate-180' : '')} />
+          </span>
+        </button>
+        {isOpen ? (
+          <div
+            id={menuId}
+            role="menu"
+            data-testid={menuTestId}
+            className="absolute left-0 top-full z-20 mt-2 flex min-w-[17rem] max-w-[min(24rem,calc(100vw-2rem))] flex-col gap-1 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--theme-floating-bg)] p-2 shadow-[var(--shadow-tight)]"
+            onKeyDown={(event) => handleNavGroupMenuKeyDown(event, groupKey)}
+          >
+            {groupRoutes.map((route, index) => renderGroupChildLink(route, groupKey, index, {
+              menuOpen: isOpen,
+              showAsDrawerChild: false,
+              // Desktop: group trigger owns aria-current; child uses is-active only.
+              ownsAriaCurrent: false,
+            }))}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  const consumerNavItems = CONSUMER_NAV_ARCHITECTURE.map((item) => {
+    if (item.type === 'link') {
+      return renderDirectNavLink(item.routeKey);
+    }
+    return renderNavGroup(item.groupKey);
   });
 
   const adminNavLinks = adminNavItems.map((item) => {
@@ -626,77 +743,9 @@ function useSidebarNavView({
       </NavLink>
     );
   });
-  const primaryNavLinks = showAdminPrimaryNav ? adminNavLinks : navLinks;
+  const primaryNavLinks = showAdminPrimaryNav ? adminNavLinks : consumerNavItems;
   const primaryNavLabel = showAdminPrimaryNav ? adminNavCopy.menuLabel : t('shell.drawerTitle');
   const primaryNavTestId = showAdminPrimaryNav ? 'shell-admin-primary-nav' : 'shell-consumer-primary-nav';
-  const moreLabel = t('nav.more');
-  const moreAction = !showAdminPrimaryNav ? (
-    isDrawer ? (
-      <div className="space-y-2" ref={moreMenuRef}>
-        <button
-          ref={moreButtonRef}
-          type="button"
-          className={cn('shell-nav-item shell-nav-item--utility w-full', secondaryRouteActive ? 'is-active' : '')}
-          onClick={toggleMoreMenu}
-          onKeyDown={handleMoreButtonKeyDown}
-          aria-expanded={showMoreMenu}
-          aria-controls={moreMenuId}
-          aria-label={moreLabel}
-          aria-current={secondaryRouteActive ? 'page' : undefined}
-        >
-          <span className="shell-nav-item__icon" aria-hidden="true">
-            <MoreHorizontal className="size-4" />
-          </span>
-          <DrawerUtilityLabel label={moreLabel} />
-          <ChevronDown className={cn('ml-auto size-4 text-[color:var(--wolfy-text-muted)] transition-transform', showMoreMenu ? 'rotate-180' : '')} />
-        </button>
-        {showMoreMenu ? (
-          <div
-            id={moreMenuId}
-            data-testid="shell-more-menu"
-            className="space-y-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-2"
-            onKeyDown={handleMoreMenuKeyDown}
-          >
-            {moreNavLinks}
-          </div>
-        ) : null}
-      </div>
-    ) : (
-      <div ref={moreMenuRef} className="relative">
-        <button
-          ref={moreButtonRef}
-          type="button"
-          className={cn(
-            'shell-header-link text-sm font-medium transition-colors',
-            (showMoreMenu || secondaryRouteActive) ? 'is-active font-bold' : '',
-          )}
-          onClick={toggleMoreMenu}
-          onKeyDown={handleMoreButtonKeyDown}
-          aria-haspopup="menu"
-          aria-expanded={showMoreMenu}
-          aria-controls={moreMenuId}
-          aria-label={moreLabel}
-          aria-current={secondaryRouteActive ? 'page' : undefined}
-        >
-          <span className="shell-header-link__label inline-flex items-center gap-1.5">
-            <span>{moreLabel}</span>
-            <ChevronDown className={cn('size-3.5 transition-transform', showMoreMenu ? 'rotate-180' : '')} />
-          </span>
-        </button>
-        {showMoreMenu ? (
-          <div
-            id={moreMenuId}
-            role="menu"
-            data-testid="shell-more-menu"
-            className="absolute right-0 top-full z-20 mt-2 flex min-w-[17rem] max-w-[min(24rem,calc(100vw-2rem))] flex-col gap-1 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--theme-floating-bg)] p-2 shadow-[var(--shadow-tight)]"
-            onKeyDown={handleMoreMenuKeyDown}
-          >
-            {moreNavLinks}
-          </div>
-        ) : null}
-      </div>
-    )
-  ) : null;
 
   const trimmedStockSearchQuery = stockSearchQuery.trim();
   const stockSearchValidation = trimmedStockSearchQuery ? validateStockCode(trimmedStockSearchQuery) : null;
@@ -1045,7 +1094,6 @@ function useSidebarNavView({
       </div>
       <nav className="shell-drawer-links" aria-label={primaryNavLabel} data-testid={primaryNavTestId}>
         {primaryNavLinks}
-        {moreAction}
       </nav>
       <div className="shell-drawer-footer">
         {stockSearchControl}
@@ -1070,7 +1118,6 @@ function useSidebarNavView({
         tabIndex={showAdminPrimaryNav ? 0 : undefined}
       >
         {primaryNavLinks}
-        {moreAction}
       </nav>
       <div className="shell-header-utilities">
         {archiveAction}

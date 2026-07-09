@@ -13,24 +13,93 @@ export type CoreProductRouteKey =
   | 'scenario-lab'
   | 'options-lab';
 
+/** Research-workflow stage used for shell information architecture. */
+export type ConsumerWorkflowStage =
+  | 'home'
+  | 'observe'
+  | 'discover'
+  | 'research'
+  | 'monitor'
+  | 'validate'
+  | 'scenario'
+  | 'options'
+  | 'portfolio';
+
+/** Top-level shell nav group (workflow-oriented, not a miscellaneous bucket). */
+export type ConsumerNavGroupKey = 'market' | 'research' | 'validate';
+
 export type CoreProductRoute = {
   key: CoreProductRouteKey;
   labelKey: string;
   path: string;
-  group: 'cockpit' | 'research' | 'context' | 'observe';
+  /** Legacy coarse group kept for compatibility; prefer workflowStage / navGroup. */
+  group: 'cockpit' | 'research' | 'context' | 'observe' | 'home' | 'market' | 'validate' | 'portfolio';
+  workflowStage: ConsumerWorkflowStage;
+  /** null = top-level direct link; otherwise child of a named workflow group. */
+  navGroup: ConsumerNavGroupKey | null;
   requiresAuth: boolean;
+  /**
+   * True when the route is part of the consumer shell navigation architecture
+   * (direct top-level or a named workflow group). Never means "hidden under More".
+   */
   primaryNav: boolean;
   pageIdentity: Record<UiLanguage, string>;
   ctaLabel?: Record<UiLanguage, string>;
   ctaDescription?: Record<UiLanguage, string>;
 };
 
+export type ConsumerNavGroupDefinition = {
+  key: ConsumerNavGroupKey;
+  labelKey: string;
+  routeKeys: CoreProductRouteKey[];
+};
+
+export type ConsumerNavArchitectureItem =
+  | { type: 'link'; routeKey: CoreProductRouteKey }
+  | { type: 'group'; groupKey: ConsumerNavGroupKey };
+
+export const CONSUMER_NAV_GROUPS: ConsumerNavGroupDefinition[] = [
+  {
+    key: 'market',
+    labelKey: 'nav.group.market',
+    // observe → discover → market decision synthesis
+    routeKeys: ['market-overview', 'research-radar', 'scanner', 'decision-cockpit'],
+  },
+  {
+    key: 'research',
+    labelKey: 'nav.group.research',
+    // symbol research → monitor → options structure
+    routeKeys: ['stock-structure', 'watchlist', 'options-lab'],
+  },
+  {
+    key: 'validate',
+    labelKey: 'nav.group.validate',
+    // historical validation → scenario testing
+    routeKeys: ['backtest', 'scenario-lab'],
+  },
+];
+
+/**
+ * Shell top-level order:
+ * Home → Market → Research → Validate → Portfolio
+ * Groups replace the generic More bucket for major research capabilities.
+ */
+export const CONSUMER_NAV_ARCHITECTURE: ConsumerNavArchitectureItem[] = [
+  { type: 'link', routeKey: 'home' },
+  { type: 'group', groupKey: 'market' },
+  { type: 'group', groupKey: 'research' },
+  { type: 'group', groupKey: 'validate' },
+  { type: 'link', routeKey: 'portfolio' },
+];
+
 export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
   {
     key: 'home',
     labelKey: 'nav.home',
     path: '/',
-    group: 'cockpit',
+    group: 'home',
+    workflowStage: 'home',
+    navGroup: null,
     requiresAuth: false,
     primaryNav: true,
     pageIdentity: { zh: '首页', en: 'Home' },
@@ -39,16 +108,20 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     key: 'decision-cockpit',
     labelKey: 'nav.marketDecisionCockpit',
     path: '/market/decision-cockpit',
-    group: 'cockpit',
+    group: 'market',
+    workflowStage: 'observe',
+    navGroup: 'market',
     requiresAuth: false,
-    primaryNav: false,
+    primaryNav: true,
     pageIdentity: { zh: '市场决策驾驶舱', en: 'Decision Cockpit' },
   },
   {
     key: 'market-overview',
     labelKey: 'nav.marketOverview',
     path: '/market-overview',
-    group: 'cockpit',
+    group: 'market',
+    workflowStage: 'observe',
+    navGroup: 'market',
     requiresAuth: false,
     primaryNav: true,
     pageIdentity: { zh: '市场总览', en: 'Market State Overview' },
@@ -62,7 +135,9 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     key: 'research-radar',
     labelKey: 'nav.researchRadar',
     path: '/research/radar',
-    group: 'research',
+    group: 'market',
+    workflowStage: 'discover',
+    navGroup: 'market',
     requiresAuth: true,
     primaryNav: true,
     pageIdentity: { zh: '今日观察队列', en: 'Today’s observation queue' },
@@ -77,6 +152,8 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     labelKey: 'nav.stockStructure',
     path: '/stocks/structure-decision',
     group: 'research',
+    workflowStage: 'research',
+    navGroup: 'research',
     requiresAuth: false,
     primaryNav: true,
     pageIdentity: { zh: '个股研究入口', en: 'Stock Research Entry' },
@@ -85,9 +162,11 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     key: 'scanner',
     labelKey: 'nav.scanner',
     path: '/scanner',
-    group: 'context',
+    group: 'market',
+    workflowStage: 'discover',
+    navGroup: 'market',
     requiresAuth: true,
-    primaryNav: false,
+    primaryNav: true,
     pageIdentity: { zh: '扫描工作台', en: 'Scanner workspace' },
     ctaLabel: { zh: '运行 Scanner', en: 'Run Scanner' },
     ctaDescription: {
@@ -99,7 +178,9 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     key: 'watchlist',
     labelKey: 'nav.watchlist',
     path: '/watchlist',
-    group: 'context',
+    group: 'research',
+    workflowStage: 'monitor',
+    navGroup: 'research',
     requiresAuth: true,
     primaryNav: true,
     pageIdentity: { zh: '观察监控板', en: 'Watchlist monitoring board' },
@@ -113,9 +194,11 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     key: 'portfolio',
     labelKey: 'nav.portfolio',
     path: '/portfolio',
-    group: 'context',
+    group: 'portfolio',
+    workflowStage: 'portfolio',
+    navGroup: null,
     requiresAuth: true,
-    primaryNav: false,
+    primaryNav: true,
     pageIdentity: { zh: '持仓管理', en: 'Holdings and portfolio exposure' },
     ctaLabel: { zh: '创建组合账户', en: 'Create portfolio account' },
     ctaDescription: {
@@ -127,33 +210,70 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     key: 'backtest',
     labelKey: 'nav.backtest',
     path: '/backtest',
-    group: 'observe',
+    group: 'validate',
+    workflowStage: 'validate',
+    navGroup: 'validate',
     requiresAuth: true,
-    primaryNav: false,
+    primaryNav: true,
     pageIdentity: { zh: '回测工作台', en: 'Backtest workbench' },
   },
   {
     key: 'scenario-lab',
     labelKey: 'nav.scenarioLab',
     path: '/scenario-lab',
-    group: 'observe',
+    group: 'validate',
+    workflowStage: 'scenario',
+    navGroup: 'validate',
     requiresAuth: true,
-    primaryNav: false,
+    primaryNav: true,
     pageIdentity: { zh: '情景实验室：假设推演工作台', en: 'Scenario Lab what-if workbench' },
   },
   {
     key: 'options-lab',
     labelKey: 'nav.optionsLab',
     path: '/options-lab',
-    group: 'observe',
+    group: 'research',
+    workflowStage: 'options',
+    navGroup: 'research',
     requiresAuth: true,
-    primaryNav: false,
+    primaryNav: true,
     pageIdentity: { zh: '期权实验室', en: 'Options Lab' },
   },
 ];
 
+/** Routes that appear as top-level direct links (not inside a workflow group). */
+export const DIRECT_PRIMARY_CONSUMER_ROUTES = CORE_PRODUCT_ROUTES.filter(
+  (route) => route.primaryNav && route.navGroup === null,
+);
+
+/**
+ * All routes discoverable from the consumer shell navigation architecture.
+ * Replaces the old primary/More split: major research tools are no longer secondary-only.
+ */
 export const PRIMARY_CONSUMER_ROUTES = CORE_PRODUCT_ROUTES.filter((route) => route.primaryNav);
-export const SECONDARY_CONSUMER_ROUTES = CORE_PRODUCT_ROUTES.filter((route) => !route.primaryNav);
+
+/** @deprecated No generic More bucket; empty by design after G008 IA consolidation. */
+export const SECONDARY_CONSUMER_ROUTES = CORE_PRODUCT_ROUTES.filter(
+  (route) => !route.primaryNav,
+);
+
+export function getConsumerNavGroup(groupKey: ConsumerNavGroupKey): ConsumerNavGroupDefinition {
+  const group = CONSUMER_NAV_GROUPS.find((item) => item.key === groupKey);
+  if (!group) {
+    throw new Error(`Unknown consumer nav group: ${groupKey}`);
+  }
+  return group;
+}
+
+export function getConsumerNavGroupRoutes(groupKey: ConsumerNavGroupKey): CoreProductRoute[] {
+  const group = getConsumerNavGroup(groupKey);
+  return group.routeKeys.map((key) => getCoreProductRouteByKey(key));
+}
+
+export function resolveConsumerNavGroupForPath(pathname: string): ConsumerNavGroupKey | null {
+  const route = resolveCurrentConsumerRoute(pathname);
+  return route?.navGroup ?? null;
+}
 
 export function normalizeConsumerRoutePath(pathname: string): string {
   const withoutQuery = String(pathname || '/').split(/[?#]/, 1)[0] || '/';
