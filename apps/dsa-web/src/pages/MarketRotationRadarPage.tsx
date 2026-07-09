@@ -35,6 +35,18 @@ import {
   type MarketRotationTheme,
   type MarketRotationThemeCorrelationBreadthSnapshot,
 } from '../api/marketRotation';
+import {
+  compareNullableAsc,
+  compareNullableDesc,
+  formatConfidenceValue as formatRotationConfidenceValue,
+  formatRelativeStrengthValue as formatRotationRelativeStrengthValue,
+  formatRotationScore,
+  hasPositiveKnownMetric,
+  matrixGeometryPosition,
+  parseRotationMetric,
+  scoreBarGeometryWidth,
+  sortThemesByEvidenceDesc,
+} from '../components/market-rotation/rotationEvidenceSemantics';
 import { cn } from '../utils/cn';
 import { decisionReadinessVariant, sanitizeMarketGuidanceCopy, type DecisionReadinessState, type DecisionReadinessSummary } from '../utils/marketIntelligenceGuidance';
 
@@ -268,7 +280,7 @@ function resolveSignalType(theme: MarketRotationTheme): MarketRotationSignalType
   if (REAL_FLOW_EVIDENCE_TYPES.has(flowEvidenceType) && theme.flowLanguageAllowed) {
     return 'real_flow';
   }
-  if (Number.isFinite(Number(theme.relativeStrength?.averageRelativeStrengthPercent))) {
+  if (parseRotationMetric(theme.relativeStrength?.averageRelativeStrengthPercent) !== null) {
     return 'relative_strength';
   }
   if (hasMomentumProxyInputs(theme)) {
@@ -591,11 +603,6 @@ function snapshotSummary(snapshot: MarketRotationThemeCorrelationBreadthSnapshot
   return `${participation} · ${breadth} · ${correlation} · ${dataState}`;
 }
 
-function parseRotationMetric(value?: number | string | null): number | null {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
-}
-
 function resolveRotationFamilyRollup(payload: MarketRotationRadarResponse): MarketRotationFamilyRollupItem[] {
   const summaryRollup = Array.isArray(payload.summary.rotationFamilyRollup) ? payload.summary.rotationFamilyRollup : [];
   if (summaryRollup.length) {
@@ -633,18 +640,11 @@ function mapDataStateLabel(theme: DataStateFields): string {
 }
 
 function formatConfidenceValue(confidence?: number | null): string {
-  if (!Number.isFinite(Number(confidence))) {
-    return '待确认';
-  }
-  return `${Math.round(Number(confidence) * 100)}%`;
+  return formatRotationConfidenceValue(confidence);
 }
 
 function formatRelativeStrengthValue(value?: number | null): string {
-  if (!Number.isFinite(Number(value))) {
-    return '待补齐';
-  }
-  const numeric = Number(value);
-  return `${numeric >= 0 ? '+' : ''}${numeric.toFixed(1)}%`;
+  return formatRotationRelativeStrengthValue(value);
 }
 
 function themeConfidenceSummary(theme?: MarketRotationTheme): string {
@@ -658,20 +658,17 @@ function themeConfidenceSummary(theme?: MarketRotationTheme): string {
 }
 
 function themeRelativeStrengthValue(theme?: MarketRotationTheme): number | null {
-  const raw = theme?.relativeStrength?.averageRelativeStrengthPercent;
-  return Number.isFinite(Number(raw)) ? Number(raw) : null;
+  return parseRotationMetric(theme?.relativeStrength?.averageRelativeStrengthPercent);
 }
 
 function themeHasUsefulFamilySignal(theme?: MarketRotationTheme): boolean {
   if (!theme || isTaxonomyOnlyTheme(theme)) {
     return false;
   }
-  const rotationScore = parseRotationMetric(theme.rotationScore) || 0;
-  const confidence = parseRotationMetric(theme.confidence) || 0;
   return resolveSignalType(theme) !== 'insufficient_evidence'
     && resolveEvidenceQuality(theme) !== 'insufficient'
     && theme.stage !== 'weak_or_no_signal'
-    && (rotationScore > 0 || confidence > 0);
+    && hasPositiveKnownMetric(theme.rotationScore, theme.confidence);
 }
 
 function resolveFamilyThemes(item: MarketRotationFamilyRollupItem, themes: MarketRotationTheme[]): MarketRotationTheme[] {
@@ -714,11 +711,17 @@ function buildRotationFamilyViews(payload: MarketRotationRadarResponse): Rotatio
       const averageConfidence = parseRotationMetric(item.averageConfidence);
       const hasUsefulSignal = familyThemes.some(themeHasUsefulFamilySignal)
         || signalThemeCount > 0
-        || Boolean(item.themeFlowSignal?.themeFlowState && (averageRotationScore || 0) > 0 && (averageConfidence || 0) > 0);
+        || Boolean(
+          item.themeFlowSignal?.themeFlowState
+          && hasPositiveKnownMetric(averageRotationScore)
+          && hasPositiveKnownMetric(averageConfidence),
+        );
       const collapsedByDefault = !hasUsefulSignal && (
         familyThemes.length
           ? familyThemes.every((theme) => isTaxonomyOnlyTheme(theme) || resolveEvidenceQuality(theme) === 'insufficient' || theme.stage === 'weak_or_no_signal')
-          : signalThemeCount <= 0 && (averageRotationScore || 0) <= 0 && (averageConfidence || 0) <= 0
+          : signalThemeCount <= 0
+            && !hasPositiveKnownMetric(averageRotationScore)
+            && !hasPositiveKnownMetric(averageConfidence)
       );
       return {
         familyKey,
@@ -749,11 +752,13 @@ function buildRotationFamilyViews(payload: MarketRotationRadarResponse): Rotatio
       if (b.signalThemeCount !== a.signalThemeCount) {
         return b.signalThemeCount - a.signalThemeCount;
       }
-      if ((b.averageRotationScore || 0) !== (a.averageRotationScore || 0)) {
-        return (b.averageRotationScore || 0) - (a.averageRotationScore || 0);
+      const scoreCmp = compareNullableDesc(a.averageRotationScore, b.averageRotationScore);
+      if (scoreCmp !== 0) {
+        return scoreCmp;
       }
-      if ((b.averageConfidence || 0) !== (a.averageConfidence || 0)) {
-        return (b.averageConfidence || 0) - (a.averageConfidence || 0);
+      const confidenceCmp = compareNullableDesc(a.averageConfidence, b.averageConfidence);
+      if (confidenceCmp !== 0) {
+        return confidenceCmp;
       }
       if (b.themeCount !== a.themeCount) {
         return b.themeCount - a.themeCount;
@@ -907,14 +912,7 @@ function isThemeStale(theme: DataStateFields): boolean {
 }
 
 function deriveTopThemes(themes: MarketRotationTheme[], limit = TOP_THEME_LIMIT): MarketRotationTheme[] {
-  return themes.slice()
-    .sort((a, b) => {
-      if (b.rotationScore !== a.rotationScore) {
-        return b.rotationScore - a.rotationScore;
-      }
-      return b.confidence - a.confidence;
-    })
-    .slice(0, limit);
+  return sortThemesByEvidenceDesc(themes).slice(0, limit);
 }
 
 function materializeSummaryTheme(item: MarketRotationSummaryItem, fullTheme?: MarketRotationTheme): MarketRotationTheme {
@@ -990,10 +988,13 @@ function hasObservationThemeData(theme: MarketRotationTheme): boolean {
     return false;
   }
   const hasMatrixFields = themeRelativeStrengthValue(theme) !== null && Boolean(theme.stage);
+  const hasScoreOrConfidence = parseRotationMetric(theme.rotationScore) !== null
+    || parseRotationMetric(theme.confidence) !== null;
   const hasUsableSignal = hasMatrixFields
+    || hasScoreOrConfidence
     || Boolean(theme.themeFlowSignal?.breadthEvidence || theme.themeFlowSignal?.relativeStrengthEvidence);
+  // Partial evidence is kept when any usable metric exists; missing score alone is not full unavailability.
   return hasUsableSignal
-    && Number.isFinite(Number(theme.rotationScore))
     && (theme.rankingLane === 'observation' || theme.observationOnly === true || theme.headlineEligible === false);
 }
 
@@ -1004,8 +1005,23 @@ function resolveObservationSummaryThemes(payload: MarketRotationRadarResponse): 
 
 function deriveWeakeningThemes(themes: MarketRotationTheme[]): MarketRotationTheme[] {
   return [...themes]
-    .filter((theme) => theme.stage === 'cooling_watch' || theme.stage === 'weak_or_no_signal' || theme.rotationScore < 50)
-    .sort((a, b) => a.rotationScore - b.rotationScore)
+    .filter((theme) => {
+      const score = parseRotationMetric(theme.rotationScore);
+      return theme.stage === 'cooling_watch'
+        || theme.stage === 'weak_or_no_signal'
+        || (score !== null && score < 50);
+    })
+    .sort((a, b) => {
+      const scoreCmp = compareNullableAsc(
+        parseRotationMetric(a.rotationScore),
+        parseRotationMetric(b.rotationScore),
+      );
+      if (scoreCmp !== 0) {
+        return scoreCmp;
+      }
+      return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN')
+        || String(a.id || '').localeCompare(String(b.id || ''));
+    })
     .slice(0, 4);
 }
 
@@ -1438,10 +1454,13 @@ const RotationVisualPanel: React.FC<{
                     <div className="relative h-12 rounded-lg border border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-rail)_70%,transparent)]">
                       <div className="absolute inset-y-2 left-1/2 w-px bg-[color:var(--wolfy-divider)]" aria-hidden="true" />
                       {stageThemes.map((theme) => {
-                        const strength = themeRelativeStrengthValue(theme) ?? 0;
+                        const strength = themeRelativeStrengthValue(theme);
+                        const geometry = matrixGeometryPosition({
+                          evidenceValue: strength,
+                          domain,
+                        });
                         const directionCue = observationDirectionCue(theme);
-                        const range = domain.max - domain.min || 1;
-                        const left = `${((strength - domain.min) / range) * 100}%`;
+                        const strengthLabel = formatRelativeStrengthValue(geometry.evidenceValue);
                         const bubbleVariant = selectedThemeId === theme.id
                           ? 'border-[color:color-mix(in_srgb,var(--wolfy-accent)_36%,transparent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_12%,transparent)] text-[color:var(--wolfy-text-primary)]'
                           : 'border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-console)_78%,transparent)] text-[color:var(--wolfy-text-secondary)] hover:bg-[color:color-mix(in_srgb,var(--wolfy-surface-console)_94%,transparent)]';
@@ -1450,17 +1469,18 @@ const RotationVisualPanel: React.FC<{
                             key={theme.id}
                             type="button"
                             data-testid={`rotation-radar-matrix-point-${theme.id}`}
+                            data-geometry-fallback={geometry.usesGeometryFallback ? 'true' : 'false'}
                             className={cn(
                               'absolute top-1/2 inline-flex h-7 -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border px-2 text-[10px] transition-colors',
                               bubbleVariant,
                             )}
-                            style={{ left }}
+                            style={{ left: `${geometry.leftPct}%` }}
                             onClick={() => onSelectTheme(theme.id)}
-                            aria-label={`${theme.name} ${observationThemeSummary(theme) || formatThemeStage(theme.stage)} ${directionCue?.changeText || formatRelativeStrengthValue(strength)}`}
+                            aria-label={`${theme.name} ${observationThemeSummary(theme) || formatThemeStage(theme.stage)} ${directionCue?.changeText || strengthLabel}`}
                           >
                             <span className="max-w-[5rem] truncate sm:max-w-[6.5rem]">{theme.name}</span>
                             <span className={ROTATION_PAPER_TEXT_MUTED_CLASS}>
-                              {directionCue ? `${directionCue.indicator} ${formatRelativeStrengthValue(strength)}` : formatRelativeStrengthValue(strength)}
+                              {directionCue ? `${directionCue.indicator} ${strengthLabel}` : strengthLabel}
                             </span>
                           </button>
                         );
@@ -1490,7 +1510,8 @@ const RotationVisualPanel: React.FC<{
           </div>
           <div className="mt-4 space-y-2">
             {rankingThemes.map((theme, index) => {
-              const scoreWidth = `${Math.max(8, Math.min(100, theme.rotationScore))}%`;
+              const geometryWidth = scoreBarGeometryWidth(theme.rotationScore);
+              const scoreLabel = formatRotationScore(theme.rotationScore);
               const observationSummary = observationThemeSummary(theme);
               const selected = selectedThemeId === theme.id;
               return (
@@ -1498,6 +1519,7 @@ const RotationVisualPanel: React.FC<{
                   key={theme.id}
                   type="button"
                   data-testid={`rotation-radar-ranking-bar-${theme.id}`}
+                  data-score-available={geometryWidth !== null ? 'true' : 'false'}
                   className={cn(
                     'block w-full rounded-lg border border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-console)_82%,transparent)] p-2 text-left transition-colors',
                     selected ? 'bg-[color:color-mix(in_srgb,var(--wolfy-accent)_12%,transparent)]' : 'hover:bg-[color:color-mix(in_srgb,var(--wolfy-surface-console)_96%,transparent)]',
@@ -1517,18 +1539,26 @@ const RotationVisualPanel: React.FC<{
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className={cn('text-[11px] font-semibold', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>{theme.rotationScore.toFixed(0)}</p>
+                      <p className={cn('text-[11px] font-semibold', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>{scoreLabel}</p>
                       <p className={cn('text-[10px]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{formatRelativeStrengthValue(themeRelativeStrengthValue(theme))}</p>
                     </div>
                   </div>
                   <div className="mt-2 h-2 rounded-full bg-[color:var(--wolfy-divider)]">
-                    <div
-                      className={cn(
-                        'h-full rounded-full',
-                        selected ? 'bg-[color:var(--wolfy-accent)]' : 'bg-[color:color-mix(in_srgb,var(--wolfy-text-secondary)_78%,transparent)]',
-                      )}
-                      style={{ width: scoreWidth }}
-                    />
+                    {geometryWidth !== null ? (
+                      <div
+                        className={cn(
+                          'h-full rounded-full',
+                          selected ? 'bg-[color:var(--wolfy-accent)]' : 'bg-[color:color-mix(in_srgb,var(--wolfy-text-secondary)_78%,transparent)]',
+                        )}
+                        style={{ width: `${geometryWidth}%` }}
+                      />
+                    ) : (
+                      <div
+                        className="h-full w-2 rounded-full bg-[color:color-mix(in_srgb,var(--wolfy-text-muted)_35%,transparent)]"
+                        data-testid={`rotation-radar-ranking-bar-unavailable-${theme.id}`}
+                        aria-hidden="true"
+                      />
+                    )}
                   </div>
                 </button>
               );

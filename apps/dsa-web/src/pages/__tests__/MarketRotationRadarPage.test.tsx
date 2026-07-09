@@ -2113,4 +2113,139 @@ describe('MarketRotationRadarPage', () => {
     expect(detail.textContent || '').not.toMatch(/置信度|置信 \d+%/);
     expect(document.body.textContent || '').not.toMatch(forbiddenTradingActionPattern);
   });
+
+  it('orders known rotation scores ahead of null and keeps null labels honest on ranking bars', async () => {
+    const base = radarFixture();
+    const asObservation = {
+      rankingLane: 'observation' as const,
+      observationOnly: true,
+      headlineEligible: false,
+      scoreContributionAllowed: false,
+      signalType: 'relative_strength' as const,
+      evidenceQuality: 'observation_only' as const,
+      sourceAuthorityAllowed: false,
+      flowLanguageAllowed: false,
+    };
+    const knownStrong = {
+      ...base.themes[0],
+      ...asObservation,
+      id: 'known_strong',
+      name: '已知强主题',
+      rotationScore: 88,
+      confidence: 0.8,
+      stage: 'early_watch' as const,
+      relativeStrength: {
+        ...base.themes[0].relativeStrength,
+        averageRelativeStrengthPercent: 3.2,
+      },
+    };
+    const knownZero = {
+      ...base.themes[0],
+      ...asObservation,
+      id: 'known_zero',
+      name: '已知零分',
+      rotationScore: 0,
+      confidence: 0,
+      stage: 'weak_or_no_signal' as const,
+      relativeStrength: {
+        ...base.themes[0].relativeStrength,
+        averageRelativeStrengthPercent: 0,
+      },
+    };
+    const partialOnlyRs = {
+      ...base.themes[0],
+      ...asObservation,
+      id: 'partial_rs_only',
+      name: '仅有相对强弱',
+      rotationScore: null,
+      confidence: 0.55,
+      stage: 'early_watch' as const,
+      relativeStrength: {
+        ...base.themes[0].relativeStrength,
+        averageRelativeStrengthPercent: 2.0,
+      },
+    };
+    // Keep three themes so observation primary lane (top 3) retains the full mixed set.
+    const themes = [partialOnlyRs, knownZero, knownStrong];
+
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce({
+      ...base,
+      themes,
+      summary: {
+        ...base.summary,
+        strongestThemes: [],
+        acceleratingThemes: [],
+        fadingThemes: [],
+        observationThemes: themes,
+        taxonomyThemes: [],
+        headlineEligibleThemeCount: 0,
+        observationThemeCount: themes.length,
+        noHeadlineReason: 'observation_only_surface',
+      },
+    });
+
+    render(<MarketRotationRadarPage />);
+
+    const rankingBar = await screen.findByTestId('rotation-radar-ranking-bar-known_strong');
+    expect(rankingBar).toHaveTextContent('88');
+    expect(screen.getByTestId('rotation-radar-ranking-bar-known_zero')).toHaveTextContent('0');
+    expect(screen.getByTestId('rotation-radar-ranking-bar-known_zero')).toHaveTextContent('+0.0%');
+    expect(screen.getByTestId('rotation-radar-ranking-bar-partial_rs_only')).toHaveTextContent('待确认');
+    expect(screen.getByTestId('rotation-radar-ranking-bar-partial_rs_only')).toHaveTextContent('+2.0%');
+    expect(screen.getByTestId('rotation-radar-ranking-bar-partial_rs_only')).toHaveAttribute('data-score-available', 'false');
+    expect(screen.getByTestId('rotation-radar-ranking-bar-known_zero')).toHaveAttribute('data-score-available', 'true');
+
+    const orderedIds = within(screen.getByTestId('rotation-radar-visual-matrix'))
+      .getAllByTestId(/^rotation-radar-ranking-bar-(?!unavailable-)/)
+      .map((node) => node.getAttribute('data-testid'));
+    expect(orderedIds).toEqual([
+      'rotation-radar-ranking-bar-known_strong',
+      'rotation-radar-ranking-bar-known_zero',
+      'rotation-radar-ranking-bar-partial_rs_only',
+    ]);
+  });
+
+  it('keeps all-unknown score sets deterministic without pretending null is weakest observed evidence', async () => {
+    const base = radarFixture();
+    const alpha = {
+      ...base.themes[0],
+      id: 'unknown_alpha',
+      name: '阿尔法',
+      rotationScore: null,
+      confidence: null,
+      relativeStrength: {
+        ...base.themes[0].relativeStrength,
+        averageRelativeStrengthPercent: null,
+      },
+    };
+    const beta = {
+      ...base.themes[0],
+      id: 'unknown_beta',
+      name: '贝塔',
+      rotationScore: null,
+      confidence: null,
+      relativeStrength: {
+        ...base.themes[0].relativeStrength,
+        averageRelativeStrengthPercent: null,
+      },
+    };
+
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce({
+      ...base,
+      themes: [beta, alpha],
+      summary: {
+        ...base.summary,
+        strongestThemes: [beta, alpha],
+        observationThemes: [beta, alpha],
+      },
+    });
+
+    render(<MarketRotationRadarPage />);
+
+    await screen.findByTestId('market-rotation-radar-page');
+    // Without RS, matrix points are filtered; leader list still must not invent zero scores.
+    const pageText = document.body.textContent || '';
+    expect(pageText).not.toMatch(/未知分数\s*0(?!\d)/);
+    expect(screen.queryByTestId('rotation-radar-ranking-bar-unknown_alpha')).not.toBeInTheDocument();
+  });
 });

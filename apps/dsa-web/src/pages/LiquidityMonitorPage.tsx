@@ -21,6 +21,12 @@ import {
   type LiquidityImpulseSynthesisHeaderView,
 } from '../components/liquidity-monitor/LiquidityImpulseSynthesisHeader';
 import {
+  formatLiquidityScoreConfidence,
+  isFiniteConfidence,
+  isLowOrMissingConfidence,
+  maxKnownConfidence,
+} from '../components/liquidity-monitor/liquidityConfidenceSemantics';
+import {
   TerminalChip,
   TerminalDenseTable,
   TerminalDisclosure,
@@ -128,8 +134,7 @@ function scoreLabel(value: number): string {
 }
 
 function confidenceLabel(value?: number | null): string {
-  if (value == null || !Number.isFinite(value)) return '0%';
-  return `${Math.round(value * 100)}%`;
+  return formatLiquidityScoreConfidence(value);
 }
 
 function liquidityCoverageInputLabel(data: LiquidityMonitorResponse): string {
@@ -532,7 +537,7 @@ function buildLiquidityImpulseSynthesisView(
     synthesis.liquidityImpulse === 'data_insufficient'
     || synthesis.confidenceLabel === 'insufficient'
     || synthesis.confidenceLabel === 'low'
-    || synthesis.confidence < 0.45
+    || isLowOrMissingConfidence(synthesis.confidence, 0.45)
   );
   const proxyOnlyDecision = Boolean(
     allScoringEvidenceProxyOnly
@@ -575,7 +580,9 @@ function buildLiquidityImpulseSynthesisView(
     impulseLabel,
     subtypeLabel: subtypeLabel(synthesis.subtype),
     confidenceLabel: synthesisConfidenceLabel(synthesis.confidenceLabel, synthesis.confidence),
-    confidenceValueText: formatPercent(synthesis.confidence, { mode: 'ratio' }),
+    confidenceValueText: isFiniteConfidence(synthesis.confidence)
+      ? formatPercent(synthesis.confidence, { mode: 'ratio' })
+      : '',
     directionScoreText: formatSignedNumber(synthesis.directionScore, 2, { showZeroSign: true }),
     qualityLine: qualityFlags,
     dominantDrivers: buildEvidenceView(synthesis.dominantDrivers, 'driver', 3),
@@ -971,10 +978,10 @@ function buildLiquidityDecisionReadiness(
     data.score.includedIndicatorCount || 0,
     evidenceQualityNumber(data, 'scoringEvidenceCount'),
   );
-  const confidence = Math.max(data.score.confidence || 0, data.liquidityImpulseSynthesis?.confidence || 0);
+  const confidence = maxKnownConfidence(data.score.confidence, data.liquidityImpulseSynthesis?.confidence);
   const state: DecisionReadinessState = synthesisView.state === 'ready'
     && scoringEvidenceCount >= 2
-    && confidence >= 0.45
+    && !isLowOrMissingConfidence(confidence, 0.45)
     && data.score.regime !== 'unavailable'
     ? 'ready'
     : scoringEvidenceCount <= 0 && data.score.regime === 'unavailable'
@@ -1498,7 +1505,7 @@ function buildConsumerLiquidityStatusView(
   const bias = buildLiquidityBiasSummary(data, readinessSummary, synthesisView);
   const limitedConfidence = readinessSummary.state !== 'ready'
     || synthesisView.state !== 'ready'
-    || (data.score.confidence || 0) < 0.45;
+    || isLowOrMissingConfidence(data.score.confidence, 0.45);
   const topSignal = topConsumerSignalLabel(data, indicators);
   const observableCount = indicators.filter((indicator) => indicator.status !== 'unavailable').length;
   const scoringPaused = limitedConfidence
@@ -2317,7 +2324,12 @@ const LiquidityGuidancePanel: React.FC<{
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <TerminalMetric label="置信度" value={confidenceLabel(data.score.confidence)} valueClassName="text-2xl" />
+                  <TerminalMetric
+                    data-testid="liquidity-score-confidence"
+                    label="置信度"
+                    value={confidenceLabel(data.score.confidence)}
+                    valueClassName="text-2xl"
+                  />
                   <TerminalMetric label="最弱时效" value={FRESHNESS_LABELS[data.freshness.weakestIndicatorFreshness]} valueClassName="text-lg font-sans" />
                   <TerminalMetric label="输入覆盖" value={liquidityCoverageInputLabel(data)} valueClassName="text-lg font-sans" />
                   <TerminalMetric label="计分指标" value={data.score.includedIndicatorCount} valueClassName="text-2xl" />

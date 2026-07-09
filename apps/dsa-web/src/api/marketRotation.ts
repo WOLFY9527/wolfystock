@@ -84,8 +84,10 @@ export type MarketRotationMember = {
 export type MarketRotationSummaryItem = {
   id: string;
   name: string;
-  rotationScore: number;
-  confidence: number;
+  /** Measured rotation score. Null means unavailable, not observed zero. */
+  rotationScore: number | null;
+  /** Measured confidence in [0,1]. Null means unavailable, not observed zero. */
+  confidence: number | null;
   stage: MarketRotationStage;
   stageExplanation?: string | null;
   freshness: MarketDataFreshness;
