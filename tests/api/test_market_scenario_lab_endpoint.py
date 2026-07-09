@@ -9,10 +9,13 @@ import re
 from pathlib import Path
 from typing import Any
 
+import api.deps as api_deps
+import api.middlewares.auth as auth_middleware
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.deps import CurrentUser, get_optional_current_user
+from api.deps import CurrentUser, get_current_user, get_optional_current_user
+from api.middlewares.auth import add_auth_middleware
 from api.v1.endpoints import market
 from src.repositories.scenario_baseline_snapshot_repository import ScenarioBaselineSnapshotStorageError
 from src.storage import DatabaseManager, ScenarioBaselineSnapshotRow
@@ -99,6 +102,7 @@ def _client(
         app.state.scenario_baseline_snapshot_db_manager = snapshot_db_manager
     if current_user is not None:
         app.dependency_overrides[get_optional_current_user] = lambda: current_user
+        app.dependency_overrides[get_current_user] = lambda: current_user
     app.include_router(market.router, prefix="/api/v1/market")
     return TestClient(app)
 
@@ -777,6 +781,96 @@ def test_market_scenario_lab_baseline_snapshot_create_and_readback_are_explicit_
     assert other_user_latest.json()["ownerScope"] == {"type": "user", "value": "user-b"}
 
 
+def test_market_scenario_lab_baseline_snapshot_requires_current_user_without_middleware(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    db = _snapshot_db(tmp_path)
+    monkeypatch.setattr(api_deps, "is_auth_enabled", lambda: True)
+    client = _client(snapshot_db_manager=db)
+
+    create_response = client.post(
+        "/api/v1/market/scenario-lab/baseline-snapshots",
+        json=_baseline_snapshot_create_payload("baseline-api-auth-required"),
+    )
+    latest_response = client.get(
+        "/api/v1/market/scenario-lab/baseline-snapshots/latest",
+        params={"scopeType": "market", "scopeValue": "US"},
+    )
+    by_id_response = client.get(
+        "/api/v1/market/scenario-lab/baseline-snapshots/baseline-api-auth-required",
+    )
+
+    assert create_response.status_code == 401
+    assert latest_response.status_code == 401
+    assert by_id_response.status_code == 401
+    assert create_response.json()["detail"]["error"] == "unauthorized"
+    assert latest_response.json()["detail"]["error"] == "unauthorized"
+    assert by_id_response.json()["detail"]["error"] == "unauthorized"
+    with db.get_session() as session:
+        assert session.query(ScenarioBaselineSnapshotRow).count() == 0
+
+
+def test_market_scenario_lab_baseline_snapshot_auth_enabled_anonymous_rejected_by_app_middleware(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    db = _snapshot_db(tmp_path)
+    monkeypatch.setattr(api_deps, "is_auth_enabled", lambda: True)
+    monkeypatch.setattr(auth_middleware, "is_auth_enabled", lambda: True)
+    app = FastAPI()
+    app.state.scenario_baseline_snapshot_db_manager = db
+    app.include_router(market.router, prefix="/api/v1/market")
+    add_auth_middleware(app)
+    client = TestClient(app)
+
+    create_response = client.post(
+        "/api/v1/market/scenario-lab/baseline-snapshots",
+        json=_baseline_snapshot_create_payload("baseline-api-middleware-auth-required"),
+    )
+    latest_response = client.get(
+        "/api/v1/market/scenario-lab/baseline-snapshots/latest",
+        params={"scopeType": "market", "scopeValue": "US"},
+    )
+
+    assert create_response.status_code == 401
+    assert latest_response.status_code == 401
+    assert create_response.json()["error"] == "unauthorized"
+    assert latest_response.json()["error"] == "unauthorized"
+    with db.get_session() as session:
+        assert session.query(ScenarioBaselineSnapshotRow).count() == 0
+
+
+def test_market_scenario_lab_baseline_snapshot_auth_disabled_uses_bootstrap_owner(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    db = _snapshot_db(tmp_path)
+    monkeypatch.setattr(api_deps, "is_auth_enabled", lambda: False)
+    client = _client(snapshot_db_manager=db)
+
+    create_response = client.post(
+        "/api/v1/market/scenario-lab/baseline-snapshots",
+        json=_baseline_snapshot_create_payload("baseline-api-local-compat"),
+    )
+
+    assert create_response.status_code == 200
+    created = create_response.json()
+    assert created["ownerScope"] == {"type": "user", "value": db.get_default_owner_id()}
+    assert created["ownerScope"]["value"] != "anonymous"
+
+    latest_response = client.get(
+        "/api/v1/market/scenario-lab/baseline-snapshots/latest",
+        params={"scopeType": "market", "scopeValue": "US"},
+    )
+    by_id_response = client.get("/api/v1/market/scenario-lab/baseline-snapshots/baseline-api-local-compat")
+
+    assert latest_response.status_code == 200
+    assert by_id_response.status_code == 200
+    assert latest_response.json() == created
+    assert by_id_response.json() == created
+
+
 def test_market_scenario_lab_durable_create_idempotent_retry_conflict_is_409_and_non_destructive(
     tmp_path: Path,
 ) -> None:
@@ -881,6 +975,7 @@ def test_market_scenario_lab_durable_create_maps_domain_validation_distinct_from
     app = FastAPI()
     app.state.scenario_baseline_snapshot_repository = FailingRepository()
     app.dependency_overrides[get_optional_current_user] = lambda: _make_user("user-a", "alice")
+    app.dependency_overrides[get_current_user] = lambda: _make_user("user-a", "alice")
     app.include_router(market.router, prefix="/api/v1/market")
     storage_response = TestClient(app).post(
         "/api/v1/market/scenario-lab/baseline-snapshots",

@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from api.deps import CurrentUser, get_optional_current_user, require_admin_capability
+from api.deps import CurrentUser, get_current_user, get_optional_current_user, require_admin_capability
 from api.v1.consumer_safe_response import consumer_safe_json_response
 from api.v1.schemas.daily_intelligence import DailyIntelligenceBriefingResponse
 from api.v1.schemas.data_source_gap_registry import DataSourceGapRegistryResponse
@@ -702,7 +702,7 @@ def get_daily_intelligence(
 def create_scenario_lab_baseline_snapshot(
     payload: MarketScenarioLabBaselineSnapshotCreateRequest,
     request: Request,
-    current_user: Optional[CurrentUser] = Depends(get_optional_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     try:
         return _scenario_baseline_snapshot_service(request).create_durable_snapshot(
@@ -740,7 +740,7 @@ def get_latest_scenario_lab_baseline_snapshot(
     request: Request,
     scope_type: str = Query(default="market", alias="scopeType"),
     scope_value: str = Query(default="US", alias="scopeValue"),
-    current_user: Optional[CurrentUser] = Depends(get_optional_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     return _scenario_baseline_snapshot_service(request).get_latest_durable_snapshot(
         scope={"type": scope_type, "value": scope_value},
@@ -757,7 +757,7 @@ def get_latest_scenario_lab_baseline_snapshot(
 def get_scenario_lab_baseline_snapshot(
     snapshot_id: str,
     request: Request,
-    current_user: Optional[CurrentUser] = Depends(get_optional_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     snapshot = _scenario_baseline_snapshot_service(request).get_durable_snapshot(
         snapshot_id,
