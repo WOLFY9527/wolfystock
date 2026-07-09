@@ -88,6 +88,80 @@ describe('apiClient auth redirect handling', () => {
     expect(window.localStorage.getItem('wolfystock.auth.session-event.v1')).toMatch(/session-invalidated/);
   });
 
+  it.each([
+    '/market-overview',
+    '/zh/market-overview',
+    '/en/market-overview',
+    '/market/decision-cockpit',
+    '/guest',
+  ])('keeps public route %s open when a secondary API returns 401', async (path) => {
+    const assignSpy = vi.fn();
+    window.history.replaceState({}, '', path);
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        ...window.location,
+        assign: assignSpy,
+      },
+    });
+
+    await expect(apiClient.get('/api/v1/market/crypto', {
+      adapter: async (config) => Promise.reject({
+        config,
+        response: {
+          config,
+          data: {
+            error: 'unauthorized',
+            message: 'Login required',
+          },
+          headers: {},
+          status: 401,
+          statusText: 'Unauthorized',
+        },
+      }),
+    })).rejects.toBeTruthy();
+
+    expect(assignSpy).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem('wolfystock.auth.session-event.v1')).toBeNull();
+  });
+
+  it.each([
+    '/watchlist',
+    '/scanner',
+    '/portfolio',
+    '/backtest',
+    '/scenario-lab',
+    '/research/radar',
+  ])('still redirects protected route %s to login on 401', async (path) => {
+    const assignSpy = vi.fn();
+    window.history.replaceState({}, '', path);
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        ...window.location,
+        assign: assignSpy,
+      },
+    });
+
+    await expect(apiClient.get('/api/v1/protected', {
+      adapter: async (config) => Promise.reject({
+        config,
+        response: {
+          config,
+          data: {
+            error: 'unauthorized',
+            message: 'Login required',
+          },
+          headers: {},
+          status: 401,
+          statusText: 'Unauthorized',
+        },
+      }),
+    })).rejects.toBeTruthy();
+
+    expect(assignSpy).toHaveBeenCalledWith(`/login?redirect=${encodeURIComponent(path)}`);
+  });
+
   it('preserves the active locale when redirecting protected API failures to login', async () => {
     const assignSpy = vi.fn();
     window.history.replaceState({}, '', '/zh/scenario-lab?shock=down');

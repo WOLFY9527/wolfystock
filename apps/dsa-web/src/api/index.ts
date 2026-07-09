@@ -7,6 +7,7 @@ import { API_BASE_URL } from '../utils/constants';
 import { getStoredUiLanguage } from '../i18n/core';
 import { attachParsedApiError } from './error';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
+import { isAuthEntryPath, shouldPreservePublicRouteOnAuthFailure } from '../utils/appRouteGuards';
 import { publishAuthSessionInvalidated } from '../utils/authSessionEvents';
 
 export type ApiTimeoutTier = 'quick' | 'standard' | 'analysis';
@@ -250,6 +251,14 @@ function shouldRedirectToLogin(error: unknown): boolean {
     return false;
   }
   if (typeof window === 'undefined') {
+    return false;
+  }
+  // Public guest research routes (e.g. /market-overview) must stay reachable even when a
+  // secondary authenticated endpoint returns 401, including during setupState=no_password.
+  if (shouldPreservePublicRouteOnAuthFailure(window.location.pathname)) {
+    return false;
+  }
+  if (isAuthEntryPath(window.location.pathname)) {
     return false;
   }
   const path = window.location.pathname + window.location.search;

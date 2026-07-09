@@ -11,7 +11,13 @@ import { useI18n } from './contexts/UiLanguageContext';
 import { useProductSurface } from './hooks/useProductSurface';
 import type { UiLanguage } from './i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from './utils/localeRouting';
-import { isPreviewRoutePath } from './utils/appRouteGuards';
+import {
+  getAuthBootstrapRouteKind,
+  isAuthEntryPath,
+  isPreviewRoutePath,
+  isStockStructureDecisionDetailPath,
+  type AuthBootstrapRouteKind,
+} from './utils/appRouteGuards';
 import { canAccessAdminPath, isAdminMissionControlPath, isAdminMissionControlPrototypeEnabled } from './utils/adminCapabilities';
 
 const APP_BOOT_SPLASH_MIN_MS = 320;
@@ -64,8 +70,6 @@ type GateCopy = {
   secondaryAction?: { label: string; to: string };
   tertiaryAction?: { label: string; to: string };
 };
-
-type AuthBootstrapRouteKind = 'public' | 'protected' | 'admin' | 'auth-entry' | 'other';
 
 type AuthBootstrapSurfaceCopy = {
   ariaLabel: string;
@@ -278,14 +282,6 @@ function getMissionControlPrototypeGateCopy(language: UiLanguage): GateCopy {
   };
 }
 
-function isPathMatch(pathname: string, target: string): boolean {
-  return pathname === target || pathname.startsWith(`${target}/`);
-}
-
-function isAuthEntryPath(pathname: string): boolean {
-  return pathname === '/login' || pathname === '/register' || pathname === '/reset-password';
-}
-
 function getPostAuthRedirectTarget(search: string, fallbackPath: string): string {
   const redirect = new URLSearchParams(search).get('redirect');
   if (!redirect || !redirect.startsWith('/') || redirect.startsWith('//')) {
@@ -307,73 +303,6 @@ function getPostAuthRedirectTarget(search: string, fallbackPath: string): string
   } catch {
     return fallbackPath;
   }
-}
-
-function isAdminSurfacePath(pathname: string): boolean {
-  return isPathMatch(pathname, '/settings/system') || isPathMatch(pathname, '/admin');
-}
-
-function isStockStructureDecisionEntryPath(pathname: string): boolean {
-  return pathname === '/stocks/structure-decision';
-}
-
-function isStockStructureDecisionDetailPath(pathname: string): boolean {
-  return /^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(pathname);
-}
-
-function isStockStructureDecisionLegacyPath(pathname: string): boolean {
-  return /^\/stock\/[^/]+(?:\/structure-decision)?(?:\/)?$/i.test(pathname);
-}
-
-function isProtectedProductPath(pathname: string): boolean {
-  return pathname === '/settings'
-    || pathname === '/options'
-    || pathname === '/scanner'
-    || pathname === '/holdings'
-    || pathname === '/radar'
-    || pathname === '/research'
-    || pathname === '/research-radar'
-    || isPathMatch(pathname, '/portfolio')
-    || isPathMatch(pathname, '/radar')
-    || isPathMatch(pathname, '/research/radar')
-    || isPathMatch(pathname, '/scenario-lab')
-    || isPathMatch(pathname, '/watchlist')
-    || isPathMatch(pathname, '/backtest')
-    || isPathMatch(pathname, '/options-lab')
-    || isStockStructureDecisionDetailPath(pathname);
-}
-
-function isPublicSafePath(pathname: string): boolean {
-  return pathname === '/'
-    || pathname === '/guest'
-    || pathname === '/market'
-    || pathname === '/cockpit'
-    || pathname === '/decision-cockpit'
-    || pathname === '/market-overview'
-    || pathname === '/liquidity'
-    || pathname === '/rotation'
-    || pathname === '/chat'
-    || pathname === '/market/decision-cockpit'
-    || pathname === '/market/liquidity-monitor'
-    || pathname === '/market/rotation-radar'
-    || isStockStructureDecisionEntryPath(pathname)
-    || isStockStructureDecisionLegacyPath(pathname);
-}
-
-function getAuthBootstrapRouteKind(pathname: string): AuthBootstrapRouteKind {
-  if (isAuthEntryPath(pathname)) {
-    return 'auth-entry';
-  }
-  if (isAdminSurfacePath(pathname)) {
-    return 'admin';
-  }
-  if (isProtectedProductPath(pathname)) {
-    return 'protected';
-  }
-  if (isPublicSafePath(pathname)) {
-    return 'public';
-  }
-  return 'other';
 }
 
 function getAuthBootstrapSurfaceCopy(kind: AuthBootstrapRouteKind, language: UiLanguage): AuthBootstrapSurfaceCopy {
