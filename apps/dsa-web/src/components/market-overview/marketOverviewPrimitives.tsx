@@ -121,20 +121,53 @@ function resolveProviderStatus(meta?: Partial<MarketDataMeta>): MarketProviderHe
   if (meta?.isRefreshing) {
     return 'refreshing';
   }
-  if (meta?.isUnavailable || meta?.source === 'unavailable' || meta?.freshness === 'unavailable') {
+  const providerFreshnessState = String(meta?.providerFreshness?.state || '').trim().toLowerCase();
+  if (
+    meta?.isUnavailable
+    || meta?.providerFreshness?.isUnavailable
+    || meta?.source === 'unavailable'
+    || meta?.freshness === 'unavailable'
+    || providerFreshnessState === 'unavailable'
+    || providerFreshnessState === 'unknown'
+  ) {
     return 'unavailable';
   }
-  if (meta?.freshness === 'error') {
+  if (meta?.freshness === 'error' || providerFreshnessState === 'error') {
     return 'error';
   }
-  if (meta?.isFallback || meta?.source === 'fallback' || meta?.freshness === 'fallback' || meta?.freshness === 'mock') {
+  if (
+    meta?.isFallback
+    || meta?.source === 'fallback'
+    || meta?.freshness === 'fallback'
+    || meta?.freshness === 'mock'
+    || meta?.freshness === 'synthetic'
+    || providerFreshnessState === 'fallback'
+    || providerFreshnessState === 'mock'
+    || providerFreshnessState === 'synthetic'
+  ) {
     return 'fallback';
   }
-  if (meta?.isStale || meta?.freshness === 'stale') {
+  if (
+    meta?.isProxy
+    || meta?.providerFreshness?.isProxy
+    || meta?.freshness === 'proxy'
+    || providerFreshnessState === 'proxy'
+  ) {
+    // Proxy is delayed/unofficial evidence, not live cache.
     return 'stale';
   }
-  if (meta?.freshness === 'live') {
+  if (meta?.isStale || meta?.freshness === 'stale' || providerFreshnessState === 'stale') {
+    return 'stale';
+  }
+  if (meta?.freshness === 'live' || meta?.freshness === 'fresh' || providerFreshnessState === 'live' || providerFreshnessState === 'fresh') {
     return 'live';
+  }
+  if (meta?.freshness === 'delayed' || providerFreshnessState === 'delayed') {
+    return 'cache';
+  }
+  // Missing freshness is unknown — do not invent "cached/live" success.
+  if (!meta?.freshness && !providerFreshnessState) {
+    return 'unavailable';
   }
   return 'cache';
 }
@@ -194,7 +227,7 @@ export const DataFreshnessBadge: React.FC<{ freshness?: MarketDataFreshness; sta
       data-testid={`data-freshness-badge-${resolved}`}
       className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-none', FRESHNESS_CLASSES[resolved], className)}
     >
-      {STATUS_LABELS[resolved] || FRESHNESS_LABELS[freshness || 'cached']}
+      {STATUS_LABELS[resolved] || FRESHNESS_LABELS[freshness || 'unknown'] || FRESHNESS_LABELS.unavailable}
     </span>
   );
 };

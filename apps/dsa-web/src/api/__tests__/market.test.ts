@@ -637,9 +637,264 @@ describe('market temperature evidence normalization', () => {
     expect(panel.errorMessage).toBe('数据源刷新超时，当前显示备用快照');
     expect(panel.items).toEqual([]);
   });
+
+  it('does not invent client-now temperature updatedAt when backend omits it', () => {
+    const payload = marketModule.normalizeMarketTemperatureResponse({
+      source: 'computed',
+      // updatedAt intentionally omitted
+      scores: {
+        overall: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+        usRiskAppetite: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+        cnMoneyEffect: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+        macroPressure: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+        liquidity: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+      },
+    });
+
+    expect(payload.updatedAt).toBe('');
+    expect(payload.asOf).toBeUndefined();
+  });
+
+  it('preserves missing actionability confidence as unknown rather than zero', () => {
+    const payload = marketModule.normalizeMarketTemperatureResponse({
+      source: 'computed',
+      updatedAt: '2026-06-01T00:00:00Z',
+      marketActionabilityFrame: {
+        verdict: 'insufficient',
+        confidence: {
+          label: 'insufficient',
+          // value intentionally omitted
+        },
+        evidenceCoverage: {
+          scoreGradeCount: 0,
+          observationOnlyCount: 1,
+          missingCount: 2,
+          totalCount: 3,
+        },
+        missingEvidence: ['vix'],
+        regimeContext: {
+          primaryRegime: 'data_insufficient',
+        },
+        sourceAuthority: 'unavailable',
+        freshness: 'unknown',
+        noAdviceBoundary: true,
+        nextResearchStep: 'await evidence',
+      },
+      scores: {
+        overall: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+        usRiskAppetite: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+        cnMoneyEffect: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+        macroPressure: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+        liquidity: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+      },
+    } as never);
+
+    expect(payload.marketActionabilityFrame?.confidence.value).toBeUndefined();
+    expect(payload.marketActionabilityFrame?.confidence.label).toBe('insufficient');
+  });
 });
 
 describe('market snapshot normalization', () => {
+  it('preserves backend providerFreshness proxy truth through snapshot normalizer', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        source: 'yfinance_proxy',
+        source_label: 'Yahoo Finance',
+        source_type: 'unofficial_proxy',
+        freshness: 'proxy',
+        is_proxy: true,
+        source_confidence: 'proxy',
+        source_authority_allowed: false,
+        score_contribution_allowed: false,
+        as_of: '2026-06-07T09:00:00Z',
+        updated_at: '2026-06-07T09:01:00Z',
+        provider_freshness: {
+          state: 'proxy',
+          label: '代理',
+          available: true,
+          source_confidence: 'proxy',
+          is_proxy: true,
+          is_stale: false,
+          is_unavailable: false,
+          as_of: '2026-06-07T09:00:00Z',
+          source_label: 'Yahoo Finance',
+          data_source: 'yfinance_proxy',
+          degradation_reason: 'etf_proxy_for_index',
+          proxy_for: 'SPX',
+          proxy_symbol: 'SPY',
+          proxy_label: 'S&P 500',
+        },
+        data_quality: {
+          state: 'partial',
+          label: '部分可用',
+          available: false,
+        },
+        proxy_for: 'SPX',
+        proxy_symbol: 'SPY',
+        items: [
+          {
+            symbol: 'SPX',
+            label: 'S&P 500 proxy (SPY ETF)',
+            value: 520,
+            freshness: 'proxy',
+            is_proxy: true,
+            source_confidence: 'proxy',
+            provider_freshness: {
+              state: 'proxy',
+              is_proxy: true,
+              proxy_for: 'SPX',
+              proxy_symbol: 'SPY',
+            },
+            as_of: '2026-06-07T09:00:00Z',
+          },
+        ],
+      },
+    });
+
+    const panel = await marketModule.marketApi.getCnIndices();
+
+    expect(panel.freshness).toBe('proxy');
+    expect(panel.isProxy).toBe(true);
+    expect(panel.sourceConfidence).toBe('proxy');
+    expect(panel.providerFreshness).toMatchObject({
+      state: 'proxy',
+      isProxy: true,
+      proxyFor: 'SPX',
+      proxySymbol: 'SPY',
+      degradationReason: 'etf_proxy_for_index',
+    });
+    expect(panel.dataQuality).toEqual({
+      state: 'partial',
+      label: '部分可用',
+      available: false,
+    });
+    expect(panel.asOf).toBe('2026-06-07T09:00:00Z');
+    expect(panel.updatedAt).toBe('2026-06-07T09:01:00Z');
+    expect(panel.status).toBe('partial');
+    expect(panel.items[0]).toMatchObject({
+      value: 520,
+      freshness: 'proxy',
+      isProxy: true,
+      sourceConfidence: 'proxy',
+      providerFreshness: {
+        state: 'proxy',
+        isProxy: true,
+        proxyFor: 'SPX',
+        proxySymbol: 'SPY',
+      },
+      asOf: '2026-06-07T09:00:00Z',
+    });
+  });
+
+  it('preserves missing prices as null/unknown and does not invent client-now timestamps', async () => {
+    const before = Date.now();
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        source: 'binance',
+        freshness: 'unavailable',
+        is_unavailable: true,
+        // intentionally omit updated_at / last_update / as_of
+        items: [
+          {
+            symbol: 'BTCUSDT',
+            label: 'BTC',
+            price: null,
+            change_percent: null,
+            freshness: 'unavailable',
+            is_unavailable: true,
+          },
+          {
+            symbol: 'ETHUSDT',
+            label: 'ETH',
+            // missing price/value entirely
+            change: null,
+            is_unavailable: true,
+          },
+        ],
+      },
+    });
+
+    const panel = await marketModule.marketApi.getCrypto();
+    const after = Date.now();
+
+    expect(panel.status).toBe('unavailable');
+    expect(panel.isUnavailable).toBe(true);
+    expect(panel.freshness).toBe('unavailable');
+    expect(panel.asOf).toBeUndefined();
+    expect(panel.updatedAt).toBeUndefined();
+    expect(panel.lastRefreshAt).toBe('');
+    // Ensure normalizer did not stamp client wall-clock into evidence timestamps.
+    expect(panel.updatedAt).not.toEqual(expect.stringMatching(/T/));
+    expect(Date.parse(String(panel.updatedAt || ''))).toBeNaN();
+    void before;
+    void after;
+
+    expect(panel.items[0]?.value).toBeNull();
+    expect(panel.items[0]?.changePct).toBeNull();
+    expect(panel.items[0]?.isUnavailable).toBe(true);
+    expect(panel.items[1]?.value).toBeUndefined();
+    expect(panel.items[1]?.changePct).toBeNull();
+  });
+
+  it('does not promote empty snapshots without usable values to success', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        items: [],
+        source: 'unknown',
+      },
+    });
+
+    const panel = await marketModule.marketApi.getRates();
+    expect(panel.status).toBe('unavailable');
+    expect(panel.errorMessage).toBeNull();
+  });
+
+  it('preserves observed zero values without treating them as missing', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        source: 'public',
+        freshness: 'live',
+        updated_at: '2026-06-07T10:00:00Z',
+        as_of: '2026-06-07T09:55:00Z',
+        items: [
+          {
+            symbol: 'FLAT',
+            label: 'Flat instrument',
+            price: 0,
+            change_percent: 0,
+            freshness: 'live',
+          },
+        ],
+      },
+    });
+
+    const panel = await marketModule.marketApi.getFxCommodities();
+    expect(panel.status).toBe('success');
+    expect(panel.items[0]?.value).toBe(0);
+    expect(panel.items[0]?.changePct).toBe(0);
+    expect(panel.asOf).toBe('2026-06-07T09:55:00Z');
+    expect(panel.updatedAt).toBe('2026-06-07T10:00:00Z');
+  });
+
+  it('honors explicit backend panel status over numeric heuristics', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        status: 'partial',
+        source: 'alternative_me',
+        freshness: 'live',
+        items: [
+          {
+            symbol: 'FGI',
+            value: 35,
+          },
+        ],
+      },
+    });
+
+    const panel = await marketModule.marketApi.getSentiment();
+    expect(panel.status).toBe('partial');
+  });
+
   it('preserves US breadth authority and partial coverage metadata', async () => {
     vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
       data: {

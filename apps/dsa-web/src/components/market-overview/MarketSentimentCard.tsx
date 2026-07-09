@@ -59,8 +59,11 @@ export const MarketSentimentCard: React.FC<{
   const supporting = items
     .filter((item) => item.symbol !== primary?.symbol && isConsumerSafeSupportItem(item))
     .slice(0, 2);
-  const score = primary?.value ?? 50;
-  const gaugeRatio = Math.min(1, Math.max(0, score / 100));
+  // Missing score is unknown evidence — do not invent a mid-scale (50) gauge reading.
+  const score = typeof primary?.value === 'number' && Number.isFinite(primary.value)
+    ? primary.value
+    : null;
+  const gaugeRatio = score === null ? 0 : Math.min(1, Math.max(0, score / 100));
   const title = t('marketOverviewPage.cards.sentiment.title');
 
   return (
