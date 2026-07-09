@@ -980,7 +980,7 @@ describe('HomeSurfacePage', () => {
     const macdSignalValue = within(macdSignal).getByText('二次扩张');
     expect(macdSignal).toHaveClass('flex', 'min-w-0', 'flex-col', 'gap-1');
     expect(macdSignalValue).toHaveClass('text-xs', 'font-semibold', 'text-emerald-400', 'drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]');
-    expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveClass('block', 'w-full', 'overflow-hidden', 'text-ellipsis', 'whitespace-nowrap', 'text-xs', 'text-white/38');
+    expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveClass('block', 'w-full', 'overflow-hidden', 'text-ellipsis', 'whitespace-nowrap', 'text-xs', 'text-[color:var(--wolfy-text-muted)]');
     expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveAttribute('title', '零轴上方，动能再扩张。');
 
     expect(within(rail).getByText('当前动作')).toBeInTheDocument();
@@ -1455,7 +1455,7 @@ describe('HomeSurfacePage', () => {
     renderSurface();
 
     await screen.findByText('Oracle Corporation');
-    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-white');
+    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-[color:var(--wolfy-text-primary)]');
     expect(within(screen.getByTestId('home-bento-strategy-metric-上方观察区')).getByText('$133.50')).toHaveClass('text-rose-400');
     expect(within(screen.getByTestId('home-bento-strategy-metric-风险失效线')).getByText('$117.40')).toHaveClass('text-emerald-400');
   });
@@ -2944,10 +2944,13 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-omnibar')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
     expect(screen.getByTestId('member-home-morning-decision-note')).toHaveTextContent('晨间研究判断');
+    expect(screen.getByTestId('member-home-observation-head')).toBeInTheDocument();
+    expect(screen.getByTestId('member-home-observation-head')).toHaveAttribute('data-research-anatomy', 'observation-head');
     expect(screen.getByRole('heading', { name: 'Market breadth improves' })).toBeInTheDocument();
     expect(screen.getByTestId('member-home-market-regime')).toHaveTextContent(/当前状态：Risk-on|当前状态：中性|当前状态：Risk-off/);
     expect(screen.getByTestId('member-home-market-reliability')).toHaveTextContent('可靠性 / 新鲜度');
     expect(screen.getByTestId('member-home-market-reliability')).toHaveTextContent('Ready');
+    expect(screen.getByTestId('member-home-market-reliability').querySelector('[data-research-anatomy="data-quality"]')).not.toBeNull();
     expect(screen.getByTestId('member-home-research-sequence')).toContainElement(screen.getByTestId('member-home-research-queue'));
     expect(screen.getByTestId('member-home-research-sequence')).toContainElement(screen.getByTestId('member-home-watch-changes'));
     expect(screen.getByTestId('member-home-evidence-limits')).toContainElement(screen.getByTestId('member-home-index-path'));
@@ -4375,8 +4378,8 @@ describe('HomeSurfacePage', () => {
     expect(timeframe1D).toHaveAttribute('aria-pressed', 'true');
     expect(timeframe1W).toHaveAttribute('aria-pressed', 'false');
     expect(timeframe1M).toHaveAttribute('aria-pressed', 'false');
-    expect(timeframe1D).toHaveClass('rounded-full', 'bg-[var(--wolfy-accent-soft)]', 'text-white/86');
-    expect(timeframe1W).toHaveClass('rounded-full', 'text-white/42');
+    expect(timeframe1D).toHaveClass('rounded-full', 'bg-[var(--wolfy-accent-soft)]', 'text-[color:var(--wolfy-text-primary)]');
+    expect(timeframe1W).toHaveClass('rounded-full', 'text-[color:var(--wolfy-text-muted)]');
     expect(screen.queryByRole('button', { name: '1m' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '5m' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '15m' })).not.toBeInTheDocument();
@@ -4422,7 +4425,7 @@ describe('HomeSurfacePage', () => {
     expect(chartRoot).toHaveAttribute('data-enabled-indicators', 'MA5,MA10,MA20');
     expect(ma20Toggle).toHaveAttribute('aria-pressed', 'true');
     expect(ma60Toggle).toBeDisabled();
-    expect(ma20Toggle).toHaveClass('rounded-full', 'bg-white/[0.07]', 'text-white/84');
+    expect(ma20Toggle).toHaveClass('rounded-full', 'bg-[var(--wolfy-accent-soft)]', 'text-[color:var(--wolfy-text-primary)]');
     expect(ma60Toggle).toHaveClass('rounded-full', 'opacity-40');
 
     fireEvent.click(ma20Toggle);

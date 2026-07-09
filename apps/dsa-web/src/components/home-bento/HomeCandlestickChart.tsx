@@ -462,7 +462,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
               data-testid="home-candlestick-hover-tooltip"
               aria-live="polite"
             >
-              <p className="font-medium text-white/88">
+              <p className="font-medium text-[color:var(--wolfy-text-primary)]">
                 {language === 'en' ? 'Date' : '日期'} {getHomeCandlestickDateLabel(hoveredCandle, locale)}
               </p>
               <p>
@@ -475,7 +475,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
                 <p>{language === 'en' ? 'Report ref' : '报告参考价'} {formatHomeCandlestickPrice(currentPrice)}</p>
               ) : null}
               {enabledIndicators.length ? (
-                <p className="text-white/48">
+                <p className="text-[color:var(--wolfy-text-muted)]">
                   {enabledIndicators
                     .reduce<string[]>((acc, { key, label }) => {
                       if (isFiniteNumber(hoveredCandle[key])) acc.push(`${label} ${formatHomeCandlestickPrice(hoveredCandle[key])}`);

@@ -39,9 +39,9 @@ export const PageBriefDrawer: React.FC<PageBriefDrawerProps> = ({
   >
     <div
       data-testid={testId}
-      className="space-y-5 rounded-[36px] border border-white/[0.08] bg-[#050505]/96 p-6 text-white backdrop-blur-xl"
+      className="space-y-5 rounded-[36px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] p-6 text-[color:var(--wolfy-text-primary)] backdrop-blur-xl"
     >
-      <p className="text-sm leading-6 text-white/68">{summary}</p>
+      <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{summary}</p>
 
       {metrics?.length ? (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -50,9 +50,9 @@ export const PageBriefDrawer: React.FC<PageBriefDrawerProps> = ({
             return (
               <div
                 key={`${metric.label}-${String(metric.value)}`}
-                className="rounded-[28px] border border-white/[0.08] bg-white/[0.02] px-5 py-4 backdrop-blur-xl"
+                className="rounded-[28px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-5 py-4 backdrop-blur-xl"
               >
-                <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">{metric.label}</p>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">{metric.label}</p>
                 <p
                   className={`mt-2 text-base font-semibold ${getToneTextClass(tone)}`}
                   style={getToneTextStyle(tone, tone !== 'neutral')}
@@ -69,7 +69,7 @@ export const PageBriefDrawer: React.FC<PageBriefDrawerProps> = ({
         {bullets.map((bullet, index) => (
           <div
             key={`${bullet}-${index}`}
-            className="rounded-[28px] border border-white/[0.08] bg-white/[0.02] px-5 py-4 text-sm leading-6 text-white/64 backdrop-blur-xl"
+            className="rounded-[28px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-5 py-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)] backdrop-blur-xl"
           >
             {bullet}
           </div>
@@ -77,7 +77,7 @@ export const PageBriefDrawer: React.FC<PageBriefDrawerProps> = ({
       </div>
 
       {footnote ? (
-        <p className="text-[11px] uppercase tracking-[0.16em] text-white/36">{footnote}</p>
+        <p className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">{footnote}</p>
       ) : null}
     </div>
   </Drawer>
