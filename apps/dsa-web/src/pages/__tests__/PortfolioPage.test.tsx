@@ -1022,7 +1022,7 @@ describe('PortfolioPage FX refresh', () => {
     const onboardingRow = screen.getByTestId('portfolio-empty-onboarding-row');
     const onboardingWorkflow = screen.getByTestId('portfolio-empty-workflow-column');
     const researchStatePreview = screen.getByTestId('portfolio-research-state-preview');
-    expect(onboardingRow).toHaveClass('grid', 'grid-cols-1', 'xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]');
+    expect(onboardingRow).toHaveClass('grid', 'grid-cols-1');
     expect(onboardingWorkflow).toHaveTextContent('首次配置路径');
     expect(onboardingWorkflow).toHaveTextContent('创建或导入首个组合');
     expect(onboardingWorkflow).toHaveTextContent('真实数据接入前不生成示例收益');

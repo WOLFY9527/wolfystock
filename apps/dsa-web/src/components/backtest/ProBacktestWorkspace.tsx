@@ -191,10 +191,18 @@ function statusLabel(tone: StepStatusTone, language: BacktestLanguage): string {
 }
 
 function statusClass(tone: StepStatusTone): string {
-  if (tone === 'done') return 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100';
-  if (tone === 'error') return 'border-rose-400/25 bg-rose-400/10 text-rose-100';
-  if (tone === 'modified') return 'border-blue-400/25 bg-blue-400/10 text-blue-100';
-  if (tone === 'pending') return 'border-amber-400/25 bg-amber-400/10 text-amber-100';
+  if (tone === 'done') {
+    return 'border-[color:var(--state-success-border)] bg-[var(--state-success-bg)] text-[color:var(--state-success-text)]';
+  }
+  if (tone === 'error') {
+    return 'border-[color:var(--state-danger-border)] bg-[var(--state-danger-bg)] text-[color:var(--state-danger-text)]';
+  }
+  if (tone === 'modified') {
+    return 'border-[color:var(--state-info-border)] bg-[var(--state-info-bg)] text-[color:var(--state-info-text)]';
+  }
+  if (tone === 'pending') {
+    return 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]';
+  }
   if (tone === 'off') return 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]';
   return 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]';
 }
@@ -219,7 +227,7 @@ const PlannedCapability: React.FC<{ title: string; description: string; testId?:
   <div data-testid={testId} className={plannedCardClass}>
     <div className="flex min-w-0 items-center justify-between gap-3">
       <p className="truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{title}</p>
-      <span className="shrink-0 rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-100">
+      <span className="shrink-0 rounded-full border border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] px-2.5 py-1 text-[11px] text-[color:var(--state-warning-text)]">
         {language === 'en' ? 'Planned' : '计划中'}
       </span>
     </div>
@@ -658,8 +666,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         ) : null}
         {parsedStrategy && !parsedExecutable ? (
           <div data-testid="pro-unsupported-guidance" className="rounded-lg border border-amber-400/20 bg-amber-400/10 p-3">
-            <p className="text-sm font-semibold text-amber-100">当前不支持</p>
-            <p className="mt-1 text-sm text-amber-50/70">{parsedStrategy.unsupportedReason || parsedStrategy.parsedStrategy.unsupportedReason || '当前解析结果需要改写后再执行。'}</p>
+            <p className="text-sm font-semibold text-[color:var(--state-warning-text)]">当前不支持</p>
+            <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">{parsedStrategy.unsupportedReason || parsedStrategy.parsedStrategy.unsupportedReason || '当前解析结果需要改写后再执行。'}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {(parsedStrategy.rewriteSuggestions || parsedStrategy.parsedStrategy.rewriteSuggestions || []).map((item) => {
                 const record = item as Record<string, unknown>;
@@ -731,8 +739,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               </button>
             ))}
           </div>
-          {catalogToast ? <p data-testid="pro-strategy-catalog-toast" role="status" className="rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">{catalogToast}</p> : null}
-          {appliedRewriteText ? <p className="rounded-lg border border-blue-400/20 bg-blue-400/10 px-3 py-2 text-sm text-blue-100">已应用建议改写</p> : null}
+          {catalogToast ? <p data-testid="pro-strategy-catalog-toast" role="status" className="rounded-lg border border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] px-3 py-2 text-sm text-[color:var(--state-warning-text)]">{catalogToast}</p> : null}
+          {appliedRewriteText ? <p className="rounded-lg border border-[color:var(--state-info-border)] bg-[var(--state-info-bg)] px-3 py-2 text-sm text-[color:var(--state-info-text)]">已应用建议改写</p> : null}
           {parseError ? <ApiErrorAlert error={parseError} /> : null}
         </div>
         <div className="flex min-w-0 flex-col gap-4">
@@ -939,7 +947,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                       key={item}
                       className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                         robustnessEnabled
-                          ? 'border-blue-400/25 bg-blue-400/10 text-blue-100'
+                          ? 'border-[color:var(--state-info-border)] bg-[var(--state-info-bg)] text-[color:var(--state-info-text)]'
                           : 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)]'
                       }`}
                     >
@@ -1142,12 +1150,12 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         <div className="mt-3 grid gap-2">
           {readiness.map((item) => (
             <div key={item.key} className="flex items-center gap-2 text-xs text-[color:var(--wolfy-text-secondary)]">
-              {item.ready ? <CheckCircle2 className="size-3.5 text-emerald-300" /> : <XCircle className="size-3.5 text-rose-300" />}
+              {item.ready ? <CheckCircle2 className="size-3.5 text-[color:var(--state-success-text)]" /> : <XCircle className="size-3.5 text-[color:var(--state-danger-text)]" />}
               <span>{item.label}</span>
             </div>
           ))}
         </div>
-        <p className={`mt-3 rounded-lg border px-3 py-2 text-xs ${canRun ? 'border-emerald-400/15 bg-emerald-400/10 text-emerald-100' : 'border-amber-400/15 bg-amber-400/10 text-amber-100'}`}>
+        <p className={`mt-3 rounded-lg border px-3 py-2 text-xs ${canRun ? 'border-[color:var(--state-success-border)] bg-[var(--state-success-bg)] text-[color:var(--state-success-text)]' : 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]'}`}>
           {readinessNote}
         </p>
         <BacktestExecutionReadinessPanel
@@ -1436,8 +1444,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                       </div>
                       <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                         template.executable
-                          ? 'border-blue-400/30 bg-blue-400/10 text-blue-100'
-                          : 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+                          ? 'border-[color:var(--state-info-border)] bg-[var(--state-info-bg)] text-[color:var(--state-info-text)]'
+                          : 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]'
                       }`}
                       >
                         {template.executable
@@ -1465,7 +1473,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                       </p>
                       <button
                         type="button"
-                        className={template.executable ? secondaryButtonClass : 'inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-100 transition-all hover:bg-amber-500/15'}
+                        className={template.executable ? secondaryButtonClass : 'inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] px-3 py-2 text-sm font-medium text-[color:var(--state-warning-text)] transition-all hover:bg-[var(--state-warning-bg-strong)]'}
                         onClick={() => handleCatalogTemplateAction(template.editorText[language], template.executable)}
                       >
                         {template.executable

@@ -35,6 +35,8 @@ type ConsumerOnboardingCtaPanelProps = {
   starterResearchWorkflow?: string[];
   firstRunChecklist?: string[];
   suggestedResearchEntrypoints?: ConsumerOnboardingEntrypoint[];
+  /** Compact keeps one primary research path without multi-card workflow walls. */
+  density?: 'default' | 'compact';
   children?: React.ReactNode;
   className?: string;
   'data-testid'?: string;
@@ -103,6 +105,7 @@ export function ConsumerOnboardingCtaPanel({
   starterResearchWorkflow,
   firstRunChecklist,
   suggestedResearchEntrypoints,
+  density = 'default',
   children,
   className,
   'data-testid': dataTestId,
@@ -112,6 +115,7 @@ export function ConsumerOnboardingCtaPanel({
   const checklist = safeList(firstRunChecklist, language);
   const conditions = safeList(guidance?.conditionsDetected, language);
   const summary = safeText(guidance?.summary, language);
+  const compact = density === 'compact';
 
   if (!ctaActions.length && !workflow.length && !checklist.length && !summary && !children) {
     return null;
@@ -120,6 +124,7 @@ export function ConsumerOnboardingCtaPanel({
   return (
     <section
       data-testid={dataTestId}
+      data-density={density}
       className={cn(
         'min-w-0 rounded-xl border border-[color:color-mix(in_srgb,var(--wolfy-accent)_28%,transparent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_7%,transparent)] p-3 text-left',
         className,
@@ -134,52 +139,110 @@ export function ConsumerOnboardingCtaPanel({
       </div>
       {children ? <div className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{children}</div> : null}
       {ctaActions.length ? (
-        <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          {ctaActions.map((action) => (
-            <a
-              key={action.route.path}
-              href={buildLocalizedPath(action.route.path, language)}
-              aria-label={action.route.ctaLabel[language]}
-              className="group flex min-h-[84px] min-w-0 flex-col justify-between rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2.5 text-left transition-colors hover:border-[color:var(--wolfy-accent)] hover:bg-[color:var(--surface-2)]"
-            >
-              <span className="flex min-w-0 items-center justify-between gap-2 text-sm font-medium text-[color:var(--wolfy-text-primary)]">
-                <span className="min-w-0 break-words">{action.route.ctaLabel[language]}</span>
-                <ArrowRight className="size-3.5 shrink-0 text-[color:var(--wolfy-text-muted)] transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-              </span>
-              <span className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
-                {safeText(action.description, language) || action.route.ctaDescription[language]}
-              </span>
-            </a>
-          ))}
-        </div>
+        compact ? (
+          <div className="mt-3 flex min-w-0 flex-col gap-2">
+            <div className="flex min-w-0 flex-wrap gap-2">
+              {ctaActions.map((action, index) => (
+                <a
+                  key={action.route.path}
+                  href={buildLocalizedPath(action.route.path, language)}
+                  aria-label={action.route.ctaLabel[language]}
+                  className={cn(
+                    'inline-flex min-h-9 min-w-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]',
+                    index === 0
+                      ? 'border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] text-[color:var(--theme-button-primary-text)] hover:bg-[var(--sage-deep)]'
+                      : 'border-[color:var(--wolfy-border-subtle)] bg-[color:var(--surface)] text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)]',
+                  )}
+                >
+                  <span className="min-w-0 break-words">{action.route.ctaLabel[language]}</span>
+                  <ArrowRight className="size-3.5 shrink-0 opacity-70" aria-hidden="true" />
+                </a>
+              ))}
+            </div>
+            {ctaActions.some((action) => safeText(action.description, language)) ? (
+              <ul className="space-y-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                {ctaActions.map((action) => {
+                  const description = safeText(action.description, language);
+                  if (!description) return null;
+                  return <li key={`${action.route.path}-desc`}>{description}</li>;
+                })}
+              </ul>
+            ) : null}
+          </div>
+        ) : (
+          <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {ctaActions.map((action) => (
+              <a
+                key={action.route.path}
+                href={buildLocalizedPath(action.route.path, language)}
+                aria-label={action.route.ctaLabel[language]}
+                className="group flex min-h-[84px] min-w-0 flex-col justify-between rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2.5 text-left transition-colors hover:border-[color:var(--wolfy-accent)] hover:bg-[color:var(--surface-2)]"
+              >
+                <span className="flex min-w-0 items-center justify-between gap-2 text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+                  <span className="min-w-0 break-words">{action.route.ctaLabel[language]}</span>
+                  <ArrowRight className="size-3.5 shrink-0 text-[color:var(--wolfy-text-muted)] transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                </span>
+                <span className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                  {safeText(action.description, language) || action.route.ctaDescription[language]}
+                </span>
+              </a>
+            ))}
+          </div>
+        )
       ) : null}
       {workflow.length || checklist.length || conditions.length ? (
-        <div className="mt-3 grid min-w-0 gap-2 md:grid-cols-3">
-          {workflow.length ? (
-            <div className="min-w-0 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Starter flow' : '起步流程'}</p>
-              <ul className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
-                {workflow.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
-              </ul>
-            </div>
-          ) : null}
-          {checklist.length ? (
-            <div className="min-w-0 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Checklist' : '检查清单'}</p>
-              <ul className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+        compact ? (
+          <div className="mt-3 space-y-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+            {workflow.length ? (
+              <p>
+                <span className="font-medium text-[color:var(--wolfy-text-secondary)]">
+                  {language === 'en' ? 'Starter flow: ' : '起步流程：'}
+                </span>
+                {workflow.slice(0, 4).join(language === 'en' ? ' → ' : ' → ')}
+              </p>
+            ) : null}
+            {checklist.length ? (
+              <ul className="space-y-1">
                 {checklist.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
               </ul>
-            </div>
-          ) : null}
-          {conditions.length ? (
-            <div className="min-w-0 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Detected state' : '当前状态'}</p>
-              <ul className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
-                {conditions.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
-              </ul>
-            </div>
-          ) : null}
-        </div>
+            ) : null}
+            {conditions.length ? (
+              <p>
+                <span className="font-medium text-[color:var(--wolfy-text-secondary)]">
+                  {language === 'en' ? 'Detected state: ' : '当前状态：'}
+                </span>
+                {conditions.slice(0, 4).join(language === 'en' ? '; ' : '；')}
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <div className="mt-3 grid min-w-0 gap-2 md:grid-cols-3">
+            {workflow.length ? (
+              <div className="min-w-0 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Starter flow' : '起步流程'}</p>
+                <ul className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                  {workflow.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              </div>
+            ) : null}
+            {checklist.length ? (
+              <div className="min-w-0 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Checklist' : '检查清单'}</p>
+                <ul className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                  {checklist.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              </div>
+            ) : null}
+            {conditions.length ? (
+              <div className="min-w-0 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Detected state' : '当前状态'}</p>
+                <ul className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                  {conditions.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        )
       ) : null}
     </section>
   );

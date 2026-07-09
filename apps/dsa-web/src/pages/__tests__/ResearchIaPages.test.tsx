@@ -2372,7 +2372,19 @@ describe('research IA pages', () => {
     const page = await screen.findByTestId('scenario-lab-page');
     expect(page).toHaveTextContent('情景实验室：假设推演工作台');
     expect(page).not.toHaveTextContent('今日观察队列');
+    expect(page).toHaveTextContent('研究问题');
     expect(page).toHaveTextContent('波动冲击');
+    expect(page).toHaveTextContent('评估前暂不可用');
+    const setup = await within(page).findByTestId('scenario-lab-setup-idle');
+    fireEvent.click(within(setup).getByRole('button', { name: '评估情景' }));
+    await waitFor(() => expect(runScenarioLabMock).toHaveBeenCalledWith(expect.objectContaining({
+      scenarioName: 'volatilitySpike',
+      baseRegime: expect.objectContaining({
+        regime: 'riskOn',
+        confidence: 'medium',
+      }),
+    })));
+    expect(await within(page).findByTestId('scenario-lab-first-read-summary')).toBeInTheDocument();
     expect(page).toHaveTextContent('基准状态');
     expect(page).toHaveTextContent('情景后的研究框架');
     expect(page).toHaveTextContent('所选压力情景下，市场广度会较快转弱。');
@@ -2388,13 +2400,6 @@ describe('research IA pages', () => {
     expect(page).toHaveTextContent('非决策级');
     expect(screen.getByRole('link', { name: '决策驾驶舱' })).toHaveAttribute('href', '/zh/market/decision-cockpit');
     expect(screen.getByRole('button', { name: '波动冲击' })).toBeInTheDocument();
-    await waitFor(() => expect(runScenarioLabMock).toHaveBeenCalledWith(expect.objectContaining({
-      scenarioName: 'volatilitySpike',
-      baseRegime: expect.objectContaining({
-        regime: 'riskOn',
-        confidence: 'medium',
-      }),
-    })));
     expect(page.textContent || '').not.toContain('评分等级');
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/raw|debug|provider|score-grade|score_grade|unavailable|Breadth participation weakens quickly under the selected stress|Volatility structure flips into a defensive posture|Research planning only; not a personalized decision basis/i);
@@ -2466,6 +2471,13 @@ describe('research IA pages', () => {
 
     const page = await screen.findByTestId('scenario-lab-page');
     expect(page).toHaveTextContent('情景实验室：假设推演工作台');
+    expect(page).toHaveTextContent('当前情景：Gamma 缺口。');
+    const setup = await within(page).findByTestId('scenario-lab-setup-idle');
+    fireEvent.click(within(setup).getByRole('button', { name: '评估情景' }));
+    await waitFor(() => expect(runScenarioLabMock).toHaveBeenCalledWith(expect.objectContaining({
+      scenarioName: 'gammaUnavailable',
+    })));
+    expect(await within(page).findByTestId('scenario-lab-unavailable-state')).toBeInTheDocument();
     expect(page).toHaveTextContent('情景待更新');
     expect(page).toHaveTextContent('基准待确认，暂不展开输出。');
     expect(page).toHaveTextContent('待补证据：市场框架、驱动证据、数据新鲜度。');
@@ -2474,9 +2486,6 @@ describe('research IA pages', () => {
     expect(within(page).getByRole('link', { name: '返回研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/blocked|unavailable|score-grade|score_grade|driver coverage|base regime evidence is missing|provider|runtime|debug|requestId|traceId|policyVersion|raw|internal|cache/i);
     expect(findConsumerRawLeakage(page.textContent || '')).toEqual([]);
-    await waitFor(() => expect(runScenarioLabMock).toHaveBeenCalledWith(expect.objectContaining({
-      scenarioName: 'gammaUnavailable',
-    })));
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓|buy|sell|hold|recommend|target|stop|position size/i);
   });
 });

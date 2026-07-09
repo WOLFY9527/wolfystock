@@ -332,6 +332,8 @@ function ResearchRadarQueueOverview({
     },
   ];
 
+  const isEmptyQueue = items.length === 0;
+
   return (
     <div className="border-b border-[color:var(--wolfy-divider)] p-3" data-testid="research-radar-consumer-overview">
       <RoughSectionCard
@@ -339,6 +341,68 @@ function ResearchRadarQueueOverview({
         title={locale === 'en' ? 'Today’s observation queue' : '今日观察队列'}
       >
         <div className="space-y-4">
+          {isEmptyQueue ? (
+            <div
+              data-testid="research-radar-empty-queue-band"
+              className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-4"
+            >
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--wolfy-text-muted)]">
+                    {locale === 'en' ? 'Current queue state' : '当前队列状态'}
+                  </p>
+                  <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
+                    {locale === 'en' ? 'Zero candidates in the research queue' : '研究队列候选为 0'}
+                  </p>
+                  <p className="max-w-[68ch] text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+                    {locale === 'en'
+                      ? 'No symbols have entered the priority queue yet. This is an empty queue, not missing market data by itself.'
+                      : '当前还没有标的进入优先级队列。这是空队列，不等于市场数据本身不可用。'}
+                  </p>
+                </div>
+                <div className="flex min-w-0 flex-wrap gap-2">
+                  <StatusBadge status={toneFor(queueQuality)} label={consumerStatusValue(queueQuality, locale)} size="sm" />
+                  <TerminalChip variant="neutral">{market || (locale === 'en' ? 'All markets' : '全部市场')}</TerminalChip>
+                </div>
+              </div>
+              <dl className="mt-3 grid gap-2 text-xs text-[color:var(--wolfy-text-secondary)] sm:grid-cols-3">
+                <div className="min-w-0">
+                  <dt className="text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Candidates' : '观察候选'}</dt>
+                  <dd className="mt-0.5 font-mono font-semibold text-[color:var(--wolfy-text-primary)]">0</dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Evidence quality' : '证据质量'}</dt>
+                  <dd className="mt-0.5">{buildEvidenceQualityDistribution(items, queueQuality, locale)}</dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Updated' : '更新时间'}</dt>
+                  <dd className="mt-0.5 font-mono">{formatDateTime(data.generatedAt, { locale: locale === 'en' ? 'en-US' : 'zh-CN' })}</dd>
+                </div>
+              </dl>
+              <div className="mt-4">
+                <ConsumerResearchEmptyState
+                  data-testid="research-radar-queue-empty-state"
+                  locale={locale}
+                  state={buildConsumerResearchEmptyState('noQueueItems', locale)}
+                />
+              </div>
+              <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+                <Link
+                  to={buildResearchWorkspacePath('scanner', linkLocale, { market, source: 'manual' })}
+                  className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-3 text-xs font-medium text-[color:var(--theme-button-primary-text)] transition-colors hover:bg-[var(--sage-deep)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
+                >
+                  {locale === 'en' ? 'Open Scanner research path' : '打开扫描器研究路径'}
+                </Link>
+                <Link
+                  to={buildLocalizedPath('/market-overview', linkLocale)}
+                  className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
+                >
+                  {locale === 'en' ? 'Review market overview' : '查看市场概览'}
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <>
           <ConsoleStatusStrip items={summaryItems} />
           <div className="flex flex-wrap gap-2 text-xs text-[color:var(--wolfy-text-muted)]">
             <TerminalChip variant="neutral">{market || (locale === 'en' ? 'All markets' : '全部市场')}</TerminalChip>
@@ -346,7 +410,6 @@ function ResearchRadarQueueOverview({
               {locale === 'en' ? 'Symbols for research observation' : '仅展示研究观察标的'}
             </TerminalChip>
           </div>
-          {items.length ? (
             <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(24rem,0.9fr)]">
               <div
                 data-testid="research-radar-candidate-ledger"
@@ -501,12 +564,7 @@ function ResearchRadarQueueOverview({
                 </section>
               ) : null}
             </div>
-          ) : (
-            <ConsumerResearchEmptyState
-              data-testid="research-radar-queue-empty-state"
-              locale={locale}
-              state={buildConsumerResearchEmptyState('noQueueItems', locale)}
-            />
+            </>
           )}
           <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
             {locale === 'en' ? 'Research observation, not investment advice.' : '研究观察，不构成投资建议。'}
@@ -1232,7 +1290,7 @@ export default function ResearchRadarPage() {
                     {
                       key: 'candidate-count',
                       label: locale === 'en' ? 'Candidates' : '观察候选',
-                      value: queueItems.length || unifiedQueueSize || '--',
+                      value: queueItems.length || unifiedQueueSize || 0,
                     },
                     {
                       key: 'quality',
@@ -1246,13 +1304,19 @@ export default function ResearchRadarPage() {
                     },
                   ]}
                 />
-              </RoughSectionCard>
-              <RoughSectionCard eyebrow={locale === 'en' ? 'Details' : '明细'} title={locale === 'en' ? 'Evidence details are collapsed' : '证据明细默认折叠'}>
-                <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-                  {locale === 'en'
-                    ? 'Open the details section for evidence gaps, data health, and queue readiness.'
-                    : '完整证据缺口、数据健康与队列就绪状态已放入下方明细区。'}
-                </p>
+                {queueItems.length === 0 ? (
+                  <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                    {locale === 'en'
+                      ? 'Evidence gaps and data readiness stay collapsed below until candidates appear.'
+                      : '证据缺口与数据就绪明细默认折叠在下方，候选出现后再展开阅读。'}
+                  </p>
+                ) : (
+                  <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                    {locale === 'en'
+                      ? 'Open the details section for evidence gaps, data health, and queue readiness.'
+                      : '完整证据缺口、数据健康与队列就绪状态已放入下方明细区。'}
+                  </p>
+                )}
               </RoughSectionCard>
             </ConsoleContextRail>
           )}
@@ -1316,6 +1380,7 @@ export default function ResearchRadarPage() {
                           <ConsumerOnboardingCtaPanel
                             data-testid="research-radar-onboarding-cta"
                             language={locale}
+                            density="compact"
                             title={locale === 'en' ? 'Start the loop before the radar queue fills' : '先完成研究循环，再回到雷达队列'}
                             guidance={onboardingGuidance}
                             actions={data.emptyStateActions}
@@ -1342,24 +1407,28 @@ export default function ResearchRadarPage() {
                             locale={locale}
                           />
                         ) : null}
-                        <RoughSectionCard eyebrow={locale === 'en' ? 'Lead item' : '队首条目'} title={locale === 'en' ? 'Driver scores' : '驱动评分'}>
-                          <RoughScoreRows
-                            items={firstItemScores}
-                            emptyText={locale === 'en' ? 'No lead item yet.' : '暂无线索条目。'}
-                          />
-                        </RoughSectionCard>
-                        <RoughSectionCard eyebrow={locale === 'en' ? 'Lead item' : '队首条目'} title={locale === 'en' ? 'What to verify' : '待验证事项'}>
-                          <RoughBulletList
-                            items={safeResearchQueueList(queueItems[0]?.whatToVerify, locale, locale === 'en' ? 'No verify item yet.' : '暂未整理验证事项。')}
-                            emptyText={locale === 'en' ? 'No verify item yet.' : '暂未整理验证事项。'}
-                          />
-                        </RoughSectionCard>
-                        <RoughSectionCard eyebrow={locale === 'en' ? 'Lead item' : '队首条目'} title={locale === 'en' ? 'Invalidation observations' : '失效观察'}>
-                          <RoughBulletList
-                            items={safeResearchQueueList(queueItems[0]?.invalidationObservations, locale, locale === 'en' ? 'No invalidation observation yet.' : '暂未整理失效观察。')}
-                            emptyText={locale === 'en' ? 'No invalidation observation yet.' : '暂未整理失效观察。'}
-                          />
-                        </RoughSectionCard>
+                        {queueItems.length > 0 ? (
+                          <>
+                            <RoughSectionCard eyebrow={locale === 'en' ? 'Lead item' : '队首条目'} title={locale === 'en' ? 'Driver scores' : '驱动评分'}>
+                              <RoughScoreRows
+                                items={firstItemScores}
+                                emptyText={locale === 'en' ? 'No lead item yet.' : '暂无线索条目。'}
+                              />
+                            </RoughSectionCard>
+                            <RoughSectionCard eyebrow={locale === 'en' ? 'Lead item' : '队首条目'} title={locale === 'en' ? 'What to verify' : '待验证事项'}>
+                              <RoughBulletList
+                                items={safeResearchQueueList(queueItems[0]?.whatToVerify, locale, locale === 'en' ? 'No verify item yet.' : '暂未整理验证事项。')}
+                                emptyText={locale === 'en' ? 'No verify item yet.' : '暂未整理验证事项。'}
+                              />
+                            </RoughSectionCard>
+                            <RoughSectionCard eyebrow={locale === 'en' ? 'Lead item' : '队首条目'} title={locale === 'en' ? 'Invalidation observations' : '失效观察'}>
+                              <RoughBulletList
+                                items={safeResearchQueueList(queueItems[0]?.invalidationObservations, locale, locale === 'en' ? 'No invalidation observation yet.' : '暂未整理失效观察。')}
+                                emptyText={locale === 'en' ? 'No invalidation observation yet.' : '暂未整理失效观察。'}
+                              />
+                            </RoughSectionCard>
+                          </>
+                        ) : null}
                       </div>
                     </div>
                   </details>

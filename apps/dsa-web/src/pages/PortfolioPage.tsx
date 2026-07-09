@@ -44,6 +44,7 @@ import {
 } from '../hooks/useSafariInteractionReady';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { translate } from '../i18n/core';
+import { cn } from '../utils/cn';
 import { normalizePortfolioRiskEvidence } from '../utils/evidenceDisplay';
 import { toDateInputValue } from '../utils/format';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
@@ -3537,7 +3538,10 @@ const PortfolioPage: React.FC = () => {
   const filteredSafeRiskWarningLabels = safeRiskWarningLabels.filter((warning) => warning !== riskWarningLabels.no_holdings);
   const holdingsTableStatusLabel = language === 'zh' ? '状态' : 'Status';
   const portfolioResearchStatePreview = (
-    <TerminalPanel as="section" data-testid="portfolio-research-state-preview" className="min-w-0 flex flex-col gap-4 border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]">
+    <TerminalPanel as="section" data-testid="portfolio-research-state-preview" className={cn(
+      'min-w-0 flex flex-col border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]',
+      hasHoldings ? 'gap-4' : 'gap-2',
+    )}>
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '组合研究状态' : 'Portfolio research state'}</h2>
@@ -3549,24 +3553,56 @@ const PortfolioPage: React.FC = () => {
         </div>
         <TerminalChip variant={hasHoldings ? 'success' : 'neutral'}>{researchStateNextAction}</TerminalChip>
       </div>
-      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-6">
-        {researchStatePreviewItems.map((item) => (
-          <div key={item.key} className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
-            <div className="flex min-w-0 items-center justify-between gap-2">
-              <div className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{item.label}</div>
-              <TerminalChip variant={item.variant} className="shrink-0">{item.value}</TerminalChip>
+      {hasHoldings ? (
+        <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-6">
+          {researchStatePreviewItems.map((item) => (
+            <div key={item.key} className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <div className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{item.label}</div>
+                <TerminalChip variant={item.variant} className="shrink-0">{item.value}</TerminalChip>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{item.detail}</p>
             </div>
-            <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{item.detail}</p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex min-w-0 flex-wrap gap-2">
+          {researchStatePreviewItems.map((item) => (
+            <div
+              key={item.key}
+              className="inline-flex min-w-0 max-w-full flex-col gap-0.5 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-1.5 text-xs"
+            >
+              <span className="inline-flex min-w-0 items-center gap-1.5">
+                <span className="text-[color:var(--wolfy-text-muted)]">{item.label}</span>
+                <TerminalChip variant={item.variant} className="shrink-0">{item.value}</TerminalChip>
+              </span>
+              {item.detail ? (
+                <span className="text-[11px] leading-4 text-[color:var(--wolfy-text-muted)]">{item.detail}</span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
       <ol
         data-testid="portfolio-productization-order"
-        className="grid min-w-0 grid-cols-1 gap-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)] sm:grid-cols-3"
+        className={cn(
+          'text-xs leading-5 text-[color:var(--wolfy-text-secondary)]',
+          hasHoldings
+            ? 'grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3'
+            : 'flex min-w-0 flex-wrap gap-x-3 gap-y-1',
+        )}
       >
         {portfolioProductizationOrder.map((item, index) => (
-          <li key={item} className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
-            <span className="mr-2 font-mono text-[10px] font-bold text-[color:var(--wolfy-text-muted)]">{String(index + 1).padStart(2, '0')}</span>
+          <li
+            key={item}
+            className={cn(
+              'min-w-0',
+              hasHoldings
+                ? 'rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2'
+                : 'inline-flex items-center gap-1',
+            )}
+          >
+            <span className="mr-1 font-mono text-[10px] font-bold text-[color:var(--wolfy-text-muted)]">{String(index + 1).padStart(2, '0')}</span>
             {item}
           </li>
         ))}
@@ -3576,7 +3612,7 @@ const PortfolioPage: React.FC = () => {
       </div>
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
         <span className="text-xs font-medium text-[color:var(--wolfy-text-secondary)]">{language === 'zh' ? '下一步' : 'Next action'}</span>
-        {canManagePortfolioOperations ? (
+        {canManagePortfolioOperations && hasHoldings ? (
         <div className="flex min-w-0 flex-wrap gap-2">
           <TerminalButton
             type="button"
@@ -3609,6 +3645,8 @@ const PortfolioPage: React.FC = () => {
             </a>
           ) : null}
         </div>
+        ) : canManagePortfolioOperations && !hasHoldings ? (
+          <span className="text-xs text-[color:var(--wolfy-text-muted)]">{researchStateNextAction}</span>
         ) : (
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="text-xs text-[color:var(--wolfy-text-muted)]">
@@ -4053,11 +4091,67 @@ const PortfolioPage: React.FC = () => {
                   {portfolioResearchStatePreview}
                 </div>
               ) : (
-                <div data-testid="portfolio-empty-onboarding-row" className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
-                  <TerminalPanel as="section" data-testid="portfolio-empty-workflow-column" className="min-w-0 flex flex-col gap-4 border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]">
+                <div data-testid="portfolio-empty-onboarding-row" className="grid min-w-0 grid-cols-1 gap-3">
+                  <TerminalPanel as="section" data-testid="portfolio-empty-workflow-column" className="min-w-0 flex flex-col gap-3 border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]">
+                    <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '首次配置路径' : 'First-use setup path'}</h2>
+                        <p className="mt-2 text-base font-medium text-[color:var(--wolfy-text-primary)]">{onboardingTitle}</p>
+                        <p className="mt-2 max-w-[68ch] text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{onboardingBody}</p>
+                      </div>
+                      <TerminalChip variant="neutral">{language === 'zh' ? '真实数据接入前不生成示例收益' : 'No sample performance before real data is saved'}</TerminalChip>
+                    </div>
+
+                    <TerminalEmptyState
+                      data-testid="portfolio-start-card"
+                      title={language === 'zh' ? '创建或导入首个组合' : 'Create or import the first portfolio'}
+                      action={hasHistory ? <TerminalChip variant="caution" className="shrink-0">{noHoldingsHistoryNote}</TerminalChip> : undefined}
+                      className="min-h-[72px]"
+                    >
+                      {compactNoHoldingText}
+                    </TerminalEmptyState>
+
+                    <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                      {language === 'zh'
+                        ? `缺失：${!hasAccounts ? '组合账户' : !hasWritableAccounts ? '可写账户' : '首笔持仓或导入记录'}。稍后可用：持仓台账、风险摘要、近期活动。`
+                        : `Missing: ${!hasAccounts ? 'portfolio account' : !hasWritableAccounts ? 'writable account' : 'first holding or import'}. Later: holdings ledger, risk summary, recent activity.`}
+                    </p>
+
+                    <ol className="flex flex-wrap gap-x-4 gap-y-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]" aria-label={language === 'zh' ? '后续路径' : 'Later path'}>
+                      {onboardingSteps.map((step, index) => (
+                        <li key={step.key} className="inline-flex min-w-0 items-center gap-1.5">
+                          <span className="font-mono text-[10px] font-bold text-[color:var(--wolfy-text-muted)]">{index + 1}</span>
+                          <span className="font-medium text-[color:var(--wolfy-text-primary)]">{step.label}</span>
+                          <span className="text-[color:var(--wolfy-text-muted)]">· {step.detail}</span>
+                        </li>
+                      ))}
+                    </ol>
+
+                    {canManagePortfolioOperations ? (
+                    <div data-testid="portfolio-empty-actions" className="flex min-w-0 flex-wrap gap-2">
+                      <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={onboardingPrimaryAction}>
+                        {onboardingPrimaryActionLabel}
+                      </TerminalButton>
+                      <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
+                        {importTradesActionLabel}
+                      </TerminalButton>
+                    </div>
+                    ) : null}
+                    <p data-testid="portfolio-empty-help" className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                      {portfolioEmptyHelpText}
+                    </p>
+                    {!hasWritableAccounts ? (
+                      <TerminalNotice variant="caution">
+                        {hasActiveAccounts
+                          ? (language === 'zh' ? '当前账户不可写，请先进入账户页调整可写账户，再继续添加持仓或导入。' : 'Current accounts are not writable. Open the account lane first, then continue with holdings or import.')
+                          : (language === 'zh' ? '暂无可写账户，请先创建账户。' : 'No writable account yet. Create an account first.')}
+                      </TerminalNotice>
+                    ) : null}
+
                     <ConsumerOnboardingCtaPanel
                       data-testid="portfolio-empty-onboarding-cta"
                       language={language}
+                      density="compact"
                       title={language === 'zh' ? '先完成研究上下文，只有需要组合跟踪时再创建账户' : 'Build research context first; create an account only when portfolio tracking is intentional'}
                       actions={[
                         {
@@ -4098,54 +4192,9 @@ const PortfolioPage: React.FC = () => {
                         ? ['不会自动创建账户。', '不会生成示例持仓。', '不会改写持仓、现金或外部同步状态。']
                         : ['No account is created automatically.', 'No sample holdings are generated.', 'Holdings, cash, and external sync stay unchanged.']}
                     />
-                    <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '首次配置路径' : 'First-use setup path'}</h2>
-                        <p className="mt-2 text-base font-medium text-[color:var(--wolfy-text-primary)]">{onboardingTitle}</p>
-                        <p className="mt-2 max-w-[68ch] text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{onboardingBody}</p>
-                      </div>
-                      <TerminalChip variant="neutral">{language === 'zh' ? '真实数据接入前不生成示例收益' : 'No sample performance before real data is saved'}</TerminalChip>
-                    </div>
-                    <TerminalEmptyState
-                      data-testid="portfolio-start-card"
-                      title={language === 'zh' ? '创建或导入首个组合' : 'Create or import the first portfolio'}
-                      action={hasHistory ? <TerminalChip variant="caution" className="shrink-0">{noHoldingsHistoryNote}</TerminalChip> : undefined}
-                      className="min-h-[72px]"
-                    >
-                      {compactNoHoldingText}
-                    </TerminalEmptyState>
-                    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
-                      {onboardingSteps.map((step, index) => (
-                        <div key={step.key} className="min-w-0 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-3">
-                          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? `步骤 ${index + 1}` : `Step ${index + 1}`}</div>
-                          <div className="mt-2 text-sm font-medium text-[color:var(--wolfy-text-primary)]">{step.label}</div>
-                          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{step.detail}</p>
-                        </div>
-                      ))}
-                    </div>
-                    {canManagePortfolioOperations ? (
-                    <div data-testid="portfolio-empty-actions" className="flex min-w-0 flex-wrap gap-2">
-                      <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={onboardingPrimaryAction}>
-                        {onboardingPrimaryActionLabel}
-                      </TerminalButton>
-                      <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
-                        {importTradesActionLabel}
-                      </TerminalButton>
-                    </div>
-                    ) : null}
-                    <p data-testid="portfolio-empty-help" className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
-                      {portfolioEmptyHelpText}
-                    </p>
-                    {!hasWritableAccounts ? (
-                      <TerminalNotice variant="caution">
-                        {hasActiveAccounts
-                          ? (language === 'zh' ? '当前账户不可写，请先进入账户页调整可写账户，再继续添加持仓或导入。' : 'Current accounts are not writable. Open the account lane first, then continue with holdings or import.')
-                          : (language === 'zh' ? '暂无可写账户，请先创建账户。' : 'No writable account yet. Create an account first.')}
-                      </TerminalNotice>
-                    ) : null}
-                  </TerminalPanel>
 
-                  {portfolioResearchStatePreview}
+                    {portfolioResearchStatePreview}
+                  </TerminalPanel>
                 </div>
               )}
             </div>
