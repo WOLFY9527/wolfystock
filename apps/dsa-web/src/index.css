@@ -9375,6 +9375,30 @@ html[data-theme-style='paper'] .stock-research-hero {
   background: linear-gradient(180deg, rgb(255 255 255 / 0.32), transparent);
 }
 
+/* G025: first-screen research sequence density (identity → path → memo). */
+html[data-theme-style='paper'] .stock-research-hero[data-first-screen-priority='conclusion-first'] {
+  display: grid;
+  min-width: 0;
+  gap: 0;
+}
+
+html[data-theme-style='paper'] .stock-research-identity-header__ticker {
+  font-family: var(--font-display);
+  letter-spacing: 0;
+}
+
+html[data-theme-style='paper'] .stock-research-identity-header__price {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+html[data-theme-style='paper'] .stock-factor-evidence--bounded-empty,
+html[data-theme-style='paper'] .stock-risk-triggers--bounded-empty,
+html[data-theme-style='paper'] [data-module-density='bounded-empty'] {
+  min-width: 0;
+}
+
 html[data-theme-style='paper'] .stock-workspace-product-flow {
   display: grid;
   min-width: 0;

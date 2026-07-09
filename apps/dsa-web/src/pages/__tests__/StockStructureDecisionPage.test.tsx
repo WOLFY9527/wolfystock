@@ -853,6 +853,8 @@ describe('StockStructureDecisionPage', () => {
     expect(quotePanel).toHaveTextContent('05/28');
     expect(quotePanel).toHaveTextContent('17:30');
     const summary = within(page).getByTestId('stock-consumer-research-summary');
+    expect(summary).toHaveAttribute('data-first-screen-priority', 'conclusion-first');
+    expect(summary).toHaveAttribute('data-research-sequence', 'identity-price-path-memo-metrics-limitation-next');
     expect(summary).toHaveTextContent('AAPL');
     expect(summary).toHaveTextContent('Apple');
     expect(summary).toHaveTextContent('US');
@@ -911,6 +913,11 @@ describe('StockStructureDecisionPage', () => {
     expect(within(ledger).getByRole('columnheader', { name: '来源边界' })).toBeInTheDocument();
     const stockCoreChart = within(page).getByTestId('stock-history-core-chart');
     expect(within(page).getByTestId('stock-price-history-visual-block')).toContainElement(stockCoreChart);
+    // G025 first-screen sequence: identity → price path → conclusion/memo (not equal-weight card wall).
+    const identityHeader = within(summary).getByTestId('stock-research-identity-header');
+    const pricePath = within(summary).getByTestId('stock-price-history-visual-block');
+    expect(identityHeader.compareDocumentPosition(pricePath) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(pricePath.compareDocumentPosition(conclusion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(stockCoreChart.compareDocumentPosition(knownFacts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(knownFacts.compareDocumentPosition(historyWorkspace) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(historyWorkspace.compareDocumentPosition(analystMemoWorkspace) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -989,6 +996,7 @@ describe('StockStructureDecisionPage', () => {
     expect(riskPanel).toHaveTextContent('未知 / 待补证据');
     expect(riskPanel).toHaveTextContent('Closes fall back into the prior range.');
     expect(riskPanel).toHaveTextContent('需要补充同业对照证据。');
+    expect(catalystPanel).toHaveAttribute('data-module-density', 'compact');
     expect(catalystPanel).toHaveTextContent('财报 / 催化证据待补');
     expect(catalystPanel).toHaveTextContent('仍需补齐公告、财报或催化证据。');
     expect(nextStepsPanel).toHaveTextContent('下一步补齐资料');
@@ -1005,6 +1013,14 @@ describe('StockStructureDecisionPage', () => {
     expect(historyPanel).toHaveTextContent('缺口 K 线');
     expect(historyPanel).toHaveTextContent('30');
     expect(within(historyPanel).queryByTestId('stock-history-core-chart')).not.toBeInTheDocument();
+    // G025: peer/theme empty state is a bounded empty line (not a giant empty panel).
+    const peerEmpty = within(page).queryByTestId('stock-peer-theme-bounded-empty');
+    if (peerEmpty) {
+      expect(peerEmpty).toHaveTextContent('同业或主题证据暂不可用');
+      expect(peerEmpty).toHaveAttribute('data-module-density', 'bounded-empty');
+    } else {
+      expect(within(page).getByTestId('stock-structure-peer-correlation-snapshot')).toBeInTheDocument();
+    }
     expect(findConsumerRawLeakage(page.textContent || '', {
       extraForbiddenPatterns: [
         /\bavailable\b/i,
@@ -1780,13 +1796,13 @@ describe('StockStructureDecisionPage', () => {
     expect(surface).toHaveTextContent('新鲜度待确认');
     expect(surface).toHaveTextContent('仍需配置授权期权结构来源后才会填充指标。');
     expect(surface).toHaveTextContent('待配置授权结构来源');
-    expect(metrics).toHaveTextContent('GEX');
-    expect(metrics).toHaveTextContent('Gamma flip');
-    expect(metrics).toHaveTextContent('Vanna');
-    expect(metrics).toHaveTextContent('Charm');
-    expect(metrics).toHaveTextContent('0DTE 集中度');
-    expect(metrics).toHaveTextContent('OI / 成交');
-    expect(metrics.textContent?.match(/待补证/g) ?? []).toHaveLength(6);
+    // G025: 0-field options metrics collapse to a bounded empty state (no 待补 cell wall).
+    expect(surface).toHaveAttribute('data-module-density', 'bounded-empty');
+    expect(metrics).toHaveAttribute('data-module-density', 'bounded-empty');
+    expect(metrics).toHaveTextContent('尚未填充授权期权指标');
+    expect(metrics).not.toHaveTextContent('GEX');
+    expect(metrics).not.toHaveTextContent('待补证');
+    expect(metrics.textContent?.match(/待补证/g) ?? []).toHaveLength(0);
     expect(findConsumerRawLeakage(surface.textContent || '', {
       extraForbiddenPatterns: [
         /providerClass|providerName|providerAttempted|requiredProviderClass|sourceAuthorityRouter/i,
@@ -1814,6 +1830,8 @@ describe('StockStructureDecisionPage', () => {
     expect(surface).toHaveTextContent('结构来源已配置');
     expect(surface).toHaveTextContent('更新');
     expect(surface).toHaveTextContent('06/19');
+    expect(surface).toHaveAttribute('data-module-density', 'full');
+    expect(metrics).toHaveAttribute('data-module-density', 'full');
     expect(metrics).toHaveTextContent('200,000');
     expect(metrics).toHaveTextContent('212.5');
     expect(metrics).toHaveTextContent('0.3');

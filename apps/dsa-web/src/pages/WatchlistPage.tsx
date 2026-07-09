@@ -1383,13 +1383,15 @@ function WatchlistConsumerObservationBoard({
   return (
     <section
       data-testid="watchlist-consumer-observation-board"
+      data-watchlist-role="important-changes"
       className="grid min-w-0 gap-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)] p-3 lg:grid-cols-[minmax(0,1fr)_320px]"
     >
       <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
-              {language === 'en' ? 'Watchlist' : '观察列表'}
+              {language === 'en' ? 'Important changes' : '重要变化'}
+              <span className="sr-only">{language === 'en' ? ' Watchlist' : ' 观察列表'}</span>
             </p>
             <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">
               {language === 'en'
@@ -1888,6 +1890,7 @@ function WatchlistConclusionBand({
       as="section"
       dense
       data-testid="watchlist-conclusion-band"
+      data-watchlist-role="needs-review-summary"
       className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start"
     >
       <div className="min-w-0">
@@ -2636,7 +2639,12 @@ const WatchlistPage: React.FC = () => {
   return (
     <ConsumerWorkspaceScope data-testid="watchlist-wide-workspace-scope" className="min-h-0 flex-1">
       <ConsumerWorkspacePageShell data-testid="watchlist-page" className="flex-1">
-      <div data-layout-zone="HeaderStrip" data-testid="watchlist-header-strip" className="flex min-w-0 flex-col gap-3">
+      <div
+        data-layout-zone="HeaderStrip"
+        data-testid="watchlist-header-strip"
+        data-watchlist-sequence="needs-review-important-changes-ledger-handoff"
+        className="flex min-w-0 flex-col gap-3"
+      >
         <DensePageHeader
           eyebrow={language === 'zh' ? '监控队列' : 'Monitoring board'}
           title={copy.title}
@@ -2656,25 +2664,12 @@ const WatchlistPage: React.FC = () => {
           items={statusItems}
         />
 
-        <WatchlistConsumerObservationBoard
-          items={filteredItems}
-          activeItem={activeItem}
-          onSelect={(item) => setActiveItemId(item.id)}
-          language={language}
-        />
-
-        {watchlistWorkflowSymbol ? (
-          <ResearchWorkspaceFlowPanel
+        {filteredItems.length > 0 ? (
+          <WatchlistConsumerObservationBoard
+            items={filteredItems}
+            activeItem={activeItem}
+            onSelect={(item) => setActiveItemId(item.id)}
             language={language}
-            current="watchlist"
-            symbol={watchlistWorkflowSymbol}
-            market={watchlistWorkflowMarket}
-            source={watchlistWorkflowSource}
-            knownEvidence={watchlistWorkflowKnownEvidence}
-            missingEvidence={watchlistWorkflowMissingEvidence}
-            stateNotes={watchlistWorkflowStateNotes}
-            nextSteps={watchlistWorkflowNextSteps}
-            testId="watchlist-research-workspace-flow"
           />
         ) : null}
 
@@ -2984,30 +2979,29 @@ const WatchlistPage: React.FC = () => {
                             </p>
                             <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">{priceLabel}</p>
                             <p className="font-mono text-xs text-[color:var(--wolfy-text-muted)]">{updateLabel}</p>
-                            <div
-                              data-testid={`watchlist-row-workflow-${item.symbol}`}
-                              className="flex min-w-0 flex-wrap items-center gap-1.5"
-                              aria-label={language === 'zh' ? `${item.symbol} 研究流程` : `${item.symbol} research workflow`}
-                            >
-                              <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '研究流程' : 'Workflow'}</span>
-                              {rowPacketView ? (
-                                <>
-                                  {rowPacketView.identityStateLabel ? (
-                                    <TerminalChip variant={rowPacketView.identityStateVariant}>{rowPacketView.identityStateLabel}</TerminalChip>
-                                  ) : null}
-                                  {rowPacketView.freshnessStateLabel ? (
-                                    <TerminalChip variant={rowPacketView.freshnessStateVariant}>{rowPacketView.freshnessStateLabel}</TerminalChip>
-                                  ) : null}
-                                  <TerminalChip variant={rowPacketView.quoteStateVariant}>{rowPacketView.quoteStateLabel}</TerminalChip>
-                                  <TerminalChip variant={rowPacketView.researchStatusVariant}>{rowPacketView.researchStatusLabel}</TerminalChip>
-                                  <TerminalChip variant={rowPacketView.scannerLineageVariant}>{rowPacketView.scannerLineageLabel}</TerminalChip>
-                                </>
-                              ) : (
-                                workflowSteps.map((step) => (
+                            {rowPacketView ? (
+                              <div
+                                data-testid={`watchlist-row-workflow-${item.symbol}`}
+                                className="flex min-w-0 flex-wrap items-center gap-1.5"
+                                aria-label={language === 'zh' ? `${item.symbol} 报价状态` : `${item.symbol} quote state`}
+                              >
+                                <TerminalChip variant={rowPacketView.quoteStateVariant}>{rowPacketView.quoteStateLabel}</TerminalChip>
+                                {rowPacketView.freshnessStateLabel ? (
+                                  <TerminalChip variant={rowPacketView.freshnessStateVariant}>{rowPacketView.freshnessStateLabel}</TerminalChip>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <div
+                                data-testid={`watchlist-row-workflow-${item.symbol}`}
+                                className="flex min-w-0 flex-wrap items-center gap-1.5"
+                                aria-label={language === 'zh' ? `${item.symbol} 研究流程` : `${item.symbol} research workflow`}
+                              >
+                                <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '研究流程' : 'Workflow'}</span>
+                                {workflowSteps.slice(0, 3).map((step) => (
                                   <TerminalChip key={step.key} variant={step.variant}>{step.label}</TerminalChip>
-                                ))
-                              )}
-                            </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
 
                           <div role="cell" aria-colindex={3} className="min-w-0 space-y-2">
@@ -3019,9 +3013,6 @@ const WatchlistPage: React.FC = () => {
                                 <>
                                   {rowPacketView.identityStateLabel ? (
                                     <TerminalChip variant={rowPacketView.identityStateVariant}>{rowPacketView.identityStateLabel}</TerminalChip>
-                                  ) : null}
-                                  {rowPacketView.freshnessStateLabel ? (
-                                    <TerminalChip variant={rowPacketView.freshnessStateVariant}>{rowPacketView.freshnessStateLabel}</TerminalChip>
                                   ) : null}
                                   <TerminalChip variant={rowPacketView.researchStatusVariant}>{rowPacketView.researchStatusLabel}</TerminalChip>
                                   <TerminalChip variant={rowPacketView.scannerLineageVariant}>{rowPacketView.scannerLineageLabel}</TerminalChip>
@@ -3617,6 +3608,22 @@ const WatchlistPage: React.FC = () => {
 
         {!isWatchlistEmptyWorkspace ? (
         <div data-layout-zone="SecondaryDeck" data-testid="watchlist-secondary-deck" className="min-w-0 border-t border-[color:var(--wolfy-divider)]">
+          {watchlistWorkflowSymbol ? (
+            <div className="border-b border-[color:var(--wolfy-divider)] px-3 py-3" data-watchlist-role="research-handoff">
+              <ResearchWorkspaceFlowPanel
+                language={language}
+                current="watchlist"
+                symbol={watchlistWorkflowSymbol}
+                market={watchlistWorkflowMarket}
+                source={watchlistWorkflowSource}
+                knownEvidence={watchlistWorkflowKnownEvidence}
+                missingEvidence={watchlistWorkflowMissingEvidence}
+                stateNotes={watchlistWorkflowStateNotes}
+                nextSteps={watchlistWorkflowNextSteps}
+                testId="watchlist-research-workspace-flow"
+              />
+            </div>
+          ) : null}
           <DenseCommandBar
             data-testid="watchlist-command-bar"
             className="border-t-0"
