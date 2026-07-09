@@ -181,40 +181,40 @@ export function ScannerCandidateResearchPacket({
     return (
       <div data-testid={testId} className="mt-1.5 space-y-1.5">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <span className="text-[10px] font-semibold uppercase text-white/36">{researchSignalTitle}</span>
-          <span className="text-[10px] font-semibold uppercase text-white/36">{title}</span>
+          <span className="text-[10px] font-semibold uppercase text-[color:var(--wolfy-text-muted)]">{researchSignalTitle}</span>
+          <span className="text-[10px] font-semibold uppercase text-[color:var(--wolfy-text-muted)]">{title}</span>
           {packet.observationOnly ? (
-            <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+            <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-primary)]">
               {boundaryLabel}
             </TerminalChip>
           ) : null}
         </div>
         {whySurfaced ? (
-          <p className="line-clamp-2 text-[11px] leading-relaxed text-white/58">
+          <p className="line-clamp-2 text-[11px] leading-relaxed text-[color:var(--wolfy-text-secondary)]">
             {whySurfaced}
           </p>
         ) : null}
-        <div className="flex min-w-0 flex-wrap gap-1.5 text-[10px] text-white/46">
+        <div className="flex min-w-0 flex-wrap gap-1.5 text-[10px] text-[color:var(--wolfy-text-muted)]">
           {researchSignalLabels.map((item) => (
             <TerminalChip
               key={`signal-${item.label}`}
               variant="neutral"
               className={`px-1.5 py-0.5 text-[10px] font-sans ${
-                item.tone === 'warning' ? 'text-amber-100/78' : 'text-white/72'
+                item.tone === 'warning' ? 'text-[color:var(--state-warning-text)]' : 'text-[color:var(--wolfy-text-primary)]'
               }`}
             >
               {item.label}
             </TerminalChip>
           ))}
         </div>
-        <div className="flex min-w-0 flex-wrap gap-1.5 text-[10px] text-white/46">
+        <div className="flex min-w-0 flex-wrap gap-1.5 text-[10px] text-[color:var(--wolfy-text-muted)]">
           {primaryEvidence.slice(0, 1).map((item) => (
-            <TerminalChip key={`primary-${item}`} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+            <TerminalChip key={`primary-${item}`} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-primary)]">
               {item}
             </TerminalChip>
           ))}
           {limitingEvidence.slice(0, 1).map((item) => (
-            <TerminalChip key={`limit-${item}`} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+            <TerminalChip key={`limit-${item}`} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-primary)]">
               {item}
             </TerminalChip>
           ))}
@@ -225,19 +225,19 @@ export function ScannerCandidateResearchPacket({
   }
 
   return (
-    <section data-testid={testId} className="grid gap-2 rounded-lg border border-white/8 bg-white/[0.015] p-3">
+    <section data-testid={testId} className="grid gap-2 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
       <div className="flex min-w-0 items-center justify-between gap-2">
-        <p className="text-[10px] font-semibold uppercase text-white/40">
+        <p className="text-[10px] font-semibold uppercase text-[color:var(--wolfy-text-muted)]">
           {title}
         </p>
         {packet.observationOnly ? (
-          <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+          <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-primary)]">
             {boundaryLabel}
           </TerminalChip>
         ) : null}
       </div>
-      <div className="grid gap-1 rounded-md border border-white/8 bg-black/10 p-2">
-        <p className="text-[10px] font-semibold uppercase text-white/36">
+      <div className="grid gap-1 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-black/10 p-2">
+        <p className="text-[10px] font-semibold uppercase text-[color:var(--wolfy-text-muted)]">
           {researchSignalTitle}
         </p>
         <div className="flex min-w-0 flex-wrap gap-1.5">
@@ -246,7 +246,7 @@ export function ScannerCandidateResearchPacket({
               key={`signal-${item.label}`}
               variant="neutral"
               className={`px-1.5 py-0.5 text-[10px] font-sans ${
-                item.tone === 'warning' ? 'text-amber-100/78' : 'text-white/72'
+                item.tone === 'warning' ? 'text-[color:var(--state-warning-text)]' : 'text-[color:var(--wolfy-text-primary)]'
               }`}
             >
               {item.label}
@@ -256,20 +256,20 @@ export function ScannerCandidateResearchPacket({
       </div>
       {whySurfaced ? (
         <div className="grid gap-1">
-          <p className="text-[10px] font-semibold uppercase text-white/36">
+          <p className="text-[10px] font-semibold uppercase text-[color:var(--wolfy-text-muted)]">
             {language === 'en' ? 'Why surfaced' : '为什么出现'}
           </p>
-          <p className="text-xs leading-relaxed text-white/72">{whySurfaced}</p>
+          <p className="text-xs leading-relaxed text-[color:var(--wolfy-text-primary)]">{whySurfaced}</p>
         </div>
       ) : null}
       {primaryEvidence.length ? (
         <div className="grid gap-1">
-          <p className="text-[10px] font-semibold uppercase text-white/36">
+          <p className="text-[10px] font-semibold uppercase text-[color:var(--wolfy-text-muted)]">
             {language === 'en' ? 'Primary evidence' : '主要证据'}
           </p>
           <div className="flex min-w-0 flex-wrap gap-1.5">
             {primaryEvidence.map((item) => (
-              <TerminalChip key={item} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+              <TerminalChip key={item} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-primary)]">
                 {item}
               </TerminalChip>
             ))}
@@ -278,12 +278,12 @@ export function ScannerCandidateResearchPacket({
       ) : null}
       {limitingEvidence.length ? (
         <div className="grid gap-1">
-          <p className="text-[10px] font-semibold uppercase text-white/36">
+          <p className="text-[10px] font-semibold uppercase text-[color:var(--wolfy-text-muted)]">
             {language === 'en' ? 'Limits' : '限制因素'}
           </p>
           <div className="flex min-w-0 flex-wrap gap-1.5">
             {limitingEvidence.map((item) => (
-              <TerminalChip key={item} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+              <TerminalChip key={item} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-primary)]">
                 {item}
               </TerminalChip>
             ))}
@@ -299,8 +299,8 @@ export function ScannerCandidateResearchPacket({
         </div>
       ) : null}
       {researchNextStep ? (
-        <p className="text-xs leading-relaxed text-white/62">
-          <span className="text-white/42">{language === 'en' ? 'Next:' : '下一步：'}</span>
+        <p className="text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
+          <span className="text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Next:' : '下一步：'}</span>
           {researchNextStep}
         </p>
       ) : null}

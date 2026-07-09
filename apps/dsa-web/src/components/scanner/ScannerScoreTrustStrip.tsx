@@ -255,7 +255,7 @@ export function ScannerScoreTrustStrip({
         />
       </div>
       {summaryParts.length ? (
-        <p className="text-[11px] leading-relaxed text-white/46">
+        <p className="text-[11px] leading-relaxed text-[color:var(--wolfy-text-muted)]">
           {summaryParts.join(language === 'en' ? ' | ' : ' ｜ ')}
         </p>
       ) : null}

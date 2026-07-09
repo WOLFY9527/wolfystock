@@ -211,6 +211,7 @@ const RESOURCES = {
     shell: {
       openMenu: '打开导航菜单',
       drawerTitle: '导航菜单',
+      skipToContent: '跳到主要内容',
       workspaceShell: 'Workspace Shell',
       workspaceShellBody: '统一导航与内容对齐。全模块共享一致的产品节奏。',
       workspaceShellFoot: '导航、界面与内容 Rail 共用统一桌面壳层宽度。',
@@ -3252,6 +3253,7 @@ const RESOURCES = {
     shell: {
       openMenu: 'Open navigation',
       drawerTitle: 'Navigation',
+      skipToContent: 'Skip to main content',
       workspaceShell: 'Workspace Shell',
       workspaceShellBody: 'Unified navigation and content alignment. Consistent rhythm across all core modules.',
       workspaceShellFoot: 'Shared shell width for navigation, interface modes, and content rails.',

@@ -87,7 +87,7 @@ export function ScannerHistoryDrawer({
                 <button
                   key={item.id}
                   type="button"
-                  className={`w-full flex flex-col gap-3 bg-white/[0.02] border border-white/5 rounded-2xl p-5 hover:bg-white/[0.04] transition-colors text-left ${item.id === selectedRunId ? 'border-white/15 bg-white/[0.05]' : ''}`}
+                  className={`w-full flex flex-col gap-3 bg-[var(--wolfy-surface-input)] border border-[color:var(--wolfy-border-subtle)] rounded-2xl p-5 hover:bg-white/[0.04] transition-colors text-left ${item.id === selectedRunId ? 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]' : ''}`}
                   onClick={() => onSelectRun(item.id)}
                 >
                   <div className="flex w-full max-w-full items-start gap-3 overflow-hidden">
@@ -98,11 +98,11 @@ export function ScannerHistoryDrawer({
                         {item.watchlistDateLabel ? <PillBadge variant="history">{item.watchlistDateLabel}</PillBadge> : null}
                         <PillBadge variant="history">{item.profileLabel}</PillBadge>
                       </div>
-                      <h4 className="mt-3 mb-2 w-full truncate font-bold text-white">
+                      <h4 className="mt-3 mb-2 w-full truncate font-bold text-[color:var(--wolfy-text-primary)]">
                         {item.title}
                       </h4>
                       {item.detail ? (
-                        <p className="break-words whitespace-normal w-full text-sm text-white/70 leading-relaxed">
+                        <p className="break-words whitespace-normal w-full text-sm text-[color:var(--wolfy-text-secondary)] leading-relaxed">
                           {item.detail}
                         </p>
                       ) : null}
@@ -115,12 +115,12 @@ export function ScannerHistoryDrawer({
                       {item.comparisonLabel || item.reviewLabel ? (
                         <div className="mt-2 flex flex-wrap gap-2">
                           {item.comparisonLabel ? (
-                            <span className="rounded border border-white/8 bg-white/[0.035] px-2 py-1 text-[10px] text-white/52">
+                            <span className="rounded border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2 py-1 text-[10px] text-[color:var(--wolfy-text-muted)]">
                               {item.comparisonLabel}
                             </span>
                           ) : null}
                           {item.reviewLabel ? (
-                            <span className="rounded border border-white/8 bg-white/[0.035] px-2 py-1 text-[10px] text-white/52">
+                            <span className="rounded border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2 py-1 text-[10px] text-[color:var(--wolfy-text-muted)]">
                               {item.reviewLabel}
                             </span>
                           ) : null}

@@ -635,6 +635,13 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         className={`theme-shell ${shellViewportClass} flex flex-col text-foreground${isConsumerShellRoute ? ' theme-shell--consumer' : ''}${isPageScrollRoute ? ' theme-shell--page-scroll' : ''}${isHomeRoute ? ' theme-shell--home' : ''}${isScannerRoute ? ' theme-shell--scanner' : ''}${isWideRoute ? ' theme-shell--wide' : ''}${isMarketOverviewRoute ? ' theme-shell--market-overview' : ''}`}
         data-layout={isDesktop ? 'desktop' : 'mobile'}
       >
+        <a
+          href="#main-content"
+          className="shell-skip-link"
+          data-testid="shell-skip-link"
+        >
+          {t('shell.skipToContent')}
+        </a>
         <header className="shell-masthead shrink-0 w-full">
           <div ref={shellMastheadInnerRef} className="shell-masthead__inner w-full">
             {isDesktop ? (
@@ -698,7 +705,11 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         <div
           className={`shell-content-frame relative flex flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isConsumerShellRoute ? ' shell-content-frame--consumer' : ''}${isPageScrollRoute ? ' shell-content-frame--page-scroll' : ''}${isHomeRoute ? ' shell-content-frame--home' : ''}${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}${isSystemControlRoute ? ' shell-content-frame--system-control' : ''}`}
         >
-          <main className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full${isSystemControlRoute ? ' p-0 shell-main-column--system-control' : isConsumerShellRoute ? ' p-0 shell-main-column--consumer' : ' px-6 pt-6 pb-12 md:px-8 xl:px-12'}${shellFrameOverflowClass}${isPageScrollRoute ? ' shell-main-column--page-scroll' : ''}${isHomeRoute ? ' shell-main-column--home' : ''}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
+          <main
+            id="main-content"
+            tabIndex={-1}
+            className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full${isSystemControlRoute ? ' p-0 shell-main-column--system-control' : isConsumerShellRoute ? ' p-0 shell-main-column--consumer' : ' px-6 pt-6 pb-12 md:px-8 xl:px-12'}${shellFrameOverflowClass}${isPageScrollRoute ? ' shell-main-column--page-scroll' : ''}${isHomeRoute ? ' shell-main-column--home' : ''}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}
+          >
             <div key={pathname} className={`theme-page-transition flex min-h-0 min-w-0 w-full flex-col${isPageScrollRoute ? '' : ' h-full'}${isPageScrollRoute ? ' theme-page-transition--page-scroll' : ''}${isSystemControlRoute ? ' theme-page-transition--system-control' : ''}`}>
               {shouldRenderStandardAdminAccountGate && standardAdminAccountGateCopy ? (
                 <ShellAdminAccountGate

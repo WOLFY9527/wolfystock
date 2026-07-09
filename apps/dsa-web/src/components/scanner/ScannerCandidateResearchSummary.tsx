@@ -261,15 +261,15 @@ export function ScannerCandidateResearchSummary({
   if (variant === 'row') {
     return (
       <div data-testid={testId} className="mt-1.5 space-y-1.5">
-        <p className="line-clamp-2 text-[11px] leading-relaxed text-white/58">
+        <p className="line-clamp-2 text-[11px] leading-relaxed text-[color:var(--wolfy-text-secondary)]">
           {primaryReason}
         </p>
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-white/46">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-[color:var(--wolfy-text-muted)]">
           {missingSummary ? <span className="truncate">{missingSummary}</span> : null}
           <span className="truncate">{sourceAuthority}</span>
           <span className="truncate">{freshness}</span>
           {frame.noAdviceBoundary ? (
-            <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+            <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-primary)]">
               {language === 'en' ? 'Research only' : '仅研究观察'}
             </TerminalChip>
           ) : null}
@@ -279,17 +279,17 @@ export function ScannerCandidateResearchSummary({
   }
 
   return (
-    <section data-testid={testId} className="grid gap-2 rounded-xl border border-white/8 bg-white/[0.015] p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+    <section data-testid={testId} className="grid gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
         {language === 'en' ? 'Research summary' : '研究摘要'}
       </p>
-      <p className="text-xs leading-relaxed text-white/72">
+      <p className="text-xs leading-relaxed text-[color:var(--wolfy-text-primary)]">
         {primaryReason}
       </p>
       {evidenceHighlights.length ? (
         <div className="flex min-w-0 flex-wrap gap-1.5">
           {evidenceHighlights.slice(0, 3).map((item) => (
-            <TerminalChip key={item} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+            <TerminalChip key={item} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-primary)]">
               {item}
             </TerminalChip>
           ))}
@@ -303,19 +303,19 @@ export function ScannerCandidateResearchSummary({
           />
         ) : null}
         {blockingReasons.slice(0, 2).map((item) => (
-          <TerminalChip key={item} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+          <TerminalChip key={item} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-primary)]">
             {item}
           </TerminalChip>
         ))}
       </div>
       {topDownRefs.length ? (
         <div className="space-y-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
             {language === 'en' ? 'Market drivers' : '市场驱动因素'}
           </p>
           <div className="flex min-w-0 flex-wrap gap-1.5">
             {topDownRefs.slice(0, 4).map((item) => (
-              <TerminalChip key={item} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+              <TerminalChip key={item} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-primary)]">
                 {item}
               </TerminalChip>
             ))}
@@ -329,8 +329,8 @@ export function ScannerCandidateResearchSummary({
           <FieldChip label={language === 'en' ? 'Boundary' : '边界'} value={language === 'en' ? 'Research only' : '仅研究观察'} />
         ) : null}
       </div>
-      <p className="text-xs leading-relaxed text-white/62">
-        <span className="text-white/42">{language === 'en' ? 'Next:' : '下一步：'}</span>
+      <p className="text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
+        <span className="text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Next:' : '下一步：'}</span>
         {nextStep}
       </p>
     </section>
