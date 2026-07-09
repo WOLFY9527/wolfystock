@@ -1,6 +1,6 @@
 # WolfyStock Design System & Frontend Contract
 
-Version: 1.0
+Version: 1.1
 Status: Canonical Consumer Frontend Design Contract
 Audience: Codex, frontend engineers, product engineers, reviewers
 Visual reference: `docs/design/reference/wolfystock-impeccable-polish-final.html`
@@ -366,41 +366,107 @@ The prototype defines **composition and visual hierarchy**, not factual content.
 
 ## 5.1 Primary consumer journey
 
-Primary navigation should represent the research journey:
+The product journey remains:
+
+```text
+看市场
+→ 找候选
+→ 看个股
+→ 加入持续观察
+→ 用扫描 / 回测 / 情景分析做验证
+→ 检视真实持仓暴露
+```
+
+The top navigation must express that journey through a coherent hierarchy, but it must **not** mechanically copy the reference prototype's literal labels or flatten every route into a first-level item.
+
+Navigation hierarchy is determined by:
+
+1. user task and mental model;
+2. frequency and continuity of use;
+3. whether the surface owns an independent workflow;
+4. whether several routes form one coherent task domain;
+5. route discoverability;
+6. role and authorization boundary;
+7. responsive constraints.
+
+The current recommended production hierarchy is:
 
 ```text
 首页
-市场总览
-研究雷达
-个股研究
+
+市场 ▾
+  市场总览
+  流动性监测
+  板块轮动
+  其他真实存在且属于市场环境判断的模块
+
+研究 ▾
+  研究雷达
+  个股研究
+  扫描器
+
 观察列表
-更多
-```
 
-Recommended More menu:
+验证 ▾
+  回测
+  情景实验室
+  其他真实存在且属于研究假设验证的工具
 
-```text
-扫描器
-回测
-情景实验室
 持仓
-管理后台（仅授权管理员可见）
 ```
 
-The exact production route path must reuse existing canonical routes. Prototype filenames such as:
+Admin/operator entry points should remain role-gated and visually separated, preferably through the authorized account/admin entry or the dedicated admin shell rather than ordinary consumer task groups.
+
+This hierarchy is the canonical default for the currently known product domains. Before changing placement, audit the real production route inventory and classify each surface. A documented, evidence-based change is allowed when the product workflow materially evolves.
+
+Do not:
+
+- copy the prototype navigation literally without checking production ownership;
+- create first-level groups with no discoverable child destinations;
+- hide meaningful product routes merely to reduce navigation density;
+- place routes according to backend package names or implementation ownership;
+- expose admin/operator surfaces to unauthorized consumer roles;
+- create menu entries for nonexistent routes.
+
+## 5.2 Navigation classification
+
+Classify production surfaces before changing the shell:
 
 ```text
-home.html
-market-overview.html
-research-radar.html
-stock-detail.html
+PRIMARY_WORKSPACE
+PRIMARY_TASK_DOMAIN
+SECONDARY_DOMAIN_TOOL
+CONTEXTUAL_RESEARCH_ENTRY
+ROLE_GATED_ADMIN_SURFACE
+ACCOUNT_UTILITY
+LEGACY_OR_DUPLICATE_ENTRY
 ```
 
-are visual-reference identifiers only.
+Interpretation:
 
-Do not rename or replace real production routes solely to match prototype filenames.
+- `PRIMARY_WORKSPACE`: high-frequency, persistent workspace with an independent task loop; may remain a first-level destination.
+- `PRIMARY_TASK_DOMAIN`: first-level parent that groups multiple coherent child surfaces.
+- `SECONDARY_DOMAIN_TOOL`: route that belongs under a primary task domain.
+- `CONTEXTUAL_RESEARCH_ENTRY`: reachable from the relevant workflow and not necessarily duplicated in global navigation.
+- `ROLE_GATED_ADMIN_SURFACE`: permission-gated operational surface, separated from ordinary consumer navigation.
+- `ACCOUNT_UTILITY`: locale, theme, account, session, and related utilities.
+- `LEGACY_OR_DUPLICATE_ENTRY`: historical or redundant entry that must be justified before remaining visible.
 
-## 5.2 Route behavior
+A grouped first-level item is valid only when its children share a clear user task. Group labels must describe user intent, not implementation structure.
+
+Every meaningful production surface must have at least one discoverable path:
+
+```text
+global navigation
+or
+grouped navigation
+or
+clear contextual handoff
+```
+
+No canonical consumer route should become an accidental orphan after shell changes.
+
+## 5.3 Route behavior
 
 Every production page must:
 
@@ -413,23 +479,83 @@ Every production page must:
 - preserve query parameters where contractually meaningful;
 - use safe redirects only.
 
-## 5.3 Advanced and admin surfaces
+Grouped navigation must additionally:
 
-Secondary tools belong under More or context-specific entry points:
+- expose child destinations on pointer and keyboard interaction according to the component contract;
+- allow Escape to close an open menu;
+- maintain visible focus;
+- mark the active child;
+- also communicate active state on the parent group;
+- preserve discoverability at tablet and mobile widths;
+- never require hover as the only way to reach a child route.
 
-- Scanner;
-- Backtest;
-- Scenario Lab;
-- Portfolio.
+## 5.4 Functional placement guidance
+
+Default placement for the currently known product surfaces:
+
+### Market domain
+
+```text
+市场
+├─ 市场总览
+├─ 流动性监测
+└─ 板块轮动
+```
+
+These surfaces answer the common question:
+
+> 当前市场环境是什么？
+
+Additional market-environment routes may join this domain only when their primary responsibility is market context, regime, liquidity, breadth, rotation, macro, or related environmental evidence.
+
+### Research domain
+
+```text
+研究
+├─ 研究雷达
+├─ 个股研究
+└─ 扫描器
+```
+
+Scanner belongs here by default because its primary product role is candidate discovery and research prioritization. Scanner ranking, scoring, candidate selection, and execution semantics remain protected backend/runtime contracts; navigation placement does not change them.
+
+### Continuous research workspace
+
+```text
+观察列表
+```
+
+Watchlist remains a first-level workspace by default because it is a research-task ledger and recurring review surface, not a bookmark utility.
+
+### Validation domain
+
+```text
+验证
+├─ 回测
+└─ 情景实验室
+```
+
+These tools evaluate hypotheses or sensitivity. Readiness must remain distinct from execution or durable result state.
+
+### Portfolio workspace
+
+```text
+持仓
+```
+
+Portfolio may remain first-level because it owns an independent accounting and exposure-review workflow. Navigation changes must not alter accounting truth, ledger semantics, cost basis, P&L, FX, or owner isolation.
+
+## 5.5 Admin and specialized surfaces
 
 Admin surfaces:
 
 - remain visually and navigationally separated from consumer research surfaces;
 - remain permission-gated;
 - may use deeper diagnostic vocabulary;
-- must not be exposed merely by copying the prototype navigation.
+- must not appear merely because a user can guess the route;
+- should use the existing role-aware account/admin entry or dedicated admin shell.
 
-Existing specialized surfaces such as Decision Cockpit may remain available through current product routes and contextual navigation. Do not force every existing route into the primary nav.
+Existing specialized surfaces such as Decision Cockpit may remain available through current product routes and contextual navigation. Do not force every specialized route into the global top navigation.
 
 ---
 
@@ -845,13 +971,19 @@ Requirements:
 - current route highlighted;
 - locale-aware links;
 - keyboard accessible;
-- primary research journey directly visible;
-- secondary tools in More;
-- role-aware Admin entry;
+- primary research journey legible through first-level workspaces and task domains;
+- grouped domains expose complete and discoverable child destinations;
+- standalone first-level workspaces are reserved for high-frequency or independent task loops;
+- role-aware Admin entry remains separated from ordinary consumer task groups;
 - account menu retained;
 - language switch retained where currently supported;
 - theme setting retained where currently supported;
-- no route contract regression.
+- no route contract regression;
+- no accidental route orphaning.
+
+The shell may use grouped navigation such as `市场`, `研究`, and `验证` when route inventory and user workflow support those domains.
+
+Do not require all consumer pages to be first-level links. Do not hide child routes behind a parent label that has no usable menu, drawer, popover, or equivalent discoverable interaction.
 
 ## 11.2 Global search
 
@@ -881,17 +1013,23 @@ Requirements:
 - correct canonical symbol and market handoff;
 - no provider live probe merely because the search box opened.
 
-## 11.3 More menu
+## 11.3 Grouped menus and overflow menus
 
 Requirements:
 
-- opens/closes predictably;
+- open and close predictably;
 - Escape closes;
-- outside click closes;
-- `aria-expanded`;
-- keyboard support;
+- outside click closes where the interaction model uses a popover;
+- `aria-expanded` on the controlling element;
+- keyboard navigation between parent and child items;
 - role-aware items;
-- active state when a child route is open.
+- active child state;
+- active parent-group state when a child route is open;
+- no hover-only access path;
+- mobile and tablet equivalent that preserves all meaningful destinations;
+- deterministic ordering based on research workflow, not alphabetical backend naming.
+
+Use an overflow or `更多` menu only for genuinely secondary or low-frequency surfaces. Do not use it as a dumping ground for major workflows merely to keep the header visually sparse.
 
 ---
 
@@ -1846,6 +1984,20 @@ Before creating a component:
 
 The migration should replace **presentation and composition**, not validated domain contracts.
 
+Before changing global navigation:
+
+```text
+inventory real consumer routes
+→ trace current entry points
+→ classify functional ownership
+→ classify first-level vs grouped vs contextual placement
+→ verify role visibility
+→ implement shell hierarchy
+→ validate direct/deep links, active state, keyboard, responsive discovery
+```
+
+Do not begin a navigation migration by copying prototype labels or by reorganizing routes from memory.
+
 Recommended order:
 
 ```text
@@ -1978,7 +2130,11 @@ A migrated consumer route is not complete until all applicable checks pass.
 - [ ] RBAC preserved;
 - [ ] PRM/readiness authority preserved;
 - [ ] no new page-local readiness interpretation;
-- [ ] no uncontrolled provider call introduced.
+- [ ] no uncontrolled provider call introduced;
+- [ ] every meaningful consumer route has a discoverable global, grouped, or contextual entry;
+- [ ] grouped first-level parents expose their real child routes;
+- [ ] active child and active parent-group state remain correct;
+- [ ] unauthorized admin/operator entries remain hidden and blocked.
 
 ## Data trust
 
@@ -2009,6 +2165,8 @@ A migrated consumer route is not complete until all applicable checks pass.
 - [ ] error state;
 - [ ] disabled state;
 - [ ] Escape behavior where applicable;
+- [ ] grouped navigation is not hover-only;
+- [ ] grouped menus preserve child-route discoverability on desktop, tablet, and mobile;
 - [ ] reduced motion respected.
 
 ## Responsive
