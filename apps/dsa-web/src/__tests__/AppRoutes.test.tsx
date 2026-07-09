@@ -624,6 +624,25 @@ describe('AppContent route flows', () => {
     expect(document.body.textContent || '').not.toMatch(publicMarketRouteSafetyPattern);
   });
 
+  it('keeps public market overview open during no_password auth bootstrap without login capture', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: false,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+      passwordSet: false,
+      setupState: 'no_password',
+    });
+
+    renderAtWithLocationProbe('/market-overview');
+
+    expect(await screen.findByText('market-overview-page')).toBeInTheDocument();
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/market-overview');
+    expect(screen.queryByText('login-page')).not.toBeInTheDocument();
+    expect(screen.queryByText(/auth-guard:/)).not.toBeInTheDocument();
+  });
+
   it.each([
     ['/zh/market-overview', 'market-overview-page'],
     ['/en/market-overview', 'market-overview-page'],
