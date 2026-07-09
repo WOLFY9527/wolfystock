@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -113,6 +114,7 @@ def _assert_safe_error_payload(
     error: str,
     message: str,
     retryable: bool | None = None,
+    expected_detail: dict[str, object] | None = None,
 ) -> None:
     assert response.status_code == status_code
     payload = response.json()
@@ -122,9 +124,17 @@ def _assert_safe_error_payload(
     assert payload["status"] == status_code
     if retryable is not None:
         assert payload["retryable"] is retryable
-    assert "detail" not in payload
+    if expected_detail is None:
+        assert "detail" not in payload
+    else:
+        assert payload.get("detail") == expected_detail
     serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    for marker in FORBIDDEN_LEAK_MARKERS:
+    forbidden_markers = FORBIDDEN_LEAK_MARKERS
+    if expected_detail is not None:
+        forbidden_markers = tuple(
+            marker for marker in forbidden_markers if marker not in {"detail", "reasonCode"}
+        )
+    for marker in forbidden_markers:
         assert marker not in serialized
 
 
@@ -205,6 +215,131 @@ def test_history_internal_error_response_is_consumer_safe_and_logged(
         message="History data is temporarily unavailable. Please retry later.",
     )
     assert history_failure in caplog.text
+
+
+def test_history_detail_internal_error_preserves_report_id_without_raw_exception(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    report_id = "report-safe-id-291"
+
+    class FailingHistoryService:
+        def resolve_and_get_detail(self, _record_id: str):
+            raise RuntimeError(RAW_LEAK_TEXT)
+
+    monkeypatch.setattr(
+        "api.v1.endpoints.history._build_history_service",
+        lambda db_manager, current_user: FailingHistoryService(),
+    )
+    caplog.set_level(logging.ERROR, logger="api.v1.endpoints.history")
+
+    response = client.get(f"/api/v1/history/{report_id}")
+
+    _assert_safe_error_payload(
+        response,
+        status_code=500,
+        error="internal_error",
+        message="History data is temporarily unavailable. Please retry later.",
+        retryable=True,
+        expected_detail={"reportId": report_id, "reasonCode": "history_internal_error"},
+    )
+    assert RAW_LEAK_TEXT in caplog.text
+
+
+def test_history_detail_internal_error_omits_unsafe_report_id(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    unsafe_report_id = "token=SECRET"
+
+    class FailingHistoryService:
+        def resolve_and_get_detail(self, _record_id: str):
+            raise RuntimeError(RAW_LEAK_TEXT)
+
+    monkeypatch.setattr(
+        "api.v1.endpoints.history._build_history_service",
+        lambda db_manager, current_user: FailingHistoryService(),
+    )
+
+    response = client.get(f"/api/v1/history/{unsafe_report_id}")
+
+    _assert_safe_error_payload(
+        response,
+        status_code=500,
+        error="internal_error",
+        message="History data is temporarily unavailable. Please retry later.",
+        retryable=True,
+        expected_detail={"reasonCode": "history_internal_error"},
+    )
+
+
+def test_analysis_sync_internal_error_preserves_request_and_task_ids_without_raw_exception(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def fail_analysis(*_args, **_kwargs):
+        raise RuntimeError(RAW_LEAK_TEXT)
+
+    monkeypatch.setattr("api.v1.endpoints.analysis._raise_if_llm_model_unavailable", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("src.services.analysis_service.AnalysisService.analyze_stock", fail_analysis)
+    caplog.set_level(logging.ERROR, logger="api.v1.endpoints.analysis")
+
+    response = client.post(
+        "/api/v1/analysis/analyze",
+        json={"stock_code": "AAPL", "async_mode": False},
+    )
+
+    assert response.status_code == 500
+    payload = response.json()
+    request_id = payload.get("detail", {}).get("requestId")
+    task_id = payload.get("detail", {}).get("taskId")
+    assert isinstance(request_id, str) and re.fullmatch(r"[a-f0-9]{32}", request_id)
+    assert task_id == request_id
+    _assert_safe_error_payload(
+        response,
+        status_code=500,
+        error="internal_error",
+        message="AI analysis is temporarily unavailable. Please retry later.",
+        retryable=True,
+        expected_detail={
+            "requestId": request_id,
+            "taskId": task_id,
+            "reasonCode": "analysis_internal_error",
+        },
+    )
+    assert RAW_LEAK_TEXT in caplog.text
+
+
+def test_analysis_status_internal_error_preserves_task_id_without_raw_exception(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    task_id = "task-safe-id-291"
+
+    class FailingAnalysisRepository:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def get_latest_record(self, **kwargs):
+            raise RuntimeError(RAW_LEAK_TEXT)
+
+    monkeypatch.setattr("api.v1.endpoints.analysis.AnalysisRepository", FailingAnalysisRepository)
+    caplog.set_level(logging.ERROR, logger="api.v1.endpoints.analysis")
+
+    response = client.get(f"/api/v1/analysis/status/{task_id}")
+
+    _assert_safe_error_payload(
+        response,
+        status_code=500,
+        error="internal_error",
+        message="Analysis task status is temporarily unavailable. Please retry later.",
+        retryable=True,
+        expected_detail={"taskId": task_id, "reasonCode": "analysis_status_internal_error"},
+    )
+    assert RAW_LEAK_TEXT in caplog.text
 
 
 def test_agent_chat_internal_error_response_is_consumer_safe(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

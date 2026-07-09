@@ -16,7 +16,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query, Depends, Body
 
 from api.deps import CurrentUser, get_current_user, get_database_manager
-from api.v1.errors import safe_api_error
+from api.v1.errors import safe_api_error, safe_error_identifier
 from api.v1.schemas.history import (
     HistoryListResponse,
     HistoryItem,
@@ -145,14 +145,29 @@ def _build_history_service(db_manager: DatabaseManager, current_user: CurrentUse
     return HistoryService(db_manager, owner_id=_resolve_owner_id(current_user))
 
 
-def _history_internal_error(context: str, exc: Exception, *, error: str = "internal_error") -> HTTPException:
+def _history_internal_error(
+    context: str,
+    exc: Exception,
+    *,
+    error: str = "internal_error",
+    detail: dict[str, Any] | None = None,
+) -> HTTPException:
     logger.error("%s: %s", context, exc, exc_info=True)
     return safe_api_error(
         status_code=500,
         error=error,
         message=_HISTORY_INTERNAL_ERROR_MESSAGE,
         retryable=True,
+        detail=detail,
     )
+
+
+def _history_error_detail(*, report_id: object, reason_code: str) -> dict[str, Any]:
+    detail: dict[str, Any] = {"reasonCode": reason_code}
+    safe_report_id = safe_error_identifier(report_id)
+    if safe_report_id:
+        detail["reportId"] = safe_report_id
+    return detail
 
 
 def _extract_number(value: Optional[object]) -> Optional[float]:
@@ -477,7 +492,11 @@ def get_history_detail(
     except HTTPException:
         raise
     except Exception as e:
-        raise _history_internal_error("查询历史详情失败", e)
+        raise _history_internal_error(
+            "查询历史详情失败",
+            e,
+            detail=_history_error_detail(report_id=record_id, reason_code="history_internal_error"),
+        )
 
 
 @router.get(
@@ -529,7 +548,11 @@ def get_history_news(
         )
 
     except Exception as e:
-        raise _history_internal_error("查询新闻情报失败", e)
+        raise _history_internal_error(
+            "查询新闻情报失败",
+            e,
+            detail=_history_error_detail(report_id=record_id, reason_code="history_internal_error"),
+        )
 
 
 @router.get(
@@ -573,9 +596,17 @@ def get_history_markdown(
             f"Markdown report generation failed for {record_id}",
             e,
             error="generation_failed",
+            detail=_history_error_detail(
+                report_id=record_id,
+                reason_code="history_markdown_generation_failed",
+            ),
         )
     except Exception as e:
-        raise _history_internal_error("获取 Markdown 报告失败", e)
+        raise _history_internal_error(
+            "获取 Markdown 报告失败",
+            e,
+            detail=_history_error_detail(report_id=record_id, reason_code="history_internal_error"),
+        )
 
     if markdown_content is None:
         raise HTTPException(

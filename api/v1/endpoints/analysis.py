@@ -32,7 +32,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from api.deps import CurrentUser, get_config_dep, get_current_user, get_current_user_id, get_system_config_service
-from api.v1.errors import safe_api_error
+from api.v1.errors import safe_api_error, safe_error_identifier
 from api.v1.schemas.analysis import (
     AnalyzeRequest,
     AnalysisPreviewRequest,
@@ -161,6 +161,7 @@ def _build_llm_model_unavailable_detail(config: Config) -> Optional[Dict[str, An
 
 
 _ANALYSIS_UNAVAILABLE_MESSAGE = "AI analysis is temporarily unavailable. Please retry later."
+_ANALYSIS_STATUS_UNAVAILABLE_MESSAGE = "Analysis task status is temporarily unavailable. Please retry later."
 _PUBLIC_PREVIEW_UNAVAILABLE_MESSAGE = "公开分析预览暂时不可用，请稍后重试。"
 
 
@@ -182,6 +183,22 @@ def _raise_if_llm_model_unavailable(
             message=public_message,
             retryable=True,
         )
+
+
+def _analysis_error_detail(
+    *,
+    request_id: Optional[str] = None,
+    task_id: Optional[str] = None,
+    reason_code: str,
+) -> Dict[str, Any]:
+    detail: Dict[str, Any] = {"reasonCode": reason_code}
+    safe_request_id = safe_error_identifier(request_id)
+    if safe_request_id:
+        detail["requestId"] = safe_request_id
+    safe_task_id = safe_error_identifier(task_id)
+    if safe_task_id:
+        detail["taskId"] = safe_task_id
+    return detail
 
 
 def _is_obviously_invalid_analysis_input(text: str) -> bool:
@@ -1027,13 +1044,17 @@ def _handle_sync_analysis(
                 status="failed",
                 query_id=query_id,
             )
-        raise HTTPException(
+        raise safe_api_error(
             status_code=500,
-            detail={
-                "error": "internal_error",
-                "message": f"分析过程发生错误: {str(e)}"
-            }
-        )
+            error="internal_error",
+            message=_ANALYSIS_UNAVAILABLE_MESSAGE,
+            retryable=True,
+            detail=_analysis_error_detail(
+                request_id=query_id,
+                task_id=query_id,
+                reason_code="analysis_internal_error",
+            ),
+        ) from e
     finally:
         if not quota_reservation_terminal_handled:
             _release_analysis_sync_quota_pilot_reservation(quota_reservation.reservation_id)
@@ -1448,13 +1469,16 @@ def get_analysis_status(
 
     except Exception as e:
         logger.error(f"查询任务状态失败: {e}", exc_info=True)
-        raise HTTPException(
+        raise safe_api_error(
             status_code=500,
-            detail={
-                "error": "internal_error",
-                "message": f"查询任务状态失败: {str(e)}"
-            }
-        )
+            error="internal_error",
+            message=_ANALYSIS_STATUS_UNAVAILABLE_MESSAGE,
+            retryable=True,
+            detail=_analysis_error_detail(
+                task_id=task_id,
+                reason_code="analysis_status_internal_error",
+            ),
+        ) from e
 
     if durable_state:
         return _task_status_from_durable_state(task_id, durable_state)

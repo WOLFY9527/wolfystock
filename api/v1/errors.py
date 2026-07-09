@@ -21,6 +21,7 @@ _UNSAFE_PUBLIC_ERROR_RE = re.compile(
     r")",
     re.IGNORECASE,
 )
+_SAFE_ERROR_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 
 
 def safe_public_error_message(message: str, *, fallback: str = "Request could not be processed.") -> str:
@@ -30,6 +31,18 @@ def safe_public_error_message(message: str, *, fallback: str = "Request could no
         return fallback
     if _UNSAFE_PUBLIC_ERROR_RE.search(text):
         return fallback
+    return text
+
+
+def safe_error_identifier(value: Any) -> str | None:
+    """Return a bounded client-safe identifier for error metadata, or None."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if not _SAFE_ERROR_IDENTIFIER_RE.fullmatch(text):
+        return None
+    if _UNSAFE_PUBLIC_ERROR_RE.search(text):
+        return None
     return text
 
 

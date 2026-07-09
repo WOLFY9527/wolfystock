@@ -41,6 +41,7 @@ class HistoryNewsFallbackTestCase(unittest.TestCase):
             end_date=None,
             offset=0,
             limit=20,
+            include_test=True,
         )
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["items"][0]["query_id"], "q-1")
