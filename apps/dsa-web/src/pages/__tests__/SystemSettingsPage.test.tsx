@@ -93,7 +93,9 @@ describe('SystemSettingsPage', () => {
     expect(screen.getByTestId('system-settings-loading')).toHaveAttribute('aria-busy', 'true');
     expect(await screen.findByText('settings-page-core')).toBeInTheDocument();
     expect(pageRoot).toHaveAttribute('data-terminal-primitive', 'page-shell');
-    expect(pageRoot).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-5', 'min-h-0', 'flex-1', 'overflow-x-hidden', 'py-5', 'text-white', 'md:py-6');
+    expect(pageRoot).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-5', 'min-h-0', 'flex-1', 'overflow-x-hidden', 'py-5', 'md:py-6');
+    expect(pageRoot.className).toContain('text-[color:var(--wolfy-text-primary)]');
+    expect(pageRoot.className).not.toContain('text-white');
     expect(pageRoot.className).not.toContain('bg-[#050505]');
     expect(shellHeader.className).not.toContain('max-w-[1600px]');
     expect(shellHeader.className).not.toContain('mx-auto');

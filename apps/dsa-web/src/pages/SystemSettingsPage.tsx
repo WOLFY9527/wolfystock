@@ -73,6 +73,10 @@ const SystemSettingsPage: FC = () => {
       dangerZoneNote: 'Open this area only when needed; it is not presented as a normal configuration step.',
       loadingTitle: 'Loading system control center',
       loadingBody: 'The top-level risk summary is ready. The latest snapshot and settings workspace are loading below.',
+      highestIssueLabel: 'Highest issue',
+      highestIssueValue: 'Access setup, schedules, and system state need step-by-step confirmation',
+      nextDomainLabel: 'Next configuration domain',
+      nextDomainValue: 'Open overview, then pick the domain that owns the open issue',
     }
     : {
       eyebrow: '管理员控制入口',
@@ -124,6 +128,10 @@ const SystemSettingsPage: FC = () => {
       dangerZoneNote: '仅在确有需要时进入，不作为日常配置步骤并列展示。',
       loadingTitle: '正在加载系统运维中心',
       loadingBody: '外层风险总览已就绪，最新快照与配置工作区正在下方加载。',
+      highestIssueLabel: '最高优先级问题',
+      highestIssueValue: '凭证、调度、系统状态需逐项确认',
+      nextDomainLabel: '下一配置域',
+      nextDomainValue: '先看总览，再进入对应配置域处理',
     };
   const resetDialogCopy = isEnglish
     ? {
@@ -211,10 +219,10 @@ const SystemSettingsPage: FC = () => {
   return (
     <TerminalPageShell
       data-testid="system-settings-page"
-      className="min-h-0 flex-1 overflow-x-hidden py-5 text-white md:py-6"
+      className="min-h-0 flex-1 overflow-x-hidden py-5 text-[color:var(--wolfy-text-primary)] md:py-6"
       onClickCapture={handleResetActionCapture}
     >
-      <div data-testid="system-settings-shell-header" className="flex min-w-0 flex-col gap-4">
+      <div data-testid="system-settings-shell-header" className="flex min-w-0 flex-col gap-3">
         <TerminalPageHeading
           data-testid="system-settings-heading"
           eyebrow={pageCopy.eyebrow}
@@ -226,9 +234,11 @@ const SystemSettingsPage: FC = () => {
             </div>
           )}
         />
-        <p className="max-w-3xl text-sm leading-6 text-white/58">
+        <p className="max-w-3xl text-sm leading-6 text-[color:var(--wolfy-text-muted)]">
           {pageCopy.description}
         </p>
+
+        {/* Compact operator status → highest issue → next domain (not five equal tiles + metric wall) */}
         <AdminOpsL0OverviewStrip
           dataTestId="system-settings-l0-overview-strip"
           systemTrustState="review_required"
@@ -238,7 +248,31 @@ const SystemSettingsPage: FC = () => {
           evidenceRef={pageCopy.l0EvidenceRef}
           lastUpdated={pageCopy.l0LastUpdated}
         />
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+
+        <section
+          data-testid="system-settings-operator-priority"
+          className="grid min-w-0 gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--state-warning-border)_70%,var(--wolfy-border-subtle))] bg-[color:color-mix(in_srgb,var(--state-warning-bg)_55%,var(--wolfy-surface-console))] px-3 py-2.5 md:grid-cols-2"
+        >
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">
+              {pageCopy.highestIssueLabel}
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">
+              <span aria-hidden="true" className="mr-1.5 text-[color:var(--state-warning-text)]">▲</span>
+              {pageCopy.highestIssueValue}
+            </p>
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">
+              {pageCopy.nextDomainLabel}
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">
+              {pageCopy.nextDomainValue}
+            </p>
+          </div>
+        </section>
+
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
           {pageCopy.overview.map(({ label, value, note }) => (
             <TerminalMetric
               key={label}
@@ -246,62 +280,66 @@ const SystemSettingsPage: FC = () => {
               value={value}
               subvalue={note}
               className="min-w-0"
-              valueClassName="text-sm font-semibold tracking-normal"
+              valueClassName="text-sm font-semibold tracking-normal text-[color:var(--wolfy-text-primary)]"
             />
           ))}
         </div>
+
         <section
           data-testid="system-settings-visual-boundary"
-          className="min-w-0 rounded-2xl border border-white/6 bg-white/[0.02] p-4 md:p-5"
+          className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3 md:p-4"
         >
-          <div className="flex min-w-0 flex-col gap-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/42">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
               {pageCopy.boundaryEyebrow}
             </p>
             <div className="min-w-0">
-              <h2 className="text-sm font-semibold text-white md:text-base">{pageCopy.boundaryTitle}</h2>
-              <p className="mt-2 max-w-4xl text-xs leading-6 text-white/58 md:text-sm">
+              <h2 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)] md:text-base">{pageCopy.boundaryTitle}</h2>
+              <p className="mt-1.5 max-w-4xl text-xs leading-6 text-[color:var(--wolfy-text-muted)] md:text-sm">
                 {pageCopy.boundaryDescription}
               </p>
             </div>
           </div>
-          <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
-            <article className="min-w-0 rounded-2xl border border-white/6 bg-black/15 p-4">
+          <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
+            <article className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
               <div className="flex min-w-0 flex-col gap-2">
                 <div>
-                  <p className="text-xs font-semibold text-white">{pageCopy.ordinaryZoneTitle}</p>
-                  <p className="mt-1 text-xs leading-5 text-white/58">
+                  <p className="text-xs font-semibold text-[color:var(--wolfy-text-primary)]">{pageCopy.ordinaryZoneTitle}</p>
+                  <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
                     {pageCopy.ordinaryZoneSummary}
                   </p>
                 </div>
-                <ul className="space-y-2 text-xs leading-5 text-white/62">
+                <ul className="space-y-1.5 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                   {pageCopy.ordinaryZoneItems.map((item) => (
                     <li key={item} className="flex min-w-0 items-start gap-2">
-                      <span aria-hidden="true" className="mt-1 size-1.5 shrink-0 rounded-full bg-emerald-300/70" />
+                      <span aria-hidden="true" className="mt-1 size-1.5 shrink-0 rounded-full bg-[color:var(--wolfy-market-up)]" />
                       <span className="min-w-0">{item}</span>
                     </li>
                   ))}
                 </ul>
               </div>
             </article>
-            <article className="min-w-0 rounded-2xl border border-amber-300/20 bg-amber-300/[0.05] p-4">
-              <div className="border-l-2 border-amber-200/70 pl-4">
+            <article className="min-w-0 rounded-lg border border-[color:var(--state-warning-border)] bg-[color:color-mix(in_srgb,var(--state-warning-bg)_70%,var(--wolfy-surface-console))] p-3">
+              <div className="border-l-2 border-[color:var(--state-warning-text)] pl-3">
                 <div className="flex min-w-0 flex-col gap-2">
                   <div>
-                    <p className="text-xs font-semibold text-amber-100">{pageCopy.dangerZoneTitle}</p>
-                    <p className="mt-1 text-xs leading-5 text-amber-50/75">
+                    <p className="text-xs font-semibold text-[color:var(--state-warning-text)]">
+                      <span aria-hidden="true" className="mr-1">▲</span>
+                      {pageCopy.dangerZoneTitle}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                       {pageCopy.dangerZoneSummary}
                     </p>
                   </div>
-                  <ul className="space-y-2 text-xs leading-5 text-white/70">
+                  <ul className="space-y-1.5 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                     {pageCopy.dangerZoneItems.map((item) => (
                       <li key={item} className="flex min-w-0 items-start gap-2">
-                        <span aria-hidden="true" className="mt-1 size-1.5 shrink-0 rounded-full bg-amber-200/80" />
+                        <span aria-hidden="true" className="mt-1 size-1.5 shrink-0 rounded-full bg-[color:var(--state-warning-text)]" />
                         <span className="min-w-0">{item}</span>
                       </li>
                     ))}
                   </ul>
-                  <p className="rounded-xl border border-amber-200/15 bg-black/20 px-3 py-2 text-xs leading-5 text-amber-50/78">
+                  <p className="rounded-md border border-[color:var(--state-warning-border)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                     {pageCopy.dangerZoneNote}
                   </p>
                 </div>

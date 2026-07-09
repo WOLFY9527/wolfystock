@@ -218,11 +218,11 @@ function boolLabel(value?: boolean | null): string {
 }
 
 const METRIC_VALUE_CLASS_BY_TONE: Record<Tone, string> = {
-  neutral: 'text-white',
-  good: 'text-emerald-300',
-  warn: 'text-amber-300',
-  danger: 'text-rose-300',
-  info: 'text-cyan-300',
+  neutral: 'text-[color:var(--wolfy-text-primary)]',
+  good: 'text-[color:var(--wolfy-market-up)]',
+  warn: 'text-[color:var(--state-warning-text)]',
+  danger: 'text-[color:var(--wolfy-market-down)]',
+  info: 'text-[color:var(--state-info-text)]',
 };
 
 function chipVariant(tone: Tone): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
@@ -536,8 +536,8 @@ const CurrentStatesPanel: React.FC<{ items: ProviderCircuitStateItem[] }> = ({ i
           <TerminalNestedBlock key={`${item.provider}-${item.providerCategory || 'all'}-${item.routeFamily || 'all'}-${index}`} className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-white">{safeText(item.provider)}</p>
-                <p className="mt-1 truncate font-mono text-[11px] text-white/42">
+                <p className="truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{safeText(item.provider)}</p>
+                <p className="mt-1 truncate font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">
                   {dimensionText(item.providerCategory, item.routeFamily)}
                 </p>
               </div>
@@ -545,18 +545,18 @@ const CurrentStatesPanel: React.FC<{ items: ProviderCircuitStateItem[] }> = ({ i
                 {stateLabel(item.state)}
               </TerminalChip>
             </div>
-            <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] text-white/44 sm:grid-cols-3">
+            <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] text-[color:var(--wolfy-text-muted)] sm:grid-cols-3">
               <p className="min-w-0">
                 原因 bucket
-                <span className="block truncate font-mono text-white/68">{bucketLabel(item.reasonBucket)}</span>
+                <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{bucketLabel(item.reasonBucket)}</span>
               </p>
               <p className="min-w-0">
                 冷却至
-                <span className="block truncate font-mono text-white/68">{safeDate(item.cooldownUntil)}</span>
+                <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{safeDate(item.cooldownUntil)}</span>
               </p>
               <p className="min-w-0">
                 更新时间
-                <span className="block truncate font-mono text-white/68">{safeDate(item.updatedAt)}</span>
+                <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{safeDate(item.updatedAt)}</span>
               </p>
             </div>
           </TerminalNestedBlock>
@@ -579,31 +579,31 @@ const EventsPanel: React.FC<{ items: ProviderCircuitEventItem[] }> = ({ items })
           <TerminalNestedBlock key={`${item.provider}-${item.eventType}-${item.createdAt || index}`} className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-white">{safeText(item.eventType)}</p>
-                <p className="mt-1 truncate font-mono text-[11px] text-white/42">
+                <p className="truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{safeText(item.eventType)}</p>
+                <p className="mt-1 truncate font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">
                   {dimensionText(item.providerCategory, item.routeFamily)}
                 </p>
               </div>
-              <span className="shrink-0 font-mono text-[11px] text-white/42">{safeDate(item.createdAt)}</span>
+              <span className="shrink-0 font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{safeDate(item.createdAt)}</span>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-4">
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-[color:var(--wolfy-text-muted)] md:grid-cols-4">
               <p>
                 状态变化
-                <span className="block truncate font-mono text-white/68">
+                <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">
                   {stateLabel(item.fromState)} {'->'} {stateLabel(item.toState)}
                 </span>
               </p>
               <p>
                 原因 bucket
-                <span className="block truncate font-mono text-white/68">{bucketLabel(item.reasonBucket)}</span>
+                <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{bucketLabel(item.reasonBucket)}</span>
               </p>
               <p>
                 请求 bucket
-                <span className="block truncate font-mono text-white/68">{safeText(item.requestCountBucket)}</span>
+                <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{safeText(item.requestCountBucket)}</span>
               </p>
               <p>
                 持续时间
-                <span className="block truncate font-mono text-white/68">{safeText(item.durationBucketMs)} ms</span>
+                <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{safeText(item.durationBucketMs)} ms</span>
               </p>
             </div>
           </TerminalNestedBlock>
@@ -626,8 +626,8 @@ const QuotaWindowsPanel: React.FC<{ items: ProviderQuotaWindowItem[] }> = ({ ite
           <TerminalNestedBlock key={`${item.provider}-${item.windowStart}-${index}`} className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-white">{safeText(item.provider)}</p>
-                <p className="mt-1 truncate font-mono text-[11px] text-white/42">
+                <p className="truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{safeText(item.provider)}</p>
+                <p className="mt-1 truncate font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">
                   {dimensionText(item.providerCategory, item.routeFamily)}
                 </p>
               </div>
@@ -635,10 +635,10 @@ const QuotaWindowsPanel: React.FC<{ items: ProviderQuotaWindowItem[] }> = ({ ite
                 {safeText(item.windowType)}
               </TerminalChip>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-4">
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-[color:var(--wolfy-text-muted)] md:grid-cols-4">
               <p>
                 请求数
-                <span className="block font-mono text-white/68">{formatNumber(item.requestCount, 0)}</span>
+                <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">{formatNumber(item.requestCount, 0)}</span>
               </p>
               <p>
                 拒绝数
@@ -646,35 +646,35 @@ const QuotaWindowsPanel: React.FC<{ items: ProviderQuotaWindowItem[] }> = ({ ite
               </p>
               <p>
                 成功 / 失败
-                <span className="block font-mono text-white/68">
+                <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">
                   {formatNumber(item.successCount, 0)} / {formatNumber(item.failureCount, 0)}
                 </span>
               </p>
               <p>
                 探测数
-                <span className="block font-mono text-white/68">{formatNumber(item.probeCount, 0)}</span>
+                <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">{formatNumber(item.probeCount, 0)}</span>
               </p>
               <p>
                 预留 / 消耗
-                <span className="block font-mono text-white/68">
+                <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">
                   {formatNumber(item.reservedUnits, 0)} / {formatNumber(item.consumedUnits, 0)}
                 </span>
               </p>
               <p>
                 429 / 403
-                <span className="block font-mono text-white/68">
+                <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">
                   {formatNumber(item.provider429Count, 0)} / {formatNumber(item.provider403Count, 0)}
                 </span>
               </p>
               <p>
                 Cache / stale
-                <span className="block font-mono text-white/68">
+                <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">
                   {formatNumber(item.cacheOnlyCount, 0)} / {formatNumber(item.staleServedCount, 0)}
                 </span>
               </p>
               <p>
                 窗口起点
-                <span className="block truncate font-mono text-white/68">{safeDate(item.windowStart)}</span>
+                <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{safeDate(item.windowStart)}</span>
               </p>
             </div>
           </TerminalNestedBlock>
@@ -697,8 +697,8 @@ const ProbeEventsPanel: React.FC<{ items: ProviderProbeEventItem[] }> = ({ items
           <TerminalNestedBlock key={`${item.provider}-${item.probeType}-${item.createdAt || index}`} className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-white">{safeText(item.probeType)}</p>
-                <p className="mt-1 truncate font-mono text-[11px] text-white/42">
+                <p className="truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{safeText(item.probeType)}</p>
+                <p className="mt-1 truncate font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">
                   {dimensionText(item.providerCategory, item.routeFamily)}
                 </p>
               </div>
@@ -706,18 +706,18 @@ const ProbeEventsPanel: React.FC<{ items: ProviderProbeEventItem[] }> = ({ items
                 {bucketLabel(item.resultBucket)}
               </TerminalChip>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-3">
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-[color:var(--wolfy-text-muted)] md:grid-cols-3">
               <p>
                 来源
-                <span className="block truncate font-mono text-white/68">{safeText(item.probeSource)}</span>
+                <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{safeText(item.probeSource)}</span>
               </p>
               <p>
                 持续时间
-                <span className="block truncate font-mono text-white/68">{safeText(item.durationBucketMs)} ms</span>
+                <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{safeText(item.durationBucketMs)} ms</span>
               </p>
               <p>
                 创建时间
-                <span className="block truncate font-mono text-white/68">{safeDate(item.createdAt)}</span>
+                <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{safeDate(item.createdAt)}</span>
               </p>
             </div>
           </TerminalNestedBlock>
@@ -747,8 +747,8 @@ const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ it
             <TerminalNestedBlock key={itemKey} className="min-w-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-white">{safeText(item.provider)}</p>
-                    <p className="mt-1 truncate font-mono text-[11px] text-white/42">
+                    <p className="truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{safeText(item.provider)}</p>
+                    <p className="mt-1 truncate font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">
                       {dimensionText(item.providerCategory, item.routeFamily)}
                     </p>
                   </div>
@@ -764,28 +764,28 @@ const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ it
                   {readinessNotice(item)}
                 </TerminalNotice>
 
-                <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-4">
+                <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-[color:var(--wolfy-text-muted)] md:grid-cols-4">
                   <p>
                     延迟
-                    <span className="block truncate font-mono text-white/68">
+                    <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">
                       {latencyLabel(item.latencyState)} · {safeText(item.latencyBucketMs)} ms
                     </span>
                   </p>
                   <p>
                     新鲜度
-                    <span className="block truncate font-mono text-white/68">
+                    <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">
                       {freshnessLabel(item.freshnessState)} · {safeText(item.freshnessSeconds)} s
                     </span>
                   </p>
                   <p>
                     错误状态
-                    <span className="block truncate font-mono text-white/68">
+                    <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">
                       {safeText(item.errorState)} · {safeText(item.errorRate)}
                     </span>
                   </p>
                   <p>
                     若启用门禁会阻断
-                    <span className="block truncate font-mono text-white/68">{boolLabel(item.wouldBlockCall)}</span>
+                    <span className="block truncate font-mono text-[color:var(--wolfy-text-secondary)]">{boolLabel(item.wouldBlockCall)}</span>
                   </p>
                 </div>
 
@@ -814,11 +814,11 @@ const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ it
 
                 <DiagnosticsDisclosure title="L3 最近错误 buckets：已脱敏原因 / 计数 / 最近观察" summary={`${(item.recentErrors || []).length} 项 · 最近 ${safeDate(item.trendSummary?.latestObservationAt)} · 默认收起`} className="mt-3">
                   {(item.recentErrors || []).length === 0 ? (
-                    <p className="text-white/48">暂无错误 bucket</p>
+                    <p className="text-[color:var(--wolfy-text-muted)]">暂无错误 bucket</p>
                   ) : (
                     <div className="space-y-2">
                       {(item.recentErrors || []).map((error) => (
-                        <p key={`${error.reasonBucket}-${error.latestAt || 'none'}`} className="font-mono text-white/60">
+                        <p key={`${error.reasonBucket}-${error.latestAt || 'none'}`} className="font-mono text-[color:var(--wolfy-text-secondary)]">
                           {bucketLabel(error.reasonBucket)} · {safeText(error.countBucket)} · {safeDate(error.latestAt)}
                         </p>
                       ))}
@@ -827,24 +827,24 @@ const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ it
                 </DiagnosticsDisclosure>
 
                 <DiagnosticsDisclosure title="L3 已脱敏技术边界：只读 / 外呼 / 门禁" summary="默认收起 · 当前数据源不展示原始载荷或秘钥线索" className="mt-3">
-                  <div className="grid grid-cols-1 gap-2 text-[11px] text-white/50 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-2 text-[11px] text-[color:var(--wolfy-text-muted)] md:grid-cols-2">
                       <p>
                         调用门禁
-                        <span className="block font-mono text-white/68">{boolLabel(item.liveHttpCallsEnabled)}</span>
+                        <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">{boolLabel(item.liveHttpCallsEnabled)}</span>
                       </p>
                       <p>
                         Dry-run
-                        <span className="block font-mono text-white/68">{boolLabel(item.dryRunEnabled)}</span>
+                        <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">{boolLabel(item.dryRunEnabled)}</span>
                       </p>
                       <p>
                         排序 / fallback 变化
-                        <span className="block font-mono text-white/68">
+                        <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">
                           {boolLabel(item.wouldChangeProviderOrder)} / {boolLabel(item.wouldChangeFallbackBehavior)}
                         </span>
                       </p>
                       <p>
                         熔断建议
-                        <span className="block font-mono text-white/68">
+                        <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">
                           {safeText(item.circuitAdvisoryState)} / {stateLabel(item.circuitStateCandidate)}
                         </span>
                       </p>
@@ -868,24 +868,24 @@ const BoundaryPanel: React.FC<{ data?: ProviderCircuitDiagnosticsBundle | null }
         当前为诊断观测，不会执行 provider blocking，也不会改变数据源 fallback 或 MarketCache 行为。
       </TerminalNotice>
       <DiagnosticsDisclosure title="L3 页面边界与脱敏姿态" summary="读取、外呼、门禁与脱敏信息默认收起" className="mt-3">
-        <div className="grid grid-cols-1 gap-2 text-[11px] text-white/50">
+        <div className="grid grid-cols-1 gap-2 text-[11px] text-[color:var(--wolfy-text-muted)]">
           <p>
             读取边界
-            <span className="block font-mono text-white/68">沿用既有数据源读取门禁</span>
+            <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">沿用既有数据源读取门禁</span>
           </p>
           <p>
             只读 / 外呼 / 门禁
-            <span className="block font-mono text-white/68">
+            <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">
               {metadata?.readOnly === true ? '只读' : '未确认'} / {metadata?.noExternalCalls === true ? '关闭' : '未确认'} / {metadata?.liveEnforcement === false ? '关闭' : '未确认'}
             </span>
           </p>
           <p>
             数据来源
-            <span className="block font-mono text-white/68">{safeText(metadata?.dataSources?.join(', '), '未提供')}</span>
+            <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">{safeText(metadata?.dataSources?.join(', '), '未提供')}</span>
           </p>
           <p>
             Redaction
-            <span className="block font-mono text-white/68">{safeText(metadata?.redaction?.join(', '), '未提供')}</span>
+            <span className="block font-mono text-[color:var(--wolfy-text-secondary)]">{safeText(metadata?.redaction?.join(', '), '未提供')}</span>
           </p>
         </div>
       </DiagnosticsDisclosure>
@@ -910,7 +910,7 @@ const CoverageDiagnosticsPanel: React.FC<{ data?: ProviderCircuitDiagnosticsBund
       <TerminalNotice variant={possibleUnwired ? 'caution' : 'neutral'} className="mt-4">
         {coverageNotice(metadata)}
       </TerminalNotice>
-      <div className="mt-4 grid grid-cols-1 gap-3 text-xs leading-5 text-white/54 md:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)] md:grid-cols-3">
         <p className="min-w-0">
           {coverageActionLabel(metadata?.recommendedNextAction)}
         </p>
@@ -929,32 +929,32 @@ const OperationalVerdictPanel: React.FC<{ verdict: OperationalVerdict; generated
   <TerminalNestedBlock data-testid="provider-circuit-operational-verdict" className="min-w-0 xl:w-[420px]">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0">
-        <p className="text-[11px] uppercase tracking-widest text-white/40">L0 运行判定</p>
+        <p className="text-[11px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">L0 运行判定</p>
         <p className={cn('mt-2 text-base font-semibold leading-6', METRIC_VALUE_CLASS_BY_TONE[verdict.tone])}>{verdict.title}</p>
       </div>
       <TerminalChip variant={chipVariant(verdict.tone)} className="shrink-0 font-semibold">
         {verdict.level}
       </TerminalChip>
     </div>
-    <p className="mt-3 text-xs leading-5 text-white/58">{verdict.description}</p>
-    <div className="mt-4 grid grid-cols-1 gap-3 text-[11px] text-white/44 sm:grid-cols-2">
+    <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{verdict.description}</p>
+    <div className="mt-4 grid grid-cols-1 gap-3 text-[11px] text-[color:var(--wolfy-text-muted)] sm:grid-cols-2">
       <p>
         运维影响
-        <span className="mt-1 block text-white/72">{verdict.impact}</span>
+        <span className="mt-1 block text-[color:var(--wolfy-text-secondary)]">{verdict.impact}</span>
       </p>
       <p>
         管理员下一步
-        <span className="mt-1 block text-white/72">{verdict.nextAction}</span>
+        <span className="mt-1 block text-[color:var(--wolfy-text-secondary)]">{verdict.nextAction}</span>
       </p>
     </div>
-    <p className="mt-3 truncate font-mono text-[11px] text-white/34">生成 {safeDate(generatedAt)} · 只读观测</p>
+    <p className="mt-3 truncate font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">生成 {safeDate(generatedAt)} · 只读观测</p>
   </TerminalNestedBlock>
 );
 
 const OperatorActionListPanel: React.FC<{ actions: OperatorActionItem[]; isLoading: boolean }> = ({ actions, isLoading }) => (
   <TerminalPanel as="section" data-testid="provider-circuit-action-list">
     <TerminalSectionHeader
-      eyebrow="L2 动作队列"
+      eyebrow="动作队列"
       title="优先处理项"
       action={<TerminalChip variant={actions.length ? 'caution' : 'success'}>{isLoading ? '读取中' : `${actions.length} 项`}</TerminalChip>}
     />
@@ -967,29 +967,55 @@ const OperatorActionListPanel: React.FC<{ actions: OperatorActionItem[]; isLoadi
         暂无需要管理员处理的数据源熔断动作；如需审计证据，可展开 L3 诊断细节。
       </TerminalNotice>
     ) : (
-      <ol className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <ol className="mt-4 space-y-2" aria-label="Provider circuit priority actions">
         {actions.map((action, index) => (
           <li key={action.id}>
-            <TerminalNestedBlock className="h-full min-w-0">
+            <TerminalNestedBlock
+              className={cn(
+                'min-w-0',
+                action.tone === 'danger'
+                  ? 'border-[color:color-mix(in_srgb,var(--wolfy-market-down)_30%,var(--wolfy-border-subtle))]'
+                  : action.tone === 'warn'
+                    ? 'border-[color:color-mix(in_srgb,var(--state-warning-border)_70%,var(--wolfy-border-subtle))]'
+                    : '',
+              )}
+            >
               <div className="flex min-w-0 items-start gap-3">
-                <span className={cn('mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-[11px] font-semibold', METRIC_VALUE_CLASS_BY_TONE[action.tone])}>
+                <span
+                  className={cn(
+                    'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-[11px] font-semibold',
+                    METRIC_VALUE_CLASS_BY_TONE[action.tone],
+                    'border-[color:var(--wolfy-border-subtle)]',
+                  )}
+                  aria-hidden="true"
+                >
                   {index + 1}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="min-w-0 text-sm font-semibold text-white">{action.issue}</p>
+                    <p
+                      className="min-w-0 text-sm font-semibold text-[color:var(--wolfy-text-primary)]"
+                      data-testid="provider-circuit-priority-title"
+                    >
+                      {action.issue}
+                    </p>
                     <TerminalChip variant={chipVariant(action.tone)} className="shrink-0">
+                      <span aria-hidden="true" className="mr-1">{action.tone === 'danger' ? '■' : '▲'}</span>
                       {action.tone === 'danger' ? 'BLOCKED' : 'DEGRADED'}
                     </TerminalChip>
                   </div>
-                  <dl className="mt-3 grid grid-cols-1 gap-2 text-xs leading-5 text-white/48 md:grid-cols-2">
+                  <dl className="mt-2 grid grid-cols-1 gap-2 text-xs leading-5 md:grid-cols-3">
                     <div className="min-w-0">
-                      <dt className="font-medium text-white/38">影响</dt>
-                      <dd className="mt-0.5 text-white/70">{action.impact}</dd>
+                      <dt className="font-medium text-[color:var(--wolfy-text-muted)]">影响</dt>
+                      <dd className="mt-0.5 text-[color:var(--wolfy-text-secondary)]">{action.impact}</dd>
                     </div>
                     <div className="min-w-0">
-                      <dt className="font-medium text-white/38">下一步</dt>
-                      <dd className="mt-0.5 text-white/70">{action.nextAction}</dd>
+                      <dt className="font-medium text-[color:var(--wolfy-text-muted)]">证据 / 归属</dt>
+                      <dd className="mt-0.5 break-words font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{action.id}</dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="font-medium text-[color:var(--wolfy-text-muted)]">下一步</dt>
+                      <dd className="mt-0.5 font-medium text-[color:var(--wolfy-text-primary)]">{action.nextAction}</dd>
                     </div>
                   </dl>
                 </div>
@@ -1005,10 +1031,10 @@ const OperatorActionListPanel: React.FC<{ actions: OperatorActionItem[]; isLoadi
 const LoadingState: React.FC = () => (
   <TerminalPanel as="section" role="status" aria-label="正在读取数据源熔断诊断">
     <div className="flex items-center gap-3">
-      <Activity className="h-4 w-4 animate-pulse text-cyan-200" aria-hidden="true" />
+      <Activity className="h-4 w-4 animate-pulse text-[color:var(--state-info-text)]" aria-hidden="true" />
       <div>
-        <p className="text-sm font-semibold text-white">正在读取数据源熔断诊断</p>
-        <p className="mt-1 text-xs text-white/46">只读取现有诊断 API，不触发外部数据调用。</p>
+        <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">正在读取数据源熔断诊断</p>
+        <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">只读取现有诊断 API，不触发外部数据调用。</p>
       </div>
     </div>
   </TerminalPanel>
@@ -1070,19 +1096,18 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
   }
 
   return (
-    <div data-testid="admin-provider-circuit-diagnostics-page" className="admin-provider-circuit-page flex min-h-0 w-full flex-1 overflow-y-auto no-scrollbar text-white">
+    <div data-testid="admin-provider-circuit-diagnostics-page" className="admin-provider-circuit-page flex min-h-0 w-full flex-1 overflow-y-auto no-scrollbar text-[color:var(--wolfy-text-primary)]">
       <TerminalPageShell className="flex min-h-0 flex-1 py-5 md:py-6">
         <TerminalPanel as="section" className="relative overflow-hidden">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/50 to-transparent" />
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0 flex-1">
               <TerminalPageHeading eyebrow="只读门禁诊断" title="数据源熔断诊断" />
-              <p className="mt-3 max-w-4xl text-sm leading-6 text-white/54">
+              <p className="mt-3 max-w-4xl text-sm leading-6 text-[color:var(--wolfy-text-muted)]">
                 {isLoading
                   ? '正在读取只读诊断快照'
                   : '先判断哪些数据源信号需要复核；事件、配额、探测与 bucket 细节默认折叠，当前不执行 provider blocking。'}
               </p>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
                 <TerminalChip variant="info">只读诊断</TerminalChip>
                 <TerminalChip variant={data?.states.metadata?.noExternalCalls === true ? 'success' : 'caution'}>
                   {data?.states.metadata?.noExternalCalls === true ? '不触发外部调用' : '外部调用状态待确认'}
@@ -1096,7 +1121,7 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
           </div>
           <AdminOpsL0OverviewStrip
             dataTestId="provider-circuit-l0-overview-strip"
-            className="mt-5"
+            className="mt-4"
             systemTrustState={
               operationalVerdict.level === 'LIVE'
                 ? 'healthy'
@@ -1111,37 +1136,7 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
             evidenceRef="L3 诊断细节 / 熔断、SLA、事件、配额、探测"
             lastUpdated={safeDate(data?.states.generatedAt)}
           />
-          <AdminDrillThroughStrip
-            className="mt-4"
-            items={[
-              {
-                label: '查看相关日志',
-                target: 'logs',
-                evidenceType: '数据源名称',
-                reason: '回看当前数据源的业务事件与降级线索。',
-                params: {
-                  tab: 'data_source',
-                  query: initialQuery.provider || data?.states.items?.[0]?.provider || '',
-                  since: initialQuery.since || '24h',
-                },
-              },
-              {
-                label: '查看数据源维护',
-                target: 'marketProviders',
-                evidenceType: '运维矩阵',
-                reason: '对照数据源运维矩阵与本地就绪检查。',
-                params: { surface: 'market_overview' },
-              },
-              {
-                label: '查看成本观测',
-                target: 'cost',
-                evidenceType: '数据源成本窗口',
-                reason: '继续确认配额、缓存与成本压力是否同步异常。',
-                params: { area: 'provider', window: initialQuery.since || '24h' },
-              },
-            ]}
-          />
-          {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}
+          {error ? <ApiErrorAlert error={error} className="mt-4" /> : null}
         </TerminalPanel>
 
         <div data-testid="provider-circuit-summary-metrics" className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1158,9 +1153,41 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
 
         {isLoading && !data && !error ? <LoadingState /> : null}
 
-        <CoverageDiagnosticsPanel data={data} />
-
+        {/* circuit state → priority actions before deep diagnostics */}
         <OperatorActionListPanel actions={operatorActions} isLoading={isLoading && !data && !error} />
+
+        <AdminDrillThroughStrip
+          className="mt-1"
+          items={[
+            {
+              label: '查看相关日志',
+              target: 'logs',
+              evidenceType: '数据源名称',
+              reason: '回看当前数据源的业务事件与降级线索。',
+              params: {
+                tab: 'data_source',
+                query: initialQuery.provider || data?.states.items?.[0]?.provider || '',
+                since: initialQuery.since || '24h',
+              },
+            },
+            {
+              label: '查看数据源维护',
+              target: 'marketProviders',
+              evidenceType: '运维矩阵',
+              reason: '对照数据源运维矩阵与本地就绪检查。',
+              params: { surface: 'market_overview' },
+            },
+            {
+              label: '查看成本观测',
+              target: 'cost',
+              evidenceType: '数据源成本窗口',
+              reason: '继续确认配额、缓存与成本压力是否同步异常。',
+              params: { area: 'provider', window: initialQuery.since || '24h' },
+            },
+          ]}
+        />
+
+        <CoverageDiagnosticsPanel data={data} />
 
         <DiagnosticsDisclosure
           title="L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA（已脱敏摘要）"

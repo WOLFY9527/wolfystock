@@ -22,7 +22,7 @@ const AdminOpsSectionHeading: React.FC<AdminOpsSectionHeadingProps> = ({
   <div data-testid={dataTestId} className={cn('col-span-12 min-w-0', className)}>
     <TerminalSectionHeader eyebrow={eyebrow} title={title} action={action} />
     {description ? (
-      <p className="mt-2 text-[11px] leading-5 text-white/46">
+      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
         {description}
       </p>
     ) : null}
