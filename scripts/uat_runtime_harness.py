@@ -10,6 +10,7 @@ process it starts and writes evidence under output/runtime-verification/.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -27,6 +28,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, IO, Mapping, Sequence
 from uuid import uuid4
+
+if os.name == "nt":
+    from ctypes import wintypes
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -70,6 +74,12 @@ class RunContext:
     evidence_dir: Path
     evidence_path: Path
     run_log_path: Path
+
+
+@dataclass(frozen=True)
+class ProcessProbe:
+    state: str
+    windows_error: int | None = None
 
 
 class DirectNoProxyHttpClient:
@@ -269,6 +279,8 @@ def ensure_frontend_dependencies(repo_root: Path) -> dict[str, Any]:
 def find_port_owner(host: str, port: int) -> PortOwner | None:
     if not _can_connect(host, port):
         return None
+    if os.name == "nt":
+        return _find_windows_port_owner(port)
     lsof = shutil.which("lsof")
     if not lsof:
         return PortOwner(pid=-1, cwd=None, command="unknown: lsof unavailable")
@@ -293,6 +305,8 @@ def find_port_owner(host: str, port: int) -> PortOwner | None:
 
 def process_cwd(pid: int) -> str | None:
     if pid <= 0:
+        return None
+    if os.name == "nt":
         return None
     proc_cwd = Path("/proc") / str(pid) / "cwd"
     try:
@@ -323,6 +337,8 @@ def process_cwd(pid: int) -> str | None:
 def process_command(pid: int) -> str | None:
     if pid <= 0:
         return None
+    if os.name == "nt":
+        return _windows_process_command(pid)
     ps = shutil.which("ps")
     if not ps:
         return None
@@ -339,6 +355,8 @@ def process_command(pid: int) -> str | None:
 
 
 def process_start_time(pid: int) -> str | None:
+    if os.name == "nt":
+        return _windows_process_start_time(pid)
     ps = shutil.which("ps")
     if pid <= 0 or not ps:
         return None
@@ -350,6 +368,176 @@ def process_start_time(pid: int) -> str | None:
         timeout=5,
     )
     return completed.stdout.strip() or None if completed.returncode == 0 else None
+
+
+def _probe_process(pid: int) -> ProcessProbe:
+    if pid <= 0:
+        return ProcessProbe(state="absent")
+    if os.name == "nt":
+        return _probe_windows_process(pid)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return ProcessProbe(state="absent")
+    except PermissionError:
+        return ProcessProbe(state="alive")
+    return ProcessProbe(state="alive")
+
+
+def _terminate_pid(pid: int) -> None:
+    if os.name != "nt":
+        os.kill(pid, signal.SIGTERM)
+        return
+    handle, error = _open_windows_process(_windows_terminate_access(), pid)
+    if not handle:
+        if error == 5:
+            raise PermissionError(13, "access denied", None, error)
+        if error in {87, 1168}:
+            raise ProcessLookupError(pid)
+        raise OSError(error or 0, f"OpenProcess failed for pid {pid}")
+    try:
+        if not _windows_kernel32().TerminateProcess(handle, 15):
+            error = ctypes.get_last_error()
+            if error == 5:
+                raise PermissionError(13, "access denied", None, error)
+            if error in {87, 1168}:
+                raise ProcessLookupError(pid)
+            raise OSError(error, f"TerminateProcess failed for pid {pid}")
+    finally:
+        _windows_kernel32().CloseHandle(handle)
+
+
+def _normalize_command_line(value: Any) -> str:
+    return " ".join(str(value or "").split()).strip()
+
+
+def _windows_process_start_time(pid: int) -> str | None:
+    handle, _error = _open_windows_process(_windows_query_access(), pid)
+    if not handle:
+        return None
+    creation = wintypes.FILETIME()
+    exit_time = wintypes.FILETIME()
+    kernel_time = wintypes.FILETIME()
+    user_time = wintypes.FILETIME()
+    try:
+        if not _windows_kernel32().GetProcessTimes(
+            handle,
+            ctypes.byref(creation),
+            ctypes.byref(exit_time),
+            ctypes.byref(kernel_time),
+            ctypes.byref(user_time),
+        ):
+            return None
+        timestamp = (int(creation.dwHighDateTime) << 32) | int(creation.dwLowDateTime)
+        if timestamp <= 0:
+            return None
+        unix_seconds = (timestamp - 116444736000000000) / 10_000_000
+        return datetime.fromtimestamp(unix_seconds, tz=timezone.utc).isoformat()
+    finally:
+        _windows_kernel32().CloseHandle(handle)
+
+
+def _windows_process_command(pid: int) -> str | None:
+    script = (
+        "$proc = Get-CimInstance Win32_Process -Filter \"ProcessId = %d\" -ErrorAction SilentlyContinue;"
+        "if ($null -ne $proc -and $proc.CommandLine) { [Console]::Out.Write($proc.CommandLine) }"
+    ) % int(pid)
+    completed = _run_windows_powershell(script)
+    if completed is None or completed.returncode != 0:
+        return None
+    return completed.stdout.strip() or None
+
+
+def _find_windows_port_owner(port: int) -> PortOwner | None:
+    script = (
+        "$conn = @(Get-NetTCPConnection -State Listen -LocalPort %d -ErrorAction SilentlyContinue | Select-Object -First 1);"
+        "if (-not $conn) { exit 0 };"
+        "$pid = [int]$conn.OwningProcess;"
+        "$command = $null;"
+        "try { $proc = Get-CimInstance Win32_Process -Filter \"ProcessId = $pid\" -ErrorAction Stop; $command = $proc.CommandLine } catch {};"
+        "@{ pid = $pid; command = $command } | ConvertTo-Json -Compress"
+    ) % int(port)
+    completed = _run_windows_powershell(script)
+    if completed is None or completed.returncode != 0 or not completed.stdout.strip():
+        return None
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return PortOwner(
+        pid=_safe_int(payload.get("pid")),
+        cwd=None,
+        command=str(payload.get("command") or "") or None,
+    )
+
+
+def _run_windows_powershell(script: str) -> subprocess.CompletedProcess[str] | None:
+    powershell = shutil.which("powershell") or shutil.which("pwsh")
+    if not powershell:
+        return None
+    return subprocess.run(
+        [powershell, "-NoProfile", "-NonInteractive", "-Command", script],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=5,
+    )
+
+
+def _probe_windows_process(pid: int) -> ProcessProbe:
+    handle, error = _open_windows_process(_windows_query_access(), pid)
+    if not handle:
+        if error == 5:
+            return ProcessProbe(state="access_denied", windows_error=error)
+        if error in {87, 1168}:
+            return ProcessProbe(state="absent", windows_error=error)
+        return ProcessProbe(state="unknown", windows_error=error)
+    exit_code = wintypes.DWORD()
+    try:
+        if not _windows_kernel32().GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            error = ctypes.get_last_error()
+            return ProcessProbe(state="unknown", windows_error=error)
+        return ProcessProbe(state="alive" if int(exit_code.value) == 259 else "absent")
+    finally:
+        _windows_kernel32().CloseHandle(handle)
+
+
+def _open_windows_process(access: int, pid: int) -> tuple[int | None, int | None]:
+    handle = _windows_kernel32().OpenProcess(int(access), False, int(pid))
+    if handle:
+        return int(handle), None
+    return None, ctypes.get_last_error()
+
+
+def _windows_query_access() -> int:
+    return 0x00100000 | 0x1000
+
+
+def _windows_terminate_access() -> int:
+    return _windows_query_access() | 0x0001
+
+
+def _windows_kernel32() -> Any:
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel32.GetProcessTimes.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+    ]
+    kernel32.GetProcessTimes.restype = wintypes.BOOL
+    kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    kernel32.TerminateProcess.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    return kernel32
 
 
 def start_runtime(
@@ -399,15 +587,7 @@ def stop_owned_runtime(process: subprocess.Popen[str] | None) -> dict[str, Any]:
 
 
 def pid_is_alive(pid: int) -> bool:
-    if pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
+    return _probe_process(pid).state == "alive"
 
 
 def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
@@ -416,8 +596,11 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
     runtime = evidence.get("runtime") if isinstance(evidence.get("runtime"), Mapping) else {}
     pid = _safe_int(run.get("pid"))
     expected_cwd = str(run.get("cwd") or "")
+    expected_command = _normalize_command_line(runtime.get("command"))
     if pid <= 0:
-        return {"status": "rejected", "reasonCode": "pid_missing", "pid": pid}
+        result = {"status": "rejected", "reasonCode": "pid_missing", "pid": pid}
+        _append_lifecycle_event(evidence_path, result)
+        return result
 
     if runtime.get("ownedByHarness") is not True:
         result = {
@@ -428,13 +611,68 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
         _append_lifecycle_event(evidence_path, result)
         return result
 
-    if not pid_is_alive(pid):
-        result = {"status": "absent", "reasonCode": "runtime_already_absent", "pid": pid}
+    probe = _probe_process(pid)
+    if probe.state == "absent":
+        result = {
+            "status": "absent",
+            "reasonCode": "runtime_already_absent",
+            "pid": pid,
+            "processState": probe.state,
+            "windowsError": probe.windows_error,
+        }
+        _append_lifecycle_event(evidence_path, result)
+        return result
+    if probe.state == "access_denied":
+        result = {
+            "status": "rejected",
+            "reasonCode": "access_denied",
+            "pid": pid,
+            "processState": probe.state,
+            "windowsError": probe.windows_error,
+        }
+        _append_lifecycle_event(evidence_path, result)
+        return result
+    if probe.state != "alive":
+        result = {
+            "status": "rejected",
+            "reasonCode": "ownership_unverifiable",
+            "pid": pid,
+            "processState": probe.state,
+            "windowsError": probe.windows_error,
+        }
         _append_lifecycle_event(evidence_path, result)
         return result
 
     expected_start = str(runtime.get("processStartTime") or "").strip()
     observed_start = str(process_start_time(pid) or "").strip()
+    if os.name == "nt" and not expected_start:
+        result = {
+            "status": "rejected",
+            "reasonCode": "ownership_unverifiable",
+            "pid": pid,
+            "missingIdentity": ["processStartTime"],
+        }
+        _append_lifecycle_event(evidence_path, result)
+        return result
+    if os.name == "nt" and expected_start and not observed_start:
+        reprobe = _probe_process(pid)
+        if reprobe.state == "absent":
+            result = {"status": "absent", "reasonCode": "runtime_already_absent", "pid": pid}
+            _append_lifecycle_event(evidence_path, result)
+            return result
+        if reprobe.state == "access_denied":
+            result = {"status": "rejected", "reasonCode": "access_denied", "pid": pid}
+            _append_lifecycle_event(evidence_path, result)
+            return result
+        result = {
+            "status": "rejected",
+            "reasonCode": "ownership_unverifiable",
+            "pid": pid,
+            "expectedProcessStartTime": expected_start,
+            "observedProcessStartTime": observed_start or None,
+        }
+        _append_lifecycle_event(evidence_path, result)
+        return result
     if expected_start and observed_start and expected_start != observed_start:
         result = {
             "status": "rejected",
@@ -447,23 +685,58 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
         return result
 
     observed_cwd = process_cwd(pid)
-    if expected_cwd and observed_cwd and Path(observed_cwd).resolve() != Path(expected_cwd).resolve():
+    observed_command = _normalize_command_line(process_command(pid))
+    if expected_cwd:
+        if observed_cwd and Path(observed_cwd).resolve() != Path(expected_cwd).resolve():
+            result = {
+                "status": "rejected",
+                "reasonCode": "pid_cwd_mismatch",
+                "pid": pid,
+                "expectedCwd": expected_cwd,
+                "observedCwd": observed_cwd,
+            }
+            _append_lifecycle_event(evidence_path, result)
+            return result
+        if not observed_cwd:
+            if os.name != "nt":
+                result = {
+                    "status": "rejected",
+                    "reasonCode": "pid_cwd_unavailable",
+                    "pid": pid,
+                    "expectedCwd": expected_cwd,
+                    "observedCwd": observed_cwd,
+                }
+                _append_lifecycle_event(evidence_path, result)
+                return result
+            if not expected_command or not observed_command:
+                result = {
+                    "status": "rejected",
+                    "reasonCode": "ownership_unverifiable",
+                    "pid": pid,
+                    "expectedCwd": expected_cwd,
+                    "observedCwd": observed_cwd,
+                    "expectedCommand": expected_command or None,
+                    "observedCommand": observed_command or None,
+                }
+                _append_lifecycle_event(evidence_path, result)
+                return result
+            if expected_command != observed_command:
+                result = {
+                    "status": "rejected",
+                    "reasonCode": "pid_command_mismatch",
+                    "pid": pid,
+                    "expectedCommand": expected_command,
+                    "observedCommand": observed_command,
+                }
+                _append_lifecycle_event(evidence_path, result)
+                return result
+    elif os.name == "nt" and expected_command and observed_command and expected_command != observed_command:
         result = {
             "status": "rejected",
-            "reasonCode": "pid_cwd_mismatch",
+            "reasonCode": "pid_command_mismatch",
             "pid": pid,
-            "expectedCwd": expected_cwd,
-            "observedCwd": observed_cwd,
-        }
-        _append_lifecycle_event(evidence_path, result)
-        return result
-    if expected_cwd and not observed_cwd:
-        result = {
-            "status": "rejected",
-            "reasonCode": "pid_cwd_unavailable",
-            "pid": pid,
-            "expectedCwd": expected_cwd,
-            "observedCwd": observed_cwd,
+            "expectedCommand": expected_command,
+            "observedCommand": observed_command,
         }
         _append_lifecycle_event(evidence_path, result)
         return result
@@ -494,9 +767,23 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
             return result
 
     try:
-        os.kill(pid, signal.SIGTERM)
+        _terminate_pid(pid)
     except ProcessLookupError:
         result = {"status": "absent", "reasonCode": "runtime_already_absent", "pid": pid}
+        _append_lifecycle_event(evidence_path, result)
+        return result
+    except PermissionError:
+        result = {"status": "rejected", "reasonCode": "access_denied", "pid": pid}
+        _append_lifecycle_event(evidence_path, result)
+        return result
+    except OSError as exc:
+        result = {
+            "status": "rejected",
+            "reasonCode": "terminate_failed",
+            "pid": pid,
+            "errorType": type(exc).__name__,
+            "windowsError": getattr(exc, "winerror", None),
+        }
         _append_lifecycle_event(evidence_path, result)
         return result
     result = {"status": "stopped", "reasonCode": "task_owned_pid_terminated", "pid": pid, "cwd": observed_cwd}
