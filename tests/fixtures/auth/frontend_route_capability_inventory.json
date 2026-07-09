@@ -1,18 +1,11 @@
 {
   "admin_surface_routes": [
     {
-      "route_id": "settings.system",
-      "path": "/settings/system",
-      "localized_path": "settings/system",
-      "capability_flag": "canReadSystemConfig",
-      "capability_label": "ops:system_config:read"
-    },
-    {
-      "route_id": "admin.logs",
-      "path": "/admin/logs",
-      "localized_path": "admin/logs",
-      "capability_flag": "canReadOpsLogs",
-      "capability_label": "ops:logs:read"
+      "route_id": "admin.cost_observability",
+      "path": "/admin/cost-observability",
+      "localized_path": "admin/cost-observability",
+      "capability_flag": "canReadCostObservability",
+      "capability_label": "cost:observability:read"
     },
     {
       "route_id": "admin.evidence_workflow",
@@ -22,11 +15,18 @@
       "capability_label": "ops:logs:read"
     },
     {
-      "route_id": "admin.notifications",
-      "path": "/admin/notifications",
-      "localized_path": "admin/notifications",
-      "capability_flag": "canReadNotifications",
-      "capability_label": "ops:notifications:read"
+      "route_id": "admin.launch_cockpit",
+      "path": "/admin/launch-cockpit",
+      "localized_path": "admin/launch-cockpit",
+      "capability_flag": "canReadOpsLogs",
+      "capability_label": "ops:logs:read"
+    },
+    {
+      "route_id": "admin.logs",
+      "path": "/admin/logs",
+      "localized_path": "admin/logs",
+      "capability_flag": "canReadOpsLogs",
+      "capability_label": "ops:logs:read"
     },
     {
       "route_id": "admin.market_providers",
@@ -34,6 +34,20 @@
       "localized_path": "admin/market-providers",
       "capability_flag": "canReadProviders",
       "capability_label": "ops:providers:read"
+    },
+    {
+      "route_id": "admin.mission_control",
+      "path": "/admin/mission-control",
+      "localized_path": "admin/mission-control",
+      "capability_flag": "canReadOpsLogs",
+      "capability_label": "ops:logs:read"
+    },
+    {
+      "route_id": "admin.notifications",
+      "path": "/admin/notifications",
+      "localized_path": "admin/notifications",
+      "capability_flag": "canReadNotifications",
+      "capability_label": "ops:notifications:read"
     },
     {
       "route_id": "admin.provider_circuits",
@@ -50,47 +64,42 @@
       "capability_label": "users:read"
     },
     {
-      "route_id": "admin.user_detail",
+      "route_id": "admin.users.userId",
       "path": "/admin/users/:userId",
       "localized_path": "admin/users/:userId",
       "capability_flag": "canReadUsers",
       "capability_label": "users:read"
     },
     {
-      "route_id": "admin.user_activity",
+      "route_id": "admin.users.userId.activity",
       "path": "/admin/users/:userId/activity",
       "localized_path": "admin/users/:userId/activity",
       "capability_flag": "canReadUserActivity",
       "capability_label": "users:activity:read"
     },
     {
-      "route_id": "admin.cost_observability",
-      "path": "/admin/cost-observability",
-      "localized_path": "admin/cost-observability",
-      "capability_flag": "canReadCostObservability",
-      "capability_label": "cost:observability:read"
+      "route_id": "settings.system",
+      "path": "/settings/system",
+      "localized_path": "settings/system",
+      "capability_flag": "canReadSystemConfig",
+      "capability_label": "ops:system_config:read"
     }
   ],
   "registered_surface_routes": [
     {
-      "route_id": "portfolio",
-      "path": "/portfolio",
-      "localized_path": "portfolio"
-    },
-    {
-      "route_id": "market_overview",
-      "path": "/market-overview",
-      "localized_path": "market-overview"
-    },
-    {
-      "route_id": "watchlist",
-      "path": "/watchlist",
-      "localized_path": "watchlist"
-    },
-    {
       "route_id": "backtest",
       "path": "/backtest",
       "localized_path": "backtest"
+    },
+    {
+      "route_id": "backtest.compare",
+      "path": "/backtest/compare",
+      "localized_path": "backtest/compare"
+    },
+    {
+      "route_id": "backtest.results.runId",
+      "path": "/backtest/results/:runId",
+      "localized_path": "backtest/results/:runId"
     },
     {
       "route_id": "options_lab",
@@ -98,17 +107,66 @@
       "localized_path": "options-lab"
     },
     {
-      "route_id": "backtest_compare",
-      "path": "/backtest/compare",
-      "localized_path": "backtest/compare"
+      "route_id": "portfolio",
+      "path": "/portfolio",
+      "localized_path": "portfolio"
     },
     {
-      "route_id": "backtest_result",
-      "path": "/backtest/results/:runId",
-      "localized_path": "backtest/results/:runId"
+      "route_id": "research.radar",
+      "path": "/research/radar",
+      "localized_path": "research/radar"
+    },
+    {
+      "route_id": "scanner",
+      "path": "/scanner",
+      "localized_path": "scanner"
+    },
+    {
+      "route_id": "scenario_lab",
+      "path": "/scenario-lab",
+      "localized_path": "scenario-lab"
+    },
+    {
+      "route_id": "settings",
+      "path": "/settings",
+      "localized_path": "settings"
+    },
+    {
+      "route_id": "stocks.stockCode.structure_decision",
+      "path": "/stocks/:stockCode/structure-decision",
+      "localized_path": "stocks/:stockCode/structure-decision"
+    },
+    {
+      "route_id": "watchlist",
+      "path": "/watchlist",
+      "localized_path": "watchlist"
     }
   ],
   "guest_paywall_routes": [
+    {
+      "route_id": "backtest",
+      "path": "/backtest",
+      "localized_path": "backtest",
+      "test_probe": "renderAt('/backtest')"
+    },
+    {
+      "route_id": "options_lab",
+      "path": "/options-lab",
+      "localized_path": "options-lab",
+      "test_probe": "renderAt('/options-lab')"
+    },
+    {
+      "route_id": "portfolio",
+      "path": "/portfolio",
+      "localized_path": "portfolio",
+      "test_probe": "renderAt('/portfolio')"
+    },
+    {
+      "route_id": "research.radar",
+      "path": "/research/radar",
+      "localized_path": "research/radar",
+      "test_probe": "renderAt('/research/radar')"
+    },
     {
       "route_id": "scanner",
       "path": "/scanner",
@@ -116,40 +174,31 @@
       "test_probe": "renderAt('/scanner')"
     },
     {
-      "route_id": "market_overview",
-      "path": "/market-overview",
-      "localized_path": "market-overview",
-      "test_probe": "['/market-overview', 'auth-guard:Market Overview']"
+      "route_id": "scenario_lab",
+      "path": "/scenario-lab",
+      "localized_path": "scenario-lab",
+      "test_probe": "renderAt('/scenario-lab')"
     },
     {
-      "route_id": "portfolio",
-      "path": "/portfolio",
-      "localized_path": "portfolio",
-      "test_probe": "['/portfolio', 'auth-guard:Portfolio']"
-    },
-    {
-      "route_id": "backtest",
-      "path": "/backtest",
-      "localized_path": "backtest",
-      "test_probe": "['/backtest', 'auth-guard:Backtest']"
-    },
-    {
-      "route_id": "options_lab",
-      "path": "/options-lab",
-      "localized_path": "options-lab",
-      "test_probe": "renderAt('/zh/options-lab')"
+      "route_id": "watchlist",
+      "path": "/watchlist",
+      "localized_path": "watchlist",
+      "test_probe": "renderAt('/watchlist')"
     }
   ],
   "guest_redirect_prefixes": [
-    "/settings",
-    "/settings/system",
-    "/admin/logs",
+    "/admin/cost-observability",
     "/admin/evidence-workflow",
-    "/admin/notifications",
+    "/admin/launch-cockpit",
+    "/admin/logs",
     "/admin/market-providers",
+    "/admin/mission-control",
+    "/admin/notifications",
     "/admin/provider-circuits",
     "/admin/users",
-    "/admin/cost-observability"
+    "/admin/users/:userId",
+    "/admin/users/:userId/activity",
+    "/settings/system"
   ],
   "public_routes": [
     {
@@ -162,5 +211,12 @@
       "path": "/market/rotation-radar",
       "localized_path": "market/rotation-radar"
     }
-  ]
+  ],
+  "metadata": {
+    "generator": "scripts/auth_route_capability_inventory.py",
+    "authority": [
+      "apps/dsa-web/src/App.tsx",
+      "apps/dsa-web/src/utils/adminCapabilities.ts"
+    ]
+  }
 }

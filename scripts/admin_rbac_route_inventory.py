@@ -608,7 +608,7 @@ def _collect_frontend_gate_rules(capability_source: str) -> tuple[dict[str, dict
     feature_flagged_paths: set[str] = set()
 
     for match in re.finditer(
-        r"if\s*\(\s*pathname\s*===\s*'(?P<path>[^']+)'\s*\|\|\s*pathname\.startsWith\('(?P=path)/'\)\s*\)"
+        r"if\s*\(\s*pathname\s*===\s*'(?P<path>[^']+)'\s*\|\|\s*pathname\.startsWith\('(?P=path)/'\)\s*,?\s*\)"
         r"\s*\{\s*return\s+capabilityFlags\.(?P<flag>can[A-Za-z0-9_]+);",
         capability_source,
         flags=re.DOTALL,
@@ -643,7 +643,7 @@ def _collect_frontend_gate_rules(capability_source: str) -> tuple[dict[str, dict
             if feature_dependency:
                 feature_flagged_paths.add(path)
 
-    if "pathname === '/admin/users'" in capability_source and "pathname.endsWith('/activity')" in capability_source:
+    if "pathname === '/admin/users'" in capability_source and "segments[segments.length - 1] === 'activity'" in capability_source:
         rules["/admin/users"] = {
             "capabilityFlag": "canReadUsers",
             "gateSource": "canAccessAdminPath:user_routes",
@@ -657,6 +657,19 @@ def _collect_frontend_gate_rules(capability_source: str) -> tuple[dict[str, dict
         rules["/admin/users/:userId/activity"] = {
             "capabilityFlag": "canReadUserActivity",
             "gateSource": "canAccessAdminPath:user_routes",
+            "featureFlagDependency": None,
+        }
+
+    if "pathname === '/admin/market-providers'" in capability_source and "capabilityFlags.canReadProviders" in capability_source:
+        rules["/admin/market-providers"] = {
+            "capabilityFlag": "canReadProviders",
+            "gateSource": "canAccessAdminPath:provider_routes",
+            "featureFlagDependency": None,
+        }
+    if "pathname === '/admin/provider-operations'" in capability_source and "capabilityFlags.canReadProviders" in capability_source:
+        rules["/admin/provider-operations"] = {
+            "capabilityFlag": "canReadProviders",
+            "gateSource": "canAccessAdminPath:provider_routes",
             "featureFlagDependency": None,
         }
 

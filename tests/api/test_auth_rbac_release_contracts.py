@@ -28,7 +28,6 @@ from src.storage import AdminUserRole, DatabaseManager
 
 
 AUDIT_SCRIPT = REPO_ROOT / "scripts" / "auth_rbac_release_audit.py"
-AUDIT_DOC = REPO_ROOT / "docs" / "audits" / "auth-rbac-release-security-guide.md"
 BACKEND_ROUTE_CLASSIFICATION_FIXTURE = (
     REPO_ROOT / "tests" / "fixtures" / "auth" / "backend_route_capability_inventory.json"
 )
@@ -700,14 +699,31 @@ def test_offline_auth_rbac_release_audit_cli_outputs_bounded_json() -> None:
     _assert_public_error_safe(payload, result.stderr)
 
 
-def test_release_security_guide_requires_manual_review_before_launch() -> None:
-    text = AUDIT_DOC.read_text(encoding="utf-8")
+def test_release_audit_contract_requires_manual_review_before_launch() -> None:
+    result = subprocess.run(
+        [sys.executable, str(AUDIT_SCRIPT), "--offline"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    audit_script_source = AUDIT_SCRIPT.read_text(encoding="utf-8")
+    payload = json.loads(result.stdout)
 
+    assert result.returncode == 0, result.stderr
+    assert payload["manualReviewRequired"] is True
+    assert payload["auditStatus"] == "manual_review_required"
+    assert payload["networkCallsExecuted"] is False
+    assert any(
+        surface["label"] == "manual_release_review_contract"
+        and surface["status"] == "pass"
+        and "does not approve launch" in surface["reviewNote"]
+        for surface in payload["surfacesChecked"]
+    )
     for required in (
-        "Manual review is required before launch",
-        "python3 scripts/auth_rbac_release_audit.py --offline",
-        "does not approve launch",
-        "Do not include raw cookies, Authorization headers, session IDs, client IPs, request bodies, or provider payloads",
-        "No runtime auth/RBAC behavior is changed by this audit",
+        "manualReviewRequired",
+        "manual_review_required",
+        "networkCallsExecuted",
+        "approve launch",
     ):
-        assert required in text
+        assert required in audit_script_source
