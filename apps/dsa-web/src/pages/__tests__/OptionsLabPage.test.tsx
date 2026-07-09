@@ -3102,6 +3102,13 @@ describe('OptionsLabPage', () => {
     expect(optionsLabPageSource).toContain('仅观察');
     expect(optionsLabPageSource).toContain('不可用于真实交易判断');
     expect(optionsLabPageSource).toContain('options-lab-consumer-availability');
+    expect(optionsLabPageSource).toContain('options-lab-research-sequence');
+    expect(optionsLabPageSource).toContain('研究上下文');
+    expect(optionsLabPageSource).toContain('可观察证据');
+    expect(optionsLabPageSource).toContain('数据质量 / 限制');
+    expect(optionsLabPageSource).toContain('情景或分析检视');
+    expect(optionsLabPageSource).toContain('下一步研究检查');
+    expect(optionsLabPageSource).toContain('非官方实时权威');
     expect(optionsLabPageSource).toContain('options-lab-input-region');
     expect(optionsLabPageSource).toContain('options-lab-output-region');
     expect(optionsLabPageSource).toContain('观察结构样例');

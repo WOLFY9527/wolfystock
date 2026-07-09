@@ -89,22 +89,24 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
   const templateName = getPointAndShootTemplateName(strategyTemplate, language);
   const readinessState = String(runReadiness?.state || '').trim().toLowerCase().replaceAll('-', '_').replace(/\s+/g, '_');
   const historicalState = String(historicalOhlcvReadiness?.status || '').trim().toLowerCase().replaceAll('-', '_').replace(/\s+/g, '_');
-  const resultPreviewTitle = hasRunAttempt && runReadiness?.resultContractAvailable === false
+  // Real result composition (equity / drawdown / metrics / ledger) must not appear before a real run result exists.
+  const hasRealResultContract = hasRunAttempt && runReadiness?.resultContractAvailable === true;
+  const resultWorkspaceTitle = hasRunAttempt && runReadiness?.resultContractAvailable === false
     ? (language === 'en' ? 'Result is not ready yet' : '结果暂未就绪')
-    : hasRunAttempt && runReadiness?.resultContractAvailable === true
+    : hasRealResultContract
       ? (language === 'en' ? 'Result view is ready' : '结果结构已返回')
-      : (language === 'en' ? 'No result yet' : '暂无结果');
-  const resultPreviewBody = hasRunAttempt && runReadiness?.resultContractAvailable === false
+      : (language === 'en' ? 'No real result yet' : '暂无真实结果');
+  const resultWorkspaceBody = hasRunAttempt && runReadiness?.resultContractAvailable === false
     ? (language === 'en'
       ? 'The current symbol or date range does not yet have enough usable data for a result view. Adjust the range, check historical data, or retry after data coverage improves.'
       : '当前标的或日期区间尚未具备足够可用数据，暂不展示结果。可调整区间、核对历史数据，或待覆盖改善后重试。')
-    : hasRunAttempt && runReadiness?.resultContractAvailable === true
+    : hasRealResultContract
       ? (language === 'en'
-        ? 'Open the saved result page to inspect curve, drawdown, trades, win rate, and sample coverage returned by the backend.'
-        : '可打开保存结果页，查看后端返回的收益曲线、回撤、交易次数、胜率与样本覆盖。')
+        ? 'A real run result is available. Open the saved result page to inspect equity, benchmark, drawdown, metrics, trade ledger, and Where It Breaks.'
+        : '已有真实运行结果。可打开保存结果页，查看收益曲线、基准、回撤、核心指标、交易账本与 Where It Breaks。')
       : (language === 'en'
-        ? 'After running, this workspace will show return curve, drawdown, trade count, win rate, and sample range when the backend returns them.'
-        : '运行后，这里会展示收益曲线、回撤、交易次数、胜率与样本区间等可用结果。');
+        ? 'Readiness is not a result. Configure the setup, review data readiness, then execute explicitly. Result composition appears only after a real run returns.'
+        : '就绪度不是结果。先完成配置、核对数据就绪度，再显式执行；结果构成仅在真实运行返回后展示。');
   const dataLimitation = readinessState === 'data_insufficient' || historicalState === 'insufficient_coverage'
     ? (language === 'en'
       ? 'Current limitation: historical price coverage is not enough for the selected range.'
@@ -118,6 +120,12 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
           ? 'Current limitation: no prepared sample is available yet.'
           : '当前限制：尚无可用样本。')
         : null;
+  const setupSequence = language === 'en'
+    ? ['Configuration', 'Readiness', 'Explicit execution', 'Real result workspace']
+    : ['配置', '就绪度', '显式执行', '真实结果工作区'];
+  const realResultComposition = language === 'en'
+    ? ['Equity vs benchmark', 'Drawdown', 'Core metrics', 'Trade ledger', 'Assumptions & costs', 'Where It Breaks']
+    : ['收益曲线与基准', '回撤', '核心指标', '交易与事件账本', '假设与成本', 'Where It Breaks'];
 
   return (
     <section
@@ -140,8 +148,8 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                 </h2>
                 <p className="mt-1 max-w-3xl text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                   {language === 'en'
-                    ? 'Set what will be tested on the left; read data readiness and the result preview on the right before launching.'
-                    : '左侧配置要验证的策略；右侧先看数据就绪度与结果预览，再决定是否运行。'}
+                    ? 'Set what will be tested on the left; check data readiness on the right. Result composition stays empty until a real run exists.'
+                    : '左侧配置要验证的策略；右侧核对数据就绪度。真实运行返回前，不展示结果构成。'}
                 </p>
               </div>
               <div className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-1 text-xs text-[color:var(--wolfy-text-muted)]">
@@ -328,14 +336,14 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
               <section data-testid="backtest-result-preview-panel" className="rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-4">
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className={LABEL_CLASS}>{language === 'en' ? 'Result preview' : '结果预览'}</p>
-                    <h3 className="text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPreviewTitle}</h3>
+                    <p className={LABEL_CLASS}>{language === 'en' ? 'Result workspace gate' : '结果工作区闸门'}</p>
+                    <h3 className="text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultWorkspaceTitle}</h3>
                   </div>
                   <span className="shrink-0 rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
                     {code || (language === 'en' ? 'No symbol' : '未选择标的')}
                   </span>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{resultPreviewBody}</p>
+                <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{resultWorkspaceBody}</p>
                 {dataLimitation ? (
                   <p data-testid="backtest-data-limitation" className="mt-3 rounded-lg border border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] px-3 py-2 text-xs leading-5 text-[color:var(--state-warning-text)]">
                     {dataLimitation}
@@ -343,19 +351,27 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                     {language === 'en' ? 'Next: change the range or rerun after data coverage is refreshed.' : '下一步：调整区间，或等待数据覆盖刷新后重试。'}
                   </p>
                 ) : null}
-                <div data-testid="backtest-preview-output-list" className="mt-4 grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-                  {[
-                    language === 'en' ? 'Equity vs benchmark' : '收益曲线与基准',
-                    language === 'en' ? 'Drawdown' : '回撤',
-                    language === 'en' ? 'Core metrics' : '核心指标',
-                    language === 'en' ? 'Trades and events' : '交易与事件账本',
-                    language === 'en' ? 'Assumptions, costs, and limitations' : '假设、成本与限制',
-                  ].map((item) => (
-                    <span key={item} className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-[color:var(--wolfy-text-secondary)]">
-                      {item}
-                    </span>
-                  ))}
-                </div>
+                {hasRealResultContract ? (
+                  <div data-testid="backtest-preview-output-list" className="mt-4 grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                    {realResultComposition.map((item) => (
+                      <span key={item} className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-[color:var(--wolfy-text-secondary)]">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <ol
+                    data-testid="backtest-setup-sequence"
+                    className="mt-4 flex flex-wrap gap-x-3 gap-y-2 text-xs text-[color:var(--wolfy-text-secondary)]"
+                  >
+                    {setupSequence.map((item, index) => (
+                      <li key={item} className="inline-flex min-w-0 items-center gap-1.5 rounded-lg border border-dashed border-[color:var(--wolfy-border-subtle)] px-2.5 py-1.5">
+                        <span className="font-mono text-[color:var(--sage-deep)]">{index + 1}</span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
               </section>
               <BacktestRunFeedbackBanner feedback={runFeedback} />
               <details data-testid="backtest-diagnostics-disclosure" className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-sm text-[color:var(--wolfy-text-secondary)]">

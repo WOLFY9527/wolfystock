@@ -919,11 +919,12 @@ export default function ScenarioLabPage() {
                       className="flex flex-wrap gap-x-4 gap-y-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5 text-xs text-[color:var(--wolfy-text-secondary)]"
                     >
                       {[
-                        locale === 'en' ? 'Explicit setup' : '显式情景设置',
+                        locale === 'en' ? 'Scenario configuration' : '情景配置',
                         locale === 'en' ? 'Explicit evaluation' : '显式评估',
-                        locale === 'en' ? 'Comparison' : '对比',
-                        locale === 'en' ? 'Sensitivity' : '敏感度',
-                        locale === 'en' ? 'Uncertainty' : '不确定性',
+                        locale === 'en' ? 'Impact map' : '冲击影响图',
+                        locale === 'en' ? 'Asset sensitivity' : '资产敏感度',
+                        locale === 'en' ? 'Watchlist mapping' : 'Watchlist 映射',
+                        locale === 'en' ? 'Explanation path' : '解释路径',
                         locale === 'en' ? 'Limitations' : '限制',
                       ].map((item, index) => (
                         <li key={item} className="inline-flex min-w-0 items-center gap-1.5">
@@ -932,6 +933,14 @@ export default function ScenarioLabPage() {
                         </li>
                       ))}
                     </ol>
+                    <p
+                      data-testid="scenario-evaluation-not-persistence"
+                      className="rounded-lg border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]"
+                    >
+                      {locale === 'en'
+                        ? 'Evaluation is not persistence. Running a scenario only recomputes the bounded frame in this session. Durable baseline creation remains a separate explicit path.'
+                        : '评估不等于持久化。运行情景只会在本会话重算有边界的框架；可复用基线的创建仍需独立显式路径。'}
+                    </p>
 
                     <div className="flex min-w-0 flex-wrap items-center gap-3">
                       <ScenarioWorkbenchButton
@@ -1062,8 +1071,16 @@ export default function ScenarioLabPage() {
                     },
                   ]}
                 />
+                <div
+                  data-testid="scenario-evaluation-ephemeral-notice"
+                  className="mx-3 rounded-xl border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5 text-xs leading-5 text-[color:var(--wolfy-text-muted)]"
+                >
+                  {locale === 'en'
+                    ? 'This evaluation result is session research output, not a durable saved baseline. Copy/save exports a research record only; explicit baseline creation remains the only durable path.'
+                    : '本次评估结果是会话内研究输出，不是可复用的持久基线。复制/保存仅导出研究记录；可复用基线仍需独立显式创建。'}
+                </div>
                 <div className="grid gap-3 p-3 md:grid-cols-2">
-                  <RoughSectionCard eyebrow={locale === 'en' ? 'Scenario presets' : '情景预设'} title={locale === 'en' ? 'Choose a bounded frame' : '选择一个有边界的框架'}>
+                  <RoughSectionCard eyebrow={locale === 'en' ? 'Scenario configuration' : '情景配置'} title={locale === 'en' ? 'Choose a bounded frame' : '选择一个有边界的框架'}>
                     <div className="flex flex-wrap gap-2">
                       {SCENARIO_PRESETS.map((preset) => {
                         const active = preset.key === selectedPreset.key;
@@ -1087,6 +1104,11 @@ export default function ScenarioLabPage() {
                     <div className="mt-3 text-xs leading-6 text-[color:var(--wolfy-text-muted)]">
                       {selectedPreset.summary[locale]}
                     </div>
+                    <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                      {locale === 'en'
+                        ? 'Changing the preset clears the prior evaluation until you re-evaluate explicitly.'
+                        : '切换预设会清除先前评估，需再次显式评估。'}
+                    </p>
                   </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Base context' : '基准状态'} title={locale === 'en' ? 'Current market frame' : '当前市场框架'}>
                     <RoughKeyValueRows
@@ -1153,21 +1175,62 @@ export default function ScenarioLabPage() {
                       />
                     )}
                   </RoughSectionCard>
-                  <RoughSectionCard eyebrow={locale === 'en' ? 'Driver deltas' : '驱动变化'} title={locale === 'en' ? 'Where the frame moves' : '框架如何变化'}>
-                    <RoughScoreRows
-                      items={changedDriverRows}
-                      emptyText={locale === 'en'
-                        ? 'No bounded driver delta is available for this scenario.'
-                        : '该情景当前没有可展示的驱动变化。'}
-                    />
+                  <RoughSectionCard
+                    eyebrow={locale === 'en' ? 'Impact map' : '冲击影响图'}
+                    title={locale === 'en' ? 'Where the frame moves' : '框架如何变化'}
+                  >
+                    <div data-testid="scenario-impact-map">
+                      <RoughScoreRows
+                        items={changedDriverRows}
+                        emptyText={locale === 'en'
+                          ? 'No bounded driver delta is available for this scenario.'
+                          : '该情景当前没有可展示的驱动变化。'}
+                      />
+                    </div>
                   </RoughSectionCard>
-                  <RoughSectionCard eyebrow={locale === 'en' ? 'Sensitivity' : '敏感度'} title={locale === 'en' ? 'Most sensitive evidence families' : '最敏感的证据族'}>
-                    <RoughBulletList
-                      items={changedDriverRows.slice(0, 3).map((item) => `${item.label} ${item.value}`)}
-                      emptyText={locale === 'en'
-                        ? 'Sensitivity remains unknown until driver deltas are returned.'
-                        : '驱动变化返回前，敏感度保持未知。'}
-                    />
+                  <RoughSectionCard
+                    eyebrow={locale === 'en' ? 'Asset sensitivity' : '资产敏感度'}
+                    title={locale === 'en' ? 'Most sensitive evidence families' : '最敏感的证据族'}
+                  >
+                    <div data-testid="scenario-asset-sensitivity">
+                      <RoughBulletList
+                        items={changedDriverRows.slice(0, 3).map((item) => `${item.label} ${item.value}`)}
+                        emptyText={locale === 'en'
+                          ? 'Sensitivity remains unknown until driver deltas are returned.'
+                          : '驱动变化返回前，敏感度保持未知。'}
+                      />
+                    </div>
+                  </RoughSectionCard>
+                  <RoughSectionCard
+                    eyebrow={locale === 'en' ? 'Watchlist mapping' : 'Watchlist 映射'}
+                    title={locale === 'en' ? 'Research handoff, not allocation' : '研究交接，而非配置建议'}
+                  >
+                    <div data-testid="scenario-watchlist-mapping" className="space-y-3 text-sm text-[color:var(--wolfy-text-secondary)]">
+                      <p>
+                        {locale === 'en'
+                          ? 'Map this scenario frame back to your Watchlist research ledger for follow-up observation. Allocation advice is out of scope.'
+                          : '将此情景框架映射回 Watchlist 研究台账，供后续观察。配置建议不在本页范围。'}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Link
+                          to={localize('/watchlist')}
+                          className="inline-flex items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+                        >
+                          {locale === 'en' ? 'Open Watchlist ledger' : '打开 Watchlist 台账'}
+                        </Link>
+                        <Link
+                          to={localize('/research/radar')}
+                          className="inline-flex items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+                        >
+                          {locale === 'en' ? 'Research radar' : '研究雷达'}
+                        </Link>
+                      </div>
+                      <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                        {locale === 'en'
+                          ? 'Watchlist mapping is a research task handoff. Evaluation still does not persist a baseline.'
+                          : 'Watchlist 映射是研究任务交接；评估本身仍不会持久化基线。'}
+                      </p>
+                    </div>
                   </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Scenario observations' : '情景观察'} title={locale === 'en' ? 'What to observe in this scenario' : '该情景下观察什么'}>
                     <RoughBulletList
@@ -1177,8 +1240,11 @@ export default function ScenarioLabPage() {
                       emptyText={locale === 'en' ? 'No scenario summary is available.' : '当前没有可展示的情景摘要。'}
                     />
                   </RoughSectionCard>
-                  <RoughSectionCard eyebrow={locale === 'en' ? 'Evidence and risk context' : '证据与风险语境'} title={locale === 'en' ? 'What confirms or invalidates it' : '确认线索与失效信号'}>
-                    <div className="space-y-3">
+                  <RoughSectionCard
+                    eyebrow={locale === 'en' ? 'Explanation path' : '解释路径'}
+                    title={locale === 'en' ? 'What confirms or invalidates it' : '确认线索与失效信号'}
+                  >
+                    <div data-testid="scenario-explanation-path" className="space-y-3">
                       <div>
                         <div className="mb-2 text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'What would confirm' : '哪些线索会继续确认'}</div>
                         <RoughBulletList

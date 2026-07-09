@@ -1108,15 +1108,17 @@ describe('BacktestPage', () => {
     );
     expect(screen.getByTestId('normal-backtest-form-grid')).toHaveClass('grid', 'md:grid-cols-4');
     expect(screen.getByRole('heading', { level: 1, name: '回测实验室' })).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-consumer-status-sentence')).toHaveTextContent('运行前可预览将展示的结果结构');
+    expect(screen.getByTestId('backtest-consumer-status-sentence')).toHaveTextContent('真实结果工作区仅在成功运行后打开');
+    expect(screen.getByTestId('backtest-consumer-status-sentence')).toHaveTextContent('就绪度本身不是结果');
     expect(screen.getByTestId('normal-backtest-consumer-grid')).toHaveClass('xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.55fr)]');
     expect(screen.getByTestId('normal-backtest-preview-rail')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-result-preview-panel')).toHaveTextContent('暂无结果');
-    expect(screen.getByTestId('backtest-result-preview-panel')).toHaveTextContent('收益曲线');
-    expect(screen.getByTestId('backtest-result-preview-panel')).toHaveTextContent('回撤');
-    expect(screen.getByTestId('backtest-result-preview-panel')).toHaveTextContent('交易次数');
-    expect(screen.getByTestId('backtest-result-preview-panel')).toHaveTextContent('胜率');
-    expect(screen.getByTestId('backtest-result-preview-panel')).toHaveTextContent('样本区间');
+    expect(screen.getByTestId('backtest-result-preview-panel')).toHaveTextContent('暂无真实结果');
+    expect(screen.getByTestId('backtest-result-preview-panel')).toHaveTextContent('就绪度不是结果');
+    expect(screen.getByTestId('backtest-setup-sequence')).toHaveTextContent('配置');
+    expect(screen.getByTestId('backtest-setup-sequence')).toHaveTextContent('就绪度');
+    expect(screen.getByTestId('backtest-setup-sequence')).toHaveTextContent('显式执行');
+    expect(screen.getByTestId('backtest-setup-sequence')).toHaveTextContent('真实结果工作区');
+    expect(screen.queryByTestId('backtest-preview-output-list')).not.toBeInTheDocument();
     expect(screen.getByTestId('normal-backtest-execution-readiness')).toHaveTextContent('数据就绪度');
     expect(screen.getByTestId('backtest-diagnostics-disclosure')).not.toHaveAttribute('open');
     expect(screen.getByTestId('backtest-diagnostics-disclosure')).toHaveTextContent('查看回测诊断');
@@ -2410,11 +2412,12 @@ describe('BacktestPage', () => {
     expect(
       within(heroCommandBar as HTMLElement).getByRole('button', { name: bt('en', 'resultPage.hero.backToConfig') }),
     ).toBeInTheDocument();
-    expect(await screen.findByRole('tab', { name: bt('en', 'resultPage.tabs.overview') })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.audit') })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.trades') })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.parameters') })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.history') })).toBeInTheDocument();
+    const resultTabs = await screen.findByTestId('deterministic-result-page-tabs');
+    expect(within(resultTabs).getByRole('tab', { name: bt('en', 'resultPage.tabs.overview') })).toHaveAttribute('aria-selected', 'true');
+    expect(within(resultTabs).getByRole('tab', { name: bt('en', 'resultPage.tabs.audit') })).toBeInTheDocument();
+    expect(within(resultTabs).getByRole('tab', { name: bt('en', 'resultPage.tabs.trades') })).toBeInTheDocument();
+    expect(within(resultTabs).getByRole('tab', { name: bt('en', 'resultPage.tabs.parameters') })).toBeInTheDocument();
+    expect(within(resultTabs).getByRole('tab', { name: bt('en', 'resultPage.tabs.history') })).toBeInTheDocument();
     expect(screen.getAllByText('Selected benchmark').length).toBeGreaterThan(0);
     expect(screen.getAllByText('QQQ').length).toBeGreaterThan(0);
   }, 10000);

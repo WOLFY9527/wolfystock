@@ -241,7 +241,8 @@ describe('BacktestResultReport', () => {
     expect(compositionOrder).toHaveTextContent('核心指标');
     expect(compositionOrder).toHaveTextContent('交易与事件账本');
     expect(compositionOrder).toHaveTextContent('假设与成本');
-    expect(compositionOrder).toHaveTextContent('限制');
+    expect(compositionOrder).toHaveTextContent('Where It Breaks');
+    expect(screen.getByTestId('backtest-report-where-it-breaks')).toHaveTextContent('Where It Breaks');
     expect(simpleReport).toHaveTextContent('核心指标');
     expect(simpleReport).toHaveTextContent('策略解读');
     expect(simpleReport).toHaveTextContent('基准收益');
