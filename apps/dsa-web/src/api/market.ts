@@ -207,9 +207,12 @@ type MarketSnapshotItem = {
   sourceLabel?: string | null;
   sourceType?: string | null;
   providerHealth?: MarketProviderHealth;
+  providerFreshness?: MarketDataMeta['providerFreshness'];
+  dataQuality?: MarketDataMeta['dataQuality'];
   updatedAt?: string;
   asOf?: string;
   freshness?: MarketDataMeta['freshness'];
+  isProxy?: boolean;
   isFallback?: boolean;
   isStale?: boolean;
   isPartial?: boolean;
@@ -222,6 +225,7 @@ type MarketSnapshotItem = {
   delayMinutes?: number;
   sourceTier?: string | null;
   trustLevel?: string | null;
+  sourceConfidence?: string | null;
   observationOnly?: boolean;
   sourceAuthorityAllowed?: boolean;
   scoreContributionAllowed?: boolean;
@@ -235,6 +239,12 @@ type MarketSnapshotItem = {
   missingMetrics?: string[];
   metricCoverageRatio?: number | null;
   broadMarketClaimAllowed?: boolean;
+  proxyFor?: string | null;
+  proxySymbol?: string | null;
+  proxyLabel?: string | null;
+  officialSeriesId?: string | null;
+  officialObservationDate?: string | null;
+  officialAsOf?: string | null;
   degradationReason?: string | null;
   degradationReasons?: string[];
   warning?: string | null;
@@ -250,12 +260,17 @@ type MarketSnapshotPayload = {
   updatedAt?: string;
   error?: string | null;
   fallbackUsed?: boolean;
+  /** Explicit panel status when backend already projects one (Market Overview-style). */
+  status?: MarketOverviewPanel['status'] | string | null;
   source?: string | null;
   sourceLabel?: string | null;
   sourceType?: string | null;
   providerHealth?: MarketProviderHealth;
+  providerFreshness?: MarketDataMeta['providerFreshness'];
+  dataQuality?: MarketDataMeta['dataQuality'];
   asOf?: string;
   freshness?: MarketDataMeta['freshness'];
+  isProxy?: boolean;
   isFallback?: boolean;
   isStale?: boolean;
   isPartial?: boolean;
@@ -268,6 +283,7 @@ type MarketSnapshotPayload = {
   delayMinutes?: number;
   sourceTier?: string | null;
   trustLevel?: string | null;
+  sourceConfidence?: string | null;
   observationOnly?: boolean;
   sourceAuthorityAllowed?: boolean;
   scoreContributionAllowed?: boolean;
@@ -281,11 +297,41 @@ type MarketSnapshotPayload = {
   missingMetrics?: string[];
   metricCoverageRatio?: number | null;
   broadMarketClaimAllowed?: boolean;
+  proxyFor?: string | null;
+  proxySymbol?: string | null;
+  proxyLabel?: string | null;
+  officialSeriesId?: string | null;
+  officialObservationDate?: string | null;
+  officialAsOf?: string | null;
   degradationReason?: string | null;
   degradationReasons?: string[];
   warning?: string | null;
   logSessionId?: string | null;
 };
+
+const EXPLICIT_PANEL_STATUSES = new Set<MarketOverviewPanel['status']>([
+  'success',
+  'partial',
+  'unavailable',
+  'failure',
+]);
+
+function isExplicitPanelStatus(value: unknown): value is MarketOverviewPanel['status'] {
+  return typeof value === 'string' && EXPLICIT_PANEL_STATUSES.has(value as MarketOverviewPanel['status']);
+}
+
+/** Preserve backend evidence timestamps; never invent client wall-clock time. */
+function resolveSnapshotEvidenceTimestamp(
+  ...candidates: Array<string | null | undefined>
+): string | undefined {
+  for (const candidate of candidates) {
+    const text = String(candidate || '').trim();
+    if (text) {
+      return text;
+    }
+  }
+  return undefined;
+}
 
 function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
   const hoverDetails = Array.isArray(item.hoverDetails) ? [...item.hoverDetails] : [];
@@ -295,12 +341,16 @@ function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
   if (item.explanation) {
     hoverDetails.push(item.explanation);
   }
+  // Prefer first present field. Explicit null means unavailable evidence; omit only when both absent.
+  // Observed zero remains 0 (not missing).
+  const value = item.price !== undefined ? item.price : item.value;
+  const changePct = item.changePercent !== undefined ? item.changePercent : item.change;
   return {
     symbol: item.symbol || '',
     label: item.label || item.name || item.symbol || '',
-    value: item.price ?? item.value,
+    value,
     unit: item.unit,
-    changePct: item.changePercent ?? item.change,
+    changePct,
     changeText: item.changeText,
     riskDirection: item.riskDirection,
     trend: Array.isArray(item.trend) ? item.trend : Array.isArray(item.sparkline) ? item.sparkline : [],
@@ -308,9 +358,12 @@ function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
     sourceLabel: item.sourceLabel || undefined,
     sourceType: item.sourceType || undefined,
     providerHealth: item.providerHealth,
-    updatedAt: item.updatedAt,
-    asOf: item.asOf,
+    providerFreshness: item.providerFreshness,
+    dataQuality: item.dataQuality,
+    updatedAt: resolveSnapshotEvidenceTimestamp(item.updatedAt),
+    asOf: resolveSnapshotEvidenceTimestamp(item.asOf),
     freshness: item.freshness,
+    isProxy: item.isProxy,
     isFallback: item.isFallback,
     isStale: item.isStale,
     isPartial: item.isPartial,
@@ -323,6 +376,7 @@ function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
     delayMinutes: item.delayMinutes,
     sourceTier: item.sourceTier || undefined,
     trustLevel: item.trustLevel || undefined,
+    sourceConfidence: item.sourceConfidence,
     observationOnly: item.observationOnly,
     sourceAuthorityAllowed: item.sourceAuthorityAllowed,
     scoreContributionAllowed: item.scoreContributionAllowed,
@@ -336,6 +390,12 @@ function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
     missingMetrics: item.missingMetrics,
     metricCoverageRatio: item.metricCoverageRatio,
     broadMarketClaimAllowed: item.broadMarketClaimAllowed,
+    proxyFor: item.proxyFor,
+    proxySymbol: item.proxySymbol,
+    proxyLabel: item.proxyLabel,
+    officialSeriesId: item.officialSeriesId,
+    officialObservationDate: item.officialObservationDate,
+    officialAsOf: item.officialAsOf,
     degradationReason: item.degradationReason,
     degradationReasons: item.degradationReasons,
     warning: item.warning,
@@ -346,21 +406,58 @@ function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
 function hasUsableSnapshotValue(payload: MarketSnapshotPayload): boolean {
   return Boolean(
     Array.isArray(payload.items)
-    && payload.items.some((item) => item && (typeof item.price === 'number' || typeof item.value === 'number'))
+    && payload.items.some((item) => {
+      if (!item) {
+        return false;
+      }
+      // Observed zero is usable evidence; null/undefined is not.
+      if (typeof item.price === 'number' && Number.isFinite(item.price)) {
+        return true;
+      }
+      if (typeof item.value === 'number' && Number.isFinite(item.value)) {
+        return true;
+      }
+      return false;
+    })
+  );
+}
+
+function isExplicitlyUnavailableSnapshot(payload: MarketSnapshotPayload): boolean {
+  const freshness = String(payload.freshness || '').trim().toLowerCase();
+  const source = String(payload.source || '').trim().toLowerCase();
+  const providerStatus = String(payload.providerHealth?.status || '').trim().toLowerCase();
+  const providerFreshnessState = String(payload.providerFreshness?.state || '').trim().toLowerCase();
+  return Boolean(
+    payload.isUnavailable
+    || payload.providerFreshness?.isUnavailable
+    || providerStatus === 'unavailable'
+    || freshness === 'unavailable'
+    || freshness === 'error'
+    || providerFreshnessState === 'unavailable'
+    || providerFreshnessState === 'error'
+    || source === 'unavailable'
   );
 }
 
 function deriveSnapshotPanelStatus(payload: MarketSnapshotPayload): MarketOverviewPanel['status'] {
+  // Prefer explicit backend panel status when present (Market Overview contract).
+  if (isExplicitPanelStatus(payload.status)) {
+    return payload.status;
+  }
+
   const hasUsableValue = hasUsableSnapshotValue(payload);
   const freshness = String(payload.freshness || '').trim().toLowerCase();
   const source = String(payload.source || '').trim().toLowerCase();
   const providerStatus = String(payload.providerHealth?.status || '').trim().toLowerCase();
+  const providerFreshnessState = String(payload.providerFreshness?.state || '').trim().toLowerCase();
+  const explicitlyUnavailable = isExplicitlyUnavailableSnapshot(payload);
   const hasDegradedValue = Boolean(
     payload.isPartial
     || payload.isStale
     || payload.isFallback
     || payload.fallbackUsed
     || payload.isFromSnapshot
+    || payload.isProxy
     || payload.refreshError
     || providerStatus === 'partial'
     || providerStatus === 'stale'
@@ -368,23 +465,44 @@ function deriveSnapshotPanelStatus(payload: MarketSnapshotPayload): MarketOvervi
     || freshness === 'partial'
     || freshness === 'stale'
     || freshness === 'fallback'
+    || freshness === 'proxy'
+    || freshness === 'delayed'
+    || freshness === 'cached'
+    || providerFreshnessState === 'partial'
+    || providerFreshnessState === 'stale'
+    || providerFreshnessState === 'fallback'
+    || providerFreshnessState === 'proxy'
+    || providerFreshnessState === 'delayed'
+    || providerFreshnessState === 'cached'
+    || payload.providerFreshness?.isProxy
+    || payload.providerFreshness?.isStale
   );
+
+  // Explicit unavailability must not be promoted to success by numeric presence alone.
+  if (explicitlyUnavailable) {
+    return hasUsableValue ? 'partial' : 'unavailable';
+  }
+
   if (hasUsableValue) {
     return hasDegradedValue ? 'partial' : 'success';
   }
+
   if (
-    payload.isUnavailable
-    || payload.isFallback
+    payload.isFallback
     || payload.fallbackUsed
-    || providerStatus === 'unavailable'
-    || freshness === 'unavailable'
     || freshness === 'fallback'
-    || source === 'unavailable'
     || source === 'fallback'
+    || providerStatus === 'fallback'
   ) {
     return 'unavailable';
   }
-  return payload.error ? 'failure' : 'success';
+
+  if (payload.error || payload.refreshError || payload.lastError) {
+    return 'failure';
+  }
+
+  // Missing usable evidence without explicit success signals is unavailable, not success.
+  return 'unavailable';
 }
 
 function deriveSnapshotPanelErrorMessage(
@@ -400,9 +518,19 @@ function deriveSnapshotPanelErrorMessage(
 function normalizeMarketSnapshotPayload(rawPayload: Record<string, unknown>, panelName: string): MarketOverviewPanel {
   const payload = toCamelCase<MarketSnapshotPayload>(rawPayload);
   const status = deriveSnapshotPanelStatus(payload);
+  const evidenceUpdatedAt = resolveSnapshotEvidenceTimestamp(
+    payload.updatedAt,
+    payload.lastUpdate,
+  );
+  const evidenceLastRefreshAt = resolveSnapshotEvidenceTimestamp(
+    payload.lastUpdate,
+    payload.updatedAt,
+  );
+  // lastRefreshAt is required by MarketOverviewPanel; preserve missing as empty string (not client now).
+  const lastRefreshAt = evidenceLastRefreshAt || '';
   return {
     panelName,
-    lastRefreshAt: payload.lastUpdate || payload.updatedAt || new Date().toISOString(),
+    lastRefreshAt,
     status,
     errorMessage: deriveSnapshotPanelErrorMessage(payload, status),
     logSessionId: payload.logSessionId,
@@ -410,9 +538,12 @@ function normalizeMarketSnapshotPayload(rawPayload: Record<string, unknown>, pan
     sourceLabel: payload.sourceLabel || undefined,
     sourceType: payload.sourceType || undefined,
     providerHealth: payload.providerHealth,
-    updatedAt: payload.updatedAt || payload.lastUpdate || new Date().toISOString(),
-    asOf: payload.asOf,
+    providerFreshness: payload.providerFreshness,
+    dataQuality: payload.dataQuality,
+    updatedAt: evidenceUpdatedAt,
+    asOf: resolveSnapshotEvidenceTimestamp(payload.asOf),
     freshness: payload.freshness,
+    isProxy: payload.isProxy,
     isFallback: payload.isFallback ?? payload.fallbackUsed,
     isStale: payload.isStale,
     isPartial: payload.isPartial,
@@ -425,6 +556,7 @@ function normalizeMarketSnapshotPayload(rawPayload: Record<string, unknown>, pan
     delayMinutes: payload.delayMinutes,
     sourceTier: payload.sourceTier || undefined,
     trustLevel: payload.trustLevel || undefined,
+    sourceConfidence: payload.sourceConfidence,
     observationOnly: payload.observationOnly,
     sourceAuthorityAllowed: payload.sourceAuthorityAllowed,
     scoreContributionAllowed: payload.scoreContributionAllowed,
@@ -438,6 +570,12 @@ function normalizeMarketSnapshotPayload(rawPayload: Record<string, unknown>, pan
     missingMetrics: payload.missingMetrics,
     metricCoverageRatio: payload.metricCoverageRatio,
     broadMarketClaimAllowed: payload.broadMarketClaimAllowed,
+    proxyFor: payload.proxyFor,
+    proxySymbol: payload.proxySymbol,
+    proxyLabel: payload.proxyLabel,
+    officialSeriesId: payload.officialSeriesId,
+    officialObservationDate: payload.officialObservationDate,
+    officialAsOf: payload.officialAsOf,
     degradationReason: payload.degradationReason,
     degradationReasons: payload.degradationReasons,
     warning: payload.warning,
@@ -2945,7 +3083,8 @@ export type MarketActionabilityConfidenceLabel = 'high' | 'medium' | 'low' | 'in
 export type MarketActionabilitySourceAuthority = 'scoreGradeAllowed' | 'observationOnly' | 'unavailable' | string;
 
 export type MarketActionabilityConfidence = {
-  value: number;
+  /** Missing confidence is unknown, not observed zero. */
+  value?: number | null;
   label: MarketActionabilityConfidenceLabel;
   capReasons: string[];
 };
@@ -3056,7 +3195,8 @@ export type MarketRegimeSummary = {
   blockers: MarketRegimeSummaryEntry[];
   contradictions: MarketRegimeSummaryEntry[];
   confidence: {
-    value: number;
+    /** Missing confidence is unknown, not observed zero. */
+    value?: number | null;
     label: string;
   };
   confidenceCaps: MarketRegimeSummaryEntry[];
@@ -3315,7 +3455,10 @@ function normalizeMarketActionabilityConfidence(
   confidence?: Partial<MarketActionabilityConfidence> | null,
 ): MarketActionabilityConfidence {
   return {
-    value: typeof confidence?.value === 'number' ? confidence.value : 0,
+    // Preserve missing confidence as unknown; do not invent observed zero.
+    value: typeof confidence?.value === 'number' && Number.isFinite(confidence.value)
+      ? confidence.value
+      : undefined,
     label: confidence?.label || 'insufficient',
     capReasons: Array.isArray(confidence?.capReasons) ? confidence.capReasons.filter(Boolean) : [],
   };
@@ -3438,7 +3581,10 @@ function normalizeMarketRegimeSummary(
     blockers: normalizeEntries(summary.blockers),
     contradictions: normalizeEntries(summary.contradictions),
     confidence: {
-      value: typeof summary.confidence?.value === 'number' ? summary.confidence.value : 0,
+      // Missing confidence is unknown, not observed zero.
+      value: typeof summary.confidence?.value === 'number' && Number.isFinite(summary.confidence.value)
+        ? summary.confidence.value
+        : undefined,
       label: summary.confidence?.label || '',
     },
     confidenceCaps: normalizeEntries(summary.confidenceCaps),
@@ -3477,8 +3623,9 @@ export function normalizeMarketTemperatureResponse(
     source: payload?.source || 'fallback',
     sourceLabel: normalizeMarketConsumerSourceLabel(payload?.sourceLabel, payload?.source),
     providerHealth: normalizeMarketProviderHealth(payload?.providerHealth),
-    updatedAt: payload?.updatedAt || new Date().toISOString(),
-    asOf: payload?.asOf,
+    // Backend as-of/update only; never substitute client render time as evidence observation time.
+    updatedAt: resolveSnapshotEvidenceTimestamp(payload?.updatedAt) || '',
+    asOf: resolveSnapshotEvidenceTimestamp(payload?.asOf),
     freshness: payload?.freshness,
     isFallback: payload?.isFallback,
     isStale: payload?.isStale,
