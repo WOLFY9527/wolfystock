@@ -4211,17 +4211,26 @@ describe('MarketOverviewPage', () => {
     render(createElement(MarketOverviewPage));
 
     const posturePanel = await screen.findByTestId('market-decision-semantics-strip');
+    const readinessBand = await screen.findByTestId('market-overview-decision-readiness');
+    // Intentional consumer-safe insufficient contract (see buildMarketNarrativeVerdict +
+    // marketDecisionPostureLabel): first-read verdict is 证据待补; posture/direction is 证据不足.
+    // Do not require legacy first-read copy 数据不足 (replaced intentionally for fail-closed
+    // observation language) or directional 偏*观察 labels under pure data_insufficient.
+    await waitFor(() => {
+      expect(within(readinessBand).getByTestId('market-overview-top-verdict')).toHaveTextContent('证据待补');
+    });
     const text = posturePanel.textContent || '';
 
-    expect(posturePanel).toHaveTextContent(/数据不足|偏强观察|中性观察|偏弱观察/);
+    expect(posturePanel).toHaveTextContent(/证据不足|证据待补/);
+    expect(posturePanel).toHaveTextContent(/当前市场：证据不足|证据强度|不支持强方向判断/);
     expect(posturePanel).toHaveTextContent(/关键证据未补齐|关键证据仍待补齐|关键确认仍待补齐|信号置信度仍偏有限|评分待恢复|数据更新中/);
     expect(posturePanel).toHaveTextContent(/待补|待确认|更新中/);
     expect(posturePanel).toHaveTextContent(/研究观察，不构成投资建议/);
     expect(posturePanel).toHaveTextContent(/可见事实有限|等待.*证据补齐|下一步看什么/);
     expect(posturePanel).not.toHaveTextContent('missing_scoring_pillars');
-    const readinessBand = screen.getByTestId('market-overview-decision-readiness');
-    expect(readinessBand).toHaveTextContent(/数据不足|偏强观察|中性观察|偏弱观察/);
+    expect(readinessBand).toHaveTextContent(/证据待补/);
     expect(readinessBand).toHaveTextContent(/关键证据未补齐|关键证据仍待补齐|关键确认仍待补齐|信号置信度仍偏有限|评分待恢复|数据更新中/);
+    expect(readinessBand).not.toHaveTextContent(/偏强观察|偏弱观察/);
     expect(readinessBand).not.toHaveTextContent('fallback_proxy_or_observation_only_evidence_present');
     expect(screen.getByTestId('market-decision-semantics-strip')).not.toHaveTextContent('fallback_proxy_or_observation_only_evidence_present');
     expect(text).not.toMatch(/买入|卖出|买卖|加仓|减仓|仓位|看多|看空|bullish|bearish|buy|sell|target|stop|recommend|add|reduce|position-size/i);
