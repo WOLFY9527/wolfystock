@@ -111,7 +111,7 @@ def build_news_catalyst_read_contract_v1(value: Mapping[str, Any] | None) -> dic
         "runtimeProviderCalls": False,
         "capabilityFamilies": list(NEWS_CATALYST_CAPABILITY_FAMILIES),
         "readinessStates": list(READINESS_STATES),
-        "asOf": as_of.isoformat(),
+        "asOf": as_of.isoformat() if as_of else None,
         "timezone": timezone_name,
         "families": families,
         "redactionBoundary": {
@@ -127,7 +127,7 @@ def _build_family_contract(
     *,
     family: str,
     payload: Mapping[str, Any],
-    as_of: datetime,
+    as_of: datetime | None,
     timezone_name: str,
 ) -> dict[str, Any]:
     source = _source_contract(_mapping(payload.get("source")))
@@ -161,7 +161,7 @@ def _build_family_contract(
         "capabilityFamily": family,
         "readinessState": readiness_state,
         "freshnessState": freshness_state,
-        "asOf": as_of.isoformat(),
+        "asOf": as_of.isoformat() if as_of else None,
         "timezone": timezone_name,
         "source": source,
         "sourceId": source["sourceId"],
@@ -197,7 +197,7 @@ def _derive_states(
     items: Sequence[Mapping[str, Any]],
     failure_reason: str | None,
     filtered_sample_count: int,
-    as_of: datetime,
+    as_of: datetime | None,
     max_age_hours: float,
 ) -> tuple[str, str, str | None, str | None]:
     if requested_state == "FETCH_FAILED" or failure_reason:
@@ -207,6 +207,15 @@ def _derive_states(
     if not items:
         reason = "sample_items_filtered" if filtered_sample_count else "source_returned_no_items"
         return "NO_ITEMS", "NO_ITEMS", None, reason
+    if as_of is None:
+        if requested_state == "STALE":
+            return "STALE", "STALE", "source_marked_stale", None
+        if requested_state in {"NO_ITEMS", "NOT_CONFIGURED"}:
+            no_item_reason = (
+                "source_returned_no_items" if requested_state == "NO_ITEMS" else None
+            )
+            return requested_state, requested_state, None, no_item_reason
+        return "PARTIAL", "PARTIAL", None, None
 
     stale_reason = _stale_reason(items=items, as_of=as_of, max_age_hours=max_age_hours)
     if requested_state == "STALE" or stale_reason:
@@ -326,13 +335,13 @@ def _stale_reason(
     return None
 
 
-def _normalize_datetime(value: Any, timezone_name: str) -> datetime:
+def _normalize_datetime(value: Any, timezone_name: str) -> datetime | None:
     parsed = _parse_datetime(value)
     if parsed is not None:
         if parsed.tzinfo is None:
             return parsed.replace(tzinfo=ZoneInfo(timezone_name))
         return parsed
-    return datetime.now(ZoneInfo(timezone_name)).replace(microsecond=0)
+    return None
 
 
 def _normalize_datetime_or_none(value: Any, timezone_name: str) -> datetime | None:

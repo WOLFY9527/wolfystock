@@ -342,3 +342,41 @@ def test_contract_does_not_infer_catalysts_or_event_dates_from_missing_data() ->
     assert company["items"] == []
     assert company["evidenceRef"] is None
     assert "tomorrow" not in json.dumps(company, ensure_ascii=False).lower()
+
+
+def test_missing_as_of_is_not_fabricated_or_marked_ready() -> None:
+    helper = _load_helper_module()
+
+    contract = helper.build_news_catalyst_read_contract_v1(
+        {
+            "timezone": "UTC",
+            "families": {
+                "stock_news": {
+                    "source": {
+                        "sourceId": "caller-supplied-news",
+                        "sourceType": "newswire",
+                        "authority": "caller_supplied",
+                    },
+                    "items": [
+                        {
+                            "title": "Caller supplied evidence",
+                            "summary": "The contract must preserve missing as-of authority.",
+                            "publishedAt": "2026-07-10T00:00:00Z",
+                            "eventTimestamp": "2026-07-10T00:00:00Z",
+                            "sourceId": "caller-supplied-news",
+                            "sourceType": "newswire",
+                            "sourceAuthority": "caller_supplied",
+                            "evidenceRef": "evidence:caller-supplied-news",
+                        }
+                    ],
+                }
+            },
+        }
+    )
+
+    stock_news = _family(contract, "stock_news")
+
+    assert contract["asOf"] is None
+    assert stock_news["asOf"] is None
+    assert stock_news["readinessState"] == "PARTIAL"
+    assert stock_news["freshnessState"] == "PARTIAL"
