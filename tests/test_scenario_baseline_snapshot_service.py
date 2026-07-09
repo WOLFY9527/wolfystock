@@ -400,6 +400,29 @@ def test_explicit_durable_snapshot_creation_records_reproducibility_contract(tmp
     assert reloaded.get_latest_durable_snapshot(scope={"type": "market", "value": "US"}, owner_id="user-a") == snapshot
 
 
+def test_durable_snapshot_creation_requires_explicit_owner(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    service = ScenarioBaselineSnapshotService(repository=ScenarioBaselineSnapshotRepository(db))
+
+    for owner_id in (None, "", "anonymous", " Anonymous ", "ANONYMOUS"):
+        with pytest.raises(ScenarioBaselineSnapshotStorageError, match="owner_required"):
+            service.create_durable_snapshot(_durable_ready_payload(), owner_id=owner_id)
+
+    with db.get_session() as session:
+        assert session.query(ScenarioBaselineSnapshotRow).count() == 0
+
+
+def test_durable_snapshot_reads_require_explicit_owner(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    snapshot = service.create_durable_snapshot(_durable_ready_payload(), owner_id="user-a")
+
+    for owner_id in (None, "", "anonymous", " Anonymous ", "ANONYMOUS"):
+        with pytest.raises(ScenarioBaselineSnapshotStorageError, match="owner_required"):
+            service.get_durable_snapshot(snapshot["snapshotId"], owner_id=owner_id)
+        with pytest.raises(ScenarioBaselineSnapshotStorageError, match="owner_required"):
+            service.get_latest_durable_snapshot(scope={"type": "market", "value": "US"}, owner_id=owner_id)
+
+
 def test_zero_usable_data_durable_snapshot_persists_domain_not_available_state(tmp_path: Path) -> None:
     service = _service(tmp_path)
     payload = _durable_ready_payload(snapshot_id="baseline-zero-usable")

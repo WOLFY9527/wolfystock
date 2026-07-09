@@ -320,8 +320,12 @@ def _missing_durable_snapshot(*, scope: Mapping[str, Any], owner_id: str | None)
 
 
 def _owner_scope(owner_id: str | None) -> dict[str, str]:
-    text = _safe_identifier(owner_id) or "anonymous"
-    return {"type": "user" if text != "anonymous" else "anonymous", "value": text}
+    text = _safe_identifier(owner_id)
+    if not text:
+        raise ScenarioBaselineSnapshotStorageError("scenario_baseline_snapshot_owner_required")
+    if text.lower() == "anonymous":
+        raise ScenarioBaselineSnapshotStorageError("scenario_baseline_snapshot_owner_required")
+    return {"type": "user", "value": text}
 
 
 def _source_authority_summary(value: Any, *, source: Mapping[str, Any]) -> dict[str, Any]:
