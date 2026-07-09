@@ -12,7 +12,6 @@ from typing import Any
 import api.deps as api_deps
 import api.middlewares.auth as auth_middleware
 from fastapi import FastAPI
-from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from api.app import create_app
@@ -116,7 +115,7 @@ def _client(
     return TestClient(app)
 
 
-def _registered_route_signatures(route: APIRoute) -> set[tuple[str, str]]:
+def _registered_route_signatures(route: Any) -> set[tuple[str, str]]:
     return {
         (method, route.path)
         for method in route.methods or set()
@@ -124,7 +123,7 @@ def _registered_route_signatures(route: APIRoute) -> set[tuple[str, str]]:
     }
 
 
-def _route_dependency_calls(route: APIRoute) -> list[object]:
+def _route_dependency_calls(route: Any) -> list[object]:
     calls: list[object] = []
     pending = list(route.dependant.dependencies)
     while pending:
@@ -279,7 +278,6 @@ def test_market_scenario_lab_durable_baseline_route_metadata_requires_current_us
     scenario_routes = {
         signature: route
         for route in iter_effective_api_routes(app.routes)
-        if isinstance(route, APIRoute)
         for signature in _registered_route_signatures(route)
         if signature[1].startswith("/api/v1/market/scenario-lab")
     }
