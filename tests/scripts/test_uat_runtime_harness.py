@@ -347,6 +347,7 @@ def test_run_harness_fails_when_dependency_bootstrap_fails(monkeypatch, tmp_path
 
 
 def test_preflight_pass_reports_machine_readable_current_run_identity(monkeypatch, tmp_path: Path) -> None:
+    expected_command = "python main.py --serve-only --host 127.0.0.1 --port 8102"
     evidence = {
         "contract": "wolfystock_uat_runtime_harness_v1",
         "status": "PASS",
@@ -361,7 +362,14 @@ def test_preflight_pass_reports_machine_readable_current_run_identity(monkeypatc
             "evidencePath": str(tmp_path / "evidence.json"),
             "runLogPath": str(tmp_path / "run.log"),
         },
-        "runtime": {"pid": 43210, "cwd": str(tmp_path.resolve()), "listener": {"port": 8102}},
+        "runtime": {
+            "pid": 43210,
+            "cwd": str(tmp_path.resolve()),
+            "ownedByHarness": True,
+            "processStartTime": "2026-07-05T00:00:00+00:00",
+            "command": expected_command,
+            "listener": {"port": 8102},
+        },
         "frontend": {"indexHtmlHash": "indexhash", "mainJsAssetFilename": "index-CKPdXr8Q.js"},
         "directHttpHtml": {"ok": True},
         "runtimeLog": {"path": str(tmp_path / "run.log"), "startTime": "2026-07-05T00:00:00+00:00"},
@@ -369,11 +377,13 @@ def test_preflight_pass_reports_machine_readable_current_run_identity(monkeypatc
     evidence_path = tmp_path / "evidence.json"
     evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
     monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path.resolve()))
+    monkeypatch.setattr(harness, "process_start_time", lambda _pid: "2026-07-05T00:00:00+00:00")
+    monkeypatch.setattr(harness, "process_command", lambda _pid: expected_command)
     monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
     monkeypatch.setattr(
         harness,
         "find_port_owner",
-        lambda _host, _port: harness.PortOwner(pid=43210, cwd=str(tmp_path.resolve()), command="python main.py --serve-only"),
+        lambda _host, _port: harness.PortOwner(pid=43210, cwd=str(tmp_path.resolve()), command=expected_command),
     )
     monkeypatch.setattr(harness, "DirectNoProxyHttpClient", lambda: _FakeClient())
 
@@ -388,9 +398,179 @@ def test_preflight_pass_reports_machine_readable_current_run_identity(monkeypatc
     assert result["checks"]["pidAlive"]["status"] == "PASS"
     assert result["checks"]["pidOwnsPort"]["status"] == "PASS"
     assert result["checks"]["cwd"]["status"] == "PASS"
+    assert result["checks"]["ownedByHarness"]["status"] == "PASS"
+    assert result["checks"]["processStartTime"]["status"] == "PASS"
+    assert result["checks"]["commandIdentity"]["status"] == "PASS"
     assert result["checks"]["directNoProxyHttp"]["status"] == "PASS"
     assert result["run"]["runId"] == "uat-20260705T000000Z-abc12345"
     assert result["run"]["runLogPath"] == str(tmp_path / "run.log")
+
+
+def test_preflight_windows_allows_unobservable_cwd_when_stronger_identity_matches(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    expected_command = "python main.py --serve-only --host 127.0.0.1 --port 8102"
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(
+        json.dumps(
+            {
+                "contract": "wolfystock_uat_runtime_harness_v1",
+                "status": "PASS",
+                "source": {"gitSha": "45b6965d"},
+                "run": {
+                    "runId": "uat-run",
+                    "pid": 43210,
+                    "cwd": str(tmp_path.resolve()),
+                    "startTime": "2026-07-05T00:00:00+00:00",
+                    "port": 8102,
+                    "assetIdentity": {"mainJsAssetFilename": "index-CKPdXr8Q.js"},
+                    "evidencePath": str(evidence_path),
+                    "runLogPath": str(tmp_path / "run.log"),
+                },
+                "runtime": {
+                    "ownedByHarness": True,
+                    "processStartTime": "2026-07-05T00:00:00+00:00",
+                    "command": expected_command,
+                    "listener": {"host": "127.0.0.1", "port": 8102},
+                },
+                "frontend": {"mainJsAssetFilename": "index-CKPdXr8Q.js"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness, "is_windows", lambda: True)
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
+    monkeypatch.setattr(harness, "process_cwd", lambda _pid: None)
+    monkeypatch.setattr(harness, "process_start_time", lambda _pid: "2026-07-05T00:00:00+00:00")
+    monkeypatch.setattr(harness, "process_command", lambda _pid: expected_command)
+    monkeypatch.setattr(
+        harness,
+        "find_port_owner",
+        lambda _host, _port: harness.PortOwner(pid=43210, cwd=None, command=expected_command),
+    )
+    monkeypatch.setattr(harness, "DirectNoProxyHttpClient", lambda: _FakeClient())
+
+    result = harness.run_preflight(
+        evidence_path=evidence_path,
+        expected_sha="45b6965d",
+        host="127.0.0.1",
+        port=8102,
+    )
+
+    assert result["status"] == "PASS"
+    assert result["checks"]["cwd"]["status"] == "UNAVAILABLE"
+    assert result["checks"]["cwd"]["observed"]["reasonCode"] == "cwd_unobservable"
+    assert result["checks"]["ownedByHarness"]["status"] == "PASS"
+    assert result["checks"]["processStartTime"]["status"] == "PASS"
+    assert result["checks"]["commandIdentity"]["status"] == "PASS"
+    assert result["checks"]["pidOwnsPort"]["status"] == "PASS"
+
+
+def test_preflight_windows_rejects_observable_cwd_mismatch(monkeypatch, tmp_path: Path) -> None:
+    expected_command = "python main.py --serve-only --host 127.0.0.1 --port 8102"
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(
+        json.dumps(
+            {
+                "contract": "wolfystock_uat_runtime_harness_v1",
+                "status": "PASS",
+                "source": {"gitSha": "45b6965d"},
+                "run": {
+                    "runId": "uat-run",
+                    "pid": 43210,
+                    "cwd": str(tmp_path.resolve()),
+                    "startTime": "2026-07-05T00:00:00+00:00",
+                    "port": 8102,
+                    "assetIdentity": {"mainJsAssetFilename": "index-CKPdXr8Q.js"},
+                    "evidencePath": str(evidence_path),
+                    "runLogPath": str(tmp_path / "run.log"),
+                },
+                "runtime": {
+                    "ownedByHarness": True,
+                    "processStartTime": "2026-07-05T00:00:00+00:00",
+                    "command": expected_command,
+                    "listener": {"host": "127.0.0.1", "port": 8102},
+                },
+                "frontend": {"mainJsAssetFilename": "index-CKPdXr8Q.js"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness, "is_windows", lambda: True)
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
+    monkeypatch.setattr(harness, "process_cwd", lambda _pid: str((tmp_path / "other").resolve()))
+    monkeypatch.setattr(harness, "process_start_time", lambda _pid: "2026-07-05T00:00:00+00:00")
+    monkeypatch.setattr(harness, "process_command", lambda _pid: expected_command)
+    monkeypatch.setattr(
+        harness,
+        "find_port_owner",
+        lambda _host, _port: harness.PortOwner(pid=43210, cwd=None, command=expected_command),
+    )
+    monkeypatch.setattr(harness, "DirectNoProxyHttpClient", lambda: _FakeClient())
+
+    result = harness.run_preflight(
+        evidence_path=evidence_path,
+        expected_sha="45b6965d",
+        host="127.0.0.1",
+        port=8102,
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["checks"]["cwd"]["status"] == "FAIL"
+    assert result["checks"]["cwd"]["observed"] == str((tmp_path / "other").resolve())
+
+
+def test_preflight_posix_rejects_unobservable_cwd(monkeypatch, tmp_path: Path) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(
+        json.dumps(
+            {
+                "contract": "wolfystock_uat_runtime_harness_v1",
+                "status": "PASS",
+                "source": {"gitSha": "45b6965d"},
+                "run": {
+                    "runId": "uat-run",
+                    "pid": 43210,
+                    "cwd": str(tmp_path.resolve()),
+                    "startTime": "2026-07-05T00:00:00+00:00",
+                    "port": 8102,
+                    "assetIdentity": {"mainJsAssetFilename": "index-CKPdXr8Q.js"},
+                    "evidencePath": str(evidence_path),
+                    "runLogPath": str(tmp_path / "run.log"),
+                },
+                "runtime": {
+                    "ownedByHarness": True,
+                    "processStartTime": "Sun Jul  5 00:00:00 2026",
+                    "listener": {"host": "127.0.0.1", "port": 8102},
+                },
+                "frontend": {"mainJsAssetFilename": "index-CKPdXr8Q.js"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness, "is_windows", lambda: False)
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
+    monkeypatch.setattr(harness, "process_cwd", lambda _pid: None)
+    monkeypatch.setattr(harness, "process_start_time", lambda _pid: "Sun Jul  5 00:00:00 2026")
+    monkeypatch.setattr(harness, "process_command", lambda _pid: "python main.py --serve-only --port 8102")
+    monkeypatch.setattr(
+        harness,
+        "find_port_owner",
+        lambda _host, _port: harness.PortOwner(pid=43210, cwd=None, command="python main.py --serve-only"),
+    )
+    monkeypatch.setattr(harness, "DirectNoProxyHttpClient", lambda: _FakeClient())
+
+    result = harness.run_preflight(
+        evidence_path=evidence_path,
+        expected_sha="45b6965d",
+        host="127.0.0.1",
+        port=8102,
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["checks"]["cwd"]["status"] == "FAIL"
+    assert result["checks"]["cwd"]["observed"] is None
 
 
 def test_preflight_fails_for_wrong_port_owner(monkeypatch, tmp_path: Path) -> None:
@@ -608,7 +788,7 @@ def test_safe_stop_windows_invalid_pid_returns_absent_without_raw_exception(monk
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(harness.os, "name", "nt", raising=False)
+    monkeypatch.setattr(harness, "is_windows", lambda: True)
     monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="absent", windows_error=87))
     monkeypatch.setattr(harness, "_terminate_pid", lambda _pid: pytest.fail("invalid pid must not be terminated"))
 
@@ -632,7 +812,7 @@ def test_safe_stop_windows_access_denied_is_not_classified_as_absent(monkeypatch
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(harness.os, "name", "nt", raising=False)
+    monkeypatch.setattr(harness, "is_windows", lambda: True)
     monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="access_denied", windows_error=5))
     monkeypatch.setattr(harness, "_terminate_pid", lambda _pid: pytest.fail("access denied process must not be terminated"))
 
@@ -644,6 +824,28 @@ def test_safe_stop_windows_access_denied_is_not_classified_as_absent(monkeypatch
     payload = json.loads(evidence_path.read_text(encoding="utf-8"))
     assert payload["lifecycleEvents"][-1]["status"] == "rejected"
     assert payload["lifecycleEvents"][-1]["reasonCode"] == "access_denied"
+
+
+def test_windows_port_owner_query_avoids_powershell_pid_collision(monkeypatch) -> None:
+    scripts: list[str] = []
+
+    def _run(script: str) -> subprocess.CompletedProcess[str]:
+        scripts.append(script)
+        return subprocess.CompletedProcess(
+            ["powershell"],
+            0,
+            stdout='{"pid":43210,"command":"python main.py --serve-only"}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(harness, "_run_windows_powershell", _run)
+
+    owner = harness._find_windows_port_owner(8102)
+
+    assert owner == harness.PortOwner(pid=43210, cwd=None, command="python main.py --serve-only")
+    assert "$pid" not in scripts[0].lower()
+    assert "OwningProcess" in scripts[0]
+    assert "Select-Object -First 1" in scripts[0]
 
 
 def test_safe_stop_windows_rejects_reused_pid_when_command_identity_mismatches(monkeypatch, tmp_path: Path) -> None:
@@ -661,7 +863,7 @@ def test_safe_stop_windows_rejects_reused_pid_when_command_identity_mismatches(m
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(harness.os, "name", "nt", raising=False)
+    monkeypatch.setattr(harness, "is_windows", lambda: True)
     monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
     monkeypatch.setattr(harness, "process_start_time", lambda _pid: "2026-07-05T00:00:00+00:00")
     monkeypatch.setattr(harness, "process_cwd", lambda _pid: None)
@@ -691,7 +893,7 @@ def test_safe_stop_windows_allows_matching_command_identity_and_terminates(monke
         encoding="utf-8",
     )
     terminated: list[int] = []
-    monkeypatch.setattr(harness.os, "name", "nt", raising=False)
+    monkeypatch.setattr(harness, "is_windows", lambda: True)
     monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
     monkeypatch.setattr(harness, "process_start_time", lambda _pid: "2026-07-05T00:00:00+00:00")
     monkeypatch.setattr(harness, "process_cwd", lambda _pid: None)
@@ -713,6 +915,53 @@ def test_stop_owned_runtime_reports_already_absent() -> None:
     assert result["status"] == "absent"
     assert process.terminated is False
     assert process.killed is False
+
+
+def test_start_runtime_uses_windows_venv_python_when_available(monkeypatch, tmp_path: Path) -> None:
+    main_py = tmp_path / "main.py"
+    main_py.write_text("print('ok')\n", encoding="utf-8")
+    windows_python = tmp_path / ".venv" / "Scripts" / "python.exe"
+    windows_python.parent.mkdir(parents=True)
+    windows_python.write_text("", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def _popen(command, cwd, env, stdout, stderr, text):
+        captured["command"] = command
+        captured["cwd"] = cwd
+        captured["env"] = env
+        captured["stdout"] = stdout
+        captured["stderr"] = stderr
+        captured["text"] = text
+        return _FakeProcess()
+
+    monkeypatch.setattr(harness, "is_windows", lambda: True)
+    monkeypatch.setattr(harness.subprocess, "Popen", _popen)
+
+    process = harness.start_runtime(tmp_path, host="127.0.0.1", port=8125)
+
+    assert process.pid == 43210
+    assert captured["command"][0] == str(windows_python)
+    assert captured["command"][1] == str(main_py)
+
+
+def test_start_runtime_preserves_posix_venv_python_default(monkeypatch, tmp_path: Path) -> None:
+    main_py = tmp_path / "main.py"
+    main_py.write_text("print('ok')\n", encoding="utf-8")
+    posix_python = tmp_path / ".venv" / "bin" / "python"
+    posix_python.parent.mkdir(parents=True)
+    posix_python.write_text("", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def _popen(command, cwd, env, stdout, stderr, text):
+        captured["command"] = command
+        return _FakeProcess()
+
+    monkeypatch.setattr(harness, "is_windows", lambda: False)
+    monkeypatch.setattr(harness.subprocess, "Popen", _popen)
+
+    harness.start_runtime(tmp_path, host="127.0.0.1", port=8125)
+
+    assert captured["command"][0] == str(posix_python)
 
 
 def test_start_runtime_captures_child_stdout_and_stderr_in_run_scoped_log(tmp_path: Path) -> None:
