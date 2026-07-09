@@ -197,6 +197,16 @@ AGENT_SEND_REQUEST = {
 LEGACY_ROLE_ONLY_ADMIN_ROUTE_COUNTS: dict[str, int] = {}
 ANONYMOUS_DENIAL_MATRIX_SURFACES = (
     (
+        "agent_skills_member",
+        "GET",
+        "/api/v1/agent/skills",
+        "/api/v1/agent/skills",
+        "authenticated_member",
+        "authenticated_user",
+        None,
+        None,
+    ),
+    (
         "agent_chat_sessions_member",
         "GET",
         "/api/v1/agent/chat/sessions",
@@ -543,6 +553,107 @@ def test_options_release_contract_is_auth_required_fixture_research_not_launch_a
     }
     for response in member_responses.values():
         _assert_public_error_safe(response.json())
+
+
+def test_agent_skills_member_metadata_is_session_gated_and_payload_safe(
+    auth_release_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db = auth_release_client
+    inventory = _backend_surface_classifications_by_signature()
+    entry = inventory[("GET", "/api/v1/agent/skills")]
+    assert entry["surface_classification"] == "authenticated_member"
+    assert entry["auth_dependency_label"] == "authenticated_user"
+    assert entry["capability_label"] is None
+    assert entry["no_go_marker"] is None
+
+    skill_manager = type(
+        "SkillManagerStub",
+        (),
+        {
+            "list_skills": lambda self: [
+                type(
+                    "SkillStub",
+                    (),
+                    {
+                        "name": "bull_trend",
+                        "display_name": "Bull Trend",
+                        "description": "Member-facing trend observation lens.",
+                        "user_invocable": True,
+                        "default_priority": 10,
+                        "default_active": True,
+                        "instructions": "raw prompt must not appear",
+                        "required_tools": ["internal_tool"],
+                        "allowed_tools": ["internal_tool"],
+                        "entrypoint": "/private/SKILL.md",
+                        "bundle_dir": "/private",
+                        "source": "builtin",
+                    },
+                )(),
+                type(
+                    "HiddenSkillStub",
+                    (),
+                    {
+                        "name": "operator_probe",
+                        "display_name": "Operator Probe",
+                        "description": "Operator-only topology",
+                        "user_invocable": False,
+                        "default_priority": 1,
+                        "default_active": False,
+                    },
+                )(),
+            ]
+        },
+    )()
+    monkeypatch.setattr("src.agent.factory.get_skill_manager", lambda _config: skill_manager)
+
+    anonymous = client.get("/api/v1/agent/skills", headers={"X-Forwarded-For": RAW_CLIENT_IP})
+    assert anonymous.status_code == 401
+    assert anonymous.json() == _safe_error("unauthorized", "Login required", 401)
+
+    client.cookies.clear()
+    _set_cookie_for_user(client, db, user_id="ordinary-user", role=ROLE_USER)
+    member = client.get("/api/v1/agent/skills")
+    assert member.status_code == 200
+    assert member.json() == {
+        "skills": [
+            {
+                "id": "bull_trend",
+                "name": "Bull Trend",
+                "description": "Member-facing trend observation lens.",
+            }
+        ],
+        "default_skill_id": "bull_trend",
+    }
+
+    client.cookies.clear()
+    _set_cookie_for_user(client, db, user_id="admin-without-capabilities", role=ROLE_ADMIN)
+    admin = client.get("/api/v1/agent/skills")
+    assert admin.status_code == 200
+    assert admin.json() == member.json()
+
+    payload_text = _json_text(member.json()).lower()
+    for marker in (
+        "raw prompt",
+        "instructions",
+        "required_tools",
+        "allowed_tools",
+        "internal_tool",
+        "entrypoint",
+        "bundle_dir",
+        "source",
+        "/private",
+        "operator_probe",
+        "operator-only",
+        "api_key",
+        "secret",
+        "provider",
+        "routing",
+        "command",
+        "environment",
+    ):
+        assert marker not in payload_text
+    _assert_public_error_safe(anonymous.json(), member.json(), admin.json())
 
 
 def test_ordinary_users_cannot_access_admin_release_surfaces(auth_release_client) -> None:

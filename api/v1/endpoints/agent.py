@@ -237,7 +237,9 @@ def _build_skills_response(config) -> SkillsResponse:
 
 
 @router.get("/skills", response_model=SkillsResponse)
-async def get_skills():
+async def get_skills(
+    _: CurrentUser = Depends(get_current_user),
+):
     """
     Get available agent skills.
     """

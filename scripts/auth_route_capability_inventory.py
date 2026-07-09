@@ -105,7 +105,7 @@ PUBLIC_SAMPLE_SPECS = [
 ]
 
 ROUTE_GROUP_SPECS = [
-    ("agent.member_surface", "agent", "authenticated_user", None, "^/api/v1/agent/(?:stock-research|chat|chat/sessions(?:/\\{session_id\\})?|chat/stream)$", ["GET", "POST", "DELETE"], None),
+    ("agent.member_surface", "agent", "authenticated_user", None, "^/api/v1/agent/(?:skills|stock-research|chat|chat/sessions(?:/\\{session_id\\})?|chat/stream)$", ["GET", "POST", "DELETE"], None),
     ("agent.operator_diagnostics", "agent_operator_diagnostics", "admin_capability", "ops:providers:read", "^/api/v1/agent/(?:status|models|provider-health)$", ["GET"], "Agent readiness, model topology, and provider health diagnostics are provider-read admin surfaces."),
     ("agent.admin_send", "agent_admin_send", "admin_capability", "ops:notifications:write", "^/api/v1/agent/chat/send$", ["POST"], None),
     ("market.scenario_baseline.member_surface", "market_scenario_baseline", "authenticated_user", None, "^/api/v1/market/scenario-lab/baseline-snapshots(?:/latest|/\\{snapshot_id\\})?$", ["GET", "POST"], "Scenario durable baseline endpoints are authenticated-user scoped; evaluation remains separately non-persistent."),

@@ -2,7 +2,7 @@
   "protected_groups": [
     {
       "route_id": "agent.member_surface",
-      "path_pattern": "^/api/v1/agent/(?:stock-research|chat|chat/sessions(?:/\\{session_id\\})?|chat/stream)$",
+      "path_pattern": "^/api/v1/agent/(?:skills|stock-research|chat|chat/sessions(?:/\\{session_id\\})?|chat/stream)$",
       "methods": [
         "GET",
         "POST",
@@ -997,11 +997,11 @@
       "route_id": "api.v1.agent.skills",
       "path": "/api/v1/agent/skills",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "public",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: decide whether agent skill discovery is public metadata, member-only product metadata, or operator diagnostic metadata.",
-      "transitional_note": "Listed explicitly so unknown agent metadata is not silently treated as safe."
+      "no_go_marker": null,
+      "transitional_note": null
     },
     {
       "route_id": "api.v1.agent.status",
