@@ -212,9 +212,12 @@ describe('Protected route auth-required flows', () => {
   it('shows a consumer-safe auth-required overlay for guest access to /settings and preserves the redirect target', async () => {
     renderAt('/settings');
 
-    expect(await screen.findByRole('dialog', { name: '需要登录' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: '个人设置' })).toBeInTheDocument();
+    expect(screen.getByTestId('auth-guard-capability')).toHaveTextContent('个人设置');
+    expect(screen.getByTestId('auth-guard-status-pill')).toHaveTextContent('需要登录');
     expect(screen.getByText('请先登录后继续访问该页面。')).toBeInTheDocument();
     expect(screen.getByText('登录后可返回刚才的研究页面。')).toBeInTheDocument();
+    expect(screen.getByTestId('auth-guard-preview-note')).toBeInTheDocument();
     expect(screen.getByTestId('location-state')).toHaveTextContent('/settings');
     expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
     expect(screen.queryByText('guest-home-page')).not.toBeInTheDocument();
@@ -223,10 +226,62 @@ describe('Protected route auth-required flows', () => {
     expect(overlayText).not.toMatch(/token|session|cookie|bearer|auth header|debug|provider|runtime|stack|Error:|requestId|traceId|schemaVersion|policyVersion|raw|internal|local_db|fallback_source|fixture|adapter|cache/i);
     expect(overlayText).not.toMatch(/buy|sell|hold|recommend|target|stop|position size|买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓/i);
 
-    fireEvent.click(screen.getByRole('button', { name: '前往登录 个人设置' }));
+    fireEvent.click(screen.getByRole('link', { name: '前往登录 个人设置' }));
     await waitFor(() => expect(screen.getByTestId('location-state')).toHaveTextContent('/login?redirect=%2Fsettings'));
     expect(screen.getByText('login-page')).toBeInTheDocument();
   });
+
+  it('keeps representative research routes on the consumer protected boundary with sign-in primary action', async () => {
+    renderAt('/portfolio');
+
+    expect(await screen.findByRole('dialog', { name: '持仓管理' })).toBeInTheDocument();
+    expect(screen.getByTestId('consumer-protected-frame')).toHaveAttribute(
+      'data-boundary-family',
+      'consumer-protected',
+    );
+    expect(screen.getByTestId('auth-guard-capability')).toHaveTextContent('持仓管理');
+    expect(screen.getByTestId('auth-guard-primary-action')).toHaveAttribute(
+      'href',
+      '/login?redirect=%2Fportfolio',
+    );
+    expect(screen.getByTestId('auth-guard-secondary-action')).toHaveAttribute('href', '/market-overview');
+    expect(screen.queryByText('portfolio-page')).not.toBeInTheDocument();
+  });
+
+  it('renders authenticated member product surface instead of the protected frame', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+      setupState: 'password_retained',
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: false,
+      isAdminAccount: false,
+      isAdminMode: false,
+      adminCapabilities: {
+        canReadUsers: false,
+        canReadUserActivity: false,
+        canReadUserPortfolio: false,
+        canWriteUserSecurity: false,
+        canReadCostObservability: false,
+        canReadOpsLogs: false,
+        canReadProviders: false,
+        canReadNotifications: false,
+        canReadSystemConfig: false,
+      },
+    });
+
+    renderAt('/portfolio');
+
+    expect(await screen.findByText('portfolio-page')).toBeInTheDocument();
+    expect(screen.queryByTestId('auth-guard-overlay')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('consumer-protected-frame')).not.toBeInTheDocument();
+  });
+
 
   it('keeps the admin settings route fail-closed with a sign-in link that preserves the localized target', async () => {
     renderAt('/zh/settings/system');

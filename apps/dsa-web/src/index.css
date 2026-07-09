@@ -10576,3 +10576,123 @@ html[data-theme-style='paper'] .access-gate-action--secondary {
     width: 100%;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Consumer protected boundary (AuthGuardOverlay) — research workbench */
+/* Distinct from admin AccessGate; keeps guest auth grammar compact.   */
+/* ------------------------------------------------------------------ */
+
+.auth-guard-overlay {
+  overscroll-behavior: contain;
+}
+
+.auth-guard-card {
+  gap: 0;
+  max-height: min(92vh, 40rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.auth-guard-eyebrow {
+  margin: 0;
+  color: var(--sage-deep, #365d3d);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.625rem;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.auth-guard-capability {
+  margin: 0;
+  color: var(--wolfy-text-primary, var(--text-primary));
+}
+
+.auth-guard-section-label {
+  color: var(--sage-deep, #365d3d);
+}
+
+.auth-guard-status-pill {
+  color: var(--state-warning-text, #5a3a18);
+}
+
+.auth-guard-action:focus-visible {
+  outline: 2px solid var(--sage-deep, #365d3d);
+  outline-offset: 2px;
+}
+
+a.auth-guard-action--primary.theme-primary-action,
+a.auth-guard-action--primary {
+  border-color: var(--theme-button-primary-border, var(--sage-deep, #365d3d));
+  background: var(--theme-button-primary-bg, var(--sage-deep, #365d3d));
+  color: var(--theme-button-primary-text, var(--wolfy-inverse-text, #fbf8f3));
+}
+
+a.auth-guard-action--primary:hover {
+  filter: brightness(0.96);
+}
+
+a.auth-guard-action--secondary {
+  border-color: var(--border-muted, var(--line));
+  color: var(--wolfy-text-primary, var(--text-primary));
+}
+
+a.auth-guard-action--secondary:hover {
+  border-color: var(--border-strong, var(--line));
+  background: var(--pill-active-bg, rgb(107 143 113 / 0.12));
+}
+
+a.auth-guard-action--tertiary {
+  color: var(--wolfy-text-secondary, var(--text-secondary));
+}
+
+a.auth-guard-action--tertiary:hover {
+  color: var(--wolfy-text-primary, var(--text-primary));
+}
+
+html[data-theme-style='paper'] .auth-guard-card {
+  border-color: var(--line);
+  background: rgb(251 248 243 / 0.96);
+  box-shadow: var(--shadow, none);
+}
+
+html[data-theme-style='paper'] .auth-guard-capability {
+  color: var(--wolfy-text-primary);
+}
+
+html[data-theme-style='paper'] .auth-guard-status-pill {
+  color: var(--state-warning-text, #5a3a18);
+}
+
+html[data-theme-style='paper'] a.auth-guard-action--primary {
+  border-color: var(--sage-deep);
+  background: var(--sage-deep);
+  color: var(--wolfy-inverse-text, #fbf8f3);
+}
+
+html[data-theme-style='paper'] a.auth-guard-action--secondary {
+  border-color: var(--line);
+  color: var(--wolfy-text-primary);
+}
+
+@media (max-width: 640px) {
+  .auth-guard-overlay {
+    align-items: flex-start;
+    padding-top: 0.85rem;
+    padding-bottom: 1rem;
+  }
+
+  .auth-guard-card {
+    max-height: none;
+    padding: 0.95rem 0.95rem 1.05rem;
+  }
+
+  .auth-guard-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .auth-guard-action {
+    width: 100%;
+  }
+}
