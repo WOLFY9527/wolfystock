@@ -56,7 +56,7 @@ export const HomeCandlestickChartTimeframeStrip: React.FC<HomeCandlestickChartTi
   <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
     <div className="flex min-w-0 flex-wrap items-center gap-2">
       <div
-        className="flex min-w-0 flex-wrap items-center gap-1 rounded-[18px] border border-[color:var(--wolfy-border-faint)] bg-white/[0.025] p-1 sm:gap-0.5 sm:rounded-full sm:p-0.5"
+        className="flex min-w-0 flex-wrap items-center gap-1 rounded-[18px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-input)] p-1 sm:gap-0.5 sm:rounded-full sm:p-0.5"
         data-testid="home-chart-timeframe-controls"
       >
         {controls.map((control) => (
@@ -68,8 +68,8 @@ export const HomeCandlestickChartTimeframeStrip: React.FC<HomeCandlestickChartTi
             className={cn(
               'touch-manipulation min-h-[40px] rounded-full px-3.5 py-2 text-[11px] font-medium leading-none transition-colors sm:min-h-0 sm:px-2.5 sm:py-1 sm:text-[10px]',
               control.pressed
-                ? 'bg-[var(--wolfy-accent-soft)] text-white/86'
-                : 'text-white/42 hover:bg-white/[0.04] hover:text-white/72',
+                ? 'bg-[var(--wolfy-accent-soft)] text-[color:var(--wolfy-text-primary)]'
+                : 'text-[color:var(--wolfy-text-muted)] hover:bg-[var(--wolfy-surface-inset)] hover:text-[color:var(--wolfy-text-secondary)]',
             )}
             onClick={() => onSelect(control.key)}
             disabled={control.disabled}
@@ -79,13 +79,13 @@ export const HomeCandlestickChartTimeframeStrip: React.FC<HomeCandlestickChartTi
           </button>
         ))}
       </div>
-      <span className="hidden text-[10px] text-white/30 sm:inline">{ticker}</span>
+      <span className="hidden text-[10px] text-[color:var(--wolfy-text-muted)] sm:inline">{ticker}</span>
       {sourceHint ? (
-        <span className="text-[10px] text-white/30">{sourceHint}</span>
+        <span className="text-[10px] text-[color:var(--wolfy-text-muted)]">{sourceHint}</span>
       ) : null}
     </div>
     {maStructure ? (
-      <span className="text-[10px] text-white/30">{maStructure}</span>
+      <span className="text-[10px] text-[color:var(--wolfy-text-muted)]">{maStructure}</span>
     ) : null}
   </div>
 );
@@ -106,9 +106,9 @@ export const HomeCandlestickChartIndicatorChips: React.FC<HomeCandlestickChartIn
         className={cn(
           'touch-manipulation inline-flex min-h-[40px] items-center gap-1.5 rounded-full border px-3.5 py-2 text-[11px] font-medium leading-none transition-colors sm:min-h-0 sm:px-2.5 sm:py-1 sm:text-[10px]',
           chip.pressed
-            ? 'border-white/[0.12] bg-white/[0.07] text-white/84'
-            : 'border-white/[0.05] bg-white/[0.012] text-white/46 hover:border-white/[0.09] hover:bg-white/[0.03] hover:text-white/70',
-          !chip.available ? 'cursor-not-allowed opacity-40 hover:border-white/[0.05] hover:bg-white/[0.012] hover:text-white/46' : '',
+            ? 'border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent-soft)] text-[color:var(--wolfy-text-primary)]'
+            : 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)] hover:border-[color:var(--wolfy-border-focus)] hover:bg-[var(--wolfy-surface-input)] hover:text-[color:var(--wolfy-text-secondary)]',
+          !chip.available ? 'cursor-not-allowed opacity-40 hover:border-[color:var(--wolfy-divider)] hover:bg-[var(--wolfy-surface-input)] hover:text-[color:var(--wolfy-text-muted)]' : '',
         )}
         onClick={() => onToggle(chip.key)}
         title={chip.title}
@@ -118,7 +118,7 @@ export const HomeCandlestickChartIndicatorChips: React.FC<HomeCandlestickChartIn
       </button>
     ))}
     {vwapUnavailableLabel ? (
-      <span className="text-[10px] text-white/30">{vwapUnavailableLabel}</span>
+      <span className="text-[10px] text-[color:var(--wolfy-text-muted)]">{vwapUnavailableLabel}</span>
     ) : null}
   </div>
 );
@@ -128,21 +128,21 @@ export const HomeCandlestickChartContextBadges: React.FC<HomeCandlestickChartCon
   volumeLabel,
   rangeHintLabel,
 }) => (
-  <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] text-white/36">
+  <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] text-[color:var(--wolfy-text-muted)]">
     <span
-      className="inline-flex min-h-6 items-center rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5"
+      className="inline-flex min-h-6 items-center rounded-full border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-2.5"
       data-testid="home-chart-context-price"
     >
       {priceLabel}
     </span>
     <span
-      className="inline-flex min-h-6 items-center rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5"
+      className="inline-flex min-h-6 items-center rounded-full border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-2.5"
       data-testid="home-chart-context-volume"
     >
       {volumeLabel}
     </span>
     <span
-      className="inline-flex min-h-6 items-center rounded-full border border-white/[0.05] bg-white/[0.015] px-2.5"
+      className="inline-flex min-h-6 items-center rounded-full border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-2.5"
       data-testid="home-chart-range-hint"
     >
       {rangeHintLabel}
@@ -160,7 +160,7 @@ export const HomeCandlestickChartUnavailablePanel: React.FC<HomeCandlestickChart
   <div
     className={cn(
       'relative flex h-[224px] min-w-0 max-w-full flex-col justify-center overflow-hidden rounded-[12px] border border-[color:var(--wolfy-border-faint)] bg-[linear-gradient(180deg,rgba(17,22,38,0.92),rgba(13,18,32,0.98))] px-5 text-left sm:h-[236px] xl:h-[248px]',
-      isLoading ? 'text-white/46' : 'text-white/42',
+      isLoading ? 'text-[color:var(--wolfy-text-muted)]' : 'text-[color:var(--wolfy-text-muted)]',
     )}
     data-testid="home-candlestick-unavailable"
   >
@@ -169,15 +169,15 @@ export const HomeCandlestickChartUnavailablePanel: React.FC<HomeCandlestickChart
       className="pointer-events-none absolute inset-x-5 top-5 h-px bg-gradient-to-r from-transparent via-white/14 to-transparent"
     />
     <div className="flex flex-wrap items-center gap-2">
-      <span className="inline-flex items-center rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white/48">
+      <span className="inline-flex items-center rounded-full border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-inset)] px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
         {statusLabel}
       </span>
-      <span className="text-[10px] uppercase tracking-[0.16em] text-white/24">{timeframeLabel}</span>
+      <span className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">{timeframeLabel}</span>
     </div>
     <div className="mt-4 max-w-sm">
-      <p className="text-sm font-semibold text-white/72">{title}</p>
+      <p className="text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">{title}</p>
       {body ? (
-        <p className="mt-2 text-xs leading-5 text-white/36">
+        <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
           {body}
         </p>
       ) : null}

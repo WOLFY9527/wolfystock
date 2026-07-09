@@ -80,7 +80,7 @@ function TraceBadge({ children, tone = 'neutral' }: { children: React.ReactNode;
       ? 'border-amber-300/20 bg-amber-300/10 text-amber-100'
       : tone === 'missing'
         ? 'border-rose-300/20 bg-rose-300/10 text-rose-100'
-        : 'border-white/10 bg-white/[0.04] text-white/62';
+        : 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)]';
   return (
     <span className={`inline-flex min-w-0 max-w-full items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${toneClass}`}>
       <span className="truncate">{children}</span>
@@ -393,12 +393,12 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
         bodyClassName="overflow-x-hidden"
       >
         <article
-          className="min-w-0 space-y-4 rounded-l-[28px] border border-amber-300/18 bg-[#080B10]/92 p-4 text-white shadow-2xl sm:p-7"
+          className="min-w-0 space-y-4 rounded-l-[28px] border border-[color:var(--wolfy-market-warn)]/30 bg-[var(--wolfy-surface-panel)] p-4 text-[color:var(--wolfy-text-primary)] shadow-[var(--wolfy-shadow-panel)] sm:p-7"
           data-testid="home-bento-full-report-drawer"
         >
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100/60">REPORT UNAVAILABLE</p>
-          <h2 className="break-words text-2xl font-semibold tracking-[0] text-white">报告暂不可用</h2>
-          <p className="max-w-2xl break-words text-sm leading-6 text-white/68">
+          <h2 className="break-words text-2xl font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">报告暂不可用</h2>
+          <p className="max-w-2xl break-words text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
             当前选择标的为 {currentTicker}，历史报告身份不一致，已停止展示这份报告内容。
           </p>
           <p className="rounded-xl border border-amber-300/18 bg-amber-300/8 px-3 py-2 text-sm text-amber-50/82">
@@ -504,17 +504,17 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
       bodyClassName="overflow-x-hidden"
     >
       <article
-        className="min-w-0 space-y-5 rounded-l-[28px] border border-white/[0.08] bg-[#080B10]/92 p-4 text-white shadow-2xl sm:p-7"
+        className="min-w-0 space-y-5 rounded-l-[28px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] p-4 text-[color:var(--wolfy-text-primary)] shadow-[var(--wolfy-shadow-panel)] sm:p-7"
         data-testid="home-bento-full-report-drawer"
       >
-        <header className="min-w-0 border-b border-white/8 pb-5">
+        <header className="min-w-0 border-b border-[color:var(--wolfy-divider)] pb-5">
           <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/42">WOLFYSTOCK RESEARCH REPORT</p>
-              <h2 className="mt-2 break-words text-2xl font-semibold tracking-[0] text-white md:text-3xl">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">WOLFYSTOCK RESEARCH REPORT</p>
+              <h2 className="mt-2 break-words text-2xl font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)] md:text-3xl">
                 {identity.companyWithTicker}
               </h2>
-              <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 text-sm text-white/68 sm:grid-cols-2">
+              <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 text-sm text-[color:var(--wolfy-text-secondary)] sm:grid-cols-2">
                 <span>研究状态：{headerSignalLabel}</span>
                 <span>评分：{dashboard.decision.heroValue}{dashboard.decision.heroUnit || ''}</span>
                 <span>置信度：{dashboard.decision.confidenceValue || '--'}</span>
@@ -526,7 +526,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
               <button
                 type="button"
                 onClick={handleMarkdownExport}
-                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-4 text-sm font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-border-focus)] hover:bg-[var(--wolfy-surface-inset)] hover:text-[color:var(--wolfy-text-primary)]"
               >
                 <Download className="size-4" />
                 导出 Markdown
@@ -534,14 +534,14 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
               <button
                 type="button"
                 onClick={handlePrintReport}
-                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-4 text-sm font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-border-focus)] hover:bg-[var(--wolfy-surface-inset)] hover:text-[color:var(--wolfy-text-primary)]"
               >
                 <Printer className="size-4" />
                 导出 PDF
               </button>
               <button
                 type="button"
-                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-4 text-sm font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-border-focus)] hover:bg-[var(--wolfy-surface-inset)] hover:text-[color:var(--wolfy-text-primary)]"
                 onClick={() => { void handleCopyReport(); }}
               >
                 <Copy className="size-4" />
@@ -549,7 +549,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
               </button>
             </div>
           </div>
-          <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3 text-xs text-white/56 md:grid-cols-4">
+          <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 rounded-2xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-3 text-xs text-[color:var(--wolfy-text-muted)] md:grid-cols-4">
             <span>市场：{identity.market}</span>
             <span>币种：{identity.currency}</span>
             <span className="min-w-0 truncate">覆盖状态：{identity.dataStatus}</span>
@@ -561,26 +561,26 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
         </header>
 
         <section
-          className="min-w-0 rounded-3xl border border-white/[0.08] bg-white/[0.03] p-4 sm:p-5"
+          className="min-w-0 rounded-3xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-4 sm:p-5"
           data-testid="home-bento-report-executive-summary"
         >
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">RESEARCH SUMMARY</p>
-          <h3 className="mt-2 text-xl font-semibold tracking-[0] text-white">研究包完整度</h3>
-          <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold tracking-[0.08em] text-white/42">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">RESEARCH SUMMARY</p>
+          <h3 className="mt-2 text-xl font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">研究包完整度</h3>
+          <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
             {['继续跟踪', '参考区间', '风险边界', '上方观察区'].map((label) => (
-              <span key={label} className="rounded-full border border-white/[0.06] bg-black/20 px-2 py-1">{label}</span>
+              <span key={label} className="rounded-full border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-inset)] px-2 py-1">{label}</span>
             ))}
           </div>
-          <p className="mt-3 break-words text-sm leading-6 text-white/72">{summaryLine}</p>
+          <p className="mt-3 break-words text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{summaryLine}</p>
           <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 md:grid-cols-3">
             {[
               { label: '研究状态', value: observationLine },
               { label: '置信度', value: confidenceLine },
               { label: '风险边界', value: riskLine },
             ].map((item) => (
-              <div key={item.label} className="min-w-0 rounded-2xl border border-white/[0.06] bg-black/20 p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">{item.label}</p>
-                <p className="mt-1.5 break-words text-sm leading-6 text-white/76">{item.value}</p>
+              <div key={item.label} className="min-w-0 rounded-2xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-inset)] p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">{item.label}</p>
+                <p className="mt-1.5 break-words text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{item.value}</p>
               </div>
             ))}
           </div>
@@ -588,22 +588,22 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
 
         <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
           {primaryReportSections.map((section) => (
-            <section key={section.id} className="min-w-0 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4 sm:p-5" data-testid={`home-bento-full-report-section-${section.id}`}>
-              <h3 className="text-base font-semibold tracking-[0] text-white">{section.title}</h3>
+            <section key={section.id} className="min-w-0 rounded-2xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-4 sm:p-5" data-testid={`home-bento-full-report-section-${section.id}`}>
+              <h3 className="text-base font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">{section.title}</h3>
               {section.rows ? (
                 <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                   {section.rows.map((row, index) => (
-                    <div key={`${section.id}-${row.label}-${index}`} className="min-w-0 rounded-xl border border-white/[0.06] bg-black/16 px-3 py-2">
-                      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">{row.label}</p>
-                      <p className="mt-1 break-words text-sm leading-6 text-white/76">{row.value}</p>
+                    <div key={`${section.id}-${row.label}-${index}`} className="min-w-0 rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-inset)] px-3 py-2">
+                      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{row.label}</p>
+                      <p className="mt-1 break-words text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{row.value}</p>
                     </div>
                   ))}
                 </div>
               ) : null}
               {section.bullets ? (
-                <ul className="mt-4 space-y-2 text-sm leading-6 text-white/68">
+                <ul className="mt-4 space-y-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                   {section.bullets.map((item) => (
-                    <li key={`${section.id}-${item}`} className="break-words border-l border-white/10 pl-3">{item}</li>
+                    <li key={`${section.id}-${item}`} className="break-words border-l border-[color:var(--wolfy-divider)] pl-3">{item}</li>
                   ))}
                 </ul>
               ) : null}
@@ -612,38 +612,38 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
         </div>
 
         <details
-          className="min-w-0 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 sm:p-5"
+          className="min-w-0 rounded-2xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-4 sm:p-5"
           data-testid="home-bento-full-report-technical-details"
         >
-          <summary className="cursor-pointer list-none text-sm font-semibold tracking-[0] text-white">
+          <summary className="cursor-pointer list-none text-sm font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">
             技术细节
           </summary>
           <div className="mt-4 grid min-w-0 grid-cols-1 gap-4">
             {technicalSections.map((section) => (
-              <section key={section.id} className="min-w-0 rounded-2xl border border-white/[0.07] bg-black/16 p-4" data-testid={`home-bento-full-report-section-${section.id}`}>
-                <h3 className="text-base font-semibold tracking-[0] text-white">{section.title}</h3>
+              <section key={section.id} className="min-w-0 rounded-2xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-inset)] p-4" data-testid={`home-bento-full-report-section-${section.id}`}>
+                <h3 className="text-base font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">{section.title}</h3>
                 {section.rows ? (
                   <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                     {section.rows.map((row, index) => (
-                      <div key={`${section.id}-${row.label}-${index}`} className="min-w-0 rounded-xl border border-white/[0.06] bg-black/16 px-3 py-2">
-                        <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">{row.label}</p>
-                        <p className="mt-1 break-words text-sm leading-6 text-white/76">{row.value}</p>
+                      <div key={`${section.id}-${row.label}-${index}`} className="min-w-0 rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-inset)] px-3 py-2">
+                        <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{row.label}</p>
+                        <p className="mt-1 break-words text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{row.value}</p>
                       </div>
                     ))}
                   </div>
                 ) : null}
                 {section.bullets ? (
-                  <ul className="mt-4 space-y-2 text-sm leading-6 text-white/68">
+                  <ul className="mt-4 space-y-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                     {section.bullets.map((item) => (
-                      <li key={`${section.id}-${item}`} className="break-words border-l border-white/10 pl-3">{item}</li>
+                      <li key={`${section.id}-${item}`} className="break-words border-l border-[color:var(--wolfy-divider)] pl-3">{item}</li>
                     ))}
                   </ul>
                 ) : null}
                 {section.checklist ? (
                   <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                     {section.checklist.map((item, index) => (
-                      <div key={`${section.id}-${item.label}-${index}`} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-black/16 px-3 py-2 text-sm">
-                        <span className="min-w-0 break-words text-white/72">{item.label}</span>
+                      <div key={`${section.id}-${item.label}-${index}`} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-inset)] px-3 py-2 text-sm">
+                        <span className="min-w-0 break-words text-[color:var(--wolfy-text-secondary)]">{item.label}</span>
                         <TraceBadge tone={item.status === 'PASS' ? 'used' : item.status === 'FAIL' ? 'missing' : item.status === 'WARN' ? 'warning' : 'neutral'}>{item.status}</TraceBadge>
                       </div>
                     ))}
