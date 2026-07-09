@@ -96,13 +96,13 @@ function renderSeriesRows(
   kind: 'ic' | 'rankIc' | 'decay',
 ) {
   if (!rows.length) {
-    return <p className="mt-2 text-xs text-white/42">--</p>;
+    return <p className="mt-2 text-xs text-[color:var(--wolfy-text-muted)]">--</p>;
   }
 
   return (
-    <div className="mt-2 overflow-hidden rounded-lg border border-white/5">
+    <div className="mt-2 overflow-hidden rounded-lg border border-[color:var(--wolfy-border-subtle)]">
       <table className="w-full border-collapse text-xs">
-        <thead className="bg-white/[0.03] text-white/42">
+        <thead className="bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]">
           <tr>
             <th className="px-2 py-1.5 text-left font-medium">Horizon</th>
             <th className="px-2 py-1.5 text-right font-medium">{kind === 'decay' ? 'IC' : 'Value'}</th>
@@ -120,11 +120,11 @@ function renderSeriesRows(
               ? maybeSignedNumber((row as QuantFactorResearchDecayPoint).decayRatio, 4)
               : row.insufficientReason ? row.insufficientReason : '--';
             return (
-              <tr key={key} className="border-t border-white/5">
-                <td className="px-2 py-1.5 font-mono text-[11px] text-white/62">{row.horizon || '--'}</td>
-                <td className="px-2 py-1.5 text-right font-mono text-white/82">{kind === 'decay' ? value : maybeNumber((row as QuantFactorResearchMetricEstimate).value, 4)}</td>
-                <td className="px-2 py-1.5 text-right font-mono text-white/62">{maybeCount(row.sampleSize)}</td>
-                <td className="px-2 py-1.5 text-[11px] text-white/46">{kind === 'decay' ? secondary : maybeText(row.insufficientReason, '--')}</td>
+              <tr key={key} className="border-t border-[color:var(--wolfy-border-subtle)]">
+                <td className="px-2 py-1.5 font-mono text-[11px] text-[color:var(--wolfy-text-secondary)]">{row.horizon || '--'}</td>
+                <td className="px-2 py-1.5 text-right font-mono text-[color:var(--wolfy-text-primary)]">{kind === 'decay' ? value : maybeNumber((row as QuantFactorResearchMetricEstimate).value, 4)}</td>
+                <td className="px-2 py-1.5 text-right font-mono text-[color:var(--wolfy-text-secondary)]">{maybeCount(row.sampleSize)}</td>
+                <td className="px-2 py-1.5 text-[11px] text-[color:var(--wolfy-text-muted)]">{kind === 'decay' ? secondary : maybeText(row.insufficientReason, '--')}</td>
               </tr>
             );
           })}
@@ -142,8 +142,8 @@ function MetricSummaryCard({
   rows: QuantFactorResearchMetricEstimate[];
 }) {
   return (
-    <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/42">{title}</p>
+    <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--wolfy-text-muted)]">{title}</p>
       {renderSeriesRows(rows, 'ic')}
     </div>
   );
@@ -157,17 +157,17 @@ function renderFactorMetadata(items: QuantFactorResearchRegistryMetadata[], lang
   return (
     <div className="mt-2 grid gap-2 md:grid-cols-2">
       {items.map((item) => (
-        <article key={item.factorId} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+        <article key={item.factorId} className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="break-words text-sm font-semibold text-white">{item.label || item.factorId}</p>
-              <p className="mt-1 break-words font-mono text-[11px] text-white/48">{item.factorId}</p>
+              <p className="break-words text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.label || item.factorId}</p>
+              <p className="mt-1 break-words font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{item.factorId}</p>
             </div>
             <TerminalChip variant={item.registryState === 'registered' ? 'success' : 'caution'}>
               {item.registryState}
             </TerminalChip>
           </div>
-          <p className="mt-2 text-xs leading-5 text-white/52">{item.description || (language === 'en' ? 'Registry metadata only.' : '仅展示注册表元数据。')}</p>
+          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{item.description || (language === 'en' ? 'Registry metadata only.' : '仅展示注册表元数据。')}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {item.family ? <TerminalChip variant="neutral">{item.family}</TerminalChip> : null}
             {item.direction ? <TerminalChip variant="info">{item.direction}</TerminalChip> : null}
@@ -188,14 +188,14 @@ function renderCoverageItems(items: QuantFactorResearchReportResponse['report'][
   return (
     <div className="mt-2 grid gap-2 md:grid-cols-2">
       {items.map((item) => (
-        <article key={item.factorId} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-          <p className="break-words text-sm font-semibold text-white">{item.factorId}</p>
-          <p className="mt-1 text-xs text-white/52">
+        <article key={item.factorId} className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
+          <p className="break-words text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.factorId}</p>
+          <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
             {language === 'en'
               ? `Observations ${maybeCount(item.observationCount)} · Symbols ${maybeCount(item.symbolCount)}`
               : `观测 ${maybeCount(item.observationCount)} · 标的 ${maybeCount(item.symbolCount)}`}
           </p>
-          <p className="mt-1 font-mono text-[11px] text-white/46">
+          <p className="mt-1 font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">
             {maybeText(item.window.asOfStart, '--')} → {maybeText(item.window.asOfEnd, '--')} · {maybeCount(item.window.asOfCount)} {language === 'en' ? 'dates' : '期'}
           </p>
         </article>
@@ -212,17 +212,17 @@ function renderNeutralizationSummary(items: QuantFactorResearchNeutralizationSum
   return (
     <div className="mt-2 grid gap-2 md:grid-cols-2">
       {items.map((item) => (
-        <article key={`${item.factorId}-${item.axis}`} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+        <article key={`${item.factorId}-${item.axis}`} className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-            <p className="break-words text-sm font-semibold text-white">{item.factorId}</p>
+            <p className="break-words text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.factorId}</p>
             <TerminalChip variant={item.warnings.length ? 'caution' : 'success'}>{item.axis}</TerminalChip>
           </div>
-          <p className="mt-2 text-xs text-white/52">
+          <p className="mt-2 text-xs text-[color:var(--wolfy-text-muted)]">
             {language === 'en'
               ? `Method ${item.neutralizationMethod} · Sample ${maybeCount(item.sampleSize)}`
               : `方法 ${item.neutralizationMethod} · 样本 ${maybeCount(item.sampleSize)}`}
           </p>
-          <p className="mt-1 text-[11px] text-white/46">
+          <p className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
             {language === 'en'
               ? `Neutralized ${maybeCount(item.neutralizedObservations)} / ${maybeCount(item.totalObservations)} · Missing metadata ${maybeCount(item.missingGroupMetadata)} · Insufficient groups ${maybeCount(item.insufficientGroupObservations)}`
               : `已中性化 ${maybeCount(item.neutralizedObservations)} / ${maybeCount(item.totalObservations)} · 缺失分组元数据 ${maybeCount(item.missingGroupMetadata)} · 分组不足 ${maybeCount(item.insufficientGroupObservations)}`}
@@ -241,23 +241,23 @@ function renderExposureSummary(items: QuantFactorResearchExposureSummary[], lang
   return (
     <div className="mt-2 grid gap-2 md:grid-cols-2">
       {items.map((item) => (
-        <article key={`${item.scope}-${item.factorId}`} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+        <article key={`${item.scope}-${item.factorId}`} className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-            <p className="break-words text-sm font-semibold text-white">{item.factorId}</p>
+            <p className="break-words text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.factorId}</p>
             <TerminalChip variant={item.warnings.length ? 'caution' : 'info'}>{item.scope}</TerminalChip>
           </div>
-          <p className="mt-2 text-xs text-white/52">
+          <p className="mt-2 text-xs text-[color:var(--wolfy-text-muted)]">
             {language === 'en'
               ? `Exposure ${maybeSignedNumber(item.exposure, 4)} · Weighted ${maybeSignedNumber(item.weightedExposure, 4)}`
               : `敞口 ${maybeSignedNumber(item.exposure, 4)} · 加权 ${maybeSignedNumber(item.weightedExposure, 4)}`}
           </p>
-          <p className="mt-1 text-[11px] text-white/46">
+          <p className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
             {language === 'en'
               ? `Gross ${maybeSignedNumber(item.grossExposure, 4)} · Net ${maybeSignedNumber(item.netExposure, 4)} · Coverage ${maybePercent(item.coverage, 1)}`
               : `总敞口 ${maybeSignedNumber(item.grossExposure, 4)} · 净敞口 ${maybeSignedNumber(item.netExposure, 4)} · 覆盖率 ${maybePercent(item.coverage, 1)}`}
           </p>
           {item.longExposure != null || item.shortExposure != null ? (
-            <p className="mt-1 text-[11px] text-white/46">
+            <p className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
               {language === 'en'
                 ? `Long ${maybeSignedNumber(item.longExposure, 4)} · Short ${maybeSignedNumber(item.shortExposure, 4)}`
                 : `多头 ${maybeSignedNumber(item.longExposure, 4)} · 空头 ${maybeSignedNumber(item.shortExposure, 4)}`}
@@ -277,21 +277,21 @@ function renderDiagnostics(items: QuantFactorResearchMissingDataReason[], warnin
   return (
     <div className="mt-2 grid gap-2">
       {items.map((item, index) => (
-        <article key={`${item.section}-${item.reason}-${item.factorId || 'global'}-${index}`} className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2.5">
-          <p className="text-xs font-semibold text-white/72">
+        <article key={`${item.section}-${item.reason}-${item.factorId || 'global'}-${index}`} className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-3 py-2.5">
+          <p className="text-xs font-semibold text-[color:var(--wolfy-text-secondary)]">
             {item.section}
             {item.factorId ? ` · ${item.factorId}` : ''}
           </p>
-          <p className="mt-1 text-xs leading-5 text-white/48">
+          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
             {item.reason}
             {item.context ? ` · ${item.context}` : ''}
           </p>
         </article>
       ))}
       {warnings.length ? (
-        <article className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2.5">
-          <p className="text-xs font-semibold text-white/72">{language === 'en' ? 'Warnings' : '警告'}</p>
-          <p className="mt-1 text-xs leading-5 text-white/48">{warnings.join(' · ')}</p>
+        <article className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-3 py-2.5">
+          <p className="text-xs font-semibold text-[color:var(--wolfy-text-secondary)]">{language === 'en' ? 'Warnings' : '警告'}</p>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{warnings.join(' · ')}</p>
         </article>
       ) : null}
     </div>
@@ -410,16 +410,16 @@ const FactorResearchReportPanel: React.FC = () => {
   const inputShape = response?.inputShape;
 
   return (
-    <section className="mt-4 space-y-4 border-t border-white/5 pt-4" data-testid="factor-research-report-panel">
+    <section className="mt-4 space-y-4 border-t border-[color:var(--wolfy-border-subtle)] pt-4" data-testid="factor-research-report-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200/60">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--state-info-text)]/60">
             {language === 'en' ? 'Factor Research' : '因子研究'}
           </p>
-          <h3 className="mt-1 text-sm font-semibold text-white">
+          <h3 className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
             {language === 'en' ? 'Factor research report' : '因子研究报表'}
           </h3>
-          <p className="mt-1 text-xs leading-5 text-white/45">
+          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
             {language === 'en'
               ? 'Observation-only and supplied-input boundaries stay visible.'
               : '仅供观察、仅用显式输入，边界保持可见。'}
@@ -433,8 +433,8 @@ const FactorResearchReportPanel: React.FC = () => {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-          <label htmlFor="factor-research-request" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em] text-white/42">
+        <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
+          <label htmlFor="factor-research-request" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">
             {language === 'en' ? 'Request JSON' : '输入 JSON'}
           </label>
           <textarea
@@ -442,8 +442,8 @@ const FactorResearchReportPanel: React.FC = () => {
             value={requestText}
             onChange={(event) => handleTextChange(event.target.value)}
             className={cn(
-              'min-h-[180px] w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm leading-6 text-white outline-none transition-colors',
-              'placeholder:text-white/24 focus:border-cyan-300/30 focus:bg-white/[0.03]',
+              'min-h-[180px] w-full rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-black/20 p-3 text-sm leading-6 text-[color:var(--wolfy-text-primary)] outline-none transition-colors',
+              'placeholder:text-[color:var(--wolfy-text-muted)] focus:border-cyan-300/30 focus:bg-[var(--wolfy-surface-input)]',
             )}
             spellCheck={false}
           />
@@ -470,18 +470,18 @@ const FactorResearchReportPanel: React.FC = () => {
               {language === 'en' ? 'Clear' : '清空'}
             </Button>
           </div>
-          <p className={cn('mt-2 text-[11px] leading-5', error ? 'text-rose-200' : 'text-white/45')} role="status">
+          <p className={cn('mt-2 text-[11px] leading-5', error ? 'text-rose-200' : 'text-[color:var(--wolfy-text-muted)]')} role="status">
             {message || DEFAULT_BLOCKED_MESSAGE[language]}
           </p>
         </div>
 
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+        <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/42">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">
                 {language === 'en' ? 'Result state' : '结果状态'}
               </p>
-              <p className="mt-1 text-sm font-semibold text-white">{response ? statusLabel(status, language) : statusLabel('blocked', language)}</p>
+              <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{response ? statusLabel(status, language) : statusLabel('blocked', language)}</p>
             </div>
             <TerminalChip variant={statusVariant(response ? status : 'blocked')}>
               {statusLabel(response ? status : 'blocked', language)}
@@ -539,13 +539,13 @@ const FactorResearchReportPanel: React.FC = () => {
 
       {response ? (
         <div className="grid gap-4">
-          <section className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+          <section className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/42">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">
                   {language === 'en' ? 'Input shape' : '输入形状'}
                 </p>
-                <p className="mt-1 text-sm font-semibold text-white">
+                <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
                   {language === 'en'
                     ? 'Shape, coverage, and hash stay visible.'
                     : '形状、覆盖和哈希保持可见。'}
@@ -561,13 +561,13 @@ const FactorResearchReportPanel: React.FC = () => {
             </div>
           </section>
 
-          <section className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+          <section className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/42">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">
                   {language === 'en' ? 'Factor registry metadata' : '因子注册表元数据'}
                 </p>
-                <p className="mt-1 text-sm font-semibold text-white">
+                <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
                   {language === 'en'
                     ? 'Registry labels and factor directions only.'
                     : '仅展示注册表标签和因子方向。'}
@@ -578,13 +578,13 @@ const FactorResearchReportPanel: React.FC = () => {
             {renderFactorMetadata(factorMetadata, language)}
           </section>
 
-          <section className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+          <section className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/42">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">
                   {language === 'en' ? 'Factor coverage' : '因子覆盖'}
                 </p>
-                <p className="mt-1 text-sm font-semibold text-white">
+                <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
                   {language === 'en'
                     ? 'Observation coverage remains explicit.'
                     : '观测覆盖保持显式。'}
@@ -595,13 +595,13 @@ const FactorResearchReportPanel: React.FC = () => {
             {renderCoverageItems(factorCoverage, language)}
           </section>
 
-          <section className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+          <section className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/42">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">
                   {language === 'en' ? 'Metrics' : '指标'}
                 </p>
-                <p className="mt-1 text-sm font-semibold text-white">
+                <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
                   {language === 'en'
                     ? 'IC, Rank IC, decay, turnover, and peer correlation.'
                     : 'IC、Rank IC、衰减、换手率与同类相关性。'}
@@ -616,11 +616,11 @@ const FactorResearchReportPanel: React.FC = () => {
                 const neutralizationRows = neutralizationByFactor.get(item.factorId) ?? [];
                 const exposureRows = exposureByFactor.get(item.factorId) ?? [];
                 return (
-                  <article key={item.factorId} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                  <article key={item.factorId} className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
                     <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="break-words text-sm font-semibold text-white">{meta?.label || item.factorId}</p>
-                        <p className="mt-1 break-words font-mono text-[11px] text-white/46">{item.factorId}</p>
+                        <p className="break-words text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{meta?.label || item.factorId}</p>
+                        <p className="mt-1 break-words font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{item.factorId}</p>
                       </div>
                       <TerminalChip variant="neutral">
                         {maybeText(item.window.asOfStart)} → {maybeText(item.window.asOfEnd)}
@@ -628,7 +628,7 @@ const FactorResearchReportPanel: React.FC = () => {
                     </div>
 
                     {coverageItem ? (
-                      <p className="mt-2 text-xs text-white/50">
+                      <p className="mt-2 text-xs text-[color:var(--wolfy-text-muted)]">
                         {language === 'en'
                           ? `Coverage ${maybeCount(coverageItem.observationCount)} observations · ${maybeCount(coverageItem.symbolCount)} symbols`
                           : `覆盖 ${maybeCount(coverageItem.observationCount)} 条观测 · ${maybeCount(coverageItem.symbolCount)} 个标的`}
@@ -638,19 +638,19 @@ const FactorResearchReportPanel: React.FC = () => {
                     <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                       <MetricSummaryCard title={language === 'en' ? 'IC' : 'IC'} rows={item.ic} />
                       <MetricSummaryCard title={language === 'en' ? 'Rank IC' : 'Rank IC'} rows={item.rankIc} />
-                      <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/42">
+                      <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--wolfy-text-muted)]">
                           {language === 'en' ? 'Decay' : '衰减'}
                         </p>
                         {renderSeriesRows(item.decay, 'decay')}
                       </div>
-                      <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/42">
+                      <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--wolfy-text-muted)]">
                           {language === 'en' ? 'Turnover' : '换手率'}
                         </p>
-                        <div className="mt-2 rounded-lg border border-white/5 bg-black/20 p-3">
-                          <p className="font-mono text-sm text-white">{maybeNumber(item.turnover.value, 4)}</p>
-                          <p className="mt-1 text-[11px] text-white/46">
+                        <div className="mt-2 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-black/20 p-3">
+                          <p className="font-mono text-sm text-[color:var(--wolfy-text-primary)]">{maybeNumber(item.turnover.value, 4)}</p>
+                          <p className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
                             {language === 'en'
                               ? `Samples ${maybeCount(item.turnover.sampleSize)} · ${item.turnover.insufficientReason || '--'}`
                               : `样本 ${maybeCount(item.turnover.sampleSize)} · ${item.turnover.insufficientReason || '--'}`}
@@ -660,16 +660,16 @@ const FactorResearchReportPanel: React.FC = () => {
                     </div>
 
                     <div className="mt-3 grid gap-2 md:grid-cols-2">
-                      <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/42">
+                      <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--wolfy-text-muted)]">
                           {language === 'en' ? 'Peer correlation' : '同类相关性'}
                         </p>
                         {item.factorCorrelation.length ? (
                           <div className="mt-2 grid gap-1.5 text-xs">
                             {item.factorCorrelation.map((peer) => (
                               <div key={peer.peerFactorId} className="flex min-w-0 items-center justify-between gap-3 rounded-md bg-black/20 px-2 py-1.5">
-                                <span className="min-w-0 break-words text-white/64">{peer.peerFactorId}</span>
-                                <span className="shrink-0 font-mono text-white">{maybeNumber(peer.value, 4)}</span>
+                                <span className="min-w-0 break-words text-[color:var(--wolfy-text-secondary)]">{peer.peerFactorId}</span>
+                                <span className="shrink-0 font-mono text-[color:var(--wolfy-text-primary)]">{maybeNumber(peer.value, 4)}</span>
                               </div>
                             ))}
                           </div>
@@ -678,8 +678,8 @@ const FactorResearchReportPanel: React.FC = () => {
                         )}
                       </div>
 
-                      <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/42">
+                      <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--wolfy-text-muted)]">
                           {language === 'en' ? 'Window' : '时间窗'}
                         </p>
                         <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -690,8 +690,8 @@ const FactorResearchReportPanel: React.FC = () => {
                     </div>
 
                     {neutralizationRows.length ? (
-                      <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/42">
+                      <div className="mt-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--wolfy-text-muted)]">
                           {language === 'en' ? 'Neutralization' : '中性化'}
                         </p>
                         {renderNeutralizationSummary(neutralizationRows, language)}
@@ -699,8 +699,8 @@ const FactorResearchReportPanel: React.FC = () => {
                     ) : null}
 
                     {exposureRows.length ? (
-                      <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/42">
+                      <div className="mt-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--wolfy-text-muted)]">
                           {language === 'en' ? 'Exposure' : '敞口'}
                         </p>
                         {renderExposureSummary(exposureRows, language)}
@@ -714,13 +714,13 @@ const FactorResearchReportPanel: React.FC = () => {
             </div>
           </section>
 
-          <section className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+          <section className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/42">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">
                   {language === 'en' ? 'Diagnostics' : '诊断'}
                 </p>
-                <p className="mt-1 text-sm font-semibold text-white">
+                <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
                   {language === 'en'
                     ? 'Missing data reasons and warnings stay explicit.'
                     : '缺失原因和警告保持显式。'}
@@ -733,7 +733,7 @@ const FactorResearchReportPanel: React.FC = () => {
             {renderDiagnostics(diagnostics, warnings, language)}
           </section>
 
-          <p className="text-[11px] leading-5 text-white/40">
+          <p className="text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
             {language === 'en'
               ? 'Research output remains observation-only and creates no external action instruction.'
               : '研究输出仅用于观察，不形成外部动作指令。'}

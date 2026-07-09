@@ -22,26 +22,26 @@ type DuckDBConfigState = 'enabled' | 'disabled' | 'unknown';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
 
-const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
-const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
+const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)] border border-[color:var(--wolfy-border-subtle)]';
+const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-[var(--wolfy-surface-input)] border border-[color:var(--wolfy-border-subtle)] hover:bg-[var(--wolfy-surface-input)] text-xs transition-colors';
 const DISCLOSURE_SUMMARY_CLASS = 'flex min-h-[58px] cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 [&::-webkit-details-marker]:hidden';
-const INTENT_PANEL_CLASS = 'min-w-0 rounded-[16px] border border-white/5 bg-black/20 p-3';
-const STATUS_ROW_CLASS = 'min-w-0 rounded-xl border border-white/[0.04] bg-white/[0.025] p-3';
+const INTENT_PANEL_CLASS = 'min-w-0 rounded-[16px] border border-[color:var(--wolfy-border-subtle)] bg-black/20 p-3';
+const STATUS_ROW_CLASS = 'min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-white/[0.025] p-3';
 const STATUS_CLASS: Record<DisplayStatusTone, string> = {
-  success: 'border-emerald-400/20 text-emerald-300 bg-emerald-400/[0.06]',
-  warning: 'border-amber-300/20 text-amber-300 bg-amber-300/[0.06]',
-  danger: 'border-rose-400/20 text-rose-300 bg-rose-400/[0.06]',
-  info: 'border-cyan-300/15 text-cyan-200 bg-cyan-300/[0.05]',
-  muted: 'border-white/10 text-white/45 bg-white/[0.03]',
-  neutral: 'border-white/10 text-white/45 bg-white/[0.03]',
+  success: 'border-emerald-400/20 text-[color:var(--wolfy-market-up)] bg-emerald-400/[0.06]',
+  warning: 'border-amber-300/20 text-[color:var(--state-warning-text)] bg-amber-300/[0.06]',
+  danger: 'border-rose-400/20 text-[color:var(--wolfy-market-down)] bg-rose-400/[0.06]',
+  info: 'border-cyan-300/15 text-[color:var(--state-info-text)] bg-cyan-300/[0.05]',
+  muted: 'border-[color:var(--wolfy-border-subtle)] text-[color:var(--wolfy-text-muted)] bg-[var(--wolfy-surface-input)]',
+  neutral: 'border-[color:var(--wolfy-border-subtle)] text-[color:var(--wolfy-text-muted)] bg-[var(--wolfy-surface-input)]',
 };
 const STATUS_TEXT_CLASS: Record<DisplayStatusTone, string> = {
-  success: 'text-emerald-300',
-  warning: 'text-amber-300',
-  danger: 'text-rose-300',
-  info: 'text-cyan-200',
-  muted: 'text-white/45',
-  neutral: 'text-white/45',
+  success: 'text-[color:var(--wolfy-market-up)]',
+  warning: 'text-[color:var(--state-warning-text)]',
+  danger: 'text-[color:var(--wolfy-market-down)]',
+  info: 'text-[color:var(--state-info-text)]',
+  muted: 'text-[color:var(--wolfy-text-muted)]',
+  neutral: 'text-[color:var(--wolfy-text-muted)]',
 };
 
 type SystemControlPlaneProps = {
@@ -72,17 +72,17 @@ const StatusRows: React.FC<StatusRowsProps> = ({ cards }) => (
           <div className="flex min-w-0 items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-foreground">{card.label}</p>
-              <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/52">{card.reason}</p>
+              <p className="mt-1 line-clamp-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{card.reason}</p>
             </div>
             <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${STATUS_CLASS[status.tone]}`}>
               {status.label}
             </span>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-white/35">
-            {card.optional ? <span className="rounded-full border border-cyan-300/15 bg-cyan-300/[0.05] px-2 py-1 text-cyan-200">可选</span> : null}
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-[color:var(--wolfy-text-muted)]">
+            {card.optional ? <span className="rounded-full border border-cyan-300/15 bg-cyan-300/[0.05] px-2 py-1 text-[color:var(--state-info-text)]">可选</span> : null}
             <span>{card.checkedAt || '最近检查：当前快照'}</span>
           </div>
-          {card.nextAction ? <p className="mt-2 text-[11px] leading-5 text-white/45">下一步：{card.nextAction}</p> : null}
+          {card.nextAction ? <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">下一步：{card.nextAction}</p> : null}
         </article>
       );
     })}
@@ -96,7 +96,7 @@ type SystemHealthSummaryProps = {
 const SystemHealthSummary: React.FC<SystemHealthSummaryProps> = ({ summaryCards }) => (
   <section
     data-testid="system-health-summary"
-    className="rounded-[16px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md"
+    className="rounded-[16px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-4 backdrop-blur-md"
   >
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
@@ -107,12 +107,12 @@ const SystemHealthSummary: React.FC<SystemHealthSummaryProps> = ({ summaryCards 
     </div>
     <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
       {summaryCards.map((item) => (
-        <div key={item.key} className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3">
-          <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-white/35">{item.label}</p>
-          <p className={`mt-2 truncate text-sm font-semibold ${item.status ? STATUS_TEXT_CLASS[describeSettingsSystemHealthStatus(item.status).tone] : 'text-white'}`}>
+        <div key={item.key} className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-black/20 p-3">
+          <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{item.label}</p>
+          <p className={`mt-2 truncate text-sm font-semibold ${item.status ? STATUS_TEXT_CLASS[describeSettingsSystemHealthStatus(item.status).tone] : 'text-[color:var(--wolfy-text-primary)]'}`}>
             {item.value}
           </p>
-          <p className="mt-1 truncate text-[11px] text-white/45">{item.detail}</p>
+          <p className="mt-1 truncate text-[11px] text-[color:var(--wolfy-text-muted)]">{item.detail}</p>
         </div>
       ))}
     </div>
@@ -142,11 +142,11 @@ const SystemPrioritySettings: React.FC<SystemPrioritySettingsProps> = ({
 }) => (
   <section
     data-testid="system-priority-settings"
-    className="rounded-[16px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md"
+    className="rounded-[16px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-4 backdrop-blur-md"
   >
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">风险与操作意图</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">风险与操作意图</p>
         <p className="mt-1 text-sm font-semibold text-foreground">{priorityGroupingSummary}</p>
       </div>
       <span className={GHOST_TAG_CLASS}>IA 分组</span>
@@ -155,8 +155,8 @@ const SystemPrioritySettings: React.FC<SystemPrioritySettingsProps> = ({
       <section data-testid="system-credential-boundary" className={INTENT_PANEL_CLASS}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-white">安全与凭证</h3>
-            <p className="mt-1 text-xs leading-5 text-white/45">只展示凭证就绪状态；不显示密钥、访问凭证、Webhook 或未遮蔽原值。</p>
+            <h3 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">安全与凭证</h3>
+            <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">只展示凭证就绪状态；不显示密钥、访问凭证、Webhook 或未遮蔽原值。</p>
           </div>
           <span className={GHOST_TAG_CLASS}>敏感</span>
         </div>
@@ -166,8 +166,8 @@ const SystemPrioritySettings: React.FC<SystemPrioritySettingsProps> = ({
       <section data-testid="system-data-probe-boundary" className={INTENT_PANEL_CLASS}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-white">{dataSourceStatusTitle}</h3>
-            <p className="mt-1 text-xs leading-5 text-white/45">{dataSourceStatusDesc}</p>
+            <h3 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{dataSourceStatusTitle}</h3>
+            <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{dataSourceStatusDesc}</p>
           </div>
           <span className={GHOST_TAG_CLASS}>探测二级</span>
         </div>
@@ -177,8 +177,8 @@ const SystemPrioritySettings: React.FC<SystemPrioritySettingsProps> = ({
       <section data-testid="system-admin-entry-boundary" className={INTENT_PANEL_CLASS}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-white">管理入口</h3>
-            <p className="mt-1 text-xs leading-5 text-white/45">审计日志和运行边界入口集中呈现，危险动作留在下方隔离区。</p>
+            <h3 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">管理入口</h3>
+            <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">审计日志和运行边界入口集中呈现，危险动作留在下方隔离区。</p>
           </div>
           <span className={GHOST_TAG_CLASS}>入口</span>
         </div>
@@ -206,12 +206,12 @@ type RiskBoundaryStripProps = {
 const RiskBoundaryStrip: React.FC<RiskBoundaryStripProps> = ({ cards }) => (
   <section
     data-testid="system-risk-boundary-strip"
-    className="rounded-[16px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md"
+    className="rounded-[16px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-4 backdrop-blur-md"
   >
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">风险边界</p>
-        <h3 className="mt-1 text-sm font-semibold text-white">运行能力与可选模块</h3>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">风险边界</p>
+        <h3 className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">运行能力与可选模块</h3>
       </div>
       <span className={GHOST_TAG_CLASS}>只读汇总</span>
     </div>
@@ -219,14 +219,14 @@ const RiskBoundaryStrip: React.FC<RiskBoundaryStripProps> = ({ cards }) => (
       {cards.map((card) => {
         const status = describeSettingsSystemHealthStatus(card.status);
         return (
-          <article key={card.key} className="rounded-xl border border-white/[0.04] bg-black/20 p-3">
+          <article key={card.key} className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-black/20 p-3">
             <div className="flex items-center justify-between gap-3">
               <p className="truncate text-sm font-semibold text-foreground">{card.label}</p>
               <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${STATUS_CLASS[status.tone]}`}>
                 {status.label}
               </span>
             </div>
-            <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/50">{card.reason}</p>
+            <p className="mt-2 line-clamp-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{card.reason}</p>
           </article>
         );
       })}
@@ -251,22 +251,22 @@ const DeveloperCompatibilityDisclosure: React.FC<DeveloperCompatibilityDisclosur
 }) => (
   <details
     data-testid="system-duckdb-disclosure"
-    className="group rounded-[16px] border border-white/5 bg-white/[0.02] backdrop-blur-md transition-colors open:border-cyan-200/15 open:bg-white/[0.03]"
+    className="group rounded-[16px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] backdrop-blur-md transition-colors open:border-cyan-200/15 open:bg-[var(--wolfy-surface-input)]"
   >
     <summary className={DISCLOSURE_SUMMARY_CLASS}>
       <span className="min-w-0">
-        <span className="block text-sm font-semibold text-white">{compatibilitySummaryTitle}</span>
-        <span className="mt-1 block text-xs leading-5 text-white/48">{compatibilitySummaryDesc}</span>
+        <span className="block text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{compatibilitySummaryTitle}</span>
+        <span className="mt-1 block text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{compatibilitySummaryDesc}</span>
       </span>
       <span className={GHOST_TAG_CLASS}>深层配置</span>
     </summary>
-    <div className="grid gap-4 border-t border-white/[0.04] p-4">
+    <div className="grid gap-4 border-t border-[color:var(--wolfy-border-subtle)] p-4">
       {compatibilityCards.length ? (
-        <section className="rounded-2xl border border-white/5 bg-black/20 p-4">
+        <section className="rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-black/20 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">{compatibilityStatusEyebrow}</p>
-              <p className="mt-1 text-sm font-semibold text-white">可选依赖和深层引擎只做状态提示</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{compatibilityStatusEyebrow}</p>
+              <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">可选依赖和深层引擎只做状态提示</p>
             </div>
             <span className={GHOST_TAG_CLASS}>可选</span>
           </div>
@@ -357,8 +357,8 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
     <section className="space-y-5" aria-labelledby="system-control-plane-heading">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100/55">{copy.operationsCenterEyebrow}</p>
-          <h2 id="system-control-plane-heading" className="mt-1 text-xl font-semibold tracking-normal text-white">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--state-info-text)]/55">{copy.operationsCenterEyebrow}</p>
+          <h2 id="system-control-plane-heading" className="mt-1 text-xl font-semibold tracking-normal text-[color:var(--wolfy-text-primary)]">
             {copy.operationsOverviewTitle}
           </h2>
         </div>
@@ -421,7 +421,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
               {t('settings.adminSurfaceActiveLabel')}
             </p>
             <p className="mt-2 text-sm font-semibold text-foreground">{copy.activeTitle}</p>
-            <p className="mt-2 text-xs leading-5 text-white/48">常规设置通过左侧分组进入；缓存、重载、危险动作不与常规保存按钮混排。</p>
+            <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">常规设置通过左侧分组进入；缓存、重载、危险动作不与常规保存按钮混排。</p>
           </div>
         </div>
       </div>
@@ -435,13 +435,13 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
         >
           <summary className={DISCLOSURE_SUMMARY_CLASS}>
             <span className="min-w-0">
-              <span className="block text-sm font-semibold text-amber-100">缓存 / 重载 / 危险动作</span>
-              <span className="mt-1 block text-xs font-semibold leading-5 text-white/60">展开缓存维护与初始化动作</span>
-              <span className="mt-1 block text-xs leading-5 text-white/52">缓存清理、重载提示和系统初始化保持隔离；确认后才执行。</span>
+              <span className="block text-sm font-semibold text-[color:var(--state-warning-text)]">缓存 / 重载 / 危险动作</span>
+              <span className="mt-1 block text-xs font-semibold leading-5 text-[color:var(--wolfy-text-secondary)]">展开缓存维护与初始化动作</span>
+              <span className="mt-1 block text-xs leading-5 text-[color:var(--wolfy-text-muted)]">缓存清理、重载提示和系统初始化保持隔离；确认后才执行。</span>
             </span>
             <span className={GHOST_TAG_CLASS}>二级动作区</span>
           </summary>
-          <div className="border-t border-white/[0.04] p-4">
+          <div className="border-t border-[color:var(--wolfy-border-subtle)] p-4">
             <div className="rounded-2xl border border-amber-300/16 bg-black/25 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -449,15 +449,15 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
                     {t('settings.adminActionsTitle')}
                   </p>
                   <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.adminActionsDesc')}</p>
-                  <p className="mt-2 text-xs leading-5 text-white/46">这里不新增后台动作；仍使用现有确认对话、权限和运行时 API。</p>
+                  <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">这里不新增后台动作；仍使用现有确认对话、权限和运行时 API。</p>
                 </div>
               </div>
-              <div className="mt-4 divide-y divide-white/5 rounded-2xl border border-white/5 bg-white/[0.025]">
+              <div className="mt-4 divide-y divide-white/5 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-white/[0.025]">
                 <div className="p-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">{t('settings.adminMaintenanceTitle')}</p>
-                      <p className="mt-1 text-xs leading-5 text-white/42">清理缓存前会先进入确认对话。</p>
+                      <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">清理缓存前会先进入确认对话。</p>
                     </div>
                     <Button
                       type="button"
@@ -477,7 +477,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">{t('settings.adminFactoryResetTitle')}</p>
-                      <p className="mt-1 text-xs leading-5 text-white/42">高风险重置动作保持在隔离区域内。</p>
+                      <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">高风险重置动作保持在隔离区域内。</p>
                     </div>
                     <Button
                       type="button"
@@ -525,9 +525,9 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
           professional={(
             <div className="grid gap-3">
               {developerDetails.map((detail) => (
-                <div key={detail.key} className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/35">{detail.label}</p>
-                  <p className="mt-2 text-xs leading-5 text-white/55">{detail.detail}</p>
+                <div key={detail.key} className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-black/20 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{detail.label}</p>
+                  <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{detail.detail}</p>
                 </div>
               ))}
             </div>

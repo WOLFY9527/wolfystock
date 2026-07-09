@@ -50,10 +50,10 @@ type AIProviderConfigProps = {
   onJumpToAiChannelConfig: () => void;
 };
 
-const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
-const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
-const SECTION_HEADER_CLASS = 'mt-8 mb-3 border-b border-white/10 pb-2 text-xs font-bold uppercase tracking-[0.2em] text-white/30 first:mt-0';
-const ROW_CLASS = 'flex items-center justify-between gap-4 border-b border-white/5 py-3 transition-colors hover:bg-white/[0.02]';
+const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-[var(--wolfy-surface-input)] border border-[color:var(--wolfy-border-subtle)] hover:bg-[var(--wolfy-surface-input)] text-xs transition-colors';
+const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)] border border-[color:var(--wolfy-border-subtle)]';
+const SECTION_HEADER_CLASS = 'mt-8 mb-3 border-b border-[color:var(--wolfy-border-subtle)] pb-2 text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--wolfy-text-muted)] first:mt-0';
+const ROW_CLASS = 'flex items-center justify-between gap-4 border-b border-[color:var(--wolfy-border-subtle)] py-3 transition-colors hover:bg-[var(--wolfy-surface-console)]';
 const MODEL_SERVICES_LIBRARY_TITLE = '模型服务';
 const MODEL_SERVICES_LIST_TITLE = '服务清单';
 const CONFIGURED_MODEL_SERVICES_LABEL = '已接入模型服务';
@@ -230,8 +230,8 @@ const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
                     <div className="flex min-w-[13rem] items-center gap-3">
                       <StatusDot active={provider.isReady} />
                       <div className="min-w-0">
-                        <p className="w-48 truncate text-sm font-bold text-white">{provider.label}</p>
-                        <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-white/30">
+                        <p className="w-48 truncate text-sm font-bold text-[color:var(--wolfy-text-primary)]">{provider.label}</p>
+                        <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
                           {provider.suggestedTestModel || t('settings.aiProviderTestModelMissing')}
                         </p>
                       </div>

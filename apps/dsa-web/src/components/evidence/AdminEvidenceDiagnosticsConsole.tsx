@@ -352,12 +352,12 @@ function metricValue(section: EngineSection): string {
 
 function metricTone(section: EngineSection): string {
   if (section.state === 'error') return 'text-rose-200';
-  if (section.state === 'empty') return 'text-white/45';
+  if (section.state === 'empty') return 'text-[color:var(--wolfy-text-muted)]';
   if (section.summary?.tone === 'danger') return 'text-rose-200';
   if (section.summary?.tone === 'warning') return 'text-amber-200';
   if (section.summary?.tone === 'info') return 'text-cyan-200';
   if (section.summary?.tone === 'success') return 'text-emerald-200';
-  return 'text-white';
+  return 'text-[color:var(--wolfy-text-primary)]';
 }
 
 function SectionBody({ section }: { section: EngineSection }) {
@@ -387,16 +387,16 @@ function SectionBody({ section }: { section: EngineSection }) {
 
       {section.sampleLabel && section.sampleValue ? (
         <TerminalNestedBlock>
-          <p className="text-[10px] uppercase tracking-widest text-white/35">{section.sampleLabel}</p>
-          <p className="mt-1 font-mono text-sm text-white/82">{section.sampleValue}</p>
+          <p className="text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{section.sampleLabel}</p>
+          <p className="mt-1 font-mono text-sm text-[color:var(--wolfy-text-primary)]">{section.sampleValue}</p>
         </TerminalNestedBlock>
       ) : null}
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         {section.detailRows.map((row) => (
           <TerminalNestedBlock key={`${section.id}-${row.label}`}>
-            <p className="text-[10px] uppercase tracking-widest text-white/35">{row.label}</p>
-            <p className="mt-1 break-words font-mono text-[12px] text-white/80">{row.value}</p>
+            <p className="text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{row.label}</p>
+            <p className="mt-1 break-words font-mono text-[12px] text-[color:var(--wolfy-text-secondary)]">{row.value}</p>
           </TerminalNestedBlock>
         ))}
       </div>
@@ -491,7 +491,7 @@ export function AdminEvidenceDiagnosticsConsole() {
             </div>
           }
         />
-        <p className="mt-3 max-w-4xl text-sm leading-6 text-white/55">
+        <p className="mt-3 max-w-4xl text-sm leading-6 text-[color:var(--wolfy-text-muted)]">
           从现有前端可读 surface 抽取代表性样本，压缩展示 Scanner、Rotation、Options、Backtest、Portfolio 的证据姿态；内部原因码仅保留在折叠的操作员细节里。
         </p>
         {unavailableCount > 0 ? (

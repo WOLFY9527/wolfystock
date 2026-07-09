@@ -642,7 +642,7 @@ const QuotaWindowsPanel: React.FC<{ items: ProviderQuotaWindowItem[] }> = ({ ite
               </p>
               <p>
                 拒绝数
-                <span className="block font-mono text-rose-100/80">{formatNumber(item.rejectedCount, 0)}</span>
+                <span className="block font-mono text-[color:var(--wolfy-market-down)]/80">{formatNumber(item.rejectedCount, 0)}</span>
               </p>
               <p>
                 成功 / 失败

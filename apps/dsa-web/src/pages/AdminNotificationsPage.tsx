@@ -521,7 +521,7 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
             </TerminalButton>
           )}
         />
-        <p className="mt-3 max-w-3xl text-xs leading-5 text-white/55">
+        <p className="mt-3 max-w-3xl text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
           {text(
             'Route Admin Logs, scanner, market data, and future provider alerts to in-app records or a controlled webhook.',
             '将管理员日志、扫描器、市场数据和后续的供应商告警路由到站内记录或受控 webhook。',
@@ -557,7 +557,7 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
               summary={text('Collapsed by default · sanitized message only', '默认收起 · 仅显示脱敏消息')}
               className="mt-3"
             >
-              <pre className="whitespace-pre-wrap break-words text-[11px] leading-5 text-white/55">
+              <pre className="whitespace-pre-wrap break-words text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                 {[
                   notice.rawMessage && notice.rawMessage !== notice.message ? notice.rawMessage : null,
                   notice.diagnosticDetails,
@@ -579,10 +579,10 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
         <TerminalGrid data-testid="admin-notifications-summary-grid" className="mt-4">
           <div className="col-span-12 grid grid-cols-2 gap-3 md:grid-cols-4">
           {[
-            { label: text('Enabled', '已启用'), value: routeSummary.enabledRoutes, tone: 'text-emerald-100' },
-            { label: text('Configured channels', '已配置通道'), value: channels.length, tone: 'text-white' },
-            { label: text('Disabled', '已停用'), value: routeSummary.disabledRoutes, tone: 'text-white/55' },
-            { label: text('Unconfigured', '未配置'), value: routeSummary.missingTargets, tone: routeSummary.missingTargets ? 'text-amber-100' : 'text-white/55' },
+            { label: text('Enabled', '已启用'), value: routeSummary.enabledRoutes, tone: 'text-[color:var(--wolfy-market-up)]' },
+            { label: text('Configured channels', '已配置通道'), value: channels.length, tone: 'text-[color:var(--wolfy-text-primary)]' },
+            { label: text('Disabled', '已停用'), value: routeSummary.disabledRoutes, tone: 'text-[color:var(--wolfy-text-muted)]' },
+            { label: text('Unconfigured', '未配置'), value: routeSummary.missingTargets, tone: routeSummary.missingTargets ? 'text-[color:var(--state-warning-text)]' : 'text-[color:var(--wolfy-text-muted)]' },
           ].map((item) => (
             <TerminalMetric
               key={item.label}
@@ -596,16 +596,16 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
           <>
             <div className="col-span-12 xl:col-span-6">
               <TerminalNestedBlock>
-                <p className="text-[11px] font-semibold text-white/40">{text('Grouped routes', '路由分组')}</p>
-                <p className="mt-2 break-words text-xs leading-5 text-white/55">
+                <p className="text-[11px] font-semibold text-[color:var(--wolfy-text-muted)]">{text('Grouped routes', '路由分组')}</p>
+                <p className="mt-2 break-words text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
                   {Object.entries(routeSummary.grouped).map(([label, count]) => `${label} × ${count}`).join(' · ')}
                 </p>
               </TerminalNestedBlock>
             </div>
             <div className="col-span-12 xl:col-span-6">
               <TerminalNestedBlock>
-                <p className="text-[11px] font-semibold text-white/40">{text('Covered events', '覆盖事件')}</p>
-                <p className="mt-2 break-words text-xs leading-5 text-white/55">
+                <p className="text-[11px] font-semibold text-[color:var(--wolfy-text-muted)]">{text('Covered events', '覆盖事件')}</p>
+                <p className="mt-2 break-words text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
                   {routeSummary.categories.join(' · ')}
                 </p>
               </TerminalNestedBlock>
@@ -629,7 +629,7 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
             title={text('Create a low-risk in-app or webhook route.', '创建一个低风险的站内或 webhook 通道。')}
             action={<TerminalChip variant="neutral">{text('Masked after save', '保存后脱敏')}</TerminalChip>}
           />
-          <p className="text-xs leading-5 text-white/45">{text('Secrets are masked after save.', '保存后密钥会被遮罩。')}</p>
+          <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{text('Secrets are masked after save.', '保存后密钥会被遮罩。')}</p>
           <Input
             label={text('Channel name', '通道名称')}
             value={draft.name}
@@ -723,8 +723,8 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
                   <TerminalNestedBlock key={channel.id} data-testid={`notification-channel-${channel.id}`} className="grid gap-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(16rem,1.35fr)_minmax(11rem,0.85fr)_minmax(13rem,0.95fr)] lg:items-start">
                     <div className="min-w-0 space-y-2">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-white/90">{channel.name}</p>
-                        <p className="mt-1 flex items-center gap-1 text-[11px] text-white/40">
+                        <p className="truncate text-sm font-semibold text-[color:var(--wolfy-text-muted)]">{channel.name}</p>
+                        <p className="mt-1 flex items-center gap-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
                           {channel.type === 'webhook' ? <Webhook className="h-3 w-3" /> : <BellRing className="h-3 w-3" />}
                           {scopeLabel(channel, language as 'zh' | 'en')} · {channel.type === 'system_channel'
                             ? text('Existing channel', '已有通道')
@@ -738,25 +738,25 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
                       </TerminalChip>
                     </div>
                     <TerminalNestedBlock className="min-w-0">
-                      <p className="text-[11px] font-semibold text-white/40">{text('Route coverage', '路由覆盖')}</p>
-                      <p className="mt-1 break-words text-xs leading-5 text-white/55">{coverageLabel(channel, language as 'zh' | 'en')}</p>
-                      <p className="mt-2 text-[11px] font-semibold text-white/40">{text('Destination', '目标通道')}</p>
-                      <p className="mt-1 break-words text-xs leading-5 text-white/55">{channelTarget(channel, language as 'zh' | 'en')}</p>
+                      <p className="text-[11px] font-semibold text-[color:var(--wolfy-text-muted)]">{text('Route coverage', '路由覆盖')}</p>
+                      <p className="mt-1 break-words text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{coverageLabel(channel, language as 'zh' | 'en')}</p>
+                      <p className="mt-2 text-[11px] font-semibold text-[color:var(--wolfy-text-muted)]">{text('Destination', '目标通道')}</p>
+                      <p className="mt-1 break-words text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{channelTarget(channel, language as 'zh' | 'en')}</p>
                     </TerminalNestedBlock>
-                    <div className="min-w-0 space-y-2 text-[11px] text-white/40">
+                    <div className="min-w-0 space-y-2 text-[11px] text-[color:var(--wolfy-text-muted)]">
                       <div>
                         <TerminalChip variant={severityChipVariant[channel.severityMin]}>
                           {severityLabel(channel.severityMin, language as 'zh' | 'en')}
                         </TerminalChip>
                       </div>
                       <p>
-                        {text('Last trigger', '最近触发')}: <span className="text-white/72">{formatDate(channel.lastTriggeredAt || channel.lastSentAt)}</span>
+                        {text('Last trigger', '最近触发')}: <span className="text-[color:var(--wolfy-text-secondary)]">{formatDate(channel.lastTriggeredAt || channel.lastSentAt)}</span>
                       </p>
                       <p>
                         {text('Last status', '最近状态')}: <TerminalChip variant={displayStatusChipVariant(lastStatus.tone)}>{lastStatus.label}</TerminalChip>
                       </p>
                       <p>
-                        {text('Last failure', '最近失败')}: <span className="text-white/72">{failureSummaryLabel(channel, deliveryError, language as 'zh' | 'en')}</span>
+                        {text('Last failure', '最近失败')}: <span className="text-[color:var(--wolfy-text-secondary)]">{failureSummaryLabel(channel, deliveryError, language as 'zh' | 'en')}</span>
                       </p>
                     </div>
                     <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
@@ -797,7 +797,7 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
                         <Trash2 className="h-3 w-3" />
                         {text('Unbind', '解除绑定')}
                       </TerminalButton>
-                      <p className="basis-full text-[11px] leading-4 text-white/40 lg:text-right">
+                      <p className="basis-full text-[11px] leading-4 text-[color:var(--wolfy-text-muted)] lg:text-right">
                         {text('Only removes the log route binding. The system channel is not deleted.', '仅解除日志路由绑定，不会删除系统通道。')}
                       </p>
                     </div>
@@ -819,14 +819,14 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
             <TerminalDenseList className="mt-4 gap-3">
                 {events.length ? events.map((event) => (
                   <TerminalNestedBlock key={event.id} data-testid={`notification-event-${event.id}`} className="grid gap-3 md:grid-cols-[8rem_minmax(12rem,1fr)_9rem_7rem] md:items-center">
-                    <p className="text-xs text-white/72">{formatDate(event.createdAt)}</p>
+                    <p className="text-xs text-[color:var(--wolfy-text-secondary)]">{formatDate(event.createdAt)}</p>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-white/90">{event.title}</p>
-                      <p className="mt-1 truncate text-[11px] text-white/40" title={displayEventMessage(event.message, language as 'zh' | 'en')}>{event.eventType} · {describeAdminNotificationStatus(event.deliveryStatus, { language: language as 'zh' | 'en' }).label}</p>
+                      <p className="truncate text-sm font-semibold text-[color:var(--wolfy-text-muted)]">{event.title}</p>
+                      <p className="mt-1 truncate text-[11px] text-[color:var(--wolfy-text-muted)]" title={displayEventMessage(event.message, language as 'zh' | 'en')}>{event.eventType} · {describeAdminNotificationStatus(event.deliveryStatus, { language: language as 'zh' | 'en' }).label}</p>
                     </div>
                     <div>
                       <TerminalChip variant={severityChipVariant[event.severity]}>{severityLabel(event.severity, language as 'zh' | 'en')}</TerminalChip>
-                      <p className="mt-1 text-[11px] text-white/40">{acknowledgedLabel(event.acknowledgedAt, language as 'zh' | 'en')}</p>
+                      <p className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{acknowledgedLabel(event.acknowledgedAt, language as 'zh' | 'en')}</p>
                     </div>
                     <div className="md:text-right">
                       <TerminalButton

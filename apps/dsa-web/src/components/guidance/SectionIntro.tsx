@@ -17,7 +17,7 @@ const STATUS_TONE_CLASS: Record<NonNullable<SectionIntroStatus['tone']>, string>
   ready: 'border-emerald-300/25 bg-emerald-400/10 text-emerald-100',
   watch: 'border-amber-300/25 bg-amber-300/10 text-amber-100',
   risk: 'border-rose-300/25 bg-rose-400/10 text-rose-100',
-  neutral: 'border-white/10 bg-white/[0.04] text-white/65',
+  neutral: 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)]',
 };
 
 export function SectionIntro({
@@ -41,7 +41,7 @@ export function SectionIntro({
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100/55">{purpose}</p>
-          <p className="mt-2 text-base font-medium leading-7 text-white md:text-lg">{summary}</p>
+          <p className="mt-2 text-base font-medium leading-7 text-[color:var(--wolfy-text-primary)] md:text-lg">{summary}</p>
         </div>
         {status ? (
           <span
@@ -55,8 +55,8 @@ export function SectionIntro({
         ) : null}
       </div>
       {nextStep ? (
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-white/58">
-          <span className="text-white/35">下一步：</span>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-[color:var(--wolfy-text-muted)]">
+          <span className="text-[color:var(--wolfy-text-muted)]">下一步：</span>
           {nextStep}
         </p>
       ) : null}

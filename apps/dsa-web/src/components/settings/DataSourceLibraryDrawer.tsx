@@ -19,12 +19,12 @@ import {
   type TranslateFn,
 } from './dataSourceLibraryShared';
 
-const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
-const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
-const DRAWER_PANEL_CLASS = 'rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3';
-const DRAWER_LABEL_CLASS = 'text-[10px] uppercase tracking-widest text-white/40 mb-1.5 font-bold block';
-const DRAWER_TEXTAREA_CLASS = 'min-h-[6rem] w-full resize-y rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-sm text-white transition-all placeholder:text-white/20 focus:border-indigo-500/50 focus:bg-white/[0.05] focus:outline-none focus:ring-1 focus:ring-indigo-500/50 disabled:cursor-not-allowed disabled:opacity-60';
-const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-6 flex cursor-pointer list-none items-center gap-1.5 border-t border-white/5 pt-4 text-xs text-white/30 transition-colors hover:text-white [&::-webkit-details-marker]:hidden';
+const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-[var(--wolfy-surface-input)] border border-[color:var(--wolfy-border-subtle)] hover:bg-[var(--wolfy-surface-input)] text-xs transition-colors';
+const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)] border border-[color:var(--wolfy-border-subtle)]';
+const DRAWER_PANEL_CLASS = 'rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-4 py-3';
+const DRAWER_LABEL_CLASS = 'text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)] mb-1.5 font-bold block';
+const DRAWER_TEXTAREA_CLASS = 'min-h-[6rem] w-full resize-y rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-3 py-2 text-sm text-[color:var(--wolfy-text-primary)] transition-all placeholder:text-[color:var(--wolfy-text-muted)] focus:border-indigo-500/50 focus:bg-[var(--wolfy-surface-input)] focus:outline-none focus:ring-1 focus:ring-indigo-500/50 disabled:cursor-not-allowed disabled:opacity-60';
+const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-6 flex cursor-pointer list-none items-center gap-1.5 border-t border-[color:var(--wolfy-border-subtle)] pt-4 text-xs text-[color:var(--wolfy-text-muted)] transition-colors hover:text-[color:var(--wolfy-text-primary)] [&::-webkit-details-marker]:hidden';
 const SENSITIVE_DRAWER_FRAGMENT_PATTERN = /((?:token|secret|cookie|session|password|authorization|bearer|api[_-]?key|apikey)\s*[:=]?\s*)([^,\s]+)/gi;
 const DRAWER_URL_PATTERN = /https?:\/\/\S+/gi;
 
@@ -69,7 +69,7 @@ const ImpactPanel: React.FC<{
     <div className={DRAWER_PANEL_CLASS} data-testid="data-source-impact-panel">
       <div className="grid gap-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
             {t('settings.dataSourceImpactPreSubmitTitle')}
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -80,7 +80,7 @@ const ImpactPanel: React.FC<{
           <p className="mt-2 text-xs text-secondary-text">{impact.summary}</p>
         </div>
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
             {t('settings.dataSourceImpactUnlockTitle')}
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -92,7 +92,7 @@ const ImpactPanel: React.FC<{
             ))}
           </div>
           <p className="mt-2 text-xs text-secondary-text">{impact.unlock}</p>
-          <p className="mt-2 text-[11px] text-white/45">{t('settings.dataSourceImpactGateNote')}</p>
+          <p className="mt-2 text-[11px] text-[color:var(--wolfy-text-muted)]">{t('settings.dataSourceImpactGateNote')}</p>
         </div>
       </div>
     </div>
@@ -101,10 +101,10 @@ const ImpactPanel: React.FC<{
 
 function hkEntitlementTone(value: string): string {
   if (value === 'ok_hk_quote_history') return 'border-emerald-400/20 bg-emerald-400/8 text-emerald-200';
-  if (value === 'quota_limited' || value === 'timeout') return 'border-amber-300/20 bg-amber-300/8 text-amber-100';
+  if (value === 'quota_limited' || value === 'timeout') return 'border-amber-300/20 bg-amber-300/8 text-[color:var(--state-warning-text)]';
   if (value === 'hk_entitlement_missing' || value === 'provider_error') return 'border-rose-400/20 bg-rose-400/8 text-rose-200';
-  if (value === 'missing_key') return 'border-white/10 bg-white/[0.04] text-white/62';
-  return 'border-white/10 bg-white/[0.04] text-white/72';
+  if (value === 'missing_key') return 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)]';
+  return 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)]';
 }
 
 function hkEntitlementLabel(check?: BuiltinDataSourceEndpointCheck | null, validationResult?: BuiltinDataSourceValidationResult): string {
@@ -142,7 +142,7 @@ function renderValidationPanel(
       {hkEntitlementCheck ? (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
           <span className="text-[11px] font-semibold text-foreground">港股权限</span>
-          <span className={`${GHOST_TAG_CLASS} border-white/10 bg-white/[0.04] text-white/72`}>{configurationLabel}</span>
+          <span className={`${GHOST_TAG_CLASS} border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)]`}>{configurationLabel}</span>
           <span className={`${GHOST_TAG_CLASS} ${hkEntitlementTone(String(hkEntitlementCheck.errorType || ''))}`}>
             {hkEntitlementLabel(hkEntitlementCheck, validationResult)}
           </span>
@@ -318,8 +318,8 @@ const CustomDataSourceEditorPanel: React.FC<CustomDataSourceEditorPanelProps> = 
                     key={capability}
                     type="button"
                     className={active
-                      ? 'rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-medium text-white'
-                      : 'rounded-lg border border-white/5 bg-white/[0.03] px-3 py-1.5 text-xs text-white/40 hover:bg-white/10'}
+                      ? 'rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-1.5 text-xs font-medium text-[color:var(--wolfy-text-primary)]'
+                      : 'rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-muted)] hover:bg-[var(--wolfy-surface-input)]'}
                     onClick={() => onDraftChange((prev) => {
                       const nextCapabilities = active
                         ? prev.capabilities.filter((item) => item !== capability)

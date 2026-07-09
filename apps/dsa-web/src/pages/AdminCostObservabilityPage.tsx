@@ -270,16 +270,16 @@ function safeVisibleText(value?: string | null): string {
 }
 
 function metricValueClass(tone: 'neutral' | 'info' | 'good' | 'warn' = 'neutral'): string {
-  if (tone === 'info') return 'text-lg font-semibold text-cyan-100';
+  if (tone === 'info') return 'text-lg font-semibold text-[color:var(--state-info-text)]';
   if (tone === 'good') return 'text-lg font-semibold text-emerald-200';
-  if (tone === 'warn') return 'text-lg font-semibold text-amber-100';
-  return 'text-lg font-semibold text-white';
+  if (tone === 'warn') return 'text-lg font-semibold text-[color:var(--state-warning-text)]';
+  return 'text-lg font-semibold text-[color:var(--wolfy-text-primary)]';
 }
 
 function iconTitle(icon: React.ReactNode, title: string) {
   return (
     <span className="inline-flex items-center gap-2">
-      <span className="text-cyan-200">{icon}</span>
+      <span className="text-[color:var(--state-info-text)]">{icon}</span>
       <span>{title}</span>
     </span>
   );
@@ -359,10 +359,10 @@ const RollupList: React.FC<{
         <article key={`${item.group}-${item.count}`} className="min-w-0">
           <TerminalNestedBlock className="min-w-0">
             <div className="flex items-start justify-between gap-3">
-              <p className="min-w-0 truncate font-mono text-sm font-semibold text-white">{item.group}</p>
+              <p className="min-w-0 truncate font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.group}</p>
               <TerminalChip variant="neutral">{compactNumber(item.count)}</TerminalChip>
             </div>
-            <p className="mt-2 truncate text-[11px] text-white/42">{safeDimensionText(item.dimensions)}</p>
+            <p className="mt-2 truncate text-[11px] text-[color:var(--wolfy-text-muted)]">{safeDimensionText(item.dimensions)}</p>
           </TerminalNestedBlock>
         </article>
       ))}
@@ -380,13 +380,13 @@ const CacheEfficiencyList: React.FC<{ items: AdminCostCacheEfficiency[] }> = ({ 
         <article key={item.group} className="min-w-0">
           <TerminalNestedBlock className="min-w-0">
             <div className="flex items-start justify-between gap-3">
-              <p className="min-w-0 truncate font-mono text-sm font-semibold text-white">{item.group}</p>
+              <p className="min-w-0 truncate font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.group}</p>
               <TerminalChip variant="success">{percent(item.hitRate)}</TerminalChip>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-white/44">
-              <span>Hit <b className="font-mono text-white/70">{compactNumber(item.hits)}</b></span>
-              <span>Miss <b className="font-mono text-white/70">{compactNumber(item.misses)}</b></span>
-              <span>Join <b className="font-mono text-white/70">{compactNumber(item.inflightJoins)}</b></span>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-[color:var(--wolfy-text-muted)]">
+              <span>Hit <b className="font-mono text-[color:var(--wolfy-text-secondary)]">{compactNumber(item.hits)}</b></span>
+              <span>Miss <b className="font-mono text-[color:var(--wolfy-text-secondary)]">{compactNumber(item.misses)}</b></span>
+              <span>Join <b className="font-mono text-[color:var(--wolfy-text-secondary)]">{compactNumber(item.inflightJoins)}</b></span>
             </div>
           </TerminalNestedBlock>
         </article>
@@ -415,7 +415,7 @@ const LimitationsPanel: React.FC<{ data: AdminCostSummaryResponse }> = ({ data }
             <TerminalChip variant={item.severity === 'warning' ? 'caution' : 'info'}>
               {limitationLabel(item.code)}
             </TerminalChip>
-            <span className="text-xs text-white/58">{item.severity === 'warning' ? '需关注' : '信息'}</span>
+            <span className="text-xs text-[color:var(--wolfy-text-muted)]">{item.severity === 'warning' ? '需关注' : '信息'}</span>
           </div>
           <p className="mt-2">
             {safeVisibleText(item.message) === '已脱敏' ? limitationLabel(item.code) : safeVisibleText(item.message)}
@@ -431,22 +431,22 @@ const LimitationsPanel: React.FC<{ data: AdminCostSummaryResponse }> = ({ data }
 
 const DeveloperDetails: React.FC<{ data: AdminCostSummaryResponse }> = ({ data }) => (
   <TerminalDisclosure title="L4 已脱敏观测响应：来源 / exactness / redaction" summary="默认折叠 · 仅显示 redaction 后字段" className="mt-4">
-    <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
+    <dl className="grid gap-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)] sm:grid-cols-2">
       <div className="min-w-0">
-        <dt className="text-white/32">countersSource</dt>
-        <dd className="break-words font-mono text-white/64">{data.metadata.countersSource}</dd>
+        <dt className="text-[color:var(--wolfy-text-muted)]">countersSource</dt>
+        <dd className="break-words font-mono text-[color:var(--wolfy-text-secondary)]">{data.metadata.countersSource}</dd>
       </div>
       <div className="min-w-0">
-        <dt className="text-white/32">exactness</dt>
-        <dd className="break-words font-mono text-white/64">{data.metadata.exactness}</dd>
+        <dt className="text-[color:var(--wolfy-text-muted)]">exactness</dt>
+        <dd className="break-words font-mono text-[color:var(--wolfy-text-secondary)]">{data.metadata.exactness}</dd>
       </div>
       <div className="min-w-0">
-        <dt className="text-white/32">dataSources</dt>
-        <dd className="break-words font-mono text-white/64">{data.metadata.dataSources.join(', ') || '--'}</dd>
+        <dt className="text-[color:var(--wolfy-text-muted)]">dataSources</dt>
+        <dd className="break-words font-mono text-[color:var(--wolfy-text-secondary)]">{data.metadata.dataSources.join(', ') || '--'}</dd>
       </div>
       <div className="min-w-0">
-        <dt className="text-white/32">redaction</dt>
-        <dd className="break-words font-mono text-white/64">{data.metadata.redaction.join(', ') || '--'}</dd>
+        <dt className="text-[color:var(--wolfy-text-muted)]">redaction</dt>
+        <dd className="break-words font-mono text-[color:var(--wolfy-text-secondary)]">{data.metadata.redaction.join(', ') || '--'}</dd>
       </div>
     </dl>
   </TerminalDisclosure>
@@ -514,15 +514,15 @@ const LedgerRollupList: React.FC<{
         <article key={`${item.group}-${item.totalTokens}-${item.totalCostUsd}`} className="min-w-0">
           <TerminalNestedBlock className="min-w-0">
             <div className="flex items-start justify-between gap-3">
-              <p className="min-w-0 truncate font-mono text-sm font-semibold text-white">{labelFor(item, index)}</p>
+              <p className="min-w-0 truncate font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{labelFor(item, index)}</p>
               <TerminalChip variant="info">{moneyUsd(item.totalCostUsd)}</TerminalChip>
             </div>
-            <p className="mt-2 truncate text-[11px] text-white/42">
+            <p className="mt-2 truncate text-[11px] text-[color:var(--wolfy-text-muted)]">
               {detailFor?.(item, index) || safeDimensionText(item.dimensions)}
             </p>
-            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/42">
-              <span>用量 <b className="font-mono text-white/68">{compactNumber(item.totalTokens)}</b></span>
-              <span>请求 <b className="font-mono text-white/68">{compactNumber(item.requestCount ?? item.ledgerCount ?? item.calls)}</b></span>
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
+              <span>用量 <b className="font-mono text-[color:var(--wolfy-text-secondary)]">{compactNumber(item.totalTokens)}</b></span>
+              <span>请求 <b className="font-mono text-[color:var(--wolfy-text-secondary)]">{compactNumber(item.requestCount ?? item.ledgerCount ?? item.calls)}</b></span>
             </div>
           </TerminalNestedBlock>
         </article>
@@ -570,17 +570,17 @@ const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = 
       />
 
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <TerminalMetric label="当前窗口" value={data?.window.key || ledgerQueryFromFilters(filters).window} valueClassName="text-sm font-semibold text-cyan-100" />
-        <TerminalMetric label="总用量" value={compactNumber(data?.total.totalTokens)} valueClassName="text-lg font-semibold text-cyan-100" />
-        <TerminalMetric label="估算成本" value={moneyUsd(data?.total.totalCostUsd)} valueClassName="text-lg font-semibold text-amber-100" />
-        <TerminalMetric label="请求数" value={compactNumber(data ? ledgerCount(data) : undefined)} valueClassName="text-lg font-semibold text-white" />
+        <TerminalMetric label="当前窗口" value={data?.window.key || ledgerQueryFromFilters(filters).window} valueClassName="text-sm font-semibold text-[color:var(--state-info-text)]" />
+        <TerminalMetric label="总用量" value={compactNumber(data?.total.totalTokens)} valueClassName="text-lg font-semibold text-[color:var(--state-info-text)]" />
+        <TerminalMetric label="估算成本" value={moneyUsd(data?.total.totalCostUsd)} valueClassName="text-lg font-semibold text-[color:var(--state-warning-text)]" />
+        <TerminalMetric label="请求数" value={compactNumber(data ? ledgerCount(data) : undefined)} valueClassName="text-lg font-semibold text-[color:var(--wolfy-text-primary)]" />
       </div>
 
       {data ? (
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <TerminalMetric label="输入" value={compactNumber(data.total.promptTokens ?? data.total.inputTokens)} valueClassName="text-sm font-semibold text-white" />
-          <TerminalMetric label="缓存输入" value={compactNumber(data.total.cachedInputTokens)} valueClassName="text-sm font-semibold text-white" />
-          <TerminalMetric label="输出" value={compactNumber(data.total.completionTokens ?? data.total.outputTokens)} valueClassName="text-sm font-semibold text-white" />
+          <TerminalMetric label="输入" value={compactNumber(data.total.promptTokens ?? data.total.inputTokens)} valueClassName="text-sm font-semibold text-[color:var(--wolfy-text-primary)]" />
+          <TerminalMetric label="缓存输入" value={compactNumber(data.total.cachedInputTokens)} valueClassName="text-sm font-semibold text-[color:var(--wolfy-text-primary)]" />
+          <TerminalMetric label="输出" value={compactNumber(data.total.completionTokens ?? data.total.outputTokens)} valueClassName="text-sm font-semibold text-[color:var(--wolfy-text-primary)]" />
         </div>
       ) : null}
 
@@ -598,7 +598,7 @@ const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = 
           ) : null}
           <div className="mt-4 grid grid-cols-1 gap-4 2xl:grid-cols-3">
             <section className="min-w-0">
-              <h3 className="mb-3 text-sm font-semibold text-white/82">用户成本排行</h3>
+              <h3 className="mb-3 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">用户成本排行</h3>
               <LedgerRollupList
                 items={data.byUser}
                 empty="暂无用户成本记录"
@@ -606,7 +606,7 @@ const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = 
               />
             </section>
             <section className="min-w-0">
-              <h3 className="mb-3 text-sm font-semibold text-white/82">模型成本分布</h3>
+              <h3 className="mb-3 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">模型成本分布</h3>
               <LedgerRollupList
                 items={data.byProviderModel}
                 empty="暂无模型成本记录"
@@ -615,7 +615,7 @@ const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = 
               />
             </section>
             <section className="min-w-0">
-              <h3 className="mb-3 text-sm font-semibold text-white/82">功能成本分布</h3>
+              <h3 className="mb-3 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">功能成本分布</h3>
               <LedgerRollupList
                 items={data.byRouteFamily}
                 empty="暂无功能成本记录"
@@ -624,22 +624,22 @@ const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = 
             </section>
           </div>
           <TerminalDisclosure title="L4 已脱敏 LLM 账本响应：readOnly / 来源 / redaction" summary="默认折叠 · 仅显示 redaction 后字段" className="mt-4">
-            <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
+            <dl className="grid gap-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)] sm:grid-cols-2">
               <div className="min-w-0">
-                <dt className="text-white/32">readOnly</dt>
-                <dd className="font-mono text-white/64">{String(data.metadata.readOnly)}</dd>
+                <dt className="text-[color:var(--wolfy-text-muted)]">readOnly</dt>
+                <dd className="font-mono text-[color:var(--wolfy-text-secondary)]">{String(data.metadata.readOnly)}</dd>
               </div>
               <div className="min-w-0">
-                <dt className="text-white/32">liveEnforcement</dt>
-                <dd className="font-mono text-white/64">{String(data.metadata.liveEnforcement)}</dd>
+                <dt className="text-[color:var(--wolfy-text-muted)]">liveEnforcement</dt>
+                <dd className="font-mono text-[color:var(--wolfy-text-secondary)]">{String(data.metadata.liveEnforcement)}</dd>
               </div>
               <div className="min-w-0">
-                <dt className="text-white/32">dataSources</dt>
-                <dd className="break-words font-mono text-white/64">{data.metadata.dataSources.join(', ') || '--'}</dd>
+                <dt className="text-[color:var(--wolfy-text-muted)]">dataSources</dt>
+                <dd className="break-words font-mono text-[color:var(--wolfy-text-secondary)]">{data.metadata.dataSources.join(', ') || '--'}</dd>
               </div>
               <div className="min-w-0">
-                <dt className="text-white/32">redaction</dt>
-                <dd className="break-words font-mono text-white/64">{data.metadata.redaction.join(', ') || '--'}</dd>
+                <dt className="text-[color:var(--wolfy-text-muted)]">redaction</dt>
+                <dd className="break-words font-mono text-[color:var(--wolfy-text-secondary)]">{data.metadata.redaction.join(', ') || '--'}</dd>
               </div>
             </dl>
           </TerminalDisclosure>
@@ -709,8 +709,8 @@ const PricingPolicyPanel: React.FC = () => {
               <TerminalNestedBlock className="min-w-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="break-words font-mono text-sm font-semibold text-white">{pricingEntryLabel(index)}</p>
-                    <p className="mt-1 text-[11px] text-white/42">
+                    <p className="break-words font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{pricingEntryLabel(index)}</p>
+                    <p className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
                       {formatDate(policy.effectiveFrom)} - {formatDate(policy.effectiveUntil)}
                     </p>
                   </div>
@@ -719,15 +719,15 @@ const PricingPolicyPanel: React.FC = () => {
                   </TerminalChip>
                 </div>
                 <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <TerminalMetric label="Input / 1M" value={pricePerMillion(policy.inputPricePer1m, policy.currency)} valueClassName="text-sm font-semibold text-cyan-100" />
-                  <TerminalMetric label="Cached / 1M" value={pricePerMillion(policy.cachedInputPricePer1m, policy.currency)} valueClassName="text-sm font-semibold text-cyan-100" />
-                  <TerminalMetric label="Output / 1M" value={pricePerMillion(policy.outputPricePer1m, policy.currency)} valueClassName="text-sm font-semibold text-cyan-100" />
+                  <TerminalMetric label="Input / 1M" value={pricePerMillion(policy.inputPricePer1m, policy.currency)} valueClassName="text-sm font-semibold text-[color:var(--state-info-text)]" />
+                  <TerminalMetric label="Cached / 1M" value={pricePerMillion(policy.cachedInputPricePer1m, policy.currency)} valueClassName="text-sm font-semibold text-[color:var(--state-info-text)]" />
+                  <TerminalMetric label="Output / 1M" value={pricePerMillion(policy.outputPricePer1m, policy.currency)} valueClassName="text-sm font-semibold text-[color:var(--state-info-text)]" />
                 </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/44">
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-[color:var(--wolfy-text-muted)]">
                   <TerminalChip variant="neutral">{policy.currency}</TerminalChip>
                   {policy.sourceUrl ? (
                     <a
-                      className="min-w-0 break-words rounded-md border border-cyan-300/15 bg-cyan-400/8 px-2.5 py-1 text-cyan-100 transition hover:border-cyan-200/35"
+                      className="min-w-0 break-words rounded-md border border-cyan-300/15 bg-cyan-400/8 px-2.5 py-1 text-[color:var(--state-info-text)] transition hover:border-cyan-200/35"
                       href={policy.sourceUrl}
                       target="_blank"
                       rel="noreferrer"
@@ -746,22 +746,22 @@ const PricingPolicyPanel: React.FC = () => {
 
       {state.data ? (
         <TerminalDisclosure title="L4 已脱敏价格策略响应：readOnly / 维护状态 / 来源" summary="默认折叠 · 仅显示 redaction 后字段" className="mt-4">
-          <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
+          <dl className="grid gap-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)] sm:grid-cols-2">
             <div className="min-w-0">
-              <dt className="text-white/32">readOnly</dt>
-              <dd className="font-mono text-white/64">{String(state.data.metadata.readOnly)}</dd>
+              <dt className="text-[color:var(--wolfy-text-muted)]">readOnly</dt>
+              <dd className="font-mono text-[color:var(--wolfy-text-secondary)]">{String(state.data.metadata.readOnly)}</dd>
             </div>
             <div className="min-w-0">
-              <dt className="text-white/32">manualMaintenance</dt>
-              <dd className="font-mono text-white/64">{String(state.data.metadata.manualMaintenance)}</dd>
+              <dt className="text-[color:var(--wolfy-text-muted)]">manualMaintenance</dt>
+              <dd className="font-mono text-[color:var(--wolfy-text-secondary)]">{String(state.data.metadata.manualMaintenance)}</dd>
             </div>
             <div className="min-w-0">
-              <dt className="text-white/32">dataSources</dt>
-              <dd className="break-words font-mono text-white/64">{state.data.metadata.dataSources.join(', ') || '--'}</dd>
+              <dt className="text-[color:var(--wolfy-text-muted)]">dataSources</dt>
+              <dd className="break-words font-mono text-[color:var(--wolfy-text-secondary)]">{state.data.metadata.dataSources.join(', ') || '--'}</dd>
             </div>
             <div className="min-w-0">
-              <dt className="text-white/32">redaction</dt>
-              <dd className="break-words font-mono text-white/64">{state.data.metadata.redaction.join(', ') || '--'}</dd>
+              <dt className="text-[color:var(--wolfy-text-muted)]">redaction</dt>
+              <dd className="break-words font-mono text-[color:var(--wolfy-text-secondary)]">{state.data.metadata.redaction.join(', ') || '--'}</dd>
             </div>
           </dl>
         </TerminalDisclosure>
@@ -849,7 +849,7 @@ const QuotaDryRunPanel: React.FC = () => {
         <label className="min-w-0 xl:col-span-6">
           <span className="theme-field-label mb-2 block">用量估算</span>
           <input
-            className="h-10 w-full min-w-0 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 font-mono text-sm text-white outline-none transition focus:border-emerald-500/50"
+            className="h-10 w-full min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-3 py-2 font-mono text-sm text-[color:var(--wolfy-text-primary)] outline-none transition focus:border-emerald-500/50"
             inputMode="numeric"
             min={0}
             max={2_000_000}
@@ -860,9 +860,9 @@ const QuotaDryRunPanel: React.FC = () => {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0 text-xs leading-5 text-white/48">
-          <span className="text-white/64">原因：</span>{' '}
-          <span className={cn('font-mono', data?.wouldBlock ? 'text-amber-200' : 'text-white/62')}>{reasonLabel(data?.reasonCode)}</span>
+        <div className="min-w-0 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+          <span className="text-[color:var(--wolfy-text-secondary)]">原因：</span>{' '}
+          <span className={cn('font-mono', data?.wouldBlock ? 'text-amber-200' : 'text-[color:var(--wolfy-text-secondary)]')}>{reasonLabel(data?.reasonCode)}</span>
         </div>
         <TerminalButton
           variant="secondary"
@@ -881,22 +881,22 @@ const QuotaDryRunPanel: React.FC = () => {
       {state.error ? <div className="mt-4"><ApiErrorAlert error={state.error} /></div> : null}
 
       <TerminalDisclosure title="L4 已脱敏 Quota 估算响应：门禁 / 来源 / redaction" summary="默认折叠 · 仅显示 redaction 后字段" className="mt-4">
-        <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
+        <dl className="grid gap-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)] sm:grid-cols-2">
           <div className="min-w-0">
-            <dt className="text-white/32">diagnosticOnly</dt>
-            <dd className="font-mono text-white/64">{String(data?.metadata.diagnosticOnly ?? true)}</dd>
+            <dt className="text-[color:var(--wolfy-text-muted)]">diagnosticOnly</dt>
+            <dd className="font-mono text-[color:var(--wolfy-text-secondary)]">{String(data?.metadata.diagnosticOnly ?? true)}</dd>
           </div>
           <div className="min-w-0">
-            <dt className="text-white/32">liveEnforcement</dt>
-            <dd className="font-mono text-white/64">{String(data?.metadata.liveEnforcement ?? false)}</dd>
+            <dt className="text-[color:var(--wolfy-text-muted)]">liveEnforcement</dt>
+            <dd className="font-mono text-[color:var(--wolfy-text-secondary)]">{String(data?.metadata.liveEnforcement ?? false)}</dd>
           </div>
           <div className="min-w-0">
-            <dt className="text-white/32">noExternalCalls</dt>
-            <dd className="font-mono text-white/64">{String(data?.metadata.noExternalCalls ?? true)}</dd>
+            <dt className="text-[color:var(--wolfy-text-muted)]">noExternalCalls</dt>
+            <dd className="font-mono text-[color:var(--wolfy-text-secondary)]">{String(data?.metadata.noExternalCalls ?? true)}</dd>
           </div>
           <div className="min-w-0">
-            <dt className="text-white/32">redaction</dt>
-            <dd className="break-words font-mono text-white/64">{data?.metadata.redaction.join(', ') || '--'}</dd>
+            <dt className="text-[color:var(--wolfy-text-muted)]">redaction</dt>
+            <dd className="break-words font-mono text-[color:var(--wolfy-text-secondary)]">{data?.metadata.redaction.join(', ') || '--'}</dd>
           </div>
         </dl>
       </TerminalDisclosure>
@@ -955,7 +955,7 @@ const AdminCostObservabilityPage: React.FC = () => {
   return (
     <div
       data-testid="admin-cost-observability-page"
-      className="min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto no-scrollbar text-white"
+      className="min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto no-scrollbar text-[color:var(--wolfy-text-primary)]"
     >
       <TerminalPageShell className="py-5 md:py-6">
         <TerminalPanel as="section" className="relative overflow-hidden">
@@ -964,7 +964,7 @@ const AdminCostObservabilityPage: React.FC = () => {
             title="成本观测"
             action={<ReadOnlyBadges data={data} />}
           />
-          <p className="mt-3 max-w-4xl text-sm leading-6 text-white/54">
+          <p className="mt-3 max-w-4xl text-sm leading-6 text-[color:var(--wolfy-text-muted)]">
             先判断预算压力、异常归属和下一步处理；账本、价格策略、数据源与缓存细节默认后置到二级区。
           </p>
           <AdminOpsL0OverviewStrip
@@ -1011,7 +1011,7 @@ const AdminCostObservabilityPage: React.FC = () => {
               label="页面用途"
               value="评估成本与配额风险"
               subvalue={`窗口 ${data?.window?.key || filters.window} · ${data?.window?.bucket || filters.bucket}`}
-              valueClassName="text-sm font-semibold text-cyan-100"
+              valueClassName="text-sm font-semibold text-[color:var(--state-info-text)]"
             />
             <TerminalMetric
               label="当前状态"

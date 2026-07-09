@@ -65,12 +65,12 @@ const DomainCard: React.FC<{ domain: MissionControlDomainSlice }> = ({ domain })
   <article
     data-testid="admin-mission-domain-card"
     aria-label={`${domain.title}：${domain.statusLabel}`}
-    className="min-w-0 rounded-xl border border-white/[0.08] bg-white/[0.025] p-3"
+    className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-white/[0.025] p-3"
   >
     <div className="flex min-w-0 items-start justify-between gap-3">
       <div className="min-w-0">
-        <p className="break-words text-sm font-semibold leading-5 text-white/88">{domain.title}</p>
-        <p className="mt-1 break-words text-[11px] leading-5 text-white/46">{safeText(domain.summary)}</p>
+        <p className="break-words text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">{domain.title}</p>
+        <p className="mt-1 break-words text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{safeText(domain.summary)}</p>
       </div>
       <TerminalChip variant={statusVariant(domain)} className="shrink-0">
         {safeText(domain.statusLabel)}
@@ -86,13 +86,13 @@ const DomainCard: React.FC<{ domain: MissionControlDomainSlice }> = ({ domain })
     </div>
 
     <dl className="mt-3 grid gap-2 text-xs md:grid-cols-2">
-      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-2.5 py-2">
-        <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/34">只读边界</dt>
-        <dd className="mt-1 text-white/70">{domain.readOnly && domain.noExternalCalls && !domain.liveEnforcement ? '只读 / 无外呼 / 无执行' : '需复核'}</dd>
+      <div className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-black/10 px-2.5 py-2">
+        <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">只读边界</dt>
+        <dd className="mt-1 text-[color:var(--wolfy-text-secondary)]">{domain.readOnly && domain.noExternalCalls && !domain.liveEnforcement ? '只读 / 无外呼 / 无执行' : '需复核'}</dd>
       </div>
-      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-2.5 py-2">
-        <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/34">证据引用</dt>
-        <dd className="mt-1 break-words text-white/70">{safeRefList(domain.evidenceRefs)}</dd>
+      <div className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-black/10 px-2.5 py-2">
+        <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">证据引用</dt>
+        <dd className="mt-1 break-words text-[color:var(--wolfy-text-secondary)]">{safeRefList(domain.evidenceRefs)}</dd>
       </div>
     </dl>
   </article>
@@ -137,7 +137,7 @@ const AdminMissionControlPage: React.FC = () => {
   return (
     <div
       data-testid="admin-mission-control-page"
-      className="min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto no-scrollbar text-white"
+      className="min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto no-scrollbar text-[color:var(--wolfy-text-primary)]"
     >
       <TerminalPageShell className="py-5 md:py-6">
         <TerminalPanel as="section" className="relative overflow-hidden">
@@ -243,13 +243,13 @@ const AdminMissionControlPage: React.FC = () => {
                 label="覆盖域"
                 value={formatNumber(data?.summary.domainCount || 0, 0)}
                 subvalue="目标 9 个"
-                valueClassName="text-white"
+                valueClassName="text-[color:var(--wolfy-text-primary)]"
               />
               <TerminalMetric
                 label="Public NO-GO"
                 value={formatNumber(data?.summary.publicLaunchNoGoCount || 0, 0)}
                 subvalue="无审批提升"
-                valueClassName="text-rose-300"
+                valueClassName="text-[color:var(--wolfy-market-down)]"
               />
               <TerminalMetric
                 label="缺真实证据"
@@ -261,7 +261,7 @@ const AdminMissionControlPage: React.FC = () => {
                 label="证据工具"
                 value={formatNumber(data?.summary.evidenceToolingCount || 0, 0)}
                 subvalue="只读/离线"
-                valueClassName="text-cyan-200"
+                valueClassName="text-[color:var(--state-info-text)]"
               />
             </div>
 
@@ -272,8 +272,8 @@ const AdminMissionControlPage: React.FC = () => {
                 { icon: AlertTriangle, text: data?.liveEnforcement === false ? '无 live enforcement' : '需要复核执行边界', variant: 'caution' as ChipVariant },
                 { icon: FileCheck2, text: data?.releaseApproved === false ? 'releaseApproved=false' : '审批状态需复核', variant: 'danger' as ChipVariant },
               ].map(({ icon: Icon, text, variant }) => (
-                <div key={text} className="flex min-w-0 items-center gap-2 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2">
-                  <Icon className="size-4 shrink-0 text-white/46" aria-hidden="true" />
+                <div key={text} className="flex min-w-0 items-center gap-2 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-black/10 px-3 py-2">
+                  <Icon className="size-4 shrink-0 text-[color:var(--wolfy-text-muted)]" aria-hidden="true" />
                   <TerminalChip variant={variant}>{text}</TerminalChip>
                 </div>
               ))}
@@ -284,12 +284,12 @@ const AdminMissionControlPage: React.FC = () => {
             </TerminalNotice>
 
             {noGoDomains.length ? (
-              <div className="mt-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3" data-testid="admin-mission-nogo-list">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">NO-GO domains</p>
-                <ul className="mt-2 space-y-1.5 text-xs text-white/68">
+              <div className="mt-4 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3" data-testid="admin-mission-nogo-list">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">NO-GO domains</p>
+                <ul className="mt-2 space-y-1.5 text-xs text-[color:var(--wolfy-text-secondary)]">
                   {noGoDomains.slice(0, 6).map((domain) => (
                     <li key={domain.id} className="break-words">
-                      <CheckCircle2 className="mr-1.5 inline size-3.5 text-rose-300" aria-hidden="true" />
+                      <CheckCircle2 className="mr-1.5 inline size-3.5 text-[color:var(--wolfy-market-down)]" aria-hidden="true" />
                       {domain.title}
                     </li>
                   ))}

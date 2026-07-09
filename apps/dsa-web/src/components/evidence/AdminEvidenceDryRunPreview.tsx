@@ -110,8 +110,8 @@ export function AdminEvidenceDryRunPreview() {
               </div>
 
               <TerminalNestedBlock className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">安全摘要</p>
-                <p className="mt-1 text-sm leading-6 text-white/78">{item.safeSummary}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">安全摘要</p>
+                <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{item.safeSummary}</p>
               </TerminalNestedBlock>
 
               <div className="flex flex-wrap gap-2">
@@ -122,7 +122,7 @@ export function AdminEvidenceDryRunPreview() {
                 ))}
               </div>
 
-              <div className="flex flex-wrap gap-2 text-[11px] text-white/42">
+              <div className="flex flex-wrap gap-2 text-[11px] text-[color:var(--wolfy-text-muted)]">
                 <span>原因码 {item.adminReasonCodeCount}</span>
                 <span>生成于 {formatGeneratedAt(item.generatedAt)}</span>
               </div>
@@ -134,7 +134,7 @@ export function AdminEvidenceDryRunPreview() {
               >
                 <div className="grid grid-cols-1 gap-2">
                   <TerminalNestedBlock>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">禁用结论</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">禁用结论</p>
                     {item.disabledClaims.length ? (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {item.disabledClaims.map((claim) => (
@@ -144,24 +144,24 @@ export function AdminEvidenceDryRunPreview() {
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-1 text-xs text-white/48">当前样本没有额外禁用结论。</p>
+                      <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">当前样本没有额外禁用结论。</p>
                     )}
                   </TerminalNestedBlock>
 
                   <TerminalNestedBlock>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">管理员元信息</p>
-                    <div className="mt-2 grid grid-cols-1 gap-2 text-xs text-white/58">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">管理员元信息</p>
+                    <div className="mt-2 grid grid-cols-1 gap-2 text-xs text-[color:var(--wolfy-text-muted)]">
                       <div className="flex items-center justify-between gap-3">
                         <span>engine</span>
-                        <span className="font-mono text-white/72">{item.engine}</span>
+                        <span className="font-mono text-[color:var(--wolfy-text-secondary)]">{item.engine}</span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <span>packet version</span>
-                        <span className="font-mono text-white/72">{item.sourcePacketVersion}</span>
+                        <span className="font-mono text-[color:var(--wolfy-text-secondary)]">{item.sourcePacketVersion}</span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <span>validation</span>
-                        <span className="font-mono text-white/72">{item.validationState}</span>
+                        <span className="font-mono text-[color:var(--wolfy-text-secondary)]">{item.validationState}</span>
                       </div>
                     </div>
                   </TerminalNestedBlock>

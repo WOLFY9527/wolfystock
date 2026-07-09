@@ -52,28 +52,28 @@ export function InsightStack({
     <section className={cn('rounded-[16px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md', className)}>
       <div className="flex items-center gap-2">
         <Radar className="size-4 text-cyan-100/70" aria-hidden="true" />
-        <h3 className="text-sm font-semibold text-white/86">{title}</h3>
+        <h3 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{title}</h3>
       </div>
       <ol className="mt-4 space-y-3">
         {visibleInsights.map((insight, index) => {
           const meta = SEVERITY_META[insight.severity];
           const Icon = meta.icon;
           return (
-            <li key={insight.id} className="rounded-xl border border-white/[0.04] bg-black/20 p-3">
+            <li key={insight.id} className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
               <div className="flex min-w-0 items-start gap-3">
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-white/8 bg-white/[0.03] font-mono text-xs text-white/48">
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] font-mono text-xs text-[color:var(--wolfy-text-muted)]">
                   {index + 1}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="min-w-0 text-sm font-semibold leading-5 text-white">{insight.title}</p>
+                    <p className="min-w-0 text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">{insight.title}</p>
                     <span className={cn('inline-flex min-h-6 shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold', meta.className)}>
                       <Icon className="size-3.5" aria-hidden="true" />
                       {meta.label}
                     </span>
                   </div>
-                  <p className="mt-2 text-sm leading-6 text-white/64">{insight.explanation}</p>
-                  {insight.detail ? <div className="mt-3 text-xs leading-5 text-white/45">{insight.detail}</div> : null}
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{insight.explanation}</p>
+                  {insight.detail ? <div className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{insight.detail}</div> : null}
                 </div>
               </div>
             </li>

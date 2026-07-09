@@ -14,10 +14,10 @@ import { SupportBanner, SupportPanel } from '../common/SupportSurface';
 
 type ChannelProtocol = 'openai' | 'deepseek' | 'gemini' | 'anthropic' | 'vertex_ai' | 'ollama';
 
-const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
-const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
-const DRAWER_LABEL_CLASS = 'text-[10px] uppercase tracking-widest text-white/40 mb-1.5 font-bold block';
-const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-4 flex cursor-pointer list-none items-center gap-1.5 border-t border-white/5 pt-4 text-xs text-white/30 transition-colors hover:text-white [&::-webkit-details-marker]:hidden';
+const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-[var(--wolfy-surface-input)] border border-[color:var(--wolfy-border-subtle)] hover:bg-[var(--wolfy-surface-input)] text-xs transition-colors';
+const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)] border border-[color:var(--wolfy-border-subtle)]';
+const DRAWER_LABEL_CLASS = 'text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)] mb-1.5 font-bold block';
+const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-4 flex cursor-pointer list-none items-center gap-1.5 border-t border-[color:var(--wolfy-border-subtle)] pt-4 text-xs text-[color:var(--wolfy-text-muted)] transition-colors hover:text-[color:var(--wolfy-text-primary)] [&::-webkit-details-marker]:hidden';
 const MULTI_API_KEY_SEPARATOR = /,/;
 
 const resolveDraftStateValue = <T,>(
@@ -1267,7 +1267,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
               <summary className={DRAWER_ADVANCED_SUMMARY_CLASS}>
                 配置高级参数 (Advanced Settings) ▾
               </summary>
-              <div className="mt-3 rounded-xl border border-white/5 bg-white/[0.015] p-4">
+              <div className="mt-3 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-white/[0.015] p-4">
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <span className="settings-accent-text text-xs font-medium uppercase tracking-wider">{t('settings.llmEditor.runtimeTitle')}</span>

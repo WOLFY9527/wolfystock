@@ -18,7 +18,7 @@ export const SettingsSectionCard: React.FC<SettingsSectionCardProps> = ({
   actionsClassName = '',
 }) => {
   return (
-    <div className={cn('bg-white/[0.02] backdrop-blur-2xl border border-white/5 rounded-2xl p-5 md:p-6', className)}>
+    <div className={cn('bg-[var(--wolfy-surface-console)] backdrop-blur-2xl border border-[color:var(--wolfy-border-subtle)] rounded-2xl p-5 md:p-6', className)}>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
           <h2 className="text-[1.125rem] font-normal tracking-[-0.02em] text-foreground md:text-[1.25rem]">{title}</h2>
