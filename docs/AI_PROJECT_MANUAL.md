@@ -168,6 +168,12 @@ Use the smallest validation set that proves the touched behavior:
 - API/schema/auth/provider/protected contracts: backend focused tests, compatibility review, redaction/leakage checks, and wider gates when shared contracts are touched.
 - Web frontend: from `apps/dsa-web`, run dependency install only when needed, then `npm run lint`, `npm run build`, and concrete Vitest paths. Use browser/screenshot smoke when layout or visible UX changes.
 - Local UAT runtime harness: `python scripts/uat_runtime_harness.py --expected-sha "$(git rev-parse HEAD)"`, then use `python scripts/uat_runtime_harness.py --preflight --expected-sha "$(git rev-parse HEAD)" --evidence-path <run-evidence> --json` for read-only WorkBuddy qualification and `--stop-from-evidence --evidence-path <run-evidence> --json` for task-owned cleanup.
+
+> Shell note: commands using `./scripts/*.sh` and `$(git rev-parse HEAD)` are
+> POSIX-shell (bash/sh) syntax. On Windows run them from Git Bash, WSL, or any
+> shell providing a POSIX `sh` (e.g. `bash scripts/ci_gate.sh`). PowerShell uses
+> the same `$(...)` subexpression syntax, so the UAT `--expected-sha "$(git rev-parse HEAD)"`
+> invocations also work unchanged in PowerShell.
 - Desktop: build web first, then desktop build where platform allows.
 - Workflow/scripts/Docker: run the closest local deterministic script or syntax check and report unexecuted remote/infra gaps.
 
