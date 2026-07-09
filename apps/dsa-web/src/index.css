@@ -5900,30 +5900,42 @@ body::after {
   gap: 0.2rem;
   padding: 0.25rem;
   border-radius: 0.85rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(18px);
+  border: 1px solid var(--wolfy-border-subtle, var(--line));
+  background: var(--wolfy-surface-input, var(--surface-2));
 }
 
 .backtest-mode-toggle__button {
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 0.7rem;
   padding: 0.45rem 1rem;
   background: transparent;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--wolfy-text-muted, var(--muted-text));
   font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   transition:
     background-color 180ms ease,
     color 180ms ease,
+    border-color 180ms ease,
     box-shadow 180ms ease;
 }
 
+.backtest-mode-toggle__button:hover {
+  color: var(--wolfy-text-secondary, var(--text-secondary));
+  background: color-mix(in srgb, var(--wolfy-surface-inset-lift, var(--surface)) 70%, transparent);
+}
+
+.backtest-mode-toggle__button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--wolfy-accent-focus, var(--wolfy-accent));
+}
+
 .backtest-mode-toggle__button.is-active {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  background: color-mix(in srgb, var(--wolfy-accent, var(--sage)) 14%, var(--wolfy-surface-input, var(--surface)));
+  border-color: color-mix(in srgb, var(--wolfy-accent, var(--sage)) 42%, transparent);
+  color: var(--wolfy-text-primary, var(--text));
+  font-weight: 700;
+  box-shadow: inset 0 -2px 0 0 var(--sage-deep, var(--wolfy-accent));
 }
 
 .backtest-header-toggles {

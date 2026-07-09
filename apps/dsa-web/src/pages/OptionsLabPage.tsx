@@ -1919,20 +1919,25 @@ const ProductHero: React.FC<{
   const nextEvidence = firstReadNextEvidence(readinessGates, decision, comparison);
   const structureLine = firstReadStructureLine(decision, comparison);
 
+  const primaryChips = chips;
+  const nextEvidenceLine = nextEvidence.slice(0, 3).join(' · ') || '等待链路与合约证据更新';
+
   return (
     <section
       data-testid="options-lab-product-hero"
       className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-console)_94%,transparent)] px-4 py-4 md:px-5"
     >
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className={labelClass}>期权研究首读</p>
-            {[OPTIONS_RESEARCH_RECORD_COPY, OPTIONS_NON_TRADING_INSTRUCTION_COPY, OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY].map((label) => (
-              <Pill key={label} tone="neutral">{label}</Pill>
-            ))}
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className={labelClass}>期权研究首读</p>
+          <h2 className="mt-1 max-w-3xl text-base font-semibold leading-7 text-[color:var(--wolfy-text-primary)] md:text-lg">
+            在当前合约与数据可用性下，哪个有边界的期权结构更值得继续观察？
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+            {structureLine}
+          </p>
+
+          <div className="mt-4 flex flex-wrap items-end gap-4">
             <div className="min-w-0">
               <p className={labelClass}>当前标的</p>
               <p className="mt-1 text-lg font-semibold tracking-tight text-[color:var(--wolfy-text-primary)] md:text-xl">
@@ -1940,18 +1945,34 @@ const ProductHero: React.FC<{
               </p>
               <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{contextLine}</p>
             </div>
-            <span className="rounded-full border border-[color:color-mix(in_srgb,var(--wolfy-accent)_32%,transparent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_10%,transparent)] px-3 py-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+            <div className="min-w-0">
+              <p className={labelClass}>标的价格</p>
+              <p className="mt-1 font-mono text-lg font-semibold tracking-tight text-[color:var(--wolfy-text-primary)]">
+                {money(underlying?.price)}
+              </p>
+              <p className={cn('mt-0.5 text-sm', changeClass)}>{ratio(underlying?.changePct)}</p>
+            </div>
+            <span
+              className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-1 text-xs font-medium text-[color:var(--wolfy-text-secondary)]"
+              aria-label={`观察状态 ${decisionStatusLabel(decision)}`}
+            >
               {decisionStatusLabel(decision)}
             </span>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {chips.map((chip) => (
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {primaryChips.map((chip) => (
               <Pill key={chip.label} tone={chip.tone}>{chip.label}</Pill>
             ))}
+            <span className="text-xs text-[color:var(--wolfy-text-muted)]">
+              {OPTIONS_RESEARCH_RECORD_COPY}
+              {' · '}
+              {OPTIONS_NON_TRADING_INSTRUCTION_COPY}
+              {' · '}
+              {OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY}
+            </span>
           </div>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-            {structureLine}
-          </p>
+
           <DataQualityBanner
             availability={availability}
             summary={summary}
@@ -1960,30 +1981,25 @@ const ProductHero: React.FC<{
           />
         </div>
 
-        <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:min-w-[21rem]">
-          <div className={cn(innerBlockClass, 'p-3')}>
-            <p className={labelClass}>标的价格</p>
-            <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-[color:var(--wolfy-text-primary)]">
-              {money(underlying?.price)}
-            </p>
-            <p className={cn('mt-1 text-sm', changeClass)}>{ratio(underlying?.changePct)}</p>
-          </div>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:min-w-[18rem] xl:max-w-sm xl:grid-cols-1">
           <div className={cn(innerBlockClass, 'p-3')} data-testid="options-lab-consumer-availability">
             <p className={labelClass}>当前可读</p>
             <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
               {observationScope}
             </p>
-            <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
+            <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
               {availability.freshnessLabel}
+              {hasChainRows ? ' · 合约链可见' : ' · 合约链暂不可用或不完整'}
             </p>
           </div>
-          <div className={cn(innerBlockClass, 'p-3 sm:col-span-2')}>
+          <div className={cn(innerBlockClass, 'p-3')}>
             <p className={labelClass}>下一步证据</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {nextEvidence.map((label) => (
-                <Pill key={label} tone="warn">{label}</Pill>
-              ))}
-            </div>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+              {nextEvidenceLine}
+            </p>
+            <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+              {OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY}
+            </p>
           </div>
         </div>
       </div>
@@ -1994,17 +2010,17 @@ const ProductHero: React.FC<{
 const DecisionSummaryStrip: React.FC<{ items: SummaryStripItem[] }> = ({ items }) => (
   <section
     data-testid="options-lab-summary-strip"
-    className="grid gap-3 md:grid-cols-3"
+    className="grid gap-2 sm:grid-cols-3"
     aria-label="期权实验室摘要"
   >
     {items.slice(0, 3).map((item) => (
       <div
         key={item.label}
-        className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-console)_88%,transparent)] px-4 py-3"
+        className="min-w-0 border-l-2 border-[color:color-mix(in_srgb,var(--wolfy-accent)_35%,transparent)] px-3 py-1.5"
       >
         <p className={labelClass}>{item.label}</p>
-        <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.value}</p>
-        {item.meta ? <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">{item.meta}</p> : null}
+        <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.value}</p>
+        {item.meta ? <p className="mt-0.5 text-xs text-[color:var(--wolfy-text-muted)]">{item.meta}</p> : null}
       </div>
     ))}
   </section>
@@ -3476,11 +3492,11 @@ const OptionsLabPageContent: React.FC = () => {
             eyebrow="只读情景分析"
             title="期权实验室"
             action={(
-              <div className="flex flex-wrap justify-end gap-2">
-                <Pill tone="info">{OPTIONS_RESEARCH_RECORD_COPY}</Pill>
-                <Pill tone="warn">{OPTIONS_NON_TRADING_INSTRUCTION_COPY}</Pill>
-                <Pill tone="neutral">{OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY}</Pill>
-              </div>
+              <p className="max-w-sm text-right text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                {OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY}
+                {' · '}
+                {OPTIONS_NON_TRADING_INSTRUCTION_COPY}
+              </p>
             )}
           />
           <div className="mt-5 grid gap-6" data-testid="options-lab-bento-grid">
@@ -3496,9 +3512,9 @@ const OptionsLabPageContent: React.FC = () => {
 
             <WorkspaceRegion
               testId="options-lab-input-region"
-              eyebrow="工作流起点"
+              eyebrow="结构输入"
               title="情景参数"
-              summary="情景参数输入"
+              summary="先确认标的、方向、到期与假设价格，再阅读可用证据与限制。"
               icon={Search}
             >
               <AssumptionPanel
@@ -3519,7 +3535,7 @@ const OptionsLabPageContent: React.FC = () => {
                 onRiskBudgetChange={setRiskBudget}
                 onExpirationSelect={handleExpirationSelect}
               />
-              <div className="border-t border-[color:var(--wolfy-divider)] pt-5">
+              <div className="border-t border-[color:var(--wolfy-divider)] pt-4">
                 <DecisionSummaryStrip items={summaryStripItems} />
               </div>
             </WorkspaceRegion>

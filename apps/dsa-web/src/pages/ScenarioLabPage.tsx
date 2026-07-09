@@ -790,25 +790,32 @@ export default function ScenarioLabPage() {
           )}
           rail={(
             <ConsoleContextRail className="flex flex-col gap-3 p-3">
-              <RoughSectionCard eyebrow={locale === 'en' ? 'Preset context' : '预设情景'} title={selectedLabel}>
+              <RoughSectionCard
+                eyebrow={locale === 'en' ? 'Selected frame' : '当前情景'}
+                title={selectedLabel}
+              >
                 <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{selectedPreset.summary[locale]}</p>
-              </RoughSectionCard>
-              <RoughSectionCard eyebrow={locale === 'en' ? 'Evidence limits' : '证据限制'} title={locale === 'en' ? 'Keep the surface bounded' : '保持边界'}>
-                <RoughBulletList
-                  items={scenarioUnavailable
-                    ? [scenarioUnavailableCopy.evidenceFallback, scenarioUnavailableCopy.boundaryNote]
-                    : sanitizeScenarioNarrativeList(scenarioResult?.evidenceLimits ?? [], locale)}
-                  emptyText={locale === 'en' ? 'No explicit evidence limit is attached.' : '当前没有额外证据限制。'}
-                />
-              </RoughSectionCard>
-              <RoughSectionCard eyebrow={locale === 'en' ? 'Disclosure' : '披露'} title={locale === 'en' ? 'Observation boundary note' : '观察边界说明'}>
-                <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-                  {sanitizeScenarioNarrativeText(
-                    scenarioResult?.noAdviceDisclosure || (locale === 'en' ? 'Research planning only.' : '仅供研究规划观察。'),
-                    locale,
-                  )}
+                <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                  {scenarioResult
+                    ? sanitizeScenarioNarrativeText(
+                      scenarioResult.noAdviceDisclosure || (locale === 'en' ? 'Research planning only.' : '仅供研究规划观察。'),
+                      locale,
+                    )
+                    : (locale === 'en'
+                      ? 'Page load only prepares market context. Evaluation starts from the explicit action.'
+                      : '页面加载只准备市场上下文；评估需要显式执行。')}
                 </p>
               </RoughSectionCard>
+              {scenarioResult ? (
+                <RoughSectionCard eyebrow={locale === 'en' ? 'Evidence limits' : '证据限制'} title={locale === 'en' ? 'Keep the surface bounded' : '保持边界'}>
+                  <RoughBulletList
+                    items={scenarioUnavailable
+                      ? [scenarioUnavailableCopy.evidenceFallback, scenarioUnavailableCopy.boundaryNote]
+                      : sanitizeScenarioNarrativeList(scenarioResult?.evidenceLimits ?? [], locale)}
+                    emptyText={locale === 'en' ? 'No explicit evidence limit is attached.' : '当前没有额外证据限制。'}
+                  />
+                </RoughSectionCard>
+              ) : null}
             </ConsoleContextRail>
           )}
         >
@@ -837,49 +844,115 @@ export default function ScenarioLabPage() {
             {!contextLoading && !scenarioResult ? (
               <section className="p-3" data-testid="scenario-lab-setup-idle">
                 <RoughSectionCard
-                  eyebrow={locale === 'en' ? 'Experiment setup' : '实验设置'}
-                  title={locale === 'en' ? 'Ready for explicit scenario evaluation' : '等待显式执行情景评估'}
+                  eyebrow={locale === 'en' ? 'Research question' : '研究问题'}
+                  title={locale === 'en'
+                    ? 'How would this market frame change under a bounded stress?'
+                    : '在有边界的压力情景下，当前市场框架会如何变化？'}
                 >
-                  <div className="grid gap-4 text-sm md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-                    <div className="min-w-0 space-y-2 text-[color:var(--wolfy-text-secondary)]">
-                      <p>
-                        {locale === 'en'
-                          ? 'Page load has read the current market context only. It has not run a scenario evaluation.'
-                          : '页面加载只读取当前市场上下文，尚未执行情景评估。'}
-                      </p>
-                      <p>
-                        {locale === 'en'
-                          ? `Selected frame: ${selectedPreset.label.en}.`
-                          : `当前情景：${selectedPreset.label.zh}。`}
-                      </p>
-                      <ol
-                        data-testid="scenario-productization-order"
-                        className="grid gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-xs text-[color:var(--wolfy-text-secondary)] sm:grid-cols-2 lg:grid-cols-3"
-                      >
-                        {[
-                          locale === 'en' ? 'Explicit setup' : '显式情景设置',
-                          locale === 'en' ? 'Explicit evaluation' : '显式评估',
-                          locale === 'en' ? 'Comparison' : '对比',
-                          locale === 'en' ? 'Sensitivity' : '敏感度',
-                          locale === 'en' ? 'Uncertainty' : '不确定性',
-                          locale === 'en' ? 'Limitations' : '限制',
-                        ].map((item, index) => (
-                          <li key={item} className="flex min-w-0 items-center gap-2">
-                            <span className="font-mono text-[color:var(--sage-deep)]">{index + 1}</span>
-                            <span className="truncate">{item}</span>
-                          </li>
-                        ))}
-                      </ol>
+                  <div className="space-y-4 text-sm text-[color:var(--wolfy-text-secondary)]">
+                    <p>
+                      {locale === 'en'
+                        ? 'Page load has read the current market context only. It has not run a scenario evaluation, and no scenario snapshot is invented here.'
+                        : '页面加载只读取当前市场上下文，尚未执行情景评估，也不会在此虚构结果。'}
+                    </p>
+                    <p>
+                      {locale === 'en'
+                        ? `Selected frame: ${selectedPreset.label.en}.`
+                        : `当前情景：${selectedPreset.label.zh}。`}
+                    </p>
+
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+                      <div className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--wolfy-text-muted)]">
+                          {locale === 'en' ? 'Input boundary' : '输入边界'}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label={locale === 'en' ? 'Scenario presets' : '情景预设'}>
+                          {SCENARIO_PRESETS.map((preset) => {
+                            const active = preset.key === selectedPreset.key;
+                            return (
+                              <ScenarioWorkbenchButton
+                                key={preset.key}
+                                className={active ? 'border-[color:var(--wolfy-accent)] font-semibold text-[color:var(--wolfy-text-primary)]' : undefined}
+                                onClick={() => {
+                                  if (!active) {
+                                    setSelectedPreset(preset);
+                                  }
+                                }}
+                                aria-pressed={active}
+                              >
+                                {preset.label[locale]}
+                              </ScenarioWorkbenchButton>
+                            );
+                          })}
+                        </div>
+                        <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                          {selectedPreset.summary[locale]}
+                        </p>
+                      </div>
+
+                      <div className="min-w-0 space-y-3">
+                        <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--wolfy-text-muted)]">
+                            {locale === 'en' ? 'Evidence to use' : '将使用的证据'}
+                          </p>
+                          <ul className="mt-2 space-y-1 text-xs leading-5">
+                            <li>{locale === 'en' ? 'Current market regime frame from context load' : '已载入的当前市场框架'}</li>
+                            <li>{locale === 'en' ? 'Driver scores already present in the cockpit' : '驾驶舱中已有的驱动评分'}</li>
+                            <li>{locale === 'en' ? 'Bounded preset assumptions only' : '仅限有边界的预设假设'}</li>
+                          </ul>
+                        </div>
+                        <div className="rounded-xl border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--wolfy-text-muted)]">
+                            {locale === 'en' ? 'Unavailable before evaluation' : '评估前暂不可用'}
+                          </p>
+                          <ul className="mt-2 space-y-1 text-xs leading-5">
+                            <li>{locale === 'en' ? 'Scenario regime projection' : '情景后的状态投影'}</li>
+                            <li>{locale === 'en' ? 'Driver deltas / sensitivity' : '驱动变化与敏感度'}</li>
+                            <li>{locale === 'en' ? 'Confirm / invalidation paths' : '确认与失效路径'}</li>
+                          </ul>
+                        </div>
+                      </div>
                     </div>
-                    <ScenarioWorkbenchButton
-                      primary
-                      onClick={() => void runScenarioEvaluation(selectedPreset)}
-                      disabled={evaluatingScenario || !cockpit}
+
+                    <ol
+                      data-testid="scenario-productization-order"
+                      className="flex flex-wrap gap-x-4 gap-y-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5 text-xs text-[color:var(--wolfy-text-secondary)]"
                     >
-                      {evaluatingScenario
-                        ? (locale === 'en' ? 'Evaluating...' : '评估中…')
-                        : (locale === 'en' ? 'Evaluate scenario' : '评估情景')}
-                    </ScenarioWorkbenchButton>
+                      {[
+                        locale === 'en' ? 'Explicit setup' : '显式情景设置',
+                        locale === 'en' ? 'Explicit evaluation' : '显式评估',
+                        locale === 'en' ? 'Comparison' : '对比',
+                        locale === 'en' ? 'Sensitivity' : '敏感度',
+                        locale === 'en' ? 'Uncertainty' : '不确定性',
+                        locale === 'en' ? 'Limitations' : '限制',
+                      ].map((item, index) => (
+                        <li key={item} className="inline-flex min-w-0 items-center gap-1.5">
+                          <span className="font-mono text-[color:var(--sage-deep)]">{index + 1}</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ol>
+
+                    <div className="flex min-w-0 flex-wrap items-center gap-3">
+                      <ScenarioWorkbenchButton
+                        primary
+                        onClick={() => void runScenarioEvaluation(selectedPreset)}
+                        disabled={evaluatingScenario || !cockpit}
+                      >
+                        {evaluatingScenario
+                          ? (locale === 'en' ? 'Evaluating...' : '评估中…')
+                          : (locale === 'en' ? 'Evaluate scenario' : '评估情景')}
+                      </ScenarioWorkbenchButton>
+                      <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                        {cockpit
+                          ? (locale === 'en'
+                            ? 'Safe next action: evaluate the selected bounded scenario when you are ready.'
+                            : '安全下一步：准备好后评估所选有边界情景。')
+                          : (locale === 'en'
+                            ? 'Market context is not ready yet; refresh context before evaluation.'
+                            : '市场上下文尚未就绪；请先刷新上下文再评估。')}
+                      </p>
+                    </div>
                   </div>
                 </RoughSectionCard>
               </section>
