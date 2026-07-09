@@ -5,14 +5,13 @@
 import type React from 'react';
 import { useEffect, useEffectEvent, useReducer, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowRight, ChevronDown, LockKeyhole, LogOut, Menu, Moon, ShieldAlert, ShieldCheck, SlidersHorizontal, Sun } from 'lucide-react';
+import { ChevronDown, LockKeyhole, LogOut, Menu, Moon, ShieldCheck, SlidersHorizontal, Sun } from 'lucide-react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { AccessGatePage } from '../access/AccessGatePage';
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
 import { Button } from '../common/Button';
-import { Card } from '../common/Card';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Drawer } from '../common/Drawer';
-import { WorkspacePageHeader } from '../common/WorkspacePageHeader';
 import { SidebarNav } from './SidebarNav';
 import { ShellRailContext } from './ShellRailContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -157,62 +156,17 @@ const ShellAdminAccountGate: React.FC<{
   note: string;
   primaryAction: { label: string; to: string };
   secondaryAction: { label: string; to: string };
-}> = ({
-  eyebrow,
-  title,
-  description,
-  bullets,
-  statusLabel,
-  note,
-  primaryAction,
-  secondaryAction,
-}) => (
-  <div className="space-y-6">
-    <WorkspacePageHeader eyebrow={eyebrow} title={title} description={description} />
-
-    <Card className="max-w-3xl space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex size-12 items-center justify-center rounded-full border border-[hsl(var(--accent-warning-hsl)/0.32)] bg-[hsl(var(--accent-warning-hsl)/0.14)] text-[hsl(var(--accent-warning-hsl))]">
-          <ShieldAlert className="size-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground">{title}</p>
-          <p className="mt-1 text-sm text-secondary-text">{description}</p>
-        </div>
-        <span className="inline-flex min-h-[28px] items-center rounded-full border border-[hsl(var(--accent-warning-hsl)/0.32)] bg-[hsl(var(--accent-warning-hsl)/0.14)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[hsl(var(--accent-warning-hsl))]">
-          {statusLabel}
-        </span>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-2">
-        {bullets.map((item) => (
-          <div
-            key={item}
-            className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-3 text-sm leading-6 text-secondary-text"
-          >
-            {item}
-          </div>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Link
-          to={primaryAction.to}
-          className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
-        >
-          <span>{primaryAction.label}</span>
-          <ArrowRight className="size-4" />
-        </Link>
-        <Link
-          to={secondaryAction.to}
-          className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 text-[0.75rem] text-secondary-text transition-colors hover:border-[var(--border-strong)] hover:text-foreground"
-        >
-          {secondaryAction.label}
-        </Link>
-      </div>
-      <p className="text-xs leading-5 text-muted-text">{note}</p>
-    </Card>
-  </div>
+}> = (props) => (
+  <AccessGatePage
+    eyebrow={props.eyebrow}
+    title={props.title}
+    description={props.description}
+    bullets={props.bullets}
+    statusLabel={props.statusLabel}
+    note={props.note}
+    primaryAction={props.primaryAction}
+    secondaryAction={props.secondaryAction}
+  />
 );
 
 type AccountMenuCopy = {

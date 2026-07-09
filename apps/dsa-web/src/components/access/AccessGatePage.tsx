@@ -21,6 +21,11 @@ type AccessGatePageProps = {
   tertiaryAction?: ActionLink;
 };
 
+/**
+ * Shared gate surface for prototype-disabled, permission-limited, and
+ * admin-unavailable routes. Keeps route identity compact and puts state →
+ * reason → boundary → safe action ahead of empty canvas space.
+ */
 export const AccessGatePage: React.FC<AccessGatePageProps> = ({
   eyebrow,
   title,
@@ -32,52 +37,86 @@ export const AccessGatePage: React.FC<AccessGatePageProps> = ({
   secondaryAction,
   tertiaryAction,
 }) => (
-  <div className="space-y-6">
+  <section
+    className="access-gate"
+    data-testid="access-gate-page"
+    aria-labelledby="access-gate-state-heading"
+  >
     <WorkspacePageHeader
-      eyebrow={eyebrow}
-      title={title}
-      description={description}
+      density="compact"
+      className="access-gate-identity"
+      contentClassName="access-gate-identity-layout"
+      titleClassName="access-gate-identity-title"
+      eyebrow={
+        <span className="access-gate-identity-eyebrow" data-testid="access-gate-eyebrow">
+          {eyebrow}
+        </span>
+      }
+      title={
+        <span id="access-gate-state-heading" data-testid="access-gate-state-heading">
+          {title}
+        </span>
+      }
     />
 
-    <Card className="max-w-3xl space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex size-12 items-center justify-center rounded-full border border-[hsl(var(--accent-warning-hsl)/0.32)] bg-[hsl(var(--accent-warning-hsl)/0.14)] text-[hsl(var(--accent-warning-hsl))]">
+    <Card className="access-gate-panel max-w-3xl">
+      <div className="access-gate-state-band" data-testid="access-gate-state-band">
+        <div className="access-gate-state-icon" aria-hidden="true">
           <ShieldAlert className="size-5" />
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground">{title}</p>
-          <p className="mt-1 text-sm text-secondary-text">{description}</p>
+        <div className="access-gate-state-copy min-w-0 flex-1">
+          {statusLabel ? (
+            <span
+              className="access-gate-status-pill"
+              data-testid="access-gate-status-pill"
+            >
+              <span className="access-gate-status-marker" aria-hidden="true">
+                ▲
+              </span>
+              <span>{statusLabel}</span>
+            </span>
+          ) : null}
+          <p className="access-gate-state-summary" data-testid="access-gate-state-summary">
+            {title}
+          </p>
         </div>
-        {statusLabel ? (
-          <span className="inline-flex min-h-[28px] items-center rounded-full border border-[hsl(var(--accent-warning-hsl)/0.32)] bg-[hsl(var(--accent-warning-hsl)/0.14)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[hsl(var(--accent-warning-hsl))]">
-            {statusLabel}
-          </span>
-        ) : null}
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {bullets.map((item) => (
-          <div
-            key={item}
-            className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-3 text-sm leading-6 text-secondary-text"
-          >
-            {item}
-          </div>
-        ))}
+      <div className="access-gate-reason" data-testid="access-gate-reason">
+        <p className="access-gate-section-label">Why access is limited</p>
+        <p className="access-gate-reason-body">{description}</p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      {bullets.length > 0 ? (
+        <div className="access-gate-boundary" data-testid="access-gate-boundary">
+          <p className="access-gate-section-label">Capability / evidence boundary</p>
+          <ul className="access-gate-boundary-list">
+            {bullets.map((item) => (
+              <li key={item} className="access-gate-boundary-item">
+                <span className="access-gate-boundary-marker" aria-hidden="true">
+                  ■
+                </span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <div className="access-gate-actions" data-testid="access-gate-actions">
         <Link
           to={primaryAction.to}
-          className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
+          className="access-gate-action access-gate-action--primary"
+          data-testid="access-gate-primary-action"
         >
           <span>{primaryAction.label}</span>
-          <ArrowRight className="size-4" />
+          <ArrowRight className="size-4" aria-hidden="true" />
         </Link>
         {secondaryAction ? (
           <Link
             to={secondaryAction.to}
-            className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 text-[0.75rem] text-secondary-text transition-colors hover:border-[var(--border-strong)] hover:text-foreground"
+            className="access-gate-action access-gate-action--secondary"
+            data-testid="access-gate-secondary-action"
           >
             {secondaryAction.label}
           </Link>
@@ -85,13 +124,19 @@ export const AccessGatePage: React.FC<AccessGatePageProps> = ({
         {tertiaryAction ? (
           <Link
             to={tertiaryAction.to}
-            className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent px-2 text-[0.75rem] text-muted-text transition-colors hover:text-foreground"
+            className="access-gate-action access-gate-action--tertiary"
+            data-testid="access-gate-tertiary-action"
           >
             {tertiaryAction.label}
           </Link>
         ) : null}
       </div>
-      {note ? <p className="text-xs leading-5 text-muted-text">{note}</p> : null}
+
+      {note ? (
+        <p className="access-gate-note" data-testid="access-gate-note">
+          {note}
+        </p>
+      ) : null}
     </Card>
-  </div>
+  </section>
 );
