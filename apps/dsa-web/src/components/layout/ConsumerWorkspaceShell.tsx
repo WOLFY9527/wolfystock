@@ -32,44 +32,50 @@ export function ConsumerWorkspacePageShell({ className, children, ...props }: Co
   );
 }
 
-function ConsumerProtectedBackdrop() {
+/**
+ * Static orientation skeleton only. Not live portfolio/scanner/watchlist data.
+ * Kept non-interactive and unlabeled for assistive tech (aria-hidden via overlay).
+ */
+function ConsumerProtectedBackdrop({ moduleName }: { moduleName: string }) {
   return (
     <ConsumerWorkspacePageShell
       aria-hidden="true"
       data-testid="consumer-protected-backdrop"
-      className="pointer-events-none flex-1 select-none opacity-85"
+      data-preview-kind="static-orientation"
+      data-protected-module={moduleName}
+      className="consumer-protected-backdrop pointer-events-none flex-1 select-none opacity-80"
     >
-      <div className="flex min-w-0 flex-col gap-4">
-        <div className="rounded-[16px] border border-[color:var(--line)] bg-[var(--wolfy-surface-console)] p-4">
-          <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex min-w-0 flex-col gap-3">
+        <div className="rounded-[14px] border border-[color:var(--line)] bg-[var(--wolfy-surface-console)] p-3.5">
+          <div className="flex min-w-0 flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0 flex-1">
-              <div className="h-3 w-28 rounded-full bg-[color:rgb(107_143_113_/_0.14)]" />
-              <div className="mt-3 h-8 max-w-[26rem] rounded-[10px] bg-[var(--wolfy-surface-input)]" />
-              <div className="mt-2 h-4 max-w-[38rem] rounded-full bg-[var(--wolfy-surface-rail)]" />
+              <div className="h-2.5 w-24 rounded-full bg-[color:rgb(107_143_113_/_0.14)]" />
+              <div className="mt-2.5 h-7 max-w-[22rem] rounded-[10px] bg-[var(--wolfy-surface-input)]" />
+              <div className="mt-2 h-3.5 max-w-[32rem] rounded-full bg-[var(--wolfy-surface-rail)]" />
             </div>
-            <div className="grid min-w-0 grid-cols-2 gap-2 lg:w-[22rem] lg:grid-cols-4">
+            <div className="grid min-w-0 grid-cols-2 gap-2 lg:w-[20rem] lg:grid-cols-4">
               {Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="h-14 rounded-[12px] border border-[color:var(--line)] bg-[var(--wolfy-surface-input)]" />
+                <div key={index} className="h-12 rounded-[12px] border border-[color:var(--line)] bg-[var(--wolfy-surface-input)]" />
               ))}
             </div>
           </div>
         </div>
 
-        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_clamp(18rem,21vw,22rem)]">
-          <div className="min-w-0 rounded-[16px] border border-[color:var(--line)] bg-[var(--wolfy-surface-console)] p-4">
-            <div className="h-10 rounded-[10px] bg-[var(--wolfy-surface-input)]" />
-            <div className="mt-4 grid gap-3">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <div key={index} className="h-14 rounded-[12px] border border-[color:var(--line)] bg-[var(--wolfy-surface-input)]" />
+        <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_clamp(16rem,20vw,20rem)]">
+          <div className="min-w-0 rounded-[14px] border border-[color:var(--line)] bg-[var(--wolfy-surface-console)] p-3.5">
+            <div className="h-8 rounded-[10px] bg-[var(--wolfy-surface-input)]" />
+            <div className="mt-3 grid gap-2.5">
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div key={index} className="h-12 rounded-[12px] border border-[color:var(--line)] bg-[var(--wolfy-surface-input)]" />
               ))}
             </div>
           </div>
-          <aside className="min-w-0 rounded-[16px] border border-[color:var(--line)] bg-[var(--wolfy-surface-rail)] p-4">
-            <div className="h-3 w-24 rounded-full bg-[color:rgb(212_165_116_/_0.16)]" />
-            <div className="mt-3 h-20 rounded-[12px] bg-[var(--wolfy-surface-input)]" />
-            <div className="mt-3 space-y-3">
+          <aside className="min-w-0 rounded-[14px] border border-[color:var(--line)] bg-[var(--wolfy-surface-rail)] p-3.5">
+            <div className="h-2.5 w-20 rounded-full bg-[color:rgb(212_165_116_/_0.16)]" />
+            <div className="mt-2.5 h-16 rounded-[12px] bg-[var(--wolfy-surface-input)]" />
+            <div className="mt-2.5 space-y-2.5">
               {Array.from({ length: 3 }).map((_, index) => (
-                <div key={index} className="h-16 rounded-[12px] border border-[color:var(--line)] bg-[var(--wolfy-surface-input)]" />
+                <div key={index} className="h-14 rounded-[12px] border border-[color:var(--line)] bg-[var(--wolfy-surface-input)]" />
               ))}
             </div>
           </aside>
@@ -89,9 +95,14 @@ export function ConsumerProtectedFrame({
   children?: React.ReactNode;
 }) {
   return (
-    <div className={cn('flex min-h-0 w-full flex-1 flex-col', className)}>
+    <div
+      className={cn('flex min-h-0 w-full flex-1 flex-col', className)}
+      data-testid="consumer-protected-frame"
+      data-boundary-family="consumer-protected"
+      data-protected-module={moduleName}
+    >
       <AuthGuardOverlay moduleName={moduleName}>
-        {children ?? <ConsumerProtectedBackdrop />}
+        {children ?? <ConsumerProtectedBackdrop moduleName={moduleName} />}
       </AuthGuardOverlay>
     </div>
   );
