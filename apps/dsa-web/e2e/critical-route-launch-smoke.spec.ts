@@ -321,15 +321,19 @@ appTest.describe('public launch route smoke', () => {
       await page.waitForLoadState('domcontentloaded');
       if (viewport.width >= 768) {
         const primaryNav = page.getByRole('navigation', { name: '导航菜单' });
-        await appExpect(primaryNav.getByRole('link', { name: '市场总览' })).toHaveClass(/is-active/);
-        const rotationNavLink = primaryNav.getByRole('link', { name: '轮动雷达' });
+        const marketTrigger = primaryNav.getByRole('button', { name: '市场' });
+        await appExpect(marketTrigger).toHaveClass(/is-active/);
+        await marketTrigger.click();
+        const marketMenu = page.getByTestId('shell-nav-group-menu-market');
+        await appExpect(marketMenu.getByRole('link', { name: '市场总览' })).toHaveClass(/is-active/);
+        const rotationNavLink = marketMenu.getByRole('link', { name: '板块轮动' });
         await appExpect(rotationNavLink).toBeVisible();
         await appExpect(rotationNavLink).toHaveAttribute('href', '/zh/market/rotation-radar');
         await rotationNavLink.click();
       } else {
         await page.getByRole('button', { name: '打开导航菜单' }).click();
         const drawerNav = page.getByRole('navigation', { name: '导航菜单' });
-        const rotationNavLink = drawerNav.getByRole('link', { name: '轮动雷达' });
+        const rotationNavLink = drawerNav.getByRole('link', { name: '板块轮动' });
         await appExpect(rotationNavLink).toBeVisible();
         await rotationNavLink.click();
       }
@@ -338,15 +342,20 @@ appTest.describe('public launch route smoke', () => {
       await appExpect(page.getByTestId('market-rotation-radar-page')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByRole('heading', { name: '主题轮动雷达' })).toBeVisible();
       if (viewport.width >= 768) {
-        const rotationNavLink = page.getByRole('navigation', { name: '导航菜单' }).getByRole('link', { name: '轮动雷达' });
+        const primaryNav = page.getByRole('navigation', { name: '导航菜单' });
+        const marketTrigger = primaryNav.getByRole('button', { name: '市场' });
+        await appExpect(marketTrigger).toHaveClass(/is-active/);
+        await marketTrigger.click();
+        const marketMenu = page.getByTestId('shell-nav-group-menu-market');
+        const rotationNavLink = marketMenu.getByRole('link', { name: '板块轮动' });
         await appExpect(rotationNavLink).toBeVisible();
         await appExpect(rotationNavLink).toHaveAttribute('href', '/zh/market/rotation-radar');
         await appExpect(rotationNavLink).toHaveClass(/is-active/);
-        await appExpect(page.getByRole('navigation', { name: '导航菜单' }).getByRole('link', { name: '市场总览' })).not.toHaveClass(/is-active/);
+        await appExpect(marketMenu.getByRole('link', { name: '市场总览' })).not.toHaveClass(/is-active/);
       } else {
-        await appExpect(page.getByTestId('shell-mobile-active-route')).toHaveText('轮动雷达');
+        await appExpect(page.getByTestId('shell-mobile-active-route')).toHaveText('板块轮动');
         await page.getByRole('button', { name: '打开导航菜单' }).click();
-        await appExpect(page.getByRole('navigation', { name: '导航菜单' }).getByRole('link', { name: '轮动雷达' })).toBeVisible();
+        await appExpect(page.getByRole('navigation', { name: '导航菜单' }).getByRole('link', { name: '板块轮动' })).toBeVisible();
       }
       await assertRotationRadarConsumerShell(page);
       await assertPublicShell(page);

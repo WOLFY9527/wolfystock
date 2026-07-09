@@ -4,6 +4,8 @@ export type CoreProductRouteKey =
   | 'home'
   | 'decision-cockpit'
   | 'market-overview'
+  | 'liquidity-monitor'
+  | 'rotation-radar'
   | 'research-radar'
   | 'stock-structure'
   | 'scanner'
@@ -35,7 +37,7 @@ export type CoreProductRoute = {
   /** Legacy coarse group kept for compatibility; prefer workflowStage / navGroup. */
   group: 'cockpit' | 'research' | 'context' | 'observe' | 'home' | 'market' | 'validate' | 'portfolio';
   workflowStage: ConsumerWorkflowStage;
-  /** null = top-level direct link; otherwise child of a named workflow group. */
+  /** null = top-level direct link or contextual-only; otherwise child of a named workflow group. */
   navGroup: ConsumerNavGroupKey | null;
   requiresAuth: boolean;
   /**
@@ -58,36 +60,39 @@ export type ConsumerNavArchitectureItem =
   | { type: 'link'; routeKey: CoreProductRouteKey }
   | { type: 'group'; groupKey: ConsumerNavGroupKey };
 
+/**
+ * DESIGN.md v1.1 market domain:
+ * 市场总览 → 流动性监测 → 板块轮动
+ */
 export const CONSUMER_NAV_GROUPS: ConsumerNavGroupDefinition[] = [
   {
     key: 'market',
     labelKey: 'nav.group.market',
-    // observe → discover → market decision synthesis
-    routeKeys: ['market-overview', 'research-radar', 'scanner', 'decision-cockpit'],
+    routeKeys: ['market-overview', 'liquidity-monitor', 'rotation-radar'],
   },
   {
     key: 'research',
     labelKey: 'nav.group.research',
-    // symbol research → monitor → options structure
-    routeKeys: ['stock-structure', 'watchlist', 'options-lab'],
+    // 研究雷达 → 个股研究 → 扫描器
+    routeKeys: ['research-radar', 'stock-structure', 'scanner'],
   },
   {
     key: 'validate',
     labelKey: 'nav.group.validate',
-    // historical validation → scenario testing
-    routeKeys: ['backtest', 'scenario-lab'],
+    // 回测 → 情景实验室 → other proven validation tools
+    routeKeys: ['backtest', 'scenario-lab', 'options-lab'],
   },
 ];
 
 /**
- * Shell top-level order:
- * Home → Market → Research → Validate → Portfolio
- * Groups replace the generic More bucket for major research capabilities.
+ * Shell top-level order (DESIGN.md v1.1):
+ * 首页 → 市场 → 研究 → 观察列表 → 验证 → 持仓
  */
 export const CONSUMER_NAV_ARCHITECTURE: ConsumerNavArchitectureItem[] = [
   { type: 'link', routeKey: 'home' },
   { type: 'group', groupKey: 'market' },
   { type: 'group', groupKey: 'research' },
+  { type: 'link', routeKey: 'watchlist' },
   { type: 'group', groupKey: 'validate' },
   { type: 'link', routeKey: 'portfolio' },
 ];
@@ -103,17 +108,6 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     requiresAuth: false,
     primaryNav: true,
     pageIdentity: { zh: '首页', en: 'Home' },
-  },
-  {
-    key: 'decision-cockpit',
-    labelKey: 'nav.marketDecisionCockpit',
-    path: '/market/decision-cockpit',
-    group: 'market',
-    workflowStage: 'observe',
-    navGroup: 'market',
-    requiresAuth: false,
-    primaryNav: true,
-    pageIdentity: { zh: '市场决策驾驶舱', en: 'Decision Cockpit' },
   },
   {
     key: 'market-overview',
@@ -132,15 +126,37 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     },
   },
   {
+    key: 'liquidity-monitor',
+    labelKey: 'nav.liquidityMonitor',
+    path: '/market/liquidity-monitor',
+    group: 'market',
+    workflowStage: 'observe',
+    navGroup: 'market',
+    requiresAuth: false,
+    primaryNav: true,
+    pageIdentity: { zh: '流动性监测', en: 'Liquidity Monitor' },
+  },
+  {
+    key: 'rotation-radar',
+    labelKey: 'nav.rotationRadar',
+    path: '/market/rotation-radar',
+    group: 'market',
+    workflowStage: 'observe',
+    navGroup: 'market',
+    requiresAuth: false,
+    primaryNav: true,
+    pageIdentity: { zh: '板块轮动', en: 'Sector Rotation' },
+  },
+  {
     key: 'research-radar',
     labelKey: 'nav.researchRadar',
     path: '/research/radar',
-    group: 'market',
+    group: 'research',
     workflowStage: 'discover',
-    navGroup: 'market',
+    navGroup: 'research',
     requiresAuth: true,
     primaryNav: true,
-    pageIdentity: { zh: '今日观察队列', en: 'Today’s observation queue' },
+    pageIdentity: { zh: '研究雷达', en: 'Research Radar' },
     ctaLabel: { zh: '查看研究雷达', en: 'Review Research Radar' },
     ctaDescription: {
       zh: '在扫描或观察列表有活动后，再回来看研究队列。',
@@ -162,9 +178,9 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     key: 'scanner',
     labelKey: 'nav.scanner',
     path: '/scanner',
-    group: 'market',
+    group: 'research',
     workflowStage: 'discover',
-    navGroup: 'market',
+    navGroup: 'research',
     requiresAuth: true,
     primaryNav: true,
     pageIdentity: { zh: '扫描工作台', en: 'Scanner workspace' },
@@ -178,32 +194,16 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     key: 'watchlist',
     labelKey: 'nav.watchlist',
     path: '/watchlist',
-    group: 'research',
+    group: 'observe',
     workflowStage: 'monitor',
-    navGroup: 'research',
+    navGroup: null,
     requiresAuth: true,
     primaryNav: true,
-    pageIdentity: { zh: '观察监控板', en: 'Watchlist monitoring board' },
+    pageIdentity: { zh: '观察列表', en: 'Watchlist' },
     ctaLabel: { zh: '选择观察标的', en: 'Add Watchlist Symbol' },
     ctaDescription: {
       zh: '只在你想持续观察某个代码时再保存。',
       en: 'Choose a symbol only when you want to keep observing it.',
-    },
-  },
-  {
-    key: 'portfolio',
-    labelKey: 'nav.portfolio',
-    path: '/portfolio',
-    group: 'portfolio',
-    workflowStage: 'portfolio',
-    navGroup: null,
-    requiresAuth: true,
-    primaryNav: true,
-    pageIdentity: { zh: '持仓管理', en: 'Holdings and portfolio exposure' },
-    ctaLabel: { zh: '创建组合账户', en: 'Create portfolio account' },
-    ctaDescription: {
-      zh: '只有你明确想跟踪组合时才创建账户。',
-      en: 'Create an account only when you want portfolio tracking.',
     },
   },
   {
@@ -232,12 +232,44 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     key: 'options-lab',
     labelKey: 'nav.optionsLab',
     path: '/options-lab',
-    group: 'research',
+    group: 'validate',
     workflowStage: 'options',
-    navGroup: 'research',
+    navGroup: 'validate',
     requiresAuth: true,
     primaryNav: true,
     pageIdentity: { zh: '期权实验室', en: 'Options Lab' },
+  },
+  {
+    key: 'portfolio',
+    labelKey: 'nav.portfolio',
+    path: '/portfolio',
+    group: 'portfolio',
+    workflowStage: 'portfolio',
+    navGroup: null,
+    requiresAuth: true,
+    primaryNav: true,
+    pageIdentity: { zh: '持仓管理', en: 'Holdings and portfolio exposure' },
+    ctaLabel: { zh: '创建组合账户', en: 'Create portfolio account' },
+    ctaDescription: {
+      zh: '只有你明确想跟踪组合时才创建账户。',
+      en: 'Create an account only when you want portfolio tracking.',
+    },
+  },
+  /**
+   * Specialized market synthesis surface.
+   * Reachable via deep link + contextual research handoffs (DESIGN.md §5.5).
+   * Not forced into the consumer top navigation groups.
+   */
+  {
+    key: 'decision-cockpit',
+    labelKey: 'nav.marketDecisionCockpit',
+    path: '/market/decision-cockpit',
+    group: 'market',
+    workflowStage: 'observe',
+    navGroup: null,
+    requiresAuth: false,
+    primaryNav: false,
+    pageIdentity: { zh: '市场决策驾驶舱', en: 'Decision Cockpit' },
   },
 ];
 
@@ -248,11 +280,14 @@ export const DIRECT_PRIMARY_CONSUMER_ROUTES = CORE_PRODUCT_ROUTES.filter(
 
 /**
  * All routes discoverable from the consumer shell navigation architecture.
- * Replaces the old primary/More split: major research tools are no longer secondary-only.
+ * Major research tools live under named workflow groups or as first-level workspaces.
  */
 export const PRIMARY_CONSUMER_ROUTES = CORE_PRODUCT_ROUTES.filter((route) => route.primaryNav);
 
-/** @deprecated No generic More bucket; empty by design after G008 IA consolidation. */
+/**
+ * Contextual / specialized consumer surfaces kept out of the global shell architecture
+ * but still registered for route identity, active-state resolution, and handoffs.
+ */
 export const SECONDARY_CONSUMER_ROUTES = CORE_PRODUCT_ROUTES.filter(
   (route) => !route.primaryNav,
 );
@@ -313,6 +348,16 @@ export function consumerRouteMatches(pathname: string, route: CoreProductRoute):
   }
   if (route.key === 'portfolio') {
     return normalizedPathname === '/holdings'
+      || normalizedPathname === target
+      || normalizedPathname.startsWith(`${target}/`);
+  }
+  if (route.key === 'liquidity-monitor') {
+    return normalizedPathname === '/liquidity'
+      || normalizedPathname === target
+      || normalizedPathname.startsWith(`${target}/`);
+  }
+  if (route.key === 'rotation-radar') {
+    return normalizedPathname === '/rotation'
       || normalizedPathname === target
       || normalizedPathname.startsWith(`${target}/`);
   }

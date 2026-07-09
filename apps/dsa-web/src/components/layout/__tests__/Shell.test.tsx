@@ -157,8 +157,9 @@ describe('Shell', () => {
     expect(marketGroupButton).toHaveClass('is-active');
     expect(marketGroupButton).toHaveAttribute('aria-current', 'page');
     fireEvent.click(marketGroupButton);
-    expect(screen.getByRole('link', { name: '扫描器' })).toHaveAttribute('href', '/scanner');
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.liquidityMonitor') })).toHaveAttribute('href', '/market/liquidity-monitor');
     expect(screen.getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toHaveClass('is-active');
+    expect(screen.queryByRole('link', { name: '扫描器' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-completion-badge')).not.toBeInTheDocument();
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
     const themeButton = within(actionIsland).getByRole('button', { name: '切换主题' });
@@ -205,36 +206,44 @@ describe('Shell', () => {
     expectNoRawI18nKeys(primaryNav);
     expect(primaryNav.textContent || '').not.toMatch(NAV_COPY_SAFETY_PATTERN);
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.home') })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveAttribute('href', '/watchlist');
+    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
+    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveAttribute('aria-current', 'page');
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.portfolio') })).toHaveAttribute('href', '/portfolio');
     expect(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.market') })).toBeInTheDocument();
-    expect(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.research') })).toHaveClass('is-active');
+    expect(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.research') })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.validate') })).toBeInTheDocument();
     // Closed groups keep major children out of the flat top-level link set (no generic More).
     expect(within(primaryNav).queryByRole('link', { name: translate('zh', 'nav.marketOverview') })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: translate('zh', 'nav.scanner') })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: translate('zh', 'nav.backtest') })).not.toBeInTheDocument();
-    expect(within(primaryNav).queryByRole('link', { name: '流动性监测' })).not.toBeInTheDocument();
-    expect(within(primaryNav).queryByRole('link', { name: '轮动雷达' })).not.toBeInTheDocument();
+    expect(within(primaryNav).queryByRole('link', { name: translate('zh', 'nav.liquidityMonitor') })).not.toBeInTheDocument();
+    expect(within(primaryNav).queryByRole('link', { name: translate('zh', 'nav.rotationRadar') })).not.toBeInTheDocument();
+    expect(within(primaryNav).queryByRole('link', { name: translate('zh', 'nav.marketDecisionCockpit') })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('button', { name: translate('zh', 'nav.more') })).not.toBeInTheDocument();
-    expect(within(primaryNav).getAllByRole('link')).toHaveLength(2);
+    expect(within(primaryNav).getAllByRole('link')).toHaveLength(3);
 
     fireEvent.click(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.market') }));
     const marketMenu = await screen.findByTestId('shell-nav-group-menu-market');
     expect(within(marketMenu).getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toHaveAttribute('href', '/market-overview');
-    expect(within(marketMenu).getByRole('link', { name: translate('zh', 'nav.researchRadar') })).toHaveAttribute('href', '/research/radar');
-    expect(within(marketMenu).getByRole('link', { name: translate('zh', 'nav.scanner') })).toHaveAttribute('href', '/scanner');
-    expect(within(marketMenu).getByRole('link', { name: translate('zh', 'nav.marketDecisionCockpit') })).toHaveAttribute('href', '/market/decision-cockpit');
+    expect(within(marketMenu).getByRole('link', { name: translate('zh', 'nav.liquidityMonitor') })).toHaveAttribute('href', '/market/liquidity-monitor');
+    expect(within(marketMenu).getByRole('link', { name: translate('zh', 'nav.rotationRadar') })).toHaveAttribute('href', '/market/rotation-radar');
+    expect(within(marketMenu).queryByRole('link', { name: translate('zh', 'nav.researchRadar') })).not.toBeInTheDocument();
+    expect(within(marketMenu).queryByRole('link', { name: translate('zh', 'nav.marketDecisionCockpit') })).not.toBeInTheDocument();
 
     fireEvent.click(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.research') }));
     const researchMenu = await screen.findByTestId('shell-nav-group-menu-research');
+    expect(within(researchMenu).getByRole('link', { name: translate('zh', 'nav.researchRadar') })).toHaveAttribute('href', '/research/radar');
     expect(within(researchMenu).getByRole('link', { name: translate('zh', 'nav.stockStructure') })).toHaveAttribute('href', '/stocks/structure-decision');
-    expect(within(researchMenu).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
-    expect(within(researchMenu).getByRole('link', { name: translate('zh', 'nav.optionsLab') })).toHaveAttribute('href', '/options-lab');
+    expect(within(researchMenu).getByRole('link', { name: translate('zh', 'nav.scanner') })).toHaveAttribute('href', '/scanner');
+    expect(within(researchMenu).queryByRole('link', { name: translate('zh', 'nav.watchlist') })).not.toBeInTheDocument();
+    expect(within(researchMenu).queryByRole('link', { name: translate('zh', 'nav.optionsLab') })).not.toBeInTheDocument();
 
     fireEvent.click(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.validate') }));
     const validateMenu = await screen.findByTestId('shell-nav-group-menu-validate');
     expect(within(validateMenu).getByRole('link', { name: translate('zh', 'nav.backtest') })).toHaveAttribute('href', '/backtest');
     expect(within(validateMenu).getByRole('link', { name: translate('zh', 'nav.scenarioLab') })).toHaveAttribute('href', '/scenario-lab');
+    expect(within(validateMenu).getByRole('link', { name: translate('zh', 'nav.optionsLab') })).toHaveAttribute('href', '/options-lab');
   });
 
   it('uses the primary Home nav item as the only current-page owner on home', () => {
@@ -352,52 +361,58 @@ describe('Shell', () => {
       { type: 'link', routeKey: 'home' },
       { type: 'group', groupKey: 'market' },
       { type: 'group', groupKey: 'research' },
+      { type: 'link', routeKey: 'watchlist' },
       { type: 'group', groupKey: 'validate' },
       { type: 'link', routeKey: 'portfolio' },
     ]);
     expect(CONSUMER_NAV_GROUPS.map((group) => [group.key, group.routeKeys])).toEqual([
-      ['market', ['market-overview', 'research-radar', 'scanner', 'decision-cockpit']],
-      ['research', ['stock-structure', 'watchlist', 'options-lab']],
-      ['validate', ['backtest', 'scenario-lab']],
+      ['market', ['market-overview', 'liquidity-monitor', 'rotation-radar']],
+      ['research', ['research-radar', 'stock-structure', 'scanner']],
+      ['validate', ['backtest', 'scenario-lab', 'options-lab']],
     ]);
-    expect(DIRECT_PRIMARY_CONSUMER_ROUTES.map((route) => route.key)).toEqual(['home', 'portfolio']);
-    expect(SECONDARY_CONSUMER_ROUTES).toEqual([]);
+    expect(DIRECT_PRIMARY_CONSUMER_ROUTES.map((route) => route.key)).toEqual(['home', 'watchlist', 'portfolio']);
+    expect(SECONDARY_CONSUMER_ROUTES.map((route) => route.key)).toEqual(['decision-cockpit']);
     expect(PRIMARY_CONSUMER_ROUTES.map((route) => route.key)).toEqual([
       'home',
-      'decision-cockpit',
       'market-overview',
+      'liquidity-monitor',
+      'rotation-radar',
       'research-radar',
       'stock-structure',
       'scanner',
       'watchlist',
-      'portfolio',
       'backtest',
       'scenario-lab',
       'options-lab',
+      'portfolio',
     ]);
-    expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'decision-cockpit')?.primaryNav).toBe(true);
+    expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'decision-cockpit')?.primaryNav).toBe(false);
+    expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'liquidity-monitor')?.primaryNav).toBe(true);
+    expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'rotation-radar')?.primaryNav).toBe(true);
     expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'scanner')?.primaryNav).toBe(true);
     expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'backtest')?.primaryNav).toBe(true);
     expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'scenario-lab')?.primaryNav).toBe(true);
     expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'options-lab')?.primaryNav).toBe(true);
     expect(PRIMARY_CONSUMER_ROUTES.map((route) => [route.key, route.navGroup, route.workflowStage, route.path, route.requiresAuth])).toEqual([
       ['home', null, 'home', '/', false],
-      ['decision-cockpit', 'market', 'observe', '/market/decision-cockpit', false],
       ['market-overview', 'market', 'observe', '/market-overview', false],
-      ['research-radar', 'market', 'discover', '/research/radar', true],
+      ['liquidity-monitor', 'market', 'observe', '/market/liquidity-monitor', false],
+      ['rotation-radar', 'market', 'observe', '/market/rotation-radar', false],
+      ['research-radar', 'research', 'discover', '/research/radar', true],
       ['stock-structure', 'research', 'research', '/stocks/structure-decision', false],
-      ['scanner', 'market', 'discover', '/scanner', true],
-      ['watchlist', 'research', 'monitor', '/watchlist', true],
-      ['portfolio', null, 'portfolio', '/portfolio', true],
+      ['scanner', 'research', 'discover', '/scanner', true],
+      ['watchlist', null, 'monitor', '/watchlist', true],
       ['backtest', 'validate', 'validate', '/backtest', true],
       ['scenario-lab', 'validate', 'scenario', '/scenario-lab', true],
-      ['options-lab', 'research', 'options', '/options-lab', true],
+      ['options-lab', 'validate', 'options', '/options-lab', true],
+      ['portfolio', null, 'portfolio', '/portfolio', true],
     ]);
     expect(PRIMARY_CONSUMER_ROUTES.find((item) => item.key === 'research-radar')?.path).not.toBe('/research-radar');
     expect(PRIMARY_CONSUMER_ROUTES.filter((item) => item.requiresAuth !== true).map((item) => item.key)).toEqual([
       'home',
-      'decision-cockpit',
       'market-overview',
+      'liquidity-monitor',
+      'rotation-radar',
       'stock-structure',
     ]);
   });
@@ -431,12 +446,16 @@ describe('Shell', () => {
   it.each([
     ['nav.home', null, '/zh'],
     ['nav.marketOverview', 'market', '/zh/market-overview'],
-    ['nav.researchRadar', 'market', '/zh/research/radar'],
+    ['nav.liquidityMonitor', 'market', '/zh/market/liquidity-monitor'],
+    ['nav.rotationRadar', 'market', '/zh/market/rotation-radar'],
+    ['nav.researchRadar', 'research', '/zh/research/radar'],
     ['nav.stockStructure', 'research', '/zh/stocks/structure-decision'],
-    ['nav.watchlist', 'research', '/zh/watchlist'],
+    ['nav.scanner', 'research', '/zh/scanner'],
+    ['nav.watchlist', null, '/zh/watchlist'],
     ['nav.portfolio', null, '/zh/portfolio'],
     ['nav.backtest', 'validate', '/zh/backtest'],
-    ['nav.optionsLab', 'research', '/zh/options-lab'],
+    ['nav.scenarioLab', 'validate', '/zh/scenario-lab'],
+    ['nav.optionsLab', 'validate', '/zh/options-lab'],
   ])('maps localized core nav label %s to the intended route', (labelKey, groupKey, expectedHref) => {
     render(
       <MemoryRouter initialEntries={['/zh/market-overview']}>
@@ -504,11 +523,12 @@ describe('Shell', () => {
     expect(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.research') })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.validate') })).toBeInTheDocument();
     fireEvent.click(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.market') }));
-    expect(within(await screen.findByTestId('shell-nav-group-menu-market')).getByRole('link', { name: translate('zh', 'nav.researchRadar') })).toHaveAttribute('href', '/research/radar');
+    expect(within(await screen.findByTestId('shell-nav-group-menu-market')).getByRole('link', { name: translate('zh', 'nav.liquidityMonitor') })).toHaveAttribute('href', '/market/liquidity-monitor');
     fireEvent.click(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.research') }));
-    expect(within(await screen.findByTestId('shell-nav-group-menu-research')).getByRole('link', { name: translate('zh', 'nav.stockStructure') })).toHaveAttribute('href', '/stocks/structure-decision');
+    expect(within(await screen.findByTestId('shell-nav-group-menu-research')).getByRole('link', { name: translate('zh', 'nav.researchRadar') })).toHaveAttribute('href', '/research/radar');
     fireEvent.click(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.validate') }));
     expect(within(await screen.findByTestId('shell-nav-group-menu-validate')).getByRole('link', { name: translate('zh', 'nav.backtest') })).toHaveAttribute('href', '/backtest');
+    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveAttribute('href', '/watchlist');
     expect(screen.getByRole('link', { name: translate('zh', 'nav.signIn') })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '账户中心' })).not.toBeInTheDocument();
   });
@@ -536,16 +556,17 @@ describe('Shell', () => {
     expect(within(primaryNav).getByRole('link', { name: translate('en', 'nav.home') })).toHaveAttribute('href', '/en');
     expect(within(primaryNav).getByRole('link', { name: translate('en', 'nav.portfolio') })).toHaveAttribute('href', '/en/portfolio');
     fireEvent.click(within(primaryNav).getByRole('button', { name: translate('en', 'nav.group.market') }));
-    expect(within(await screen.findByTestId('shell-nav-group-menu-market')).getByRole('link', { name: translate('en', 'nav.researchRadar') })).toHaveAttribute('href', '/en/research/radar');
+    expect(within(await screen.findByTestId('shell-nav-group-menu-market')).getByRole('link', { name: translate('en', 'nav.liquidityMonitor') })).toHaveAttribute('href', '/en/market/liquidity-monitor');
     fireEvent.click(within(primaryNav).getByRole('button', { name: translate('en', 'nav.group.research') }));
-    expect(within(await screen.findByTestId('shell-nav-group-menu-research')).getByRole('link', { name: translate('en', 'nav.stockStructure') })).toHaveAttribute('href', '/en/stocks/structure-decision');
+    expect(within(await screen.findByTestId('shell-nav-group-menu-research')).getByRole('link', { name: translate('en', 'nav.researchRadar') })).toHaveAttribute('href', '/en/research/radar');
     fireEvent.click(within(primaryNav).getByRole('button', { name: translate('en', 'nav.group.validate') }));
     expect(within(await screen.findByTestId('shell-nav-group-menu-validate')).getByRole('link', { name: translate('en', 'nav.backtest') })).toHaveAttribute('href', '/en/backtest');
+    expect(within(primaryNav).getByRole('link', { name: translate('en', 'nav.watchlist') })).toHaveAttribute('href', '/en/watchlist');
     expect(screen.getByRole('link', { name: translate('en', 'nav.signIn') })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Account Center' })).not.toBeInTheDocument();
   });
 
-  it('keeps localized liquidity monitor as a market deep route outside primary nav', async () => {
+  it('surfaces liquidity monitor under the market group with active parent and child state', async () => {
     render(
       <MemoryRouter initialEntries={['/zh/market/liquidity-monitor']}>
         <ThemeProvider>
@@ -557,19 +578,26 @@ describe('Shell', () => {
     );
 
     const primaryNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
-    fireEvent.click(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.market') }));
-    const overviewLink = within(await screen.findByTestId('shell-nav-group-menu-market')).getByRole('link', {
+    const marketTrigger = within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.market') });
+    expect(marketTrigger).toHaveClass('is-active');
+    expect(marketTrigger).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(marketTrigger);
+    const marketMenu = await screen.findByTestId('shell-nav-group-menu-market');
+    const liquidityLink = within(marketMenu).getByRole('link', {
+      name: translate('zh', 'nav.liquidityMonitor'),
+    });
+    const overviewLink = within(marketMenu).getByRole('link', {
       name: translate('zh', 'nav.marketOverview'),
     });
 
-    expect(within(primaryNav).queryByRole('link', { name: '流动性监测' })).not.toBeInTheDocument();
-    expect(overviewLink).toHaveAttribute('href', '/zh/market-overview');
+    expect(liquidityLink).toHaveAttribute('href', '/zh/market/liquidity-monitor');
+    expect(liquidityLink).toHaveClass('is-active');
     expect(overviewLink).not.toHaveClass('is-active');
     expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
   });
 
-  it('keeps localized rotation radar as a market deep route outside primary nav', async () => {
+  it('surfaces sector rotation under the market group with active parent and child state', async () => {
     render(
       <MemoryRouter initialEntries={['/zh/market/rotation-radar']}>
         <ThemeProvider>
@@ -581,13 +609,20 @@ describe('Shell', () => {
     );
 
     const primaryNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
-    fireEvent.click(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.market') }));
-    const overviewLink = within(await screen.findByTestId('shell-nav-group-menu-market')).getByRole('link', {
+    const marketTrigger = within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.market') });
+    expect(marketTrigger).toHaveClass('is-active');
+    expect(marketTrigger).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(marketTrigger);
+    const marketMenu = await screen.findByTestId('shell-nav-group-menu-market');
+    const rotationLink = within(marketMenu).getByRole('link', {
+      name: translate('zh', 'nav.rotationRadar'),
+    });
+    const overviewLink = within(marketMenu).getByRole('link', {
       name: translate('zh', 'nav.marketOverview'),
     });
 
-    expect(within(primaryNav).queryByRole('link', { name: '轮动雷达' })).not.toBeInTheDocument();
-    expect(overviewLink).toHaveAttribute('href', '/zh/market-overview');
+    expect(rotationLink).toHaveAttribute('href', '/zh/market/rotation-radar');
+    expect(rotationLink).toHaveClass('is-active');
     expect(overviewLink).not.toHaveClass('is-active');
     expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
@@ -608,21 +643,21 @@ describe('Shell', () => {
 
     const primaryNav = screen.getByRole('navigation', { name: translate('en', 'shell.drawerTitle') });
     expect(within(primaryNav).getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/en');
+    expect(within(primaryNav).getByRole('link', { name: 'Watchlist' })).toHaveAttribute('href', '/en/watchlist');
     expect(within(primaryNav).getByRole('link', { name: 'Holdings' })).toHaveAttribute('href', '/en/portfolio');
-    expect(within(primaryNav).getByRole('button', { name: 'Market' })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole('button', { name: 'Market' })).toHaveClass('is-active');
     expect(within(primaryNav).getByRole('button', { name: 'Research' })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('button', { name: 'Validate' })).toBeInTheDocument();
     fireEvent.click(within(primaryNav).getByRole('button', { name: 'Market' }));
     const marketMenu = await screen.findByTestId('shell-nav-group-menu-market');
     expect(within(marketMenu).getByRole('link', { name: 'Market Overview' })).toBeInTheDocument();
-    expect(within(marketMenu).getByRole('link', { name: 'Research Radar' })).toBeInTheDocument();
-    expect(within(marketMenu).getByRole('link', { name: 'Scanner' })).toBeInTheDocument();
-    expect(within(marketMenu).getByRole('link', { name: 'Decision Cockpit' })).toBeInTheDocument();
-    expect(within(primaryNav).queryByRole('link', { name: 'Liquidity Monitor' })).not.toBeInTheDocument();
-    expect(within(primaryNav).queryByRole('link', { name: 'Rotation Radar' })).not.toBeInTheDocument();
+    expect(within(marketMenu).getByRole('link', { name: 'Liquidity Monitor' })).toHaveClass('is-active');
+    expect(within(marketMenu).getByRole('link', { name: 'Sector Rotation' })).toBeInTheDocument();
+    expect(within(marketMenu).queryByRole('link', { name: 'Research Radar' })).not.toBeInTheDocument();
+    expect(within(marketMenu).queryByRole('link', { name: 'Decision Cockpit' })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: '市场总览' })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: '流动性监测' })).not.toBeInTheDocument();
-    expect(within(primaryNav).queryByRole('link', { name: '轮动雷达' })).not.toBeInTheDocument();
+    expect(within(primaryNav).queryByRole('link', { name: '板块轮动' })).not.toBeInTheDocument();
   });
 
   it('shows the guest navigation routes without member-only account controls', async () => {
@@ -680,11 +715,15 @@ describe('Shell', () => {
     expect(screen.queryByRole('link', { name: '登录' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '退出' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: '首页' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '观察列表' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '持仓' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '更多' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '市场' }));
+    expect(await screen.findByRole('link', { name: '流动性监测' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '板块轮动' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '决策驾驶舱' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '研究' }));
     expect(await screen.findByRole('link', { name: '扫描器' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '决策驾驶舱' })).toBeInTheDocument();
   });
 
   it('shows a confirmation dialog before logout', async () => {
@@ -907,9 +946,11 @@ describe('Shell', () => {
     expect(within(drawerNav).getByTestId('shell-nav-group-label-research')).toHaveTextContent(translate('zh', 'nav.group.research'));
     expect(within(drawerNav).getByTestId('shell-nav-group-label-validate')).toHaveTextContent(translate('zh', 'nav.group.validate'));
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toBeInTheDocument();
+    expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.liquidityMonitor') })).toBeInTheDocument();
+    expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.rotationRadar') })).toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.researchRadar') })).toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.scanner') })).toBeInTheDocument();
-    expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.marketDecisionCockpit') })).toBeInTheDocument();
+    expect(within(drawerNav).queryByRole('link', { name: translate('zh', 'nav.marketDecisionCockpit') })).not.toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.stockStructure') })).toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveAttribute('aria-current', 'page');
@@ -917,7 +958,6 @@ describe('Shell', () => {
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.backtest') })).toHaveAttribute('href', '/backtest');
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.scenarioLab') })).toBeInTheDocument();
     expect(within(drawerNav).queryByRole('button', { name: translate('zh', 'nav.more') })).not.toBeInTheDocument();
-    expect(within(drawerNav).queryByRole('link', { name: '轮动雷达' })).not.toBeInTheDocument();
     const accountPanel = screen.getByTestId('shell-mobile-account-center');
     expect(accountPanel).toBeInTheDocument();
     expect(within(accountPanel).getByRole('link', { name: '账户中心' })).toBeInTheDocument();
@@ -1199,11 +1239,10 @@ describe('Shell', () => {
     );
 
     const primaryNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
-    const researchTrigger = within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.research') });
-    expect(researchTrigger).toHaveClass('is-active');
-    expect(researchTrigger).toHaveAttribute('aria-current', 'page');
-    fireEvent.click(researchTrigger);
-    expect(within(screen.getByTestId('shell-nav-group-menu-research')).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
+    const watchlistLink = within(primaryNav).getByRole('link', { name: translate('zh', 'nav.watchlist') });
+    expect(watchlistLink).toHaveClass('is-active');
+    expect(watchlistLink).toHaveAttribute('aria-current', 'page');
+    expect(within(primaryNav).getByRole('button', { name: translate('zh', 'nav.group.research') })).not.toHaveClass('is-active');
     expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
     expect(document.querySelector('.theme-shell--consumer')).not.toBeNull();
     expect(document.querySelector('.theme-shell--page-scroll')).not.toBeNull();
