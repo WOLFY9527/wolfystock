@@ -13,7 +13,8 @@ export type LiquidityConsumerDataQualityState = 'ready' | 'delayed' | 'cached' |
 export interface LiquidityMonitorScore {
   value: number;
   regime: LiquidityMonitorRegime;
-  confidence: number;
+  /** Measured confidence in [0,1]. Null/undefined means unavailable, not observed zero. */
+  confidence: number | null;
   includedIndicatorCount: number;
   possibleIndicatorWeight: number;
   includedIndicatorWeight: number;
@@ -246,7 +247,8 @@ export interface LiquidityImpulseSynthesis {
   liquidityImpulse: string;
   impulseLabel: string;
   subtype: string;
-  confidence: number;
+  /** Measured confidence in [0,1]. Null means unavailable, not observed zero. */
+  confidence: number | null;
   confidenceLabel: string;
   pillarScores: Record<string, number>;
   directionScore: number;
@@ -344,7 +346,9 @@ function normalizeLiquidityImpulseSynthesis(
     liquidityImpulse: synthesis.liquidityImpulse,
     impulseLabel: synthesis.impulseLabel,
     subtype: synthesis.subtype,
-    confidence: typeof synthesis.confidence === 'number' ? synthesis.confidence : 0,
+    confidence: typeof synthesis.confidence === 'number' && Number.isFinite(synthesis.confidence)
+      ? synthesis.confidence
+      : null,
     confidenceLabel: synthesis.confidenceLabel,
     pillarScores: synthesis.pillarScores || {},
     directionScore: typeof synthesis.directionScore === 'number' ? synthesis.directionScore : 0,

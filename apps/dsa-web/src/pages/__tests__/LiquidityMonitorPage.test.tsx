@@ -1826,4 +1826,46 @@ describe('LiquidityMonitorPage', () => {
     expect(within(details).getByTestId('liquidity-impulse-synthesis-state-chip')).toHaveTextContent('载荷缺失');
     expect(within(details).getByTestId('liquidity-impulse-synthesis-summary')).toHaveTextContent('不推断扩张或收缩');
   });
+
+  it('renders missing score confidence as 待确认 instead of 0%', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: true,
+      canReadProviders: true,
+    });
+    getLiquidityMonitor.mockResolvedValueOnce({
+      ...payload,
+      score: {
+        ...payload.score,
+        confidence: null,
+      },
+    });
+
+    render(<LiquidityMonitorPage />);
+    const details = await expandLiquidityDetails();
+    const confidenceMetric = within(details).getByTestId('liquidity-score-confidence');
+    expect(confidenceMetric).toHaveTextContent('置信度');
+    expect(confidenceMetric).toHaveTextContent('待确认');
+    expect(confidenceMetric).not.toHaveTextContent('0%');
+  });
+
+  it('renders observed zero score confidence as 0% and keeps it distinct from unavailable', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: true,
+      canReadProviders: true,
+    });
+    getLiquidityMonitor.mockResolvedValueOnce({
+      ...payload,
+      score: {
+        ...payload.score,
+        confidence: 0,
+      },
+    });
+
+    render(<LiquidityMonitorPage />);
+    const details = await expandLiquidityDetails();
+    const confidenceMetric = within(details).getByTestId('liquidity-score-confidence');
+    expect(confidenceMetric).toHaveTextContent('置信度');
+    expect(confidenceMetric).toHaveTextContent('0%');
+    expect(confidenceMetric).not.toHaveTextContent('待确认');
+  });
 });
