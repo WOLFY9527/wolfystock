@@ -12,13 +12,16 @@ from typing import Any
 import api.deps as api_deps
 import api.middlewares.auth as auth_middleware
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
+from api.app import create_app
 from api.deps import CurrentUser, get_current_user, get_optional_current_user
 from api.middlewares.auth import add_auth_middleware
 from api.v1.endpoints import market
 from src.repositories.scenario_baseline_snapshot_repository import ScenarioBaselineSnapshotStorageError
 from src.storage import DatabaseManager, ScenarioBaselineSnapshotRow
+from tests.api.route_table_helpers import iter_effective_api_routes
 
 
 FORBIDDEN_PUBLIC_TERMS = (
@@ -77,6 +80,12 @@ SAFE_DRILLDOWN_ROUTES = {
     "/market-overview",
     "/scenario-lab",
 }
+DURABLE_SCENARIO_BASELINE_ROUTE_SIGNATURES = {
+    ("POST", "/api/v1/market/scenario-lab/baseline-snapshots"),
+    ("GET", "/api/v1/market/scenario-lab/baseline-snapshots/latest"),
+    ("GET", "/api/v1/market/scenario-lab/baseline-snapshots/{snapshot_id}"),
+}
+SCENARIO_EVALUATION_ROUTE_SIGNATURE = ("POST", "/api/v1/market/scenario-lab")
 
 
 def _make_user(user_id: str, username: str = "scenario-user") -> CurrentUser:
@@ -105,6 +114,26 @@ def _client(
         app.dependency_overrides[get_current_user] = lambda: current_user
     app.include_router(market.router, prefix="/api/v1/market")
     return TestClient(app)
+
+
+def _registered_route_signatures(route: APIRoute) -> set[tuple[str, str]]:
+    return {
+        (method, route.path)
+        for method in route.methods or set()
+        if method not in {"HEAD", "OPTIONS"}
+    }
+
+
+def _route_dependency_calls(route: APIRoute) -> list[object]:
+    calls: list[object] = []
+    pending = list(route.dependant.dependencies)
+    while pending:
+        dependency = pending.pop(0)
+        call = getattr(dependency, "call", None)
+        if call is not None:
+            calls.append(call)
+        pending.extend(getattr(dependency, "dependencies", []) or [])
+    return calls
 
 
 def _snapshot_db(tmp_path: Path, *, name: str = "scenario-api.sqlite") -> DatabaseManager:
@@ -241,6 +270,43 @@ def _not_available_baseline_snapshot_create_payload(
     payload["missingInputList"] = ["market_price", "market_regime", "volatility", "market_flow", "options_greeks"]
     payload["targetEnvironmentEvidence"] = {"state": "missing", "evidenceRefs": []}
     return payload
+
+
+def test_market_scenario_lab_durable_baseline_route_metadata_requires_current_user(
+    tmp_path: Path,
+) -> None:
+    app = create_app(static_dir=tmp_path / "static")
+    scenario_routes = {
+        signature: route
+        for route in iter_effective_api_routes(app.routes)
+        if isinstance(route, APIRoute)
+        for signature in _registered_route_signatures(route)
+        if signature[1].startswith("/api/v1/market/scenario-lab")
+    }
+    baseline_route_signatures = {
+        signature
+        for signature in scenario_routes
+        if signature[1].startswith("/api/v1/market/scenario-lab/baseline-snapshots")
+    }
+
+    durable_routes = {
+        signature: scenario_routes[signature]
+        for signature in DURABLE_SCENARIO_BASELINE_ROUTE_SIGNATURES
+        if signature in scenario_routes
+    }
+
+    assert baseline_route_signatures == DURABLE_SCENARIO_BASELINE_ROUTE_SIGNATURES
+    assert set(durable_routes) == DURABLE_SCENARIO_BASELINE_ROUTE_SIGNATURES
+    assert SCENARIO_EVALUATION_ROUTE_SIGNATURE in scenario_routes
+    assert SCENARIO_EVALUATION_ROUTE_SIGNATURE not in durable_routes
+
+    for signature, route in durable_routes.items():
+        dependency_calls = _route_dependency_calls(route)
+        assert get_current_user in dependency_calls, signature
+        assert get_optional_current_user not in dependency_calls, signature
+
+    evaluation_dependency_calls = _route_dependency_calls(scenario_routes[SCENARIO_EVALUATION_ROUTE_SIGNATURE])
+    assert get_current_user not in evaluation_dependency_calls
 
 
 def _serialized_values(payload: object) -> str:
