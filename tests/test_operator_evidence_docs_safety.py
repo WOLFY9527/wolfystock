@@ -5,16 +5,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 DOC_PATHS = (
+    REPO_ROOT / "docs" / "AI_PROJECT_MANUAL.md",
     *sorted((REPO_ROOT / "docs" / "audits").glob("operator-evidence-*.md")),
     *sorted((REPO_ROOT / "docs" / "audits").glob("evidence-*.md")),
-    REPO_ROOT / "docs" / "audits" / "public-launch-readiness-master.md",
-    REPO_ROOT / "docs" / "audits" / "public-launch-gap-register.md",
-    REPO_ROOT / "docs" / "audits" / "deployment-readiness-checklist.md",
-    REPO_ROOT / "docs" / "audits" / "launch-acceptance-evidence-pack.md",
-    REPO_ROOT / "docs" / "audits" / "release-rollback-runbook.md",
-    REPO_ROOT / "docs" / "audits" / "db-retention-backup-restore-drill-plan.md",
-    REPO_ROOT / "docs" / "audits" / "public-api-abuse-limiter-operator-note.md",
-    REPO_ROOT / "scripts" / "README.md",
 )
 
 FORBIDDEN_RELEASE_WORDING = (

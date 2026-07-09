@@ -19,6 +19,7 @@ Do not use as: launch approval, protected-domain authorization, stale audit auth
 - [Data Providers And Data Reality Boundaries](#data-providers-and-data-reality-boundaries)
 - [Market, Options, Macro, Liquidity, Backtest, Scenario, And Portfolio Domains](#market-options-macro-liquidity-backtest-scenario-and-portfolio-domains)
 - [Professional Analytics Roadmap And Readiness](#professional-analytics-roadmap-and-readiness)
+- [Production Readiness Documentation Authority](#production-readiness-documentation-authority)
 - [Protected Domains And Safety Rules](#protected-domains-and-safety-rules)
 - [No-Advice Policy](#no-advice-policy)
 - [Validation Matrix](#validation-matrix)
@@ -132,6 +133,39 @@ The professional roadmap is not a promise that a family is live. It is an ordere
 Each step must expose blocked, partial, missing, unauthorized, stale, or observation-only states rather than hiding them behind positive copy.
 
 Source provenance: [`README.md`](../README.md), [`AGENTS.md`](../AGENTS.md).
+
+## Production Readiness Documentation Authority
+
+Canonical owner: this generated manual, produced by `scripts/build_ai_project_manual.py`. After DOCS-006, the historical `docs/audits/deployment-readiness-checklist.md`, `docs/DEPLOY.md`, and `docs/DEPLOY_EN.md` are deprecated and must not be recreated as compatibility shims. Production-readiness tests should validate this section and the runtime preflight contract, not stale audit paths.
+
+Current public multi-user production posture remains **NO-GO** unless every repository-owned gate below has accepted sanitized target-environment evidence and manual release review. The manual is documentation authority, not launch approval.
+
+| Production concern | Repository-owned authority | Required evidence boundary |
+| --- | --- | --- |
+| Production environment marker | `APP_ENV=production` must be explicit in the sanitized production config contract. | Use `python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>`; do not attach raw `.env` values. |
+| Authentication enablement | `ADMIN_AUTH_ENABLED=true` is required for public deployment; missing or false is local/dev only. | Auth-disabled public ingress is **NO-GO** and does not change runtime defaults. |
+| Fail-closed production posture | Missing required launch config, unsupported MFA scope, public SearXNG discovery, or unsafe CORS posture must fail closed. | Readiness output may include flag names, states, and bounded labels, not secret values or raw service URLs. |
+| CORS and CSRF allowlist | `CORS_ALLOW_ALL=false`, explicit `CORS_ORIGINS`, and explicit `CSRF_TRUSTED_ORIGINS` are required for public topology review. | Evidence must prove intended HTTPS origin behavior without echoing raw credential-bearing origins. |
+| Secret and config handling | Provider keys, cookies, sessions, DSNs, broker credentials, webhook URLs, raw provider payloads, stack traces, and raw `.env` values stay out of docs, logs, DOM, and release evidence. | Use presence states, redacted summaries, and sanitized validator output only. |
+| Docs/OpenAPI production exposure | Root docs/OpenAPI exposure must fail closed when production mode has public ingress but auth is disabled. | T286 behavior is read-only here; documentation must keep auth-disabled production exposure as **NO-GO**. |
+| Database and persistence readiness | Repository-owned DB readiness is bounded to local/storage checks, backup/PITR opt-in flags, restore/PITR evidence tooling, and owner-isolation smoke where implemented. | Do not claim Kubernetes, managed database, cloud secret-manager, or external backup infrastructure ownership. |
+| Runtime startup verification | `scripts/uat_runtime_harness.py` is the canonical local runtime verifier for clean tree, expected SHA, build, no-proxy localhost checks, asset identity, and evidence-bound stop. | UAT harness evidence is local runtime proof, not production launch approval. |
+| Health and readiness checks | Health/readiness coverage is limited to repository scripts, API/system endpoints, admin diagnostics, and release-summary validators that exist in this tree. | Missing target-environment evidence remains blocked, partial, or **NO-GO** rather than inferred. |
+| Rollback and operational validation | Rollback proof requires last-good commit/image, DB restore decision point where applicable, health checks, owner-isolation smoke, and sanitized operator evidence references. | No release, rollback, or live-enforcement approval is implied by docs alone. |
+
+Public deployment env flag matrix:
+
+| Flag / feature | Current behavior | Classification | Required target-env evidence before public launch |
+| --- | --- | --- | --- |
+| `APP_ENV` | Enables production-mode security semantics only when explicitly set to `production`; missing or non-production values are local/dev only. | **GATED** | Sanitized config contract and target-environment evidence must show explicit production review without raw `.env` values. |
+| `VITE_API_URL` | Frontend uses same-origin API by default; explicit value only overrides API base for split-domain/static deployments. | **GATED** | Browser/ingress evidence must show the built frontend reaches the intended HTTPS API origin, CORS/CSRF origins match, and backend `:8000` is not directly public. |
+| `PUBLIC_API_ABUSE_LIMIT_*` | Process-local abuse limiter knobs are clamped and sanitized in diagnostics. | **SAFE** | Include sanitized limiter snapshot evidence and keep it labeled process-local; it is not quota, billing, auth, or distributed rate-limit enforcement. |
+| `CRYPTO_REALTIME_ENABLED` | Realtime crypto background behavior must be explicitly reviewed for outbound access and degraded behavior. | **AMBIGUOUS** | Target-environment evidence must show whether outbound Binance/WebSocket access is allowed, how failures degrade, and whether realtime is intentionally disabled. |
+| `SEARXNG_PUBLIC_INSTANCES_ENABLED` | Public-instance discovery is unsuitable for public launch unless separately accepted or disabled in favor of vetted self-hosted endpoints. | **NO-GO** | Public launch must use vetted self-hosted SearXNG endpoints, explicitly disable public discovery, or attach accepted operator risk evidence. |
+
+Classification rule: **SAFE** still requires target-environment evidence; **GATED** requires explicit config plus accepted evidence; **AMBIGUOUS** requires an operator decision; **NO-GO** applies whenever required target-environment evidence is missing, raw secrets would be needed to prove the claim, or a flag is used to imply provider, quota, auth/RBAC, database, broker, or notification live-enforcement approval.
+
+Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md), [`docs/DOCS_INDEX.md`](DOCS_INDEX.md).
 
 ## Protected Domains And Safety Rules
 
@@ -258,6 +292,7 @@ This map is generated from the hard-collapse source set. The manual contains abs
 | Data Providers And Data Reality Boundaries | `AGENTS.md`<br>`README.md` | Provider routing, source authority, data readiness, freshness, lineage, or professional-roadmap changes. | Provider/cache/freshness tests, no-live-call proof when relevant, and raw-provider leakage scans. |
 | Market, Options, Macro, Liquidity, Backtest, Scenario, And Portfolio Domains | `AGENTS.md`<br>`README.md` | Any domain readiness, public copy, protected math/accounting, options authority, or macro/liquidity source change. | Domain-focused tests plus no-advice and leakage checks; never use unrelated green tests as proof. |
 | Professional Analytics Roadmap And Readiness | `README.md`<br>`AGENTS.md` | Professional data roadmap, readiness labels, or evidence-harness expectations change. | Docs/generator validation for handbook changes; domain validation for implementation changes. |
+| Production Readiness Documentation Authority | `AGENTS.md`<br>`README.md`<br>`docs/DOCS_INDEX.md` | Production readiness docs authority, public deployment env flag classifications, or launch evidence policy changes. | Production config readiness tests, manual generator freshness, AI asset check, and link/stale-path scans. |
 | Protected Domains And Safety Rules | `AGENTS.md` | Any protected boundary or safety policy changes. | Focused tests for the exact protected semantic plus diff/status/secret/no-advice checks before reporting completion. |
 | No-Advice Policy | `AGENTS.md` | User-facing research copy, generated reports, product policy, options/backtest/portfolio wording, or no-advice guards change. | Focused grep/classification plus relevant page/report tests. |
 | Validation Matrix | `AGENTS.md`<br>`README.md` | Validation commands, CI gates, protected test expectations, or docs/generator workflow changes. | Run the validation relevant to this manual/generator when edited. |
@@ -272,7 +307,7 @@ The machine-readable manifest is generated at `docs/AI_PROJECT_MANUAL_SOURCES.js
 
 Current discovery summary:
 
-- Markdown discovered after pruned directory rules, excluding this generated manual: 19
+- Markdown discovered after pruned directory rules, excluding this generated manual: 22
 - Candidate Markdown after hard-collapse policy: 3
 - Curated sources included in this manual: 3
 

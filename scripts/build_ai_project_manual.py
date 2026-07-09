@@ -453,6 +453,128 @@ SECTIONS = [
         validation="Docs/generator validation for handbook changes; domain validation for implementation changes.",
     ),
     ManualSection(
+        key="production-readiness-authority",
+        title="Production Readiness Documentation Authority",
+        body=(
+            "Canonical owner: this generated manual, produced by `scripts/build_ai_project_manual.py`. After DOCS-006, "
+            "the historical `docs/audits/deployment-readiness-checklist.md`, `docs/DEPLOY.md`, and `docs/DEPLOY_EN.md` "
+            "are deprecated and must not be recreated as compatibility shims. Production-readiness tests should validate "
+            "this section and the runtime preflight contract, not stale audit paths.\n\n"
+            "Current public multi-user production posture remains **NO-GO** unless every repository-owned gate below has "
+            "accepted sanitized target-environment evidence and manual release review. The manual is documentation authority, "
+            "not launch approval.\n\n"
+            + render_table(
+                (
+                    "Production concern",
+                    "Repository-owned authority",
+                    "Required evidence boundary",
+                ),
+                (
+                    (
+                        "Production environment marker",
+                        "`APP_ENV=production` must be explicit in the sanitized production config contract.",
+                        "Use `python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>`; do not attach raw `.env` values.",
+                    ),
+                    (
+                        "Authentication enablement",
+                        "`ADMIN_AUTH_ENABLED=true` is required for public deployment; missing or false is local/dev only.",
+                        "Auth-disabled public ingress is **NO-GO** and does not change runtime defaults.",
+                    ),
+                    (
+                        "Fail-closed production posture",
+                        "Missing required launch config, unsupported MFA scope, public SearXNG discovery, or unsafe CORS posture must fail closed.",
+                        "Readiness output may include flag names, states, and bounded labels, not secret values or raw service URLs.",
+                    ),
+                    (
+                        "CORS and CSRF allowlist",
+                        "`CORS_ALLOW_ALL=false`, explicit `CORS_ORIGINS`, and explicit `CSRF_TRUSTED_ORIGINS` are required for public topology review.",
+                        "Evidence must prove intended HTTPS origin behavior without echoing raw credential-bearing origins.",
+                    ),
+                    (
+                        "Secret and config handling",
+                        "Provider keys, cookies, sessions, DSNs, broker credentials, webhook URLs, raw provider payloads, stack traces, and raw `.env` values stay out of docs, logs, DOM, and release evidence.",
+                        "Use presence states, redacted summaries, and sanitized validator output only.",
+                    ),
+                    (
+                        "Docs/OpenAPI production exposure",
+                        "Root docs/OpenAPI exposure must fail closed when production mode has public ingress but auth is disabled.",
+                        "T286 behavior is read-only here; documentation must keep auth-disabled production exposure as **NO-GO**.",
+                    ),
+                    (
+                        "Database and persistence readiness",
+                        "Repository-owned DB readiness is bounded to local/storage checks, backup/PITR opt-in flags, restore/PITR evidence tooling, and owner-isolation smoke where implemented.",
+                        "Do not claim Kubernetes, managed database, cloud secret-manager, or external backup infrastructure ownership.",
+                    ),
+                    (
+                        "Runtime startup verification",
+                        "`scripts/uat_runtime_harness.py` is the canonical local runtime verifier for clean tree, expected SHA, build, no-proxy localhost checks, asset identity, and evidence-bound stop.",
+                        "UAT harness evidence is local runtime proof, not production launch approval.",
+                    ),
+                    (
+                        "Health and readiness checks",
+                        "Health/readiness coverage is limited to repository scripts, API/system endpoints, admin diagnostics, and release-summary validators that exist in this tree.",
+                        "Missing target-environment evidence remains blocked, partial, or **NO-GO** rather than inferred.",
+                    ),
+                    (
+                        "Rollback and operational validation",
+                        "Rollback proof requires last-good commit/image, DB restore decision point where applicable, health checks, owner-isolation smoke, and sanitized operator evidence references.",
+                        "No release, rollback, or live-enforcement approval is implied by docs alone.",
+                    ),
+                ),
+            )
+            + "\n\n"
+            "Public deployment env flag matrix:\n\n"
+            + render_table(
+                (
+                    "Flag / feature",
+                    "Current behavior",
+                    "Classification",
+                    "Required target-env evidence before public launch",
+                ),
+                (
+                    (
+                        "`APP_ENV`",
+                        "Enables production-mode security semantics only when explicitly set to `production`; missing or non-production values are local/dev only.",
+                        "**GATED**",
+                        "Sanitized config contract and target-environment evidence must show explicit production review without raw `.env` values.",
+                    ),
+                    (
+                        "`VITE_API_URL`",
+                        "Frontend uses same-origin API by default; explicit value only overrides API base for split-domain/static deployments.",
+                        "**GATED**",
+                        "Browser/ingress evidence must show the built frontend reaches the intended HTTPS API origin, CORS/CSRF origins match, and backend `:8000` is not directly public.",
+                    ),
+                    (
+                        "`PUBLIC_API_ABUSE_LIMIT_*`",
+                        "Process-local abuse limiter knobs are clamped and sanitized in diagnostics.",
+                        "**SAFE**",
+                        "Include sanitized limiter snapshot evidence and keep it labeled process-local; it is not quota, billing, auth, or distributed rate-limit enforcement.",
+                    ),
+                    (
+                        "`CRYPTO_REALTIME_ENABLED`",
+                        "Realtime crypto background behavior must be explicitly reviewed for outbound access and degraded behavior.",
+                        "**AMBIGUOUS**",
+                        "Target-environment evidence must show whether outbound Binance/WebSocket access is allowed, how failures degrade, and whether realtime is intentionally disabled.",
+                    ),
+                    (
+                        "`SEARXNG_PUBLIC_INSTANCES_ENABLED`",
+                        "Public-instance discovery is unsuitable for public launch unless separately accepted or disabled in favor of vetted self-hosted endpoints.",
+                        "**NO-GO**",
+                        "Public launch must use vetted self-hosted SearXNG endpoints, explicitly disable public discovery, or attach accepted operator risk evidence.",
+                    ),
+                ),
+            )
+            + "\n\n"
+            "Classification rule: **SAFE** still requires target-environment evidence; **GATED** requires explicit config plus accepted evidence; "
+            "**AMBIGUOUS** requires an operator decision; **NO-GO** applies whenever required target-environment evidence is missing, "
+            "raw secrets would be needed to prove the claim, or a flag is used to imply provider, quota, auth/RBAC, database, broker, "
+            "or notification live-enforcement approval."
+        ),
+        source_paths=("AGENTS.md", "README.md", "docs/DOCS_INDEX.md"),
+        update_trigger="Production readiness docs authority, public deployment env flag classifications, or launch evidence policy changes.",
+        validation="Production config readiness tests, manual generator freshness, AI asset check, and link/stale-path scans.",
+    ),
+    ManualSection(
         key="protected-domains",
         title="Protected Domains And Safety Rules",
         body=(

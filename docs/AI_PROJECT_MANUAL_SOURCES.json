@@ -11,13 +11,14 @@
     "candidateMarkdownAfterPolicy": 3,
     "excludedByReason": {
       "legacy_external_product_doc": 1,
+      "legacy_untracked_agent_mirror": 3,
       "not_in_hard_collapse_source_set": 3,
       "required_ai_governance_symlink": 1,
       "required_github_workflow_markdown": 7,
       "required_repository_skill_asset": 4
     },
     "includedSourceCount": 3,
-    "markdownDiscovered": 19,
+    "markdownDiscovered": 22,
     "prunedDirectoryNames": [
       ".cache",
       ".codex",
@@ -58,12 +59,12 @@
     "path": "scripts/build_ai_project_manual.py",
     "readsProductionDataPaths": false,
     "requiresApiKeys": false,
-    "sha256": "648b09b5131f7db5834432e10415a0ff8c3eebedc9bee33310dec0ff380c838a",
+    "sha256": "71001e1b197e87b633cf227179b5de4e3a411eeaaf69c3d8ea4e29f8fea0485f",
     "version": 4
   },
   "includedSources": [
     {
-      "bytes": 4886,
+      "bytes": 4788,
       "categories": [
         "governance",
         "workflow"
@@ -71,11 +72,11 @@
       "lineCount": 98,
       "path": "AGENTS.md",
       "purpose": "repository AI-agent rules and hard safety boundaries",
-      "sha256": "29352d889b1f2c0d27a9c0639067a008be2dce6a0bca8cf6697bbc2dceb91f65",
+      "sha256": "397ea8fc66abf770c022f9802b7c5cb5c25f90a432eaac5d51ba1bdef7576ffa",
       "title": "AGENTS.md"
     },
     {
-      "bytes": 5859,
+      "bytes": 5699,
       "categories": [
         "onboarding",
         "product"
@@ -83,11 +84,11 @@
       "lineCount": 160,
       "path": "README.md",
       "purpose": "human product entrypoint and supported run commands",
-      "sha256": "28944b8efb00339002025a7c26a1dc424d8393d525c160e20bb52b5918956078",
+      "sha256": "bafe6ca124757314ac2e77189a5b6fcd99f34691e4d02eb9d148f3b1a43ec7b9",
       "title": "WolfyStock"
     },
     {
-      "bytes": 755,
+      "bytes": 738,
       "categories": [
         "governance",
         "sources"
@@ -95,14 +96,14 @@
       "lineCount": 17,
       "path": "docs/DOCS_INDEX.md",
       "purpose": "tiny canonical documentation pointer",
-      "sha256": "c42fdefe65806eb5d4ae7519f150019d5695cad6b16f4774df24ea15349019e7",
+      "sha256": "2ea80605b35f2ee1bdcc17a74f7b53f31f6f15a5d912c0f3105a28ed95504281",
       "title": "WolfyStock Docs Index"
     }
   ],
   "outputs": {
     "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
     "manual": "docs/AI_PROJECT_MANUAL.md",
-    "manualSha256": "611857491c0bc240cacdbd99d33253ca61fe56e0f0715230a6513572ea273ef5"
+    "manualSha256": "00ce5aef3256937111d45e6f4baee58ca50ea8ac4557a147215eb466cc07ee22"
   },
   "schemaVersion": 2,
   "sections": [
@@ -175,6 +176,17 @@
       "title": "Professional Analytics Roadmap And Readiness",
       "updateTrigger": "Professional data roadmap, readiness labels, or evidence-harness expectations change.",
       "validation": "Docs/generator validation for handbook changes; domain validation for implementation changes."
+    },
+    {
+      "key": "production-readiness-authority",
+      "sources": [
+        "AGENTS.md",
+        "README.md",
+        "docs/DOCS_INDEX.md"
+      ],
+      "title": "Production Readiness Documentation Authority",
+      "updateTrigger": "Production readiness docs authority, public deployment env flag classifications, or launch evidence policy changes.",
+      "validation": "Production config readiness tests, manual generator freshness, AI asset check, and link/stale-path scans."
     },
     {
       "key": "protected-domains",

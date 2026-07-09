@@ -1534,7 +1534,7 @@ class AdminOpsStatusService:
                 ],
                 blocker_refs=[
                     "docs/audits/public-launch-readiness-master.md#manual-release-criteria",
-                    "docs/audits/deployment-readiness-checklist.md",
+                    "docs/AI_PROJECT_MANUAL.md#production-readiness-documentation-authority",
                 ],
                 safe_next_actions=[
                     "Compare backend route inventory against admin capability expectations.",
