@@ -1790,7 +1790,8 @@ describe('AppContent route flows', () => {
 
     expect(await screen.findByText('market-rotation-radar-page')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '轮动雷达' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '市场总览' })).toHaveAttribute('href', '/zh/market-overview');
+    fireEvent.click(screen.getByRole('button', { name: '市场' }));
+    expect(within(await screen.findByTestId('shell-nav-group-menu-market')).getByRole('link', { name: '市场总览' })).toHaveAttribute('href', '/zh/market-overview');
   });
 
   it('renders the localized liquidity monitor route', async () => {
@@ -1800,7 +1801,8 @@ describe('AppContent route flows', () => {
 
     expect(await screen.findByText('liquidity-monitor-page')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '流动性监测' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '市场总览' })).toHaveAttribute('href', '/zh/market-overview');
+    fireEvent.click(screen.getByRole('button', { name: '市场' }));
+    expect(within(await screen.findByTestId('shell-nav-group-menu-market')).getByRole('link', { name: '市场总览' })).toHaveAttribute('href', '/zh/market-overview');
   });
 
   it('renders the rule backtest compare workbench route for signed-in users', async () => {

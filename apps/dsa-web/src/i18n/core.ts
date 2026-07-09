@@ -11,6 +11,11 @@ const RESOURCES = {
       stockStructure: '个股研究',
       scenarioLab: '情景实验室',
       more: '更多',
+      group: {
+        market: '市场',
+        research: '研究',
+        validate: '验证',
+      },
       scanner: '扫描器',
       portfolio: '持仓',
       marketOverview: '市场总览',
@@ -3047,6 +3052,11 @@ const RESOURCES = {
       stockStructure: 'Stock Research',
       scenarioLab: 'Scenario Lab',
       more: 'More',
+      group: {
+        market: 'Market',
+        research: 'Research',
+        validate: 'Validate',
+      },
       scanner: 'Scanner',
       portfolio: 'Holdings',
       marketOverview: 'Market Overview',
