@@ -32,7 +32,7 @@ const CompactStatusTile: React.FC<{
   value: string;
   meta: React.ReactNode;
   tone?: string;
-}> = ({ testId, eyebrow, title, value, meta, tone = 'text-white' }) => (
+}> = ({ testId, eyebrow, title, value, meta, tone = 'text-[color:var(--wolfy-text-primary)]' }) => (
   <TerminalPanel
     as="section"
     dense
@@ -44,7 +44,7 @@ const CompactStatusTile: React.FC<{
       title={title}
       action={<p className={cn('shrink-0 text-right font-mono text-lg font-semibold leading-none tabular-nums', tone)}>{value}</p>}
     />
-    <div className="mt-2 min-w-0 text-xs leading-5 text-white/45">{meta}</div>
+    <div className="mt-2 min-w-0 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{meta}</div>
   </TerminalPanel>
 );
 
@@ -57,7 +57,7 @@ const MarketTemperatureCompactSummary: React.FC<{ summary: MarketOverviewTempera
     tone={summary.toneClass}
     meta={(
       <div data-testid="market-temperature-strip" className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="font-semibold text-white/68">{summary.label}</span>
+        <span className="font-semibold text-[color:var(--wolfy-text-muted)]">{summary.label}</span>
         <span>信号可信：{summary.confidenceLabel}</span>
         <span className="font-mono tabular-nums">
           真实 {summary.reliableInputCount} · 备用 {summary.fallbackInputCount} · 排除 {summary.excludedInputCount}
@@ -81,7 +81,7 @@ const MarketBriefingCompactSummary: React.FC<{ summary: MarketOverviewBriefingSu
     tone={summary.toneClass}
     meta={(
       <div className="min-w-0">
-        <p data-testid="market-briefing-card" className="truncate text-white/55">{summary.leadMessage}</p>
+        <p data-testid="market-briefing-card" className="truncate text-[color:var(--wolfy-text-muted)]">{summary.leadMessage}</p>
         {summary.warning ? <p data-testid="market-briefing-warning" className="truncate text-amber-200/70">{summary.warning}</p> : null}
       </div>
     )}
@@ -119,7 +119,7 @@ const MarketOverviewDataStateStrip: React.FC<{
         <TerminalSectionHeader eyebrow="状态" title="数据状态" />
         <TerminalDenseList
           data-testid="market-overview-data-state-summary"
-          className="mt-2 min-w-0 text-[11px] leading-4 text-white/45"
+          className="mt-2 min-w-0 text-[11px] leading-4 text-[color:var(--wolfy-text-muted)]"
         >
           <span className="truncate font-mono">
             可用 {dataState.availableCount} · 备用数据 {dataState.fallbackCount} · 数据过期 {dataState.staleCount}
@@ -187,7 +187,7 @@ const MarketDirectionReadinessStrip: React.FC<{
   return (
     <div
       data-testid="market-direction-readiness-strip"
-      className="mt-3 min-w-0 rounded-md border border-white/[0.07] bg-black/10 px-3 py-2"
+      className="mt-3 min-w-0 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-2"
     >
       <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -200,7 +200,7 @@ const MarketDirectionReadinessStrip: React.FC<{
           <TerminalChip variant="neutral" className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest">
             {view.confidenceLabel}
           </TerminalChip>
-          <span className="font-mono text-[11px] text-white/55">
+          <span className="font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">
             评分级 {view.scoreGradeCount} · 仅观察 {view.observationOnlyCount} · 证据不足 {view.missingCount}
           </span>
         </div>
@@ -214,11 +214,11 @@ const MarketDirectionReadinessStrip: React.FC<{
         ) : null}
       </div>
       {pillarSummary.length ? (
-        <div className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-[10px] font-semibold text-white/48">
+        <div className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-[10px] font-semibold text-[color:var(--wolfy-text-muted)]">
           {pillarSummary.map((pillar) => (
             <span
               key={pillar.key}
-              className="max-w-full truncate rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1"
+              className="max-w-full truncate rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-2 py-1"
             >
               {pillar.label}
               {pillar.reasonCode && pillar.reasonCode !== 'score_grade_evidence' ? ` · ${marketIntelligenceReasonLabel(pillar.reasonCode)}` : ''}
@@ -227,7 +227,7 @@ const MarketDirectionReadinessStrip: React.FC<{
         </div>
       ) : null}
       {view.notInvestmentAdvice ? (
-        <p className="mt-2 text-[10px] font-semibold text-white/34">不构成交易指令</p>
+        <p className="mt-2 text-[10px] font-semibold text-[color:var(--wolfy-text-muted)]">不构成交易指令</p>
       ) : null}
     </div>
   );
@@ -248,7 +248,7 @@ export const MarketOverviewDecisionDebugDetails: React.FC<MarketOverviewDecision
   return (
     <div className="grid gap-3">
       {regimeSynthesis ? (
-        <div className="rounded-lg border border-white/[0.06] bg-black/10 p-3">
+        <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-3">
           <MarketRegimeSynthesisHeader view={regimeSynthesis} />
         </div>
       ) : null}
@@ -282,7 +282,7 @@ export const MarketOverviewDecisionDebugDetails: React.FC<MarketOverviewDecision
           </span>
         ))}
       </div>
-      <TerminalDenseList className="font-mono text-[10px] leading-4 text-white/46">
+      <TerminalDenseList className="font-mono text-[10px] leading-4 text-[color:var(--wolfy-text-muted)]">
         {rawDebugCodes.length ? rawDebugCodes.map((code, index) => (
           <span key={`${code}-${index}`}>{code}</span>
         )) : <span>暂无原始代码</span>}

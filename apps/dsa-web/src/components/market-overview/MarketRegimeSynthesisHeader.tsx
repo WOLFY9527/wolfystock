@@ -47,13 +47,13 @@ export const MarketRegimeSynthesisHeader: React.FC<{ view: MarketRegimeSynthesis
     data-testid="market-regime-synthesis-header"
     data-market-research-flow="regime-synthesis"
     data-mobile-order="synthesis"
-    className="relative overflow-hidden bg-white/[0.02]"
+    className="relative overflow-hidden bg-[color:var(--wolfy-surface-input)]"
   >
     <div
       className={cn(
         'absolute inset-x-0 top-0 h-px',
         view.state === 'ready'
-          ? 'bg-gradient-to-r from-emerald-400/0 via-emerald-300/55 to-sky-400/0'
+          ? 'bg-gradient-to-r from-emerald-400/0 via-emerald-300/55 to-transparent'
           : 'bg-gradient-to-r from-amber-400/0 via-amber-200/50 to-rose-300/0',
       )}
       aria-hidden="true"
@@ -62,16 +62,16 @@ export const MarketRegimeSynthesisHeader: React.FC<{ view: MarketRegimeSynthesis
       <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] font-bold tracking-[0.24em] text-white/38">综合结论</p>
+            <p className="text-[10px] font-bold tracking-[0.24em] text-[color:var(--wolfy-text-muted)]">综合结论</p>
             <p
               data-testid="market-regime-synthesis-title"
-              className="mt-1 text-base font-semibold leading-6 text-white/90 md:text-lg"
+              className="mt-1 text-base font-semibold leading-6 text-[color:var(--wolfy-text-primary)] md:text-lg"
             >
               {view.title}
             </p>
             <p
               data-testid="market-regime-synthesis-summary"
-              className="mt-2 max-w-2xl text-xs leading-5 text-white/56"
+              className="mt-2 max-w-2xl text-xs leading-5 text-[color:var(--wolfy-text-muted)]"
             >
               {view.summary}
             </p>
@@ -92,7 +92,7 @@ export const MarketRegimeSynthesisHeader: React.FC<{ view: MarketRegimeSynthesis
               variant="neutral"
               className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest"
             >
-              <span className="text-white/36">状态</span>
+              <span className="text-[color:var(--wolfy-text-muted)]">状态</span>
               <span className="max-w-[240px] truncate font-mono normal-case tracking-normal">
                 {view.primaryRegimeLabel}
               </span>
@@ -103,7 +103,7 @@ export const MarketRegimeSynthesisHeader: React.FC<{ view: MarketRegimeSynthesis
             variant={view.state === 'ready' ? 'success' : view.state === 'missing' ? 'neutral' : 'caution'}
             className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest"
           >
-            <span className="text-white/36">置信度</span>
+            <span className="text-[color:var(--wolfy-text-muted)]">置信度</span>
             <span className="font-mono normal-case tracking-normal">
               {view.confidenceLabel}
               {view.confidenceValueText ? ` · ${view.confidenceValueText}` : ''}
@@ -114,7 +114,7 @@ export const MarketRegimeSynthesisHeader: React.FC<{ view: MarketRegimeSynthesis
         {view.qualityLine ? (
           <p
             data-testid="market-regime-synthesis-quality-line"
-            className="mt-3 truncate font-mono text-[11px] leading-5 text-white/34"
+            className="mt-3 truncate font-mono text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]"
           >
             {view.qualityLine}
           </p>
@@ -123,7 +123,7 @@ export const MarketRegimeSynthesisHeader: React.FC<{ view: MarketRegimeSynthesis
         {view.notInvestmentAdvice ? (
           <p
             data-testid="market-regime-synthesis-disclaimer"
-            className="mt-3 text-[11px] leading-5 text-white/34"
+            className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]"
           >
             不构成交易指令
           </p>

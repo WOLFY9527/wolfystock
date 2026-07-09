@@ -30,6 +30,14 @@ import {
   type DecisionReadinessSummary,
   type MarketDirectionalSummary,
 } from '../../utils/marketIntelligenceGuidance';
+import {
+  NextResearchAction,
+  ObservationHead,
+  ResearchDataQualityComposition,
+  ResearchRiskLimits,
+  type NextResearchActionItem,
+  type ResearchQualityFacet,
+} from '../research/anatomy';
 
 export type {
   MarketOverviewBriefingSummaryView,
@@ -153,7 +161,7 @@ type MarketNarrativeDriverView = {
   variant: 'success' | 'info' | 'caution' | 'neutral';
 };
 
-const MARKET_OVERVIEW_SETUP_ACTION_CLASS = 'inline-flex min-h-8 items-center rounded-md border border-white/[0.08] bg-white/[0.035] px-2.5 py-1 text-[11px] font-semibold text-white/72 transition-colors hover:border-cyan-200/25 hover:bg-white/[0.06] hover:text-white';
+const MARKET_OVERVIEW_SETUP_ACTION_CLASS = 'inline-flex min-h-8 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-divider)] hover:bg-[color:var(--wolfy-surface-inset-lift)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]';
 
 function marketOverviewConsumerCopy(text: string): string {
   return text
@@ -485,12 +493,12 @@ function buildCompactMissingSummary(params: {
 const MarketOverviewSetupPath: React.FC<{ testId: string }> = ({ testId }) => (
   <div
     data-testid={testId}
-    className="mt-3 rounded-lg border border-cyan-200/12 bg-cyan-300/[0.035] p-3"
+    className="mt-3 rounded-lg border border-[color:var(--wolfy-accent-soft-border,var(--wolfy-border-subtle))] bg-[color:var(--wolfy-surface-inset-lift)] p-3"
   >
     <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold text-cyan-100/82">查看数据状态说明</p>
-        <p className="mt-1 max-w-3xl text-[11px] leading-5 text-white/52">
+        <p className="text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)]">查看数据状态说明</p>
+        <p className="mt-1 max-w-3xl text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
           补齐可用、部分可用与延迟可用状态；是否进入评分仍由现有证据门槛决定。
         </p>
       </div>
@@ -509,15 +517,15 @@ const MarketOverviewSetupPath: React.FC<{ testId: string }> = ({ testId }) => (
 const MarketOverviewDirectionSummary: React.FC<{ summary: MarketDirectionalSummary }> = ({ summary }) => (
   <section
     data-testid="market-overview-direction-summary"
-    className="relative overflow-hidden border-t border-[color:var(--wolfy-divider)] bg-white/[0.022] p-3 md:px-4"
+    className="relative overflow-hidden border-t border-[color:var(--wolfy-divider)] bg-[color:var(--wolfy-surface-input)] p-3 md:px-4"
   >
-    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-cyan-400/0 via-cyan-200/38 to-sky-400/0" aria-hidden="true" />
+    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[color:var(--wolfy-divider)] to-transparent" aria-hidden="true" />
     <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0">
-        <p className="text-[10px] font-medium tracking-[0.24em] text-white/38">
+        <p className="text-[10px] font-medium tracking-[0.24em] text-[color:var(--wolfy-text-muted)]">
           {summary.currentLabel.startsWith('当前') ? '市场方向摘要' : summary.title}
         </p>
-        <h2 className="mt-2 text-base font-semibold leading-6 text-white/92 md:text-lg">
+        <h2 className="mt-2 text-base font-semibold leading-6 text-[color:var(--wolfy-text-primary)] md:text-lg">
           {summary.currentLabel}
         </h2>
         <div className="mt-2 flex min-w-0 flex-wrap gap-2">
@@ -531,13 +539,13 @@ const MarketOverviewDirectionSummary: React.FC<{ summary: MarketDirectionalSumma
       {[
         { key: 'supporting', title: summary.supportingTitle, items: summary.supportingDrivers, tone: 'text-emerald-200' },
         { key: 'blocking', title: summary.blockingTitle, items: summary.blockingDrivers, tone: 'text-amber-200' },
-        { key: 'watch', title: summary.watchTitle, items: summary.watchItems, tone: 'text-cyan-100' },
+        { key: 'watch', title: summary.watchTitle, items: summary.watchItems, tone: 'text-[color:var(--wolfy-text-secondary)]' },
       ].map((block) => (
-        <div key={block.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
-          <p className="text-[11px] font-medium text-white/48">{block.title}</p>
+        <div key={block.key} className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-3">
+          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{block.title}</p>
           <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
             {block.items.map((item, index) => (
-              <span key={`${block.key}-${item}-${index}`} className={cn('max-w-full truncate rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[11px] font-semibold', block.tone)}>
+              <span key={`${block.key}-${item}-${index}`} className={cn('max-w-full truncate rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-2 py-1 text-[11px] font-semibold', block.tone)}>
                 {marketNarrativeCopy(item)}
               </span>
             ))}
@@ -558,7 +566,7 @@ const CrossAssetHeroRibbon: React.FC<{ anchors: MarketOverviewHeroAnchorView[] }
       label: anchor.secondaryLabel ? `${anchor.primaryLabel} (${anchor.secondaryLabel})` : anchor.primaryLabel,
       value: (
         <span className="flex min-w-0 flex-col">
-          <span className="truncate font-mono text-[22px] font-semibold leading-none text-white md:text-2xl">
+          <span className="truncate font-mono text-[22px] font-semibold leading-none text-[color:var(--wolfy-text-primary)] md:text-2xl">
             {anchor.valueText}
           </span>
           <span className={cn('mt-1 truncate font-mono text-xs font-semibold', anchor.changeToneClass)}>
@@ -581,8 +589,8 @@ export const MarketOverviewVisualEvidenceStrip: React.FC<{
   >
     <div className="mb-3 flex min-w-0 items-end justify-between gap-3">
       <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/38">核心图表证据</p>
-        <p className="mt-1 text-sm text-white/56">只展示当前已有市场证据，不扩展结论边界。</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[color:var(--wolfy-text-muted)]">核心图表证据</p>
+        <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">只展示当前已有市场证据，不扩展结论边界。</p>
       </div>
       <TerminalChip variant="neutral" className="shrink-0">
         关键证据
@@ -593,21 +601,21 @@ export const MarketOverviewVisualEvidenceStrip: React.FC<{
         <article
           key={card.id}
           data-testid={`market-overview-visual-card-${card.id}`}
-          className="min-w-0 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-3"
+          className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-3"
         >
           <p
             data-testid={`market-overview-visual-card-eyebrow-${card.id}`}
-            className="break-words whitespace-normal text-[10px] font-semibold uppercase tracking-widest text-white/38 md:truncate"
+            className="break-words whitespace-normal text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)] md:truncate"
           >
             {card.eyebrow}
           </p>
           <h3
             data-testid={`market-overview-visual-card-title-${card.id}`}
-            className="mt-1 break-words whitespace-normal text-sm font-semibold text-white/86 md:truncate"
+            className="mt-1 break-words whitespace-normal text-sm font-semibold text-[color:var(--wolfy-text-secondary)] md:truncate"
           >
             {card.title}
           </h3>
-          <p className="mt-1 text-[11px] leading-5 text-white/50">{card.summary}</p>
+          <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{card.summary}</p>
           {card.points.length > 0 ? (
             <div
               data-testid={`market-overview-visual-card-${card.id}-points`}
@@ -617,12 +625,12 @@ export const MarketOverviewVisualEvidenceStrip: React.FC<{
                 <div
                   key={point.key}
                   data-testid={`market-overview-visual-point-${point.key}`}
-                  className="grid min-w-0 grid-cols-[minmax(0,1fr)_88px] items-center gap-3 rounded-lg border border-white/[0.05] bg-black/10 px-2.5 py-2"
+                  className="grid min-w-0 grid-cols-[minmax(0,1fr)_88px] items-center gap-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-2.5 py-2"
                 >
                   <div className="min-w-0">
                     <div className="flex min-w-0 items-center justify-between gap-3">
-                      <p className="break-words whitespace-normal text-[11px] font-semibold text-white/76 md:truncate">{point.label}</p>
-                      <p className="shrink-0 font-mono text-[11px] text-white/50">{point.valueText}</p>
+                      <p className="break-words whitespace-normal text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)] md:truncate">{point.label}</p>
+                      <p className="shrink-0 font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{point.valueText}</p>
                     </div>
                     <div className="mt-1 flex min-w-0 items-center gap-3">
                       <div className="min-w-0 flex-1">
@@ -640,13 +648,13 @@ export const MarketOverviewVisualEvidenceStrip: React.FC<{
           ) : (
             <div
               data-testid={`market-overview-visual-card-${card.id}-unavailable`}
-              className="mt-3 rounded-lg border border-dashed border-white/[0.10] bg-white/[0.02] px-3 py-3"
+              className="mt-3 rounded-lg border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-3"
             >
               <div className="flex items-center gap-2">
-                <div className="h-6 w-16 rounded bg-white/[0.05]" aria-hidden="true" />
-                <div className="h-6 flex-1 rounded bg-white/[0.04]" aria-hidden="true" />
+                <div className="h-6 w-16 rounded bg-[color:var(--wolfy-surface-input)]" aria-hidden="true" />
+                <div className="h-6 flex-1 rounded bg-[color:var(--wolfy-surface-input)]" aria-hidden="true" />
               </div>
-              <p className="mt-2 text-[11px] leading-5 text-white/46">
+              <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                 {card.unavailableCopy || '图形证据暂缺，当前保持观察。'}
               </p>
             </div>
@@ -664,17 +672,17 @@ const MarketDecisionSemanticsList: React.FC<{
   items: MarketOverviewDecisionSemanticsLineView[];
 }> = ({ testId, label, emptyLabel, items }) => (
   <div className="min-w-0">
-    <p className="text-[11px] font-medium text-white/48">{label}</p>
+    <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{label}</p>
     <div
       data-testid={testId}
-      className="mt-2 flex max-h-32 min-w-0 flex-col gap-1.5 overflow-y-auto no-scrollbar pr-1 text-[11px] leading-5 text-white/58 ui-scroll-y-quiet"
+      className="mt-2 flex max-h-32 min-w-0 flex-col gap-1.5 overflow-y-auto no-scrollbar pr-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)] ui-scroll-y-quiet"
     >
       {items.length ? items.map((item) => (
         <p key={item.key} className="min-w-0">
-          <span className="font-semibold text-white/72">{item.label}</span>
-          {item.meta ? <span className="text-white/42"> · {item.meta}</span> : null}
+          <span className="font-semibold text-[color:var(--wolfy-text-secondary)]">{item.label}</span>
+          {item.meta ? <span className="text-[color:var(--wolfy-text-muted)]"> · {item.meta}</span> : null}
         </p>
-      )) : <p className="text-white/34">{emptyLabel}</p>}
+      )) : <p className="text-[color:var(--wolfy-text-muted)]">{emptyLabel}</p>}
     </div>
   </div>
 );
@@ -682,18 +690,18 @@ const MarketDecisionSemanticsList: React.FC<{
 const MarketOverviewRegimeSummaryBlock: React.FC<{ view: MarketOverviewRegimeSummaryView }> = ({ view }) => (
   <section
     data-testid="market-overview-regime-summary"
-    className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3"
+    className="mt-4 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-3"
   >
     <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0">
-        <p className="text-[11px] font-medium text-white/48">市场温度摘要</p>
+        <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">市场温度摘要</p>
         <h3
           data-testid="market-overview-regime-summary-title"
-          className="mt-1 text-sm font-semibold leading-6 text-white/88"
+          className="mt-1 text-sm font-semibold leading-6 text-[color:var(--wolfy-text-secondary)]"
         >
           {view.title}
         </h3>
-        <p className="mt-2 max-w-4xl text-[11px] leading-5 text-white/56">{view.explanation}</p>
+        <p className="mt-2 max-w-4xl text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{view.explanation}</p>
       </div>
       <div className="flex min-w-0 shrink-0 flex-wrap gap-2 lg:justify-end">
         <TerminalChip variant="neutral">{view.label}</TerminalChip>
@@ -953,6 +961,74 @@ function dataStatusLabel(summary: DecisionReadinessSummary, dataState: MarketOve
   return '可用';
 }
 
+function buildMarketOverviewQualityFacets(params: {
+  summary: DecisionReadinessSummary;
+  dataState: MarketOverviewDataStateStripView;
+  confidenceSummary: ConsumerConfidenceSummaryView;
+  locale: 'zh' | 'en';
+}): ResearchQualityFacet[] {
+  const { summary, dataState, confidenceSummary, locale } = params;
+  const facets: ResearchQualityFacet[] = [
+    {
+      key: 'freshness',
+      kind: dataState.staleCount > 0 ? 'stale' : dataState.isRefreshing ? 'freshness' : 'freshness',
+      tone: dataState.staleCount > 0 ? 'caution' : dataState.isRefreshing ? 'info' : 'success',
+      label: locale === 'en' ? 'Freshness' : '新鲜度',
+      value: dataStatusLabel(summary, dataState),
+      detail: dataState.updatedAtLabel
+        ? (locale === 'en' ? `Updated ${dataState.updatedAtLabel}` : `最近更新 ${dataState.updatedAtLabel}`)
+        : undefined,
+    },
+    {
+      key: 'coverage',
+      kind: dataState.hasUnavailable || dataState.unavailableCount > 0
+        ? 'partial'
+        : dataState.hasFallback
+          ? 'partial'
+          : 'coverage',
+      tone: dataState.hasUnavailable ? 'caution' : dataState.hasFallback ? 'info' : 'success',
+      label: locale === 'en' ? 'Coverage' : '覆盖',
+      value: locale === 'en'
+        ? `${dataState.availableCount} available · ${dataState.fallbackCount} delayed · ${dataState.unavailableCount} unavailable`
+        : `${dataState.availableCount} 可用 · ${dataState.fallbackCount} 延迟 · ${dataState.unavailableCount} 不可用`,
+    },
+    {
+      key: 'observation-only',
+      kind: summary.state === 'observe' || summary.state === 'unavailable' ? 'observation-only' : 'authority',
+      tone: summary.state === 'unavailable' ? 'caution' : summary.state === 'observe' ? 'info' : 'neutral',
+      label: locale === 'en' ? 'Use posture' : '使用口径',
+      value: confidenceSummary.chipLabel || confidenceSummary.value,
+      detail: confidenceSummary.detail,
+    },
+  ];
+
+  if (dataState.hasFallback) {
+    facets.push({
+      key: 'delayed',
+      kind: 'delayed',
+      tone: 'caution',
+      label: locale === 'en' ? 'Delayed / proxy' : '延迟 / 代理',
+      value: locale === 'en'
+        ? `${dataState.fallbackCount} delayed or partial modules`
+        : `${dataState.fallbackCount} 个延迟或部分可用模块`,
+    });
+  }
+
+  if (dataState.hasUnavailable || dataState.unavailableCount > 0) {
+    facets.push({
+      key: 'unavailable',
+      kind: 'unavailable',
+      tone: 'danger',
+      label: locale === 'en' ? 'Unavailable' : '不可用',
+      value: locale === 'en'
+        ? `${dataState.unavailableCount} modules unavailable`
+        : `${dataState.unavailableCount} 个模块暂不可用`,
+    });
+  }
+
+  return facets;
+}
+
 const MarketOverviewConclusionLayer: React.FC<{
   testId: string;
   summary: DecisionReadinessSummary;
@@ -965,6 +1041,8 @@ const MarketOverviewConclusionLayer: React.FC<{
   heroAnchors: MarketOverviewHeroAnchorView[];
 }> = ({ testId, summary, statusSummary, dataState, directionalSummary, regimeSummary, view, briefingSummary, heroAnchors }) => {
   const routeLocale = typeof window !== 'undefined' ? parseLocaleFromPathname(window.location.pathname) : null;
+  const isEnglishRoute = routeLocale === 'en';
+  const researchLocale = isEnglishRoute ? 'en' : 'zh';
   const confidenceSummary = buildConsumerConfidenceSummary(summary, view);
   const verdict = buildMarketNarrativeVerdict({
     summary,
@@ -990,134 +1068,282 @@ const MarketOverviewConclusionLayer: React.FC<{
     directionalSummary.blockingDrivers[0],
   ], 2, '暂无关键阻断');
   const missingSummary = buildCompactMissingSummary({ summary, view, missingButObservable });
+  const whatHappened = buildWhatHappenedLine({ briefingSummary, heroAnchors, verdict });
+  const whatMatters = buildWhatMattersLine({ drivers, verdict, directionalSummary });
+  const nextCheck = buildNextCheckLine({ nextObservation, missingButObservable, summary, view });
   const narrativeFacts = [
     {
       key: 'what-happened',
-      label: '发生了什么',
-      value: buildWhatHappenedLine({ briefingSummary, heroAnchors, verdict }),
+      label: isEnglishRoute ? 'What happened' : '发生了什么',
+      value: whatHappened,
       detail: verdict.headline,
     },
     {
       key: 'what-matters',
-      label: '重要点',
-      value: buildWhatMattersLine({ drivers, verdict, directionalSummary }),
-      detail: marketNarrativeCopy(`数据状态：${dataStatusLabel(summary, dataState)}；信心水平：${confidenceSummary.value}。`),
+      label: isEnglishRoute ? 'What matters' : '重要点',
+      value: whatMatters,
+      detail: marketNarrativeCopy(
+        isEnglishRoute
+          ? `Data state: ${dataStatusLabel(summary, dataState)}; confidence ${confidenceSummary.value}.`
+          : `数据状态：${dataStatusLabel(summary, dataState)}；信心水平：${confidenceSummary.value}。`,
+      ),
     },
     {
       key: 'next',
-      label: '下一步看什么',
-      value: buildNextCheckLine({ nextObservation, missingButObservable, summary, view }),
-      detail: '只作为研究核对顺序，不升级为更强结论。',
+      label: isEnglishRoute ? 'What to check next' : '下一步看什么',
+      value: nextCheck,
+      detail: isEnglishRoute
+        ? 'Research check order only — not a stronger conclusion.'
+        : '只作为研究核对顺序，不升级为更强结论。',
     },
   ];
-  const isEnglishRoute = routeLocale === 'en';
-  const quickActions: Array<{
-    key: string;
-    label: string;
-    href: string;
-    primary: boolean;
-    current?: boolean;
-  }> = [
-    {
-      key: 'decision-cockpit',
-      label: isEnglishRoute ? 'Decision Cockpit' : '决策驾驶舱',
-      href: routeLocale ? buildLocalizedPath('/market/decision-cockpit', routeLocale) : '/market/decision-cockpit',
-      primary: true,
-    },
+
+  const contradictoryLines = uniqueNarrativeStrings([
+    ...(regimeSummary?.contradictions || []).map(narrativeLineText),
+    ...(view?.counterEvidence || []).map(narrativeLineText),
+    ...directionalSummary.blockingDrivers,
+  ], 3, '');
+
+  const qualityFacets = buildMarketOverviewQualityFacets({
+    summary,
+    dataState,
+    confidenceSummary,
+    locale: researchLocale,
+  });
+
+  // Plain same-origin anchors keep handoffs router-agnostic in unit harnesses
+  // (NextResearchAction Link requires a Router context that page unit tests omit).
+  const researchSteps: NextResearchActionItem[] = [
     {
       key: 'research-radar',
+      kind: 'inspect',
       label: isEnglishRoute ? 'Research Radar' : '研究雷达',
-      href: routeLocale ? buildLocalizedPath('/research/radar', routeLocale) : '/research/radar',
-      primary: false,
+      description: isEnglishRoute
+        ? 'Inspect Research Radar priorities against the current market observation.'
+        : '查看研究雷达优先级，对照当前市场观察。',
+      onClick: () => {
+        const href = routeLocale ? buildLocalizedPath('/research/radar', routeLocale) : '/research/radar';
+        if (typeof window !== 'undefined') {
+          window.location.assign(href);
+        }
+      },
+    },
+    {
+      key: 'stock-structure',
+      kind: 'validate',
+      label: isEnglishRoute ? 'Stock Search' : '搜索个股',
+      description: isEnglishRoute
+        ? 'Validate single-name structure against this market context.'
+        : '用结构页在当前市场背景下验证个股证据。',
+      onClick: () => {
+        const href = routeLocale ? buildLocalizedPath('/stocks/structure-decision', routeLocale) : '/stocks/structure-decision';
+        if (typeof window !== 'undefined') {
+          window.location.assign(href);
+        }
+      },
+    },
+    {
+      key: 'decision-cockpit',
+      kind: 'compare',
+      label: isEnglishRoute ? 'Decision Cockpit' : '决策驾驶舱',
+      description: isEnglishRoute
+        ? 'Compare Decision Cockpit evidence without implying a trade.'
+        : '比较决策驾驶舱证据，不升级为交易建议。',
+      onClick: () => {
+        const href = routeLocale ? buildLocalizedPath('/market/decision-cockpit', routeLocale) : '/market/decision-cockpit';
+        if (typeof window !== 'undefined') {
+          window.location.assign(href);
+        }
+      },
     },
     {
       key: 'scanner',
+      kind: 'handoff',
       label: isEnglishRoute ? 'Scanner' : '扫描器',
-      href: routeLocale ? buildLocalizedPath('/scanner', routeLocale) : '/scanner',
-      primary: false,
+      description: isEnglishRoute
+        ? 'Continue research screening under the same observation constraints.'
+        : '继续到扫描器，在同一观察约束下筛选研究候选。',
+      onClick: () => {
+        const href = routeLocale ? buildLocalizedPath('/scanner', routeLocale) : '/scanner';
+        if (typeof window !== 'undefined') {
+          window.location.assign(href);
+        }
+      },
     },
-    {
-      key: 'stock-search',
-      label: isEnglishRoute ? 'Stock Search' : '搜索个股',
-      href: routeLocale ? buildLocalizedPath('/stocks/structure-decision', routeLocale) : '/stocks/structure-decision',
-      primary: false,
-    },
-  ] as const;
+  ];
 
   return (
     <section
       data-testid={testId}
       data-market-research-flow="market-thesis"
-      className="min-w-0 border-b border-[color:var(--wolfy-divider)] bg-white/[0.018] p-3 md:px-4"
+      data-market-overview-anatomy="observation-composition"
+      className="min-w-0 border-b border-[color:var(--wolfy-divider)] bg-[color:var(--wolfy-surface-console)]"
     >
-      <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/38">市场论点</p>
-          <h2
-            data-testid="market-decision-semantics-advice-boundary"
-            className="mt-2 text-2xl font-semibold leading-8 text-white/94 md:text-[34px]"
-          >
-            <span data-testid="market-overview-top-verdict" className="break-words whitespace-normal">
-              {verdict.label}
-            </span>
-          </h2>
-          <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">
-            {verdict.headline}
-          </p>
-        </div>
-        <div data-testid="market-overview-status-line" className="max-w-sm text-left text-[11px] leading-5 text-white/46 lg:text-right">
-          {marketNarrativeCopy(`${verdict.label === '证据待补' ? '事实有限' : verdict.label} · ${dataStatusLabel(summary, dataState)} · 信心水平 ${confidenceSummary.value}`)}
-        </div>
-      </div>
-      <section
-        data-testid="market-overview-summary-strip"
-        aria-label={routeLocale === 'en' ? 'First-read summary' : '首读摘要'}
-        className="mt-4 grid min-w-0 grid-cols-1 gap-2 md:grid-cols-3"
-      >
-        {narrativeFacts.map((fact) => (
-          <div key={fact.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5">
-            <p className="text-[11px] font-medium text-white/48">{fact.label}</p>
-            <p className="mt-1 text-sm font-semibold leading-5 text-white/88">{marketNarrativeCopy(fact.value)}</p>
-            <p className="mt-1 text-[11px] leading-5 text-white/50">{marketNarrativeCopy(fact.detail)}</p>
-          </div>
-        ))}
-      </section>
-      {missingSummary ? (
-        <p data-testid="market-overview-missing-summary" className="mt-3 rounded-lg border border-amber-200/10 bg-amber-300/[0.035] px-3 py-2 text-[11px] leading-5 text-amber-50/66">
-          {missingSummary}
-        </p>
-      ) : null}
-      <div
-        data-testid="market-overview-quick-actions"
-        className="mt-3 flex min-w-0 flex-wrap items-center gap-2"
-      >
-        {quickActions.map((action) => (
-          action.current ? (
+      <ObservationHead
+        density="research"
+        locale={researchLocale}
+        data-testid="market-overview-observation-head"
+        eyebrow={isEnglishRoute ? 'Market thesis' : '市场论点'}
+        title={isEnglishRoute ? 'Market State Overview' : '市场状态概览'}
+        lead={(
+          <span className="flex min-w-0 flex-col gap-1">
             <span
-              key={action.key}
-              className="inline-flex min-h-9 items-center rounded-full border border-white/[0.08] bg-white/[0.03] px-3.5 py-1.5 text-xs font-semibold text-white/46"
+              data-testid="market-decision-semantics-advice-boundary"
+              className="break-words whitespace-normal text-base font-semibold text-[color:var(--wolfy-text-primary)] md:text-lg"
             >
-              {action.label}
+              <span data-testid="market-overview-top-verdict" className="break-words whitespace-normal">
+                {verdict.label}
+              </span>
             </span>
-          ) : (
-            <a
-              key={action.key}
-              href={action.href}
-              className={cn(
-                'inline-flex min-h-9 items-center rounded-full border px-3.5 py-1.5 text-xs font-semibold transition',
-                action.primary
-                  ? 'border-cyan-200/22 bg-cyan-300/[0.08] text-cyan-50 hover:border-cyan-200/35 hover:bg-cyan-300/[0.12]'
-                  : 'border-white/[0.08] bg-white/[0.03] text-white/68 hover:border-white/[0.12] hover:bg-white/[0.05] hover:text-white/84',
-              )}
+            <span>{verdict.headline}</span>
+          </span>
+        )}
+        status={(
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <TerminalChip variant={verdict.variant === 'neutral' ? 'neutral' : verdict.variant} className="px-2 py-1 text-[10px] font-semibold">
+              {verdict.label}
+            </TerminalChip>
+            <TerminalChip
+              variant={dataState.variant === 'caution' ? 'caution' : dataState.isRefreshing ? 'info' : 'neutral'}
+              className="px-2 py-1 text-[10px] font-semibold"
             >
-              {action.label}
-            </a>
-          )
-        ))}
+              {dataStatusLabel(summary, dataState)}
+            </TerminalChip>
+            <TerminalChip variant="neutral" className="px-2 py-1 text-[10px] font-semibold">
+              {isEnglishRoute ? `Confidence ${confidenceSummary.value}` : `信心 ${confidenceSummary.value}`}
+            </TerminalChip>
+            <span
+              data-testid="market-overview-status-line"
+              className="min-w-0 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]"
+            >
+              {marketNarrativeCopy(
+                `${verdict.label === '证据待补' ? (isEnglishRoute ? 'Limited facts' : '事实有限') : verdict.label} · ${dataStatusLabel(summary, dataState)} · ${isEnglishRoute ? 'confidence' : '信心水平'} ${confidenceSummary.value}`,
+              )}
+            </span>
+          </div>
+        )}
+        known={[
+          {
+            key: 'what-happened',
+            label: isEnglishRoute ? 'Observation' : '观察',
+            body: marketNarrativeCopy(whatHappened),
+          },
+        ]}
+        changing={[
+          {
+            key: 'what-matters',
+            label: isEnglishRoute ? 'Drivers' : '驱动',
+            body: marketNarrativeCopy(whatMatters),
+          },
+        ]}
+        unknown={missingButObservable.filter(Boolean).length ? [{
+          key: 'unknown',
+          label: isEnglishRoute ? 'Open items' : '待确认',
+          body: marketNarrativeCopy(missingButObservable.join(' / ')),
+        }] : undefined}
+        contradictory={contradictoryLines.length ? [{
+          key: 'contradictory',
+          label: isEnglishRoute ? 'Tension' : '张力',
+          body: marketNarrativeCopy(contradictoryLines.join('；')),
+        }] : undefined}
+      >
+        <section
+          data-testid="market-overview-summary-strip"
+          aria-label={isEnglishRoute ? 'First-read summary' : '首读摘要'}
+          className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-3"
+        >
+          {narrativeFacts.map((fact) => (
+            <div
+              key={fact.key}
+              className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-2.5"
+            >
+              <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{fact.label}</p>
+              <p className="mt-1 text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">
+                {marketNarrativeCopy(fact.value)}
+              </p>
+              <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+                {marketNarrativeCopy(fact.detail)}
+              </p>
+            </div>
+          ))}
+        </section>
+        {missingSummary ? (
+          <p
+            data-testid="market-overview-missing-summary"
+            className="mt-3 rounded-lg border border-[color:var(--state-warning-border)] bg-[color:var(--state-warning-bg)] px-3 py-2 text-[11px] leading-5 text-[color:var(--state-warning-text)]"
+          >
+            {missingSummary}
+          </p>
+        ) : null}
+      </ObservationHead>
+
+      <div className="flex min-w-0 flex-col gap-3 border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4">
+        <ResearchDataQualityComposition
+          density="research"
+          locale={researchLocale}
+          compact
+          data-testid="market-overview-data-quality-composition"
+          facets={qualityFacets}
+        />
+
+        <ResearchRiskLimits
+          density="research"
+          locale={researchLocale}
+          placement="disclosure"
+          data-testid="market-overview-research-risk-limits"
+          title={isEnglishRoute ? 'Research limits' : '研究限制'}
+          cannotEstablish={[
+            isEnglishRoute
+              ? 'Current market evidence cannot establish trade timing, position size, or investment advice.'
+              : '当前市场证据不能成立交易时机、仓位规模或投资建议。',
+            verdict.label === '证据待补' || summary.state === 'unavailable'
+              ? (isEnglishRoute
+                ? 'Directional confidence remains capped while critical confirmation is missing.'
+                : '关键确认仍缺失时，方向置信保持上限约束。')
+              : (isEnglishRoute
+                ? 'A single module move does not prove a durable market regime shift.'
+                : '单一模块变动不能证明稳定的市场状态切换。'),
+          ]}
+          missingEvidence={missingButObservable.map((body, index) => ({ key: `missing-${index}`, body: marketNarrativeCopy(body) }))}
+          dataLimitations={[
+            dataState.hasFallback
+              ? (isEnglishRoute
+                ? 'Some modules are delayed, cached, or partial and must not be treated as live authority.'
+                : '部分模块为延迟、缓存或部分可用，不能当作实时权威。')
+              : null,
+            dataState.staleCount > 0
+              ? (isEnglishRoute
+                ? 'Stale timestamps limit how far the current observation can be extended.'
+                : '过期时间戳限制当前观察可延伸的范围。')
+              : null,
+            dataState.hasUnavailable
+              ? (isEnglishRoute
+                ? 'Unavailable coverage leaves cross-asset confirmation incomplete.'
+                : '不可用覆盖使跨资产确认不完整。')
+              : null,
+          ].filter(Boolean).map((body, index) => ({ key: `data-limit-${index}`, body: body as string }))}
+          modelLimitations={[
+            isEnglishRoute
+              ? 'Regime and temperature labels are observation readiness signals, not scored recommendations.'
+              : '状态与温度标签是观察就绪信号，不是评分化推荐。',
+          ]}
+        />
+
+        <div data-testid="market-overview-quick-actions" className="min-w-0">
+          <NextResearchAction
+            density="research"
+            locale={researchLocale}
+            compact
+            data-testid="market-overview-next-research-action"
+            title={isEnglishRoute ? 'Next research step' : '下一步研究'}
+            steps={researchSteps}
+          />
+        </div>
+
+        <p className="text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+          {isEnglishRoute ? 'Research observation, not investment advice.' : '研究观察，不构成投资建议。'}
+        </p>
       </div>
-      <p className="mt-3 text-[11px] leading-5 text-white/38">
-        {isEnglishRoute ? 'Research observation, not investment advice.' : '研究观察，不构成投资建议。'}
-      </p>
     </section>
   );
 };
@@ -1138,25 +1364,25 @@ const MarketRegimeSynthesisResearchBlock: React.FC<{
     <section
       data-testid="market-regime-synthesis-research-block"
       data-market-research-flow="regime-summary"
-      className="mt-4 min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3"
+      className="mt-4 min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-3"
     >
       <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-medium text-white/48">市场状态综合</p>
-          <p className="mt-1 text-sm font-semibold leading-5 text-white/90">{view.title}</p>
-          <p className="mt-1 max-w-3xl text-[11px] leading-5 text-white/56">{view.summary}</p>
+          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">市场状态综合</p>
+          <p className="mt-1 text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">{view.title}</p>
+          <p className="mt-1 max-w-3xl text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{view.summary}</p>
         </div>
         <div className="flex min-w-0 flex-wrap gap-1.5 lg:max-w-[46%] lg:justify-end">
           <TerminalChip variant={view.stateChipVariant} className="px-2 py-1 text-[10px] font-semibold">
             {view.postureLabel || view.stateChipLabel}
           </TerminalChip>
           <TerminalChip variant="neutral" className="px-2 py-1 text-[10px] font-semibold">
-            <span className="text-white/36">置信上限</span>
+            <span className="text-[color:var(--wolfy-text-muted)]">置信上限</span>
             <span>{[view.confidenceCapLabel, view.confidenceCapValueText].filter(Boolean).join(' · ') || view.confidenceLabel}</span>
           </TerminalChip>
           {view.freshnessLabel ? (
             <TerminalChip variant="neutral" className="px-2 py-1 text-[10px] font-semibold">
-              <span className="text-white/36">时效</span>
+              <span className="text-[color:var(--wolfy-text-muted)]">时效</span>
               <span>{view.freshnessLabel}</span>
             </TerminalChip>
           ) : null}
@@ -1165,7 +1391,7 @@ const MarketRegimeSynthesisResearchBlock: React.FC<{
 
       {view.evidenceFamilies?.length ? (
         <div className="mt-3 min-w-0">
-          <p className="text-[11px] font-medium text-white/48">证据家族</p>
+          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">证据家族</p>
           <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
             {view.evidenceFamilies.slice(0, 5).map((family) => (
               <TerminalChip
@@ -1174,8 +1400,8 @@ const MarketRegimeSynthesisResearchBlock: React.FC<{
                 className="px-2 py-1 text-[10px] font-semibold"
               >
                 <span>{family.label}</span>
-                <span className="text-white/38">{family.stateLabel}</span>
-                {family.freshnessLabel ? <span className="text-white/32">{family.freshnessLabel}</span> : null}
+                <span className="text-[color:var(--wolfy-text-muted)]">{family.stateLabel}</span>
+                {family.freshnessLabel ? <span className="text-[color:var(--wolfy-text-muted)]">{family.freshnessLabel}</span> : null}
               </TerminalChip>
             ))}
           </div>
@@ -1206,19 +1432,19 @@ const MarketRegimeSynthesisResearchBlock: React.FC<{
         />
       </div>
 
-      <div className="mt-3 min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2.5">
-        <p className="text-[11px] font-medium text-white/48">下一步研究</p>
+      <div className="mt-3 min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-2.5">
+        <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">下一步研究</p>
         <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
           {nextSteps.length ? nextSteps.map((step) => (
             <span
               key={step.key}
-              className="max-w-full rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[11px] leading-5 text-white/60"
+              className="max-w-full rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-2 py-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]"
             >
-              <span className="font-semibold text-white/78">{step.label}</span>
-              {step.meta ? <span className="text-white/42"> · {step.meta}</span> : null}
+              <span className="font-semibold text-[color:var(--wolfy-text-secondary)]">{step.label}</span>
+              {step.meta ? <span className="text-[color:var(--wolfy-text-muted)]"> · {step.meta}</span> : null}
             </span>
           )) : (
-            <span className="text-[11px] leading-5 text-white/38">继续观察同一证据家族是否延续确认</span>
+            <span className="text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">继续观察同一证据家族是否延续确认</span>
           )}
         </div>
       </div>
@@ -1243,7 +1469,7 @@ const MarketOverviewDataNotesDisclosure: React.FC<{
     data-testid="market-overview-evidence-disclosure"
     title="数据说明"
     summary="更新时效、证据、风险与下一步观察默认折叠"
-    className="mt-3 bg-black/10"
+    className="mt-3 bg-[color:var(--wolfy-surface-input)]"
   >
     {decisionChips.length ? (
       <div data-testid="market-overview-decision-chip-details" className="mt-3 flex min-w-0 flex-wrap gap-2">
@@ -1253,7 +1479,7 @@ const MarketOverviewDataNotesDisclosure: React.FC<{
             variant={chip.variant}
             className="px-2.5 py-1 text-[10px]"
           >
-            <span className="text-white/36">{chip.label}</span>
+            <span className="text-[color:var(--wolfy-text-muted)]">{chip.label}</span>
             <span className="tracking-normal">{chip.value}</span>
           </TerminalChip>
         ))}
@@ -1280,18 +1506,18 @@ const MarketOverviewDataNotesDisclosure: React.FC<{
       />
     </div>
 
-    <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/10 p-3">
-      <p className="text-[11px] font-medium text-white/48">下一步观察</p>
+    <div className="mt-4 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-3">
+      <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">下一步观察</p>
       <div
         data-testid="market-decision-semantics-watch-next"
-        className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-[11px] leading-5 text-white/60"
+        className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]"
       >
         {watchNext.length ? watchNext.map((item) => (
-          <span key={item.key} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1">
-            <span className="font-semibold text-white/78">{item.label}</span>
-            {item.meta ? <span className="text-white/42"> · {item.meta}</span> : null}
+          <span key={item.key} className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-2 py-1">
+            <span className="font-semibold text-[color:var(--wolfy-text-secondary)]">{item.label}</span>
+            {item.meta ? <span className="text-[color:var(--wolfy-text-muted)]"> · {item.meta}</span> : null}
           </span>
-        )) : <span className="text-white/34">等待下一项可验证信号</span>}
+        )) : <span className="text-[color:var(--wolfy-text-muted)]">等待下一项可验证信号</span>}
       </div>
     </div>
   </TerminalDisclosure>
@@ -1358,11 +1584,11 @@ const MarketDecisionSemanticsStrip: React.FC<{
       data-testid="market-decision-semantics-strip"
       data-market-research-flow="research-workbench"
       className={cn(
-        'relative overflow-visible border-t border-[color:var(--wolfy-divider)] bg-white/[0.018] p-3 md:px-4',
+        'relative overflow-visible border-t border-[color:var(--wolfy-divider)] bg-[color:var(--wolfy-surface-input)] p-3 md:px-4',
         view?.insufficient ? 'opacity-85' : '',
       )}
     >
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-cyan-400/0 via-cyan-200/45 to-sky-400/0" aria-hidden="true" />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[color:var(--wolfy-divider)] to-transparent" aria-hidden="true" />
       <div className="min-w-0">
         <MarketOverviewConclusionLayer
           testId="market-overview-decision-readiness"
@@ -1397,7 +1623,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
             data-testid="market-decision-debug-details"
             title="技术细节"
             summary="管理员模式下可查看更细的方向可用性与数据状态"
-            className="mt-3 bg-black/10"
+            className="mt-3 bg-[color:var(--wolfy-surface-input)]"
           >
             {readinessSummary.state !== 'ready' ? (
               <MarketOverviewSetupPath testId="market-overview-setup-path" />
@@ -1426,10 +1652,10 @@ const MarketDecisionDebugLoadingFallback: React.FC = () => (
     data-testid="market-decision-debug-loading"
     aria-live="polite"
     aria-busy="true"
-    className="block rounded-lg border border-white/[0.06] bg-black/10 p-3"
+    className="block rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-3"
   >
-    <p className="text-[11px] font-semibold text-white/72">正在加载技术细节</p>
-    <p className="mt-1 text-[11px] leading-5 text-white/42">
+    <p className="text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)]">正在加载技术细节</p>
+    <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
       保留当前方向摘要，补充可用性与数据状态。
     </p>
   </output>
@@ -1448,10 +1674,10 @@ const MarketOverviewCategoryControls: React.FC<{
       data-testid="market-overview-category-tabs"
       data-selector-position="static-safe"
       data-mobile-order="controls"
-      className="flex w-full min-w-0 flex-col gap-2 overflow-visible rounded-xl border border-white/8 bg-white/[0.02] p-2 backdrop-blur-md md:flex-row md:items-center md:justify-between"
+      className="flex w-full min-w-0 flex-col gap-2 overflow-visible rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-2 backdrop-blur-md md:flex-row md:items-center md:justify-between"
     >
       <div className="flex w-full min-w-0 items-center gap-2 overflow-visible md:w-auto">
-        <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[10px] font-semibold text-white/42">
+        <span className="shrink-0 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-2 py-1 text-[10px] font-semibold text-[color:var(--wolfy-text-muted)]">
           筛选
         </span>
         <div className="ui-scroll-x-quiet min-w-0 max-w-full overflow-x-auto overscroll-x-contain p-1 scroll-px-1">
@@ -1463,8 +1689,8 @@ const MarketOverviewCategoryControls: React.FC<{
                 aria-pressed={activeCategory === tab.key}
                 className={`ui-truncate scroll-m-3 shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] ${
                   activeCategory === tab.key
-                    ? 'bg-white/10 text-white shadow-sm'
-                    : 'bg-transparent text-white/45 hover:text-white/75'
+                    ? 'bg-[color:var(--wolfy-surface-input)] text-[color:var(--wolfy-text-primary)] shadow-sm'
+                    : 'bg-transparent text-[color:var(--wolfy-text-muted)] hover:text-[color:var(--wolfy-text-secondary)]'
                 }`}
                 onClick={() => onCategoryChange(tab.key)}
               >
@@ -1480,7 +1706,7 @@ const MarketOverviewCategoryControls: React.FC<{
         aria-label={exportLabel}
         aria-live="polite"
         disabled={exportDisabled}
-        className="scroll-m-3 w-fit rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] disabled:cursor-not-allowed disabled:border-white/[0.05] disabled:bg-white/[0.015] disabled:text-white/34 disabled:hover:bg-white/[0.015] disabled:hover:text-white/34"
+        className="scroll-m-3 w-fit rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-2 text-xs font-semibold text-[color:var(--wolfy-text-muted)] transition hover:bg-[color:var(--wolfy-surface-input)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] disabled:cursor-not-allowed disabled:border-[color:var(--wolfy-border-subtle)] disabled:bg-[color:var(--wolfy-surface-input)] disabled:text-[color:var(--wolfy-text-muted)] disabled:hover:bg-[color:var(--wolfy-surface-input)] disabled:hover:text-[color:var(--wolfy-text-muted)]"
         onClick={onExportSummary}
       >
         {exportLabel}
