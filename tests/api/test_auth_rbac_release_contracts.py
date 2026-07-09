@@ -65,6 +65,17 @@ FORBIDDEN_ERROR_MARKERS = (
     "provider_payload",
 )
 
+
+def _safe_error(error: str, message: str, status: int) -> dict[str, object]:
+    return {
+        "error": error,
+        "code": error,
+        "message": message,
+        "status": status,
+        "reason": error,
+        "consumerSafeMessage": message,
+    }
+
 PRIVATE_SURFACES = (
     ("GET", "/api/v1/system/config"),
     ("GET", "/api/v1/portfolio/accounts"),
@@ -360,7 +371,7 @@ def test_unauthenticated_users_cannot_access_private_api_surfaces(auth_release_c
 
     assert [response.status_code for response in responses] == [401] * len(PRIVATE_SURFACES)
     for response in responses:
-        assert response.json() == {"error": "unauthorized", "message": "Login required"}
+        assert response.json() == _safe_error("unauthorized", "Login required", 401)
         _assert_public_error_safe(response.json(), dict(response.headers))
 
 
@@ -395,7 +406,7 @@ def test_anonymous_denial_matrix_matches_sensitive_route_inventory(auth_release_
         surface[0]: 401 for surface in ANONYMOUS_DENIAL_MATRIX_SURFACES
     }
     for response in responses.values():
-        assert response.json() == {"error": "unauthorized", "message": "Login required"}
+        assert response.json() == _safe_error("unauthorized", "Login required", 401)
         _assert_public_error_safe(response.json(), dict(response.headers))
 
 

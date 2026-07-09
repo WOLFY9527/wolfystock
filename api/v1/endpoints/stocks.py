@@ -578,7 +578,7 @@ def get_stock_quote(
         return StockQuote(
             stock_code=result.get("stock_code", stock_code),
             stock_name=result.get("stock_name"),
-            current_price=result.get("current_price", 0.0),
+            current_price=result.get("current_price"),
             change=result.get("change"),
             change_percent=result.get("change_percent"),
             open=result.get("open"),
@@ -679,13 +679,13 @@ def get_stock_intraday(
         )
     except Exception as e:
         logger.error(f"获取日内行情失败: {e}", exc_info=True)
-        raise HTTPException(
+        raise safe_api_error(
             status_code=500,
-            detail={
-                "error": "internal_error",
-                "message": f"获取日内行情失败: {str(e)}",
-            },
-        )
+            error="internal_error",
+            message="获取日内行情失败",
+            retryable=True,
+            fallback_message="获取日内行情失败",
+        ) from e
 
 
 @router.get(
@@ -764,10 +764,10 @@ def get_stock_history(
         )
     except Exception as e:
         logger.error(f"获取历史行情失败: {e}", exc_info=True)
-        raise HTTPException(
+        raise safe_api_error(
             status_code=500,
-            detail={
-                "error": "internal_error",
-                "message": f"获取历史行情失败: {str(e)}"
-            }
-        )
+            error="internal_error",
+            message="获取历史行情失败",
+            retryable=True,
+            fallback_message="获取历史行情失败",
+        ) from e

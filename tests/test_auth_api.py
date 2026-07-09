@@ -909,6 +909,12 @@ class AuthApiTestCase(unittest.TestCase):
             response = asyncio.run(middleware.dispatch(request, AsyncMock(return_value=Response(status_code=200))))
 
         self.assertEqual(response.status_code, 401)
+        body = self._json_response_body(response)
+        self.assertEqual(body["error"], "unauthorized")
+        self.assertEqual(body["code"], "unauthorized")
+        self.assertEqual(body["reason"], "unauthorized")
+        self.assertEqual(body["status"], 401)
+        self.assertEqual(body["consumerSafeMessage"], "Login required")
 
     def test_protected_api_options_preflight_reaches_cors_without_session(self) -> None:
         scope = {

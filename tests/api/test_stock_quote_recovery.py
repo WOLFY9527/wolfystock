@@ -16,6 +16,23 @@ class _NoQuoteAdapter:
         return None
 
 
+class _QuoteWithoutPriceService:
+    def get_realtime_quote(self, stock_code: str):
+        return {
+            "stock_code": stock_code,
+            "stock_name": f"{stock_code} Inc.",
+            "source": "Quote unavailable",
+            "freshness": "unavailable",
+            "isUnavailable": True,
+            "availabilityState": "missing",
+            "providerState": "provider_missing",
+            "missingRequirements": ["quote_snapshot_missing"],
+            "unavailableReason": "quote_snapshot_missing",
+            "quoteReadiness": {"consumerSafe": True},
+            "sourceConfidence": {"source": "unavailable"},
+        }
+
+
 def _client() -> TestClient:
     app = FastAPI()
     app.include_router(stocks.router, prefix="/api/v1/stocks")
@@ -48,6 +65,19 @@ def test_starter_quote_endpoint_returns_structured_unavailable_instead_of_raw_40
             assert "quote_snapshot_missing" in payload["missingRequirements"]
             assert payload["quoteReadiness"]["consumerSafe"] is True
             assert payload["sourceConfidence"]["source"] == "unavailable"
+
+
+def test_quote_endpoint_preserves_missing_price_as_null_not_false_zero() -> None:
+    with patch("api.v1.endpoints.stocks.StockService", return_value=_QuoteWithoutPriceService()):
+        response = _client().get("/api/v1/stocks/AAPL/quote")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stock_code"] == "AAPL"
+    assert payload.get("current_price") is None
+    assert payload["isUnavailable"] is True
+    assert payload["availabilityState"] == "missing"
+    assert payload["unavailableReason"] == "quote_snapshot_missing"
 
 
 def test_starter_quote_endpoint_reads_real_local_quote_snapshot_with_source_and_freshness(tmp_path, monkeypatch) -> None:

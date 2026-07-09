@@ -32,6 +32,7 @@ from sqlalchemy import text
 
 from api.deps import resolve_current_user
 from api.v1 import api_v1_router
+from api.v1.errors import build_safe_error_payload
 from api.middlewares.auth import add_auth_middleware
 from api.middlewares.error_handler import add_error_handlers
 from api.security_headers import apply_security_headers
@@ -92,7 +93,11 @@ def _docs_auth_error_response(request: Request, *, status_code: int, error: str,
     return apply_security_headers(
         JSONResponse(
             status_code=status_code,
-            content={"error": error, "message": message},
+            content=build_safe_error_payload(
+                error=error,
+                message=message,
+                status_code=status_code,
+            ),
         ),
         request,
     )
