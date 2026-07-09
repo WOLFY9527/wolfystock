@@ -738,6 +738,10 @@ def test_scenario_baseline_artifact_preserves_readiness_fields(tmp_path: Path) -
     assert projected["driverInputs"]["missingDriverKeys"] == ["eventCatalyst"]
     assert projected["evidenceCompleteness"] == {"state": "partial", "gaps": ["eventCatalyst"]}
     assert artifact["scenarioBaselineEvidence"]["affectedDriverKeys"] == ["eventCatalyst"]
+    assert artifact["scenarioBaselineEvidence"]["diagnosticOnly"] is True
+    assert artifact["executionBoundary"]["noDataMutation"] is True
+    assert artifact["executionBoundary"]["noProviderCalls"] is True
+    assert artifact["executionBoundary"]["noNetworkBehaviorChanged"] is True
 
 
 def test_scenario_baseline_artifact_output_path_is_deterministic(tmp_path: Path) -> None:
