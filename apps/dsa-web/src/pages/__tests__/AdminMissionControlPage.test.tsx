@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminMissionControlPage from '../AdminMissionControlPage';
 
@@ -84,6 +85,14 @@ const payload = {
   },
 };
 
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <AdminMissionControlPage />
+    </MemoryRouter>,
+  );
+}
+
 describe('AdminMissionControlPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -91,7 +100,7 @@ describe('AdminMissionControlPage', () => {
   });
 
   it('renders the mission control readiness overview for all required domains', async () => {
-    render(<AdminMissionControlPage />);
+    renderPage();
 
     expect(await screen.findByText('运维任务总控')).toBeInTheDocument();
     expect(getSnapshot).toHaveBeenCalledTimes(1);
@@ -106,8 +115,26 @@ describe('AdminMissionControlPage', () => {
     });
   });
 
+  it('surfaces operator state before domain diagnostics', async () => {
+    renderPage();
+
+    const stateBand = await screen.findByTestId('admin-mission-state-band');
+    const domainSection = screen.getByTestId('admin-mission-domain-section');
+    const stateTop = stateBand.getBoundingClientRect().top;
+    const domainTop = domainSection.getBoundingClientRect().top;
+    expect(stateTop).toBeLessThanOrEqual(domainTop);
+
+    expect(within(stateBand).getByTestId('admin-mission-primary-state')).toHaveTextContent(/NO-GO/);
+    expect(within(stateBand).getByTestId('admin-mission-ownership')).toBeInTheDocument();
+    expect(within(stateBand).getByTestId('admin-mission-evidence-availability')).toBeInTheDocument();
+    expect(within(stateBand).getByTestId('admin-mission-primary-action-link')).toHaveAttribute(
+      'href',
+      '/zh/admin/evidence-workflow?ref=mission_control',
+    );
+  });
+
   it('separates foundation, evidence tooling, missing evidence, approval, and NO-GO labels', async () => {
-    render(<AdminMissionControlPage />);
+    renderPage();
 
     const firstCard = (await screen.findAllByTestId('admin-mission-domain-card'))[0];
     expect(within(firstCard).getByText('基础已落地')).toBeInTheDocument();
@@ -118,7 +145,7 @@ describe('AdminMissionControlPage', () => {
   });
 
   it('shows read-only system posture without mutation or approval controls', async () => {
-    render(<AdminMissionControlPage />);
+    renderPage();
 
     const metrics = await screen.findByTestId('admin-mission-summary-metrics');
     expect(within(metrics).getByText('覆盖域')).toBeInTheDocument();
@@ -163,16 +190,19 @@ describe('AdminMissionControlPage', () => {
       },
     });
 
-    render(<AdminMissionControlPage />);
+    renderPage();
 
-    expect(await screen.findByText('Mission Control prototype 未启用')).toBeInTheDocument();
+    expect(await screen.findByTestId('admin-mission-primary-state')).toHaveTextContent('Mission Control prototype 未启用');
+    expect(screen.getByTestId('admin-mission-prototype-pill')).toHaveTextContent(/Prototype gate disabled/i);
+    expect(screen.getByTestId('admin-mission-primary-action-link')).toHaveAttribute('href', '/zh/settings/system');
     expect(screen.getAllByText(/默认关闭/).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByTestId('admin-mission-domain-grid')).not.toBeInTheDocument();
     expect(screen.queryAllByTestId('admin-mission-domain-card')).toHaveLength(0);
+    expect(screen.queryByTestId('admin-mission-secondary-actions')).not.toBeInTheDocument();
   });
 
   it('renders sanitized drill-through links only to existing admin read surfaces', async () => {
-    render(<AdminMissionControlPage />);
+    renderPage();
 
     await screen.findByTestId('admin-mission-control-page');
     expect(screen.getByRole('link', { name: /查看证据工作流/i })).toHaveAttribute('href', '/zh/admin/evidence-workflow?ref=mission_control');
@@ -183,12 +213,23 @@ describe('AdminMissionControlPage', () => {
     expect(text).not.toMatch(/token|secret|payload|credential|stack trace/i);
   });
 
+  it('keeps primary action above secondary diagnostics', async () => {
+    renderPage();
+
+    const primary = await screen.findByTestId('admin-mission-primary-action');
+    const secondary = await screen.findByTestId('admin-mission-action-hierarchy');
+    expect(primary.getBoundingClientRect().top).toBeLessThanOrEqual(secondary.getBoundingClientRect().top);
+    expect(within(primary).getByTestId('admin-mission-primary-action-link')).toBeInTheDocument();
+    expect(within(secondary).getByTestId('admin-mission-secondary-actions')).toBeInTheDocument();
+  });
+
   it('shows a sanitized error state when the projection fails', async () => {
     getSnapshot.mockRejectedValueOnce(new Error('raw token stack trace should not render'));
 
-    render(<AdminMissionControlPage />);
+    renderPage();
 
     await waitFor(() => expect(screen.getByText('读取 Mission Control 失败')).toBeInTheDocument());
     expect(screen.getByTestId('admin-mission-control-page')).not.toHaveTextContent('raw token stack trace');
+    expect(screen.getByTestId('admin-mission-primary-state')).toHaveTextContent(/不可用/);
   });
 });
