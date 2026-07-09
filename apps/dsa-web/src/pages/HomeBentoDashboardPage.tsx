@@ -7568,67 +7568,28 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             data-testid="member-home-market-brief"
             data-research-density="editorial"
           >
-            <div className="flex w-full min-w-0 flex-col gap-3" data-testid="member-home-daily-research-stack">
+            <div className="flex w-full min-w-0 flex-col gap-2.5" data-testid="member-home-daily-research-stack">
               {omnibarModule}
               {(() => {
                 const researchLocale = locale === 'en' ? 'en' : 'zh';
                 const isEnglish = locale === 'en';
-                const knownFacts: ResearchObservationFact[] = [
-                  {
-                    key: 'regime',
-                    label: isEnglish ? 'Regime' : '状态',
-                    body: memberMarketBrief.regimeDetail,
-                  },
-                  ...memberMarketBrief.evidence.slice(0, 2).map((item) => ({
-                    key: item.key,
-                    label: item.label,
-                    body: item.detail ? `${item.value} · ${item.detail}` : item.value,
-                  })),
-                ].filter((item) => Boolean(item.body));
-                const changingFacts: ResearchObservationFact[] = homeDailyResearch.watchChanges.map((item) => ({
-                  key: item.key,
-                  label: item.label,
-                  body: item.detail ? `${item.value} · ${item.detail}` : item.value,
-                }));
-                const unknownFacts: ResearchObservationFact[] = [
-                  {
-                    key: 'reliability',
-                    label: isEnglish ? 'Reliability' : '可靠性',
-                    body: homeDailyResearch.reliabilityDetail,
-                  },
-                  ...(homeDailyResearch.queue.length === 0
-                    ? [{
-                        key: 'queue-gap',
-                        label: isEnglish ? 'Queue gap' : '队列缺口',
-                        body: homeDailyResearch.queueEmptyDetail,
-                      }]
-                    : []),
-                ];
-                const contradictoryFacts: ResearchObservationFact[] = memberMarketBrief.regimeLabel === 'Neutral' || memberMarketBrief.regimeLabel === '中性'
-                  ? [{
-                      key: 'mixed',
-                      label: isEnglish ? 'Mixed tape' : '线索分化',
-                      body: isEnglish
-                        ? 'Signals are mixed; keep the first read balanced and evidence-bounded.'
-                        : '多空线索分化，首读保持中性与证据边界。',
-                    }]
-                  : [];
+                // Compact briefing: no ObservationHead fact wall (avoids restating queue/changes/ledger).
                 const reliabilityTone: ResearchQualityFacet['tone'] =
                   /partial|limited|部分|受限|updating|更新/i.test(homeDailyResearch.reliabilityLabel)
                     ? 'caution'
                     : /unavailable|不可用|blocking|阻断/i.test(homeDailyResearch.reliabilityLabel)
                       ? 'danger'
                       : 'success';
+                // One primary facet only in the strip — ledger domains remain in data-ledger below.
                 const qualityFacets: ResearchQualityFacet[] = [
                   {
                     key: 'reliability',
                     kind: reliabilityTone === 'danger' ? 'unavailable' : reliabilityTone === 'caution' ? 'partial' : 'freshness',
                     label: isEnglish ? 'Reliability / freshness' : '可靠性 / 新鲜度',
                     value: homeDailyResearch.reliabilityLabel,
-                    detail: homeDailyResearch.reliabilityDetail,
                     tone: reliabilityTone,
                   },
-                  ...homeDailyResearch.dataLedger.slice(0, 3).map((item) => ({
+                  ...homeDailyResearch.dataLedger.slice(0, 2).map((item) => ({
                     key: item.key,
                     kind: /delay|延迟/.test(item.value)
                       ? 'delayed' as const
@@ -7639,7 +7600,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           : 'coverage' as const,
                     label: item.label,
                     value: item.value,
-                    detail: item.detail,
                     tone: /ready|可用/.test(item.value) ? 'success' as const : 'caution' as const,
                   })),
                 ];
@@ -7658,24 +7618,54 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     key: item.key,
                     body: item.detail ? `${item.label}: ${item.value} · ${item.detail}` : `${item.label}: ${item.value}`,
                   }));
+                const primaryWatch = homeDailyResearch.watchChanges[0];
 
                 return (
                   <>
+              {/* A. Compact research-state briefing — observation path only (no quality wall) */}
               <section
-                className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'overflow-hidden')}
+                className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'overflow-hidden px-4 py-3 sm:px-5')}
                 data-testid="member-home-morning-decision-note"
+                data-member-home-zone="research-state"
               >
                 <ObservationHead
                   density="editorial"
                   locale={researchLocale}
                   data-testid="member-home-observation-head"
+                  className="!border-0 !bg-transparent !p-0 !shadow-none"
                   eyebrow={isEnglish ? 'Morning Decision Note' : '晨间研究判断'}
                   title={homeDailyResearch.observation}
                   lead={(
-                    <>
-                      <span className="block font-semibold text-[color:var(--wolfy-text-primary)]">{homeDailyResearch.why}</span>
-                      <span className="mt-1 block text-[color:var(--wolfy-text-secondary)]">{homeDailyResearch.nextCheck}</span>
-                    </>
+                    // LeadText renders as <p>; keep phrasing-only children (no nested <p>/<div>).
+                    <span className="block space-y-1" data-testid="member-home-briefing-hierarchy">
+                      <span className="block text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)] sm:leading-6">
+                        <span className="mr-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
+                          {isEnglish ? 'What changed' : '发生了什么'}
+                        </span>
+                        {homeDailyResearch.why}
+                      </span>
+                      {primaryWatch ? (
+                        <span className="block text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)]">
+                          <span className="mr-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
+                            {isEnglish ? 'Signal' : '信号'}
+                          </span>
+                          {primaryWatch.label}: {primaryWatch.value}
+                          {primaryWatch.detail ? ` · ${primaryWatch.detail}` : ''}
+                        </span>
+                      ) : null}
+                      <span className="block text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)]">
+                        <span className="mr-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
+                          {isEnglish ? 'Evidence limit' : '证据边界'}
+                        </span>
+                        {homeDailyResearch.reliabilityDetail}
+                      </span>
+                      <span className="block text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)]">
+                        <span className="mr-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
+                          {isEnglish ? 'Inspect next' : '下一步检查'}
+                        </span>
+                        {homeDailyResearch.nextCheck}
+                      </span>
+                    </span>
                   )}
                   status={(
                     <div
@@ -7687,46 +7677,19 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       </span>
                     </div>
                   )}
-                  known={knownFacts}
-                  unknown={unknownFacts}
-                  changing={changingFacts}
-                  contradictory={contradictoryFacts}
                 />
-                <aside
-                  className="border-t border-[color:var(--wolfy-divider)] px-4 py-3 md:px-5"
-                  data-testid="member-home-market-reliability"
-                >
-                  <ResearchDataQualityComposition
-                    density="editorial"
-                    locale={researchLocale}
-                    compact
-                    title={isEnglish ? 'Reliability / freshness' : '可靠性 / 新鲜度'}
-                    facets={qualityFacets}
-                    statusSlot={(
-                      <ProductReadModelStatusStrip
-                        model={memberMarketBrief.productReadModel}
-                        language={locale}
-                        title={isEnglish ? 'Dashboard readiness' : 'Dashboard 就绪度'}
-                        testId="member-home-dashboard-product-read-model"
-                      />
-                    )}
-                  >
-                    <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
-                      {homeDailyResearch.reliabilityLabel}
-                    </p>
-                    <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-                      {homeDailyResearch.reliabilityDetail}
-                    </p>
-                  </ResearchDataQualityComposition>
-                </aside>
               </section>
 
+              {/* B. Material changes + research queue — primary workbench (before quality wall).
+                  Document order keeps queue before watch-changes for tests;
+                  visual order elevates material changes first on xl. */}
               <section
-                className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]"
+                className="grid min-w-0 gap-2.5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"
                 data-testid="member-home-research-sequence"
+                data-member-home-zone="queue-and-changes"
               >
                 <section
-                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-3.5 sm:px-5')}
+                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-3 sm:px-5 xl:order-2')}
                   data-testid="member-home-research-queue"
                 >
                   <div className="flex min-w-0 items-start justify-between gap-4">
@@ -7734,7 +7697,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       <MetaLabel>
                         {isEnglish ? 'Research Queue' : '研究队列'}
                       </MetaLabel>
-                      <SectionTitle as="h2" className="mt-1.5">
+                      <SectionTitle as="h2" className="mt-1">
                         {isEnglish ? 'What deserves attention' : '值得研究的线索'}
                       </SectionTitle>
                     </div>
@@ -7743,11 +7706,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     </span>
                   </div>
                   {homeDailyResearch.queue.length > 0 ? (
-                    <ul className="mt-3 divide-y divide-[color:var(--wolfy-divider)] border-t border-[color:var(--wolfy-divider)]">
+                    <ul className="mt-2.5 divide-y divide-[color:var(--wolfy-divider)] border-t border-[color:var(--wolfy-divider)]">
                       {homeDailyResearch.queue.map((item, index) => (
                         <li
                           key={`${item.title}-${index}`}
-                          className="min-w-0 py-3"
+                          className="min-w-0 py-2.5"
                           data-testid={`member-home-research-queue-item-${index}`}
                         >
                           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -7769,14 +7732,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     </ul>
                   ) : (
                     <div
-                      className="mt-3 min-w-0 border-t border-dashed border-[color:var(--wolfy-divider)] px-0.5 py-3"
+                      className="mt-2.5 min-w-0 border-t border-dashed border-[color:var(--wolfy-divider)] px-0.5 py-2.5"
                       data-testid="member-home-research-queue-empty"
                     >
                       <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{homeDailyResearch.queueEmptyTitle}</p>
                       <p className="mt-1.5 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{homeDailyResearch.queueEmptyDetail}</p>
                     </div>
                   )}
-                  <div className="mt-3" data-testid="member-home-research-queue-action">
+                  <div className="mt-2.5" data-testid="member-home-research-queue-action">
                     <NextResearchAction
                       density="editorial"
                       locale={researchLocale}
@@ -7788,19 +7751,19 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                 </section>
 
                 <section
-                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-3.5 sm:px-5')}
+                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-3 sm:px-5 xl:order-1')}
                   data-testid="member-home-watch-changes"
                 >
                   <MetaLabel>
                     {isEnglish ? 'Watch Changes' : '观察变化'}
                   </MetaLabel>
-                  <SectionTitle as="h2" className="mt-1.5">
+                  <SectionTitle as="h2" className="mt-1">
                     {isEnglish ? 'What changed' : '发生了什么变化'}
                   </SectionTitle>
                   {homeDailyResearch.watchChanges.length > 0 ? (
-                    <ul className="mt-3 divide-y divide-[color:var(--wolfy-divider)] border-t border-[color:var(--wolfy-divider)]">
+                    <ul className="mt-2.5 divide-y divide-[color:var(--wolfy-divider)] border-t border-[color:var(--wolfy-divider)]">
                       {homeDailyResearch.watchChanges.map((item) => (
-                        <li key={item.key} className="min-w-0 py-2.5">
+                        <li key={item.key} className="min-w-0 py-2">
                           <p className="text-[11px] font-semibold text-[color:var(--wolfy-text-muted)]">{item.label}</p>
                           <p className="mt-1 text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">{item.value}</p>
                           {item.detail ? (
@@ -7810,45 +7773,79 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       ))}
                     </ul>
                   ) : (
-                    <p className="mt-3 border-t border-dashed border-[color:var(--wolfy-divider)] py-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                    <p className="mt-2.5 border-t border-dashed border-[color:var(--wolfy-divider)] py-2.5 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                       {isEnglish ? 'No meaningful watch change returned yet.' : '暂未返回有意义的变化线索。'}
                     </p>
                   )}
                 </section>
               </section>
 
+              {/* C. Evidence quality — subordinate strip after research state + queue, not a first-fold wall */}
+              <aside
+                className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'px-3.5 py-2 sm:px-4')}
+                data-testid="member-home-market-reliability"
+                data-member-home-zone="evidence-quality"
+              >
+                <ResearchDataQualityComposition
+                  density="editorial"
+                  locale={researchLocale}
+                  compact
+                  className="gap-1.5"
+                  title={isEnglish ? 'Reliability / freshness' : '可靠性 / 新鲜度'}
+                  facets={qualityFacets}
+                  statusSlot={(
+                    <ProductReadModelStatusStrip
+                      model={memberMarketBrief.productReadModel}
+                      language={locale}
+                      title={isEnglish ? 'Dashboard readiness' : 'Dashboard 就绪度'}
+                      testId="member-home-dashboard-product-read-model"
+                      className="!px-2.5 !py-2"
+                    />
+                  )}
+                >
+                  <p className="text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)]">
+                    <span className="mr-1.5 font-semibold text-[color:var(--wolfy-text-primary)]">
+                      {homeDailyResearch.reliabilityLabel}
+                    </span>
+                    {homeDailyResearch.reliabilityDetail}
+                  </p>
+                </ResearchDataQualityComposition>
+              </aside>
+
+              {/* D. Supporting evidence + market path + workflow continuity (subordinate) */}
               <section
-                className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+                className="grid min-w-0 gap-2.5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]"
                 data-testid="member-home-evidence-limits"
+                data-member-home-zone="supporting-evidence"
               >
                 <section
-                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-3.5 sm:px-5')}
+                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-3 sm:px-5')}
                   data-testid="member-home-index-path"
                 >
-                  <div className="flex min-w-0 items-start justify-between gap-4">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
                       <MetaLabel>
                         {isEnglish ? 'Market / Index Path' : '市场 / 指数路径'}
                       </MetaLabel>
-                      <SectionTitle as="h2" className="mt-1.5">
+                      <SectionTitle as="h2" className="mt-1">
                         {isEnglish ? 'What the tape says first' : '先看市场路径'}
                       </SectionTitle>
                     </div>
                     <Link
                       to={memberMarketBrief.actions[0]?.href || '#'}
-                      className="shrink-0 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+                      className="shrink-0 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-border-focus)]"
                       data-testid="member-home-index-path-action"
                     >
                       {memberMarketBrief.actions[0]?.label || (isEnglish ? 'Open Market Research' : '查看市场研究')}
                     </Link>
                   </div>
                   {homeDailyResearch.indexPath.length > 0 ? (
-                    <div className="mt-3 grid min-w-0 gap-0 overflow-hidden rounded-[8px] border border-[color:var(--wolfy-divider)] sm:grid-cols-2">
+                    <div className="mt-2.5 grid min-w-0 gap-0 overflow-hidden rounded-[8px] border border-[color:var(--wolfy-divider)] sm:grid-cols-2">
                       {homeDailyResearch.indexPath.map((metric, index) => (
                         <div
                           key={metric.key}
                           className={cn(
-                            'min-w-0 border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2.5',
+                            'min-w-0 border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2',
                             index % 2 === 0 && 'sm:border-r',
                             index < homeDailyResearch.indexPath.length - (homeDailyResearch.indexPath.length % 2 === 0 ? 2 : 1) && 'border-b',
                             homeDailyResearch.indexPath.length % 2 === 1 && index === homeDailyResearch.indexPath.length - 1 && 'sm:col-span-2',
@@ -7861,8 +7858,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                               <span className="shrink-0 text-[10px] font-medium text-[color:var(--wolfy-text-muted)]">{metric.statusLabel}</span>
                             ) : null}
                           </div>
-                          <div className="mt-1.5 flex min-w-0 items-end justify-between gap-3">
-                            <strong className="truncate font-mono text-base font-semibold text-[color:var(--wolfy-text-primary)]">{metric.value}</strong>
+                          <div className="mt-1 flex min-w-0 items-end justify-between gap-3">
+                            <strong className="truncate font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)] sm:text-base">{metric.value}</strong>
                             {metric.change ? (
                               <span className="shrink-0 text-xs font-semibold text-[color:var(--wolfy-text-secondary)]">{metric.change}</span>
                             ) : null}
@@ -7871,25 +7868,25 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-3 border-t border-dashed border-[color:var(--wolfy-divider)] py-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                    <p className="mt-2.5 border-t border-dashed border-[color:var(--wolfy-divider)] py-2.5 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                       {isEnglish ? 'No usable index path returned yet.' : '暂未返回可用指数路径。'}
                     </p>
                   )}
                 </section>
 
                 <section
-                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-3.5 sm:px-5')}
+                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-3 sm:px-5')}
                   data-testid="member-home-data-ledger"
                 >
                   <MetaLabel>
                     {isEnglish ? 'Data Ledger' : '数据账本'}
                   </MetaLabel>
-                  <SectionTitle as="h2" className="mt-1.5">
+                  <SectionTitle as="h2" className="mt-1">
                     {isEnglish ? 'Evidence and limitations' : '证据与限制'}
                   </SectionTitle>
-                  <ul className="mt-3 divide-y divide-[color:var(--wolfy-divider)] border-t border-[color:var(--wolfy-divider)]">
+                  <ul className="mt-2.5 divide-y divide-[color:var(--wolfy-divider)] border-t border-[color:var(--wolfy-divider)]">
                     {homeDailyResearch.dataLedger.map((item) => (
-                      <li key={item.key} className="min-w-0 py-2.5">
+                      <li key={item.key} className="min-w-0 py-2">
                         <div className="flex min-w-0 items-center justify-between gap-3">
                           <p className="truncate text-[11px] font-semibold text-[color:var(--wolfy-text-muted)]">{item.label}</p>
                           <span className="shrink-0 text-xs font-semibold text-[color:var(--wolfy-text-primary)]">{item.value}</span>
@@ -7900,7 +7897,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       </li>
                     ))}
                   </ul>
-                  <div className="mt-3">
+                  <div className="mt-2.5">
                     <ResearchRiskLimits
                       density="editorial"
                       locale={researchLocale}
@@ -7910,13 +7907,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       missingEvidence={homeDailyResearch.queue.length === 0 ? [{ key: 'queue', body: homeDailyResearch.queueEmptyDetail }] : undefined}
                     />
                   </div>
-                  <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-3" data-testid="member-home-market-actions">
+                  {/* Workflow continuity: existing Radar / Market / Scanner paths only */}
+                  <div className="mt-2.5 grid min-w-0 gap-2 sm:grid-cols-3" data-testid="member-home-market-actions">
                     {memberMarketBrief.actions.slice(0, 3).map((action) => (
                       <Link
                         key={action.key}
                         to={action.href}
                         className={cn(
-                          'inline-flex min-h-10 min-w-0 items-center justify-center rounded-lg border px-4 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-border-focus)]',
+                          'inline-flex min-h-10 min-w-0 items-center justify-center rounded-lg border px-3 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-border-focus)]',
                           action.primary
                             ? 'theme-primary-action border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] text-[color:var(--theme-button-primary-text)] hover:bg-[var(--sage)]'
                             : 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)]',
@@ -7927,7 +7925,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       </Link>
                     ))}
                   </div>
-                  <p data-testid="member-home-market-safety" className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+                  <p data-testid="member-home-market-safety" className="mt-2.5 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                     {memberMarketBrief.safety}
                   </p>
                 </section>
