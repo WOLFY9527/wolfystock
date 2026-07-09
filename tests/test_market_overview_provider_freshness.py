@@ -196,6 +196,47 @@ def test_spy_proxy_for_spx_is_explicit_and_never_official_index() -> None:
     assert "official" not in proxy_item["label"].lower()
 
 
+def test_vix_proxy_item_projects_consistent_authority_and_freshness() -> None:
+    service = MarketOverviewService()
+    now = datetime.now(CN_TZ).isoformat(timespec="seconds")
+
+    proxy_item = service._with_item_meta(
+        {
+            "symbol": "VIX",
+            "label": "VIX",
+            "value": 17.1,
+            "source": "yfinance",
+            "sourceId": "yfinance:^VIX",
+            "sourceType": "public_proxy",
+            "asOf": now,
+            "updatedAt": now,
+            "freshness": "fresh",
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+        },
+        "volatility",
+        {"source": "yfinance", "sourceType": "public_proxy", "asOf": now, "updatedAt": now},
+    )
+
+    freshness = proxy_item["providerFreshness"]
+    snapshot = proxy_item["volatilityAuthoritySnapshot"]
+
+    assert proxy_item["freshness"] == "delayed"
+    assert proxy_item["freshnessState"] == "delayed"
+    assert freshness["state"] == "delayed"
+    assert freshness["isProxy"] is True
+    assert freshness["sourceConfidence"] == "proxy"
+    assert proxy_item["sourceAuthorityState"] == "proxy"
+    assert proxy_item["sourceAuthorityAllowed"] is False
+    assert proxy_item["scoreContributionAllowed"] is False
+    assert proxy_item["consumerEligibility"]["marketOverview"] is True
+    assert proxy_item["consumerEligibility"]["liquidity"] is False
+    assert proxy_item["scoreAuthorityEligible"] is False
+    assert snapshot["authorityState"] == "proxy"
+    assert snapshot["freshnessState"] == "delayed"
+    assert snapshot["scoreEligibility"]["allowed"] is False
+
+
 def test_mixed_provider_bundle_uses_worst_truthful_freshness_without_generic_missing() -> None:
     service = MarketOverviewService()
     now = datetime.now(CN_TZ).isoformat(timespec="seconds")
