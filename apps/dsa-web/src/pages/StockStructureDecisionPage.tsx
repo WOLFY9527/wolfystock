@@ -442,11 +442,26 @@ function sumExpirationMetric(
   return structure.expirationSummaries.reduce((total, row) => total + (row[key] || 0), 0);
 }
 
+/** DESIGN.md show / compact / hide for optional evidence modules. */
+type ModuleDensity = 'full' | 'compact' | 'hide';
+
+function resolveModuleDensity(meaningfulFieldCount: number): ModuleDensity {
+  if (meaningfulFieldCount >= 3) return 'full';
+  if (meaningfulFieldCount >= 1) return 'compact';
+  return 'hide';
+}
+
+function isPlaceholderMetricValue(value: string | null | undefined, language: 'zh' | 'en'): boolean {
+  const text = String(value || '').trim();
+  if (!text) return true;
+  const missing = optionsMissingValue(language);
+  return text === missing || text === '--' || text === '—' || text === 'N/A' || text === 'n/a';
+}
+
 function buildOptionsStructureMetrics(
   structure: OptionsStructureSummary,
   language: 'zh' | 'en',
 ): OptionsStructureMetricRow[] {
-  const missing = optionsMissingValue(language);
   const gex = formatOptionsNumber(structure.totalDealerGammaExposure, language);
   const gammaFlip = structure.gammaFlipLevel.state === 'available'
     ? formatOptionsNumber(structure.gammaFlipLevel.level, language)
@@ -469,50 +484,49 @@ function buildOptionsStructureMetrics(
   const totalVolume = callVolume + putVolume;
   const hasOiVolume = totalOi > 0 || totalVolume > 0;
 
+  // Only real values — never wall empty cells with 待补 scaffolding.
   return [
-    {
+    gex ? {
       key: 'gex',
       label: 'GEX',
-      value: gex ?? missing,
-      detail: gex ? 'Dealer gamma exposure' : (language === 'en' ? 'Awaiting authorized inputs' : '等待授权输入'),
-    },
-    {
+      value: gex,
+      detail: 'Dealer gamma exposure',
+    } : null,
+    gammaFlip ? {
       key: 'gamma-flip',
       label: 'Gamma flip',
-      value: gammaFlip ?? missing,
-      detail: gammaFlip ? (language === 'en' ? 'Flip level populated' : '翻转位置已填充') : (language === 'en' ? 'Methodology evidence needed' : '方法与输入待补'),
-    },
-    {
+      value: gammaFlip,
+      detail: language === 'en' ? 'Flip level populated' : '翻转位置已填充',
+    } : null,
+    vanna ? {
       key: 'vanna',
       label: 'Vanna',
-      value: vanna ?? missing,
-      detail: vanna ? (language === 'en' ? 'Contract values summed' : '合约值汇总') : (language === 'en' ? 'Vanna not present' : 'Vanna 暂缺'),
-    },
-    {
+      value: vanna,
+      detail: language === 'en' ? 'Contract values summed' : '合约值汇总',
+    } : null,
+    charm ? {
       key: 'charm',
       label: 'Charm',
-      value: charm ?? missing,
-      detail: charm ? (language === 'en' ? 'Contract values summed' : '合约值汇总') : (language === 'en' ? 'Charm not present' : 'Charm 暂缺'),
-    },
-    {
+      value: charm,
+      detail: language === 'en' ? 'Contract values summed' : '合约值汇总',
+    } : null,
+    zeroDteValue ? {
       key: 'zero-dte',
       label: language === 'en' ? '0DTE concentration' : '0DTE 集中度',
-      value: zeroDteValue ?? missing,
+      value: zeroDteValue,
       detail: structure.zeroDte.state === 'available'
         ? (language === 'en'
           ? `${structure.zeroDte.expiration || 'nearest'} · ${structure.zeroDte.contractCount} contracts`
           : `${structure.zeroDte.expiration || '最近到期'} · ${structure.zeroDte.contractCount} 张合约`)
         : (language === 'en' ? '0DTE bucket not present' : '0DTE 桶暂缺'),
-    },
-    {
+    } : null,
+    hasOiVolume ? {
       key: 'oi-volume',
       label: language === 'en' ? 'OI / volume' : 'OI / 成交',
-      value: hasOiVolume
-        ? `${formatOptionsInteger(totalOi, language)} / ${formatOptionsInteger(totalVolume, language)}`
-        : missing,
+      value: `${formatOptionsInteger(totalOi, language)} / ${formatOptionsInteger(totalVolume, language)}`,
       detail: language === 'en' ? 'Expiration summaries' : '到期汇总',
-    },
-  ];
+    } : null,
+  ].filter((row): row is OptionsStructureMetricRow => Boolean(row));
 }
 
 function OptionsStructureSurface({
@@ -570,12 +584,18 @@ function OptionsStructureSurface({
 
   const status = optionsStructureStatusCopy(structure, language);
   const reasons = optionsStructureReasonLabels(structure, language);
-  const metrics = buildOptionsStructureMetrics(structure, language);
+  const metrics = buildOptionsStructureMetrics(structure, language)
+    .filter((metric) => !isPlaceholderMetricValue(metric.value, language));
+  const density = resolveModuleDensity(metrics.length);
+  const isCompact = density !== 'full';
 
   return (
-    <div className="p-3 md:p-4">
+    <div
+      className="p-3 md:p-4"
+      data-testid="stock-options-structure-surface"
+      data-module-density={density === 'hide' ? 'bounded-empty' : density}
+    >
       <RoughSectionCard
-        data-testid="stock-options-structure-surface"
         eyebrow={language === 'en' ? 'Options structure' : '期权结构'}
         title={language === 'en' ? 'Professional structure metrics' : '专业结构指标'}
       >
@@ -595,15 +615,33 @@ function OptionsStructureSurface({
             ))}
           </div>
         ) : null}
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3" data-testid="stock-options-structure-metrics">
-          {metrics.map((metric) => (
-            <div key={metric.key} className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-subtle)] p-3">
-              <div className="text-[11px] font-semibold uppercase tracking-normal text-[color:var(--wolfy-text-muted)]">{metric.label}</div>
-              <div className="mt-1 text-lg font-semibold text-[color:var(--wolfy-text-primary)]">{metric.value}</div>
-              <div className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{metric.detail}</div>
-            </div>
-          ))}
-        </div>
+        {density === 'hide' ? (
+          <p
+            className="mt-3 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]"
+            data-testid="stock-options-structure-metrics"
+            data-module-density="bounded-empty"
+          >
+            {language === 'en'
+              ? 'No authorized options metrics are populated yet. Empty metric cells are not shown.'
+              : '尚未填充授权期权指标。不展示空指标格。'}
+          </p>
+        ) : (
+          <div
+            className={isCompact
+              ? 'mt-3 grid gap-2 sm:grid-cols-2'
+              : 'mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3'}
+            data-testid="stock-options-structure-metrics"
+            data-module-density={density}
+          >
+            {metrics.map((metric) => (
+              <div key={metric.key} className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-subtle)] p-3">
+                <div className="text-[11px] font-semibold uppercase tracking-normal text-[color:var(--wolfy-text-muted)]">{metric.label}</div>
+                <div className="mt-1 text-lg font-semibold tabular-nums text-[color:var(--wolfy-text-primary)]">{metric.value}</div>
+                <div className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{metric.detail}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </RoughSectionCard>
     </div>
   );
@@ -1040,9 +1078,32 @@ function StockFactorEvidencePanel({
   const isEnglish = language === 'en';
   const stackRows = packet ? buildEvidenceStackRows(packet, language) : [];
   const readinessRows = stackRows.filter((row) => row.key !== 'quote' && row.key !== 'history');
+  const availableReadiness = readinessRows.filter((row) => row.bucket === 'available' || row.bucket === 'partial' || row.bucket === 'stale');
+  const meaningfulCount = scoreRows.length + availableReadiness.length;
+  const density = resolveModuleDensity(meaningfulCount);
+
+  if (density === 'hide' && !readinessRows.length) {
+    return (
+      <div
+        className="stock-factor-evidence stock-factor-evidence--bounded-empty"
+        data-testid="stock-factor-evidence-panel"
+        data-module-density="bounded-empty"
+      >
+        <p className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] px-3 py-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+          {isEnglish
+            ? 'No scored factor dimension is available for this packet.'
+            : '当前研究包没有可展示的评分因子维度。'}
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="stock-factor-evidence" data-testid="stock-factor-evidence-panel">
+    <div
+      className="stock-factor-evidence"
+      data-testid="stock-factor-evidence-panel"
+      data-module-density={density === 'hide' ? 'compact' : density}
+    >
       {scoreRows.length ? (
         <RoughSectionCard eyebrow={isEnglish ? 'Factor evidence' : '因子证据'} title={isEnglish ? 'Component evidence by relevance' : '按相关性排列的组件证据'}>
           <RoughScoreRows
@@ -1050,13 +1111,11 @@ function StockFactorEvidencePanel({
             emptyText={isEnglish ? 'No component score yet.' : '暂无组件评分。'}
           />
         </RoughSectionCard>
-      ) : (
-        <RoughSectionCard eyebrow={isEnglish ? 'Factor evidence' : '因子证据'} title={isEnglish ? 'Factor evidence unavailable' : '因子证据暂不可用'}>
-          <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-            {isEnglish ? 'No scored factor dimension is available for this packet.' : '当前研究包没有可展示的评分因子维度。'}
-          </p>
-        </RoughSectionCard>
-      )}
+      ) : density === 'compact' ? (
+        <p className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] px-3 py-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+          {isEnglish ? 'Factor scores pending; readiness state below is not treated as neutral evidence.' : '因子评分待确认；下方就绪度不按中性证据处理。'}
+        </p>
+      ) : null}
       {readinessRows.length ? (
         <RoughSectionCard eyebrow={isEnglish ? 'Data state' : '数据状态'} title={isEnglish ? 'Ready, partial, stale, unavailable' : '可用、部分、延迟、不可用'}>
           <RoughKeyValueRows
@@ -1093,26 +1152,57 @@ function StockRiskTriggersPanel({
     ...safeConsumerList(data.evidenceGaps ?? [], language),
   ].filter(Boolean) as string[]);
 
+  const sections = [
+    observedRisks.length ? {
+      key: 'observed',
+      eyebrow: isEnglish ? 'Observed risk evidence' : '已观察风险证据',
+      title: isEnglish ? 'What is already visible' : '当前已经可见',
+      items: observedRisks,
+    } : null,
+    invalidationRows.length ? {
+      key: 'invalidation',
+      eyebrow: isEnglish ? 'Invalidation context' : '失效条件',
+      title: isEnglish ? 'What would change the interpretation' : '什么会改变当前解释',
+      items: invalidationRows,
+    } : null,
+    unknownEvidence.length ? {
+      key: 'unknown',
+      eyebrow: isEnglish ? 'Unknown evidence' : '未知 / 待补证据',
+      title: isEnglish ? 'Not inferred as neutral' : '不按中性值处理',
+      items: unknownEvidence,
+    } : null,
+  ].filter(Boolean) as Array<{ key: string; eyebrow: string; title: string; items: string[] }>;
+
+  const meaningfulCount = sections.reduce((total, section) => total + section.items.length, 0);
+  const density = resolveModuleDensity(meaningfulCount);
+
+  if (!sections.length) {
+    return (
+      <div
+        className="stock-risk-triggers stock-risk-triggers--bounded-empty"
+        data-testid="stock-risk-triggers-panel"
+        data-module-density="bounded-empty"
+      >
+        <p className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] px-3 py-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+          {isEnglish
+            ? 'No observed risk, invalidation, or unknown-evidence item is listed yet.'
+            : '暂未列出已观察风险、失效条件或未知证据。'}
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="stock-risk-triggers" data-testid="stock-risk-triggers-panel">
-      <RoughSectionCard eyebrow={isEnglish ? 'Observed risk evidence' : '已观察风险证据'} title={isEnglish ? 'What is already visible' : '当前已经可见'}>
-        <RoughBulletList
-          items={observedRisks}
-          emptyText={isEnglish ? 'No observed risk evidence is listed yet.' : '暂未列出已观察风险证据。'}
-        />
-      </RoughSectionCard>
-      <RoughSectionCard eyebrow={isEnglish ? 'Invalidation context' : '失效条件'} title={isEnglish ? 'What would change the interpretation' : '什么会改变当前解释'}>
-        <RoughBulletList
-          items={invalidationRows}
-          emptyText={isEnglish ? 'No threshold or invalidation condition is listed yet.' : '暂未列出阈值或失效条件。'}
-        />
-      </RoughSectionCard>
-      <RoughSectionCard eyebrow={isEnglish ? 'Unknown evidence' : '未知 / 待补证据'} title={isEnglish ? 'Not inferred as neutral' : '不按中性值处理'}>
-        <RoughBulletList
-          items={unknownEvidence}
-          emptyText={isEnglish ? 'No additional unknown evidence is listed yet.' : '暂未列出额外未知证据。'}
-        />
-      </RoughSectionCard>
+    <div
+      className="stock-risk-triggers"
+      data-testid="stock-risk-triggers-panel"
+      data-module-density={density}
+    >
+      {sections.map((section) => (
+        <RoughSectionCard key={section.key} eyebrow={section.eyebrow} title={section.title}>
+          <RoughBulletList items={section.items} emptyText="" />
+        </RoughSectionCard>
+      ))}
     </div>
   );
 }
@@ -2387,25 +2477,54 @@ function StockConsumerResearchSummary({
     void navigator.clipboard.writeText(evidenceEntry.exportContent);
   };
 
+  const trustItems = [
+    { key: 'quote', label: language === 'en' ? 'Quote' : '报价', value: quoteTrust, meaningful: Boolean(quote) },
+    {
+      key: 'history',
+      label: language === 'en' ? 'History' : '历史',
+      value: availableBars > 0 ? chartCoverageLabel(availableBars, requiredBars, language) : (language === 'en' ? 'History pending' : '历史待补'),
+      meaningful: availableBars > 0,
+    },
+    {
+      key: 'technical',
+      label: language === 'en' ? 'Technicals' : '技术指标',
+      value: technicalTrust,
+      meaningful: Boolean(technicalIndicators) && !technicalFailed,
+    },
+    {
+      key: 'evidence',
+      label: language === 'en' ? 'Evidence' : '证据',
+      value: evidenceTrust,
+      meaningful: evidenceEntry?.state === 'available',
+    },
+  ];
+  // Always surface trust chips that carry real readiness; pending-only chips stay compact (max 4, never empty wall).
+  const trustDensity = resolveModuleDensity(trustItems.filter((item) => item.meaningful).length);
+
   return (
-    <section className="stock-research-hero p-3 md:p-4" data-testid="stock-consumer-research-summary">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(360px,0.85fr)]">
+    <section
+      className="stock-research-hero p-3 md:p-4"
+      data-testid="stock-consumer-research-summary"
+      data-research-sequence="identity-price-path-memo-metrics-limitation-next"
+      data-first-screen-priority="conclusion-first"
+    >
+      <div className="stock-research-identity-header rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] p-4" data-testid="stock-research-identity-header">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h2 className="stock-research-identity-header__ticker text-2xl font-semibold text-[color:var(--wolfy-text-primary)]">{data.ticker}</h2>
+          {name ? <span className="text-sm text-[color:var(--wolfy-text-secondary)]">{name}</span> : null}
+          <TerminalChip variant="neutral">{[market, exchange].filter(Boolean).join(' · ') || '--'}</TerminalChip>
+          <TerminalChip variant="neutral">{timestamp ? `${language === 'en' ? 'Updated' : '更新'} ${timestamp}` : (language === 'en' ? 'Update time pending' : '更新时间待确认')}</TerminalChip>
+        </div>
+        <div className="mt-3 flex min-w-0 flex-wrap items-end gap-3">
+          <span className="stock-research-identity-header__price text-3xl font-semibold tabular-nums text-[color:var(--wolfy-text-primary)]">{price}</span>
+          <span className={change.startsWith('-') ? 'stock-price-change stock-price-change--down' : 'stock-price-change stock-price-change--up'}>{change}</span>
+          <StatusBadge status={toneFor(confidenceValue)} label={`${language === 'en' ? 'Confidence' : '置信度'}：${confidence}`} size="sm" />
+          <StatusBadge status={toneFor(displayStructureState)} label={structureState} size="sm" />
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(360px,0.85fr)]">
         <div className="min-w-0 space-y-3">
-          <div className="stock-research-identity-header rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] p-4" data-testid="stock-research-identity-header">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h2 className="text-2xl font-semibold text-[color:var(--wolfy-text-primary)]">{data.ticker}</h2>
-              {name ? <span className="text-sm text-[color:var(--wolfy-text-secondary)]">{name}</span> : null}
-              <TerminalChip variant="neutral">{[market, exchange].filter(Boolean).join(' · ') || '--'}</TerminalChip>
-              <TerminalChip variant="neutral">{timestamp ? `${language === 'en' ? 'Updated' : '更新'} ${timestamp}` : (language === 'en' ? 'Update time pending' : '更新时间待确认')}</TerminalChip>
-            </div>
-            <div className="mt-3 flex min-w-0 flex-wrap items-end gap-3">
-              <span className="text-3xl font-semibold text-[color:var(--wolfy-text-primary)]">{price}</span>
-              <span className={change.startsWith('-') ? 'stock-price-change stock-price-change--down' : 'stock-price-change stock-price-change--up'}>{change}</span>
-              <StatusBadge status={toneFor(confidenceValue)} label={`${language === 'en' ? 'Confidence' : '置信度'}：${confidence}`} size="sm" />
-              <StatusBadge status={toneFor(displayStructureState)} label={structureState} size="sm" />
-            </div>
-          </div>
-          <StockCurrentConclusionPanel view={conclusionView} language={language} />
           <div data-testid="stock-price-history-visual-block" data-primary-analytical-surface="price-path">
             <StockHistoryCoreChart
               history={history}
@@ -2414,6 +2533,7 @@ function StockConsumerResearchSummary({
               language={language}
             />
           </div>
+          <StockCurrentConclusionPanel view={conclusionView} language={language} />
         </div>
         <aside className="stock-research-memo-panel min-w-0 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-4" data-testid="stock-first-viewport-summary-panel">
           <div className="flex flex-wrap gap-2">
@@ -2435,13 +2555,14 @@ function StockConsumerResearchSummary({
             nextCheck={nextCheck}
             limitations={limitationItems}
           />
-          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1" data-testid="stock-data-trust-row">
-            {[
-              { key: 'quote', label: language === 'en' ? 'Quote' : '报价', value: quoteTrust },
-              { key: 'history', label: language === 'en' ? 'History' : '历史', value: availableBars > 0 ? chartCoverageLabel(availableBars, requiredBars, language) : (language === 'en' ? 'History pending' : '历史待补') },
-              { key: 'technical', label: language === 'en' ? 'Technicals' : '技术指标', value: technicalTrust },
-              { key: 'evidence', label: language === 'en' ? 'Evidence' : '证据', value: evidenceTrust },
-            ].map((item) => (
+          <div
+            className={trustDensity === 'full'
+              ? 'mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1'
+              : 'mt-4 grid gap-2 sm:grid-cols-2'}
+            data-testid="stock-data-trust-row"
+            data-module-density={trustDensity === 'hide' ? 'compact' : trustDensity}
+          >
+            {trustItems.map((item) => (
               <div key={item.key} className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] px-3 py-2">
                 <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{item.label}</p>
                 <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.value}</p>
@@ -2457,7 +2578,7 @@ function StockConsumerResearchSummary({
             </p>
           ) : null}
           <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{confidenceText}</p>
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-2" data-testid="stock-first-viewport-next-actions">
             <Link
               to={localize('/research/radar')}
               className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-accent)]"
@@ -3291,6 +3412,40 @@ function StockEarningsCatalystReadinessPanel({
   const latestCount = packet?.events.latest.length ?? 0;
   const eventGap = packet ? hasMissingData(packet, ['events', 'filing_event_catalyst']) : false;
   const nextAction = safeOptionalConsumerText(packet?.nextDataAction, language);
+  const meaningfulCount = (latestCount > 0 ? 1 : 0)
+    + (eventGap ? 1 : 0)
+    + (nextAction ? 1 : 0)
+    + (failed ? 0 : 1);
+  const density = latestCount > 0 ? 'full' : resolveModuleDensity(Math.min(meaningfulCount, 2));
+  const nextGapText = eventGap
+    ? (isEnglish ? 'Filing, earnings, or catalyst evidence is still needed.' : '仍需补齐公告、财报或催化证据。')
+    : (nextAction || (isEnglish ? 'No catalyst-specific gap is listed.' : '暂未列出财报 / 催化专项缺口。'));
+
+  if (density !== 'full') {
+    return (
+      <div
+        className="p-3 md:p-4"
+        data-testid="stock-earnings-catalyst-readiness-panel"
+        data-module-density={density === 'hide' ? 'bounded-empty' : 'compact'}
+      >
+        <RoughSectionCard
+          eyebrow={isEnglish ? 'Earnings / catalysts' : '财报 / 催化'}
+          title={isEnglish ? 'Catalyst readiness' : '催化就绪度'}
+        >
+          <div className="mb-2 flex flex-wrap gap-2">
+            <StatusBadge status={failed ? 'warning' : readiness.status} label={failed ? (isEnglish ? 'Packet pending' : '研究包待更新') : readiness.label} size="sm" />
+            <TerminalChip variant="neutral">{isEnglish ? 'No inferred events' : '不推断事件'}</TerminalChip>
+          </div>
+          <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+            {failed
+              ? (isEnglish ? 'Catalyst packet pending; no events inferred.' : '催化研究包待更新，不推断事件。')
+              : nextGapText}
+          </p>
+        </RoughSectionCard>
+      </div>
+    );
+  }
+
   const rows = [
     {
       key: 'events-state',
@@ -3300,19 +3455,17 @@ function StockEarningsCatalystReadinessPanel({
     {
       key: 'latest-items',
       label: isEnglish ? 'Visible items' : '可见条目',
-      value: latestCount ? String(latestCount) : (isEnglish ? 'none listed' : '未列明'),
+      value: String(latestCount),
     },
     {
       key: 'next-data',
       label: isEnglish ? 'Next missing data' : '下一缺口',
-      value: eventGap
-        ? (isEnglish ? 'Filing, earnings, or catalyst evidence is still needed.' : '仍需补齐公告、财报或催化证据。')
-        : (nextAction || (isEnglish ? 'No catalyst-specific gap is listed.' : '暂未列出财报 / 催化专项缺口。')),
+      value: nextGapText,
     },
   ];
 
   return (
-    <div className="p-3 md:p-4" data-testid="stock-earnings-catalyst-readiness-panel">
+    <div className="p-3 md:p-4" data-testid="stock-earnings-catalyst-readiness-panel" data-module-density="full">
       <RoughSectionCard
         eyebrow={isEnglish ? 'Earnings / catalysts' : '财报 / 催化'}
         title={isEnglish ? 'Catalyst readiness' : '催化就绪度'}
@@ -4308,11 +4461,15 @@ export default function StockStructureDecisionPage() {
                         ) : null}
                       </>
                     ) : (
-                      <TerminalEmptyState title={locale === 'en' ? 'Peer context unavailable' : '同业语境暂不可用'}>
+                      <p
+                        className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] px-3 py-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]"
+                        data-module-density="bounded-empty"
+                        data-testid="stock-peer-theme-bounded-empty"
+                      >
                         {locale === 'en'
                           ? 'Peer or theme evidence is not available yet; it is not treated as neutral.'
                           : '同业或主题证据暂不可用，不按中性证据处理。'}
-                      </TerminalEmptyState>
+                      </p>
                     )}
                   </StockWorkspaceSection>
                 </div>
@@ -4338,14 +4495,15 @@ export default function StockStructureDecisionPage() {
                         language={locale}
                       />
                     ) : (
-                      <TerminalEmptyState
+                      <p
+                        className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] px-3 py-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]"
                         data-testid="stock-evidence-package-unavailable-state"
-                        title={locale === 'en' ? 'Evidence package unavailable' : '证据包暂不可用'}
+                        data-module-density="bounded-empty"
                       >
                         {locale === 'en'
-                          ? 'The visible record does not yet contain a copyable evidence package.'
-                          : '当前可见记录还没有可复制的证据包。'}
-                      </TerminalEmptyState>
+                          ? 'Evidence package unavailable. The visible record does not yet contain a copyable evidence package.'
+                          : '证据包暂不可用。当前可见记录还没有可复制的证据包。'}
+                      </p>
                     )}
                   </StockWorkspaceSection>
 

@@ -381,6 +381,12 @@ describe('WatchlistPage', () => {
     expect(screen.queryByTestId('watchlist-row-600519')).not.toBeInTheDocument();
 
     const panel = await screen.findByTestId('watchlist-research-workspace-flow');
+    // G025: research handoff sits after the ledger (secondary deck), not above the task board.
+    expect(screen.getByTestId('watchlist-secondary-deck')).toContainElement(panel);
+    expect(screen.getByTestId('watchlist-header-strip')).toHaveAttribute(
+      'data-watchlist-sequence',
+      'needs-review-important-changes-ledger-handoff',
+    );
     expect(panel).toHaveTextContent('TSM');
     expect(panel).not.toHaveTextContent(/Run #|Rank #|scannerRunId|watchlistItemId|provider|cache|runtime|debug/i);
     expect(within(panel).getByTestId('research-workspace-link-stock-structure')).toHaveAttribute('href', expect.stringContaining('/stocks/TSM/structure-decision?'));
@@ -566,6 +572,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const board = await screen.findByTestId('watchlist-consumer-observation-board');
+    expect(board).toHaveTextContent('重要变化');
     expect(board).toHaveTextContent('观察列表');
     expect(board).toHaveTextContent('正在观察 2 个标的');
     expect(board).toHaveTextContent('可用报价 1');
@@ -2539,6 +2546,7 @@ describe('WatchlistPage', () => {
     expect(detailRail).not.toHaveTextContent(/数据更新中|稍后将自动刷新|自动刷新|刷新中/i);
 
     const panel = await screen.findByTestId('watchlist-research-workspace-flow');
+    expect(screen.getByTestId('watchlist-secondary-deck')).toContainElement(panel);
     expect(within(panel).getByTestId('research-workspace-link-stock-structure')).toHaveAttribute(
       'href',
       expect.stringContaining('/stocks/AAPL/structure-decision?'),
