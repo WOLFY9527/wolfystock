@@ -104,7 +104,15 @@ def _docs_auth_error_response(request: Request, *, status_code: int, error: str,
 
 
 def _require_docs_admin_user(request: Request):
-    if not is_auth_enabled():
+    auth_enabled = is_auth_enabled()
+    if not auth_enabled:
+        if is_production_mode():
+            return _docs_auth_error_response(
+                request,
+                status_code=403,
+                error="admin_auth_required",
+                message="Admin authentication must be enabled for production API docs",
+            )
         return None
 
     current_user = resolve_current_user(request)
