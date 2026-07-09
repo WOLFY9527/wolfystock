@@ -884,7 +884,8 @@ describe('HomeSurfacePage', () => {
     expect(board).toHaveAttribute('data-linear-primitive', 'console-board');
     expect(board).toHaveAttribute('data-surface-system', 'reflect-linear-console');
     expect(board).toHaveClass('relative', 'z-10', 'overflow-visible');
-    expect(screen.getByTestId('home-research-board').firstElementChild).toHaveClass('home-research-fixed-grid', 'w-full', 'min-w-0', 'gap-4');
+    // G017 denser Research Console grid gap (composition density, not layout IA change).
+    expect(screen.getByTestId('home-research-board').firstElementChild).toHaveClass('home-research-fixed-grid', 'w-full', 'min-w-0', 'gap-3');
     expect(rail).toHaveAttribute('data-linear-primitive', 'context-rail');
     expect(rail).toHaveAttribute('data-layout-zone', 'ContextRail');
     expect(rail).toHaveClass('home-research-context-rail', 'bg-transparent', 'divide-y-0', 'lg:border-l-0');
@@ -944,7 +945,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-decision-sector')).toHaveTextContent('科技');
     expect(screen.getByTestId('home-research-company-mark')).toHaveTextContent('OR');
     expect(screen.getByTestId('home-research-company-mark')).toHaveAttribute('data-company-mark', 'oracle-logo');
-    expect(screen.getByTestId('home-research-company-mark')).toHaveClass('h-[72px]', 'w-[72px]', 'rounded-[14px]');
+    // G017 denser identity mark: compact base size with sm: upscale, not 72px monopoly.
+    expect(screen.getByTestId('home-research-company-mark')).toHaveClass('h-12', 'w-12', 'rounded-[12px]');
     expect(screen.queryByTestId('home-bento-decision-hero-row')).not.toBeInTheDocument();
     expect(headerStrip).toHaveClass('rounded-[10px]');
     expect(conclusionConsole).toHaveClass('home-research-conclusion-console', 'rounded-[10px]', 'border');
