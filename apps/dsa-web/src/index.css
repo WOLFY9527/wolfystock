@@ -563,29 +563,31 @@ body[data-scanner-shell='true'],
   overflow-y: auto;
 }
 
+/*
+ * DESIGN §17 reduced-motion: material kill of non-essential animation/transition.
+ * Use near-zero durations (not hard `transition: none` on everything) so functional
+ * state changes and focus rings remain available without decorative motion.
+ */
 @media (prefers-reduced-motion: reduce) {
-  html[data-theme] :where(
-      .workspace-header-panel,
-      .workspace-surface,
-      .workspace-surface-muted,
-      .theme-panel-solid,
-      .theme-panel-glass,
-      .theme-panel-subtle,
-      .theme-menu-panel,
-      .theme-dropdown-panel,
-      .theme-history-item,
-      .theme-chart-toolbar,
-      .theme-chart-tab,
-      .theme-chart-legend-item,
-      .theme-badge,
-      .theme-inline-chip,
-      .btn-primary,
-      .btn-secondary,
-      .input-terminal,
-      .input-surface
-    ) {
-    transition: none !important;
-    animation: none !important;
+  :root,
+  html,
+  html[data-theme] {
+    --motion-duration-fast: 0.01ms;
+    --motion-duration-base: 0.01ms;
+    --motion-duration-slow: 0.01ms;
+    --motion-distance-soft: 0px;
+    --theme-hover-lift: 0px;
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -10718,5 +10720,32 @@ html[data-theme-style='paper'] a.auth-guard-action--secondary {
 
   .auth-guard-action {
     width: 100%;
+  }
+}
+
+
+/* G037: re-assert reduced-motion tokens after theme-specific motion redeclarations. */
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  html,
+  html[data-theme],
+  html[data-theme-style],
+  html[data-theme][data-theme-style] {
+    --motion-duration-fast: 0.01ms;
+    --motion-duration-base: 0.01ms;
+    --motion-duration-slow: 0.01ms;
+    --motion-distance-soft: 0px;
+    --theme-hover-lift: 0px;
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
   }
 }

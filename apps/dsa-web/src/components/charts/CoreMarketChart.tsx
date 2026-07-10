@@ -15,6 +15,15 @@ import type {
 import * as echarts from 'echarts/core';
 import type { ComposeOption, ECharts, SetOptionOpts } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
+import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
+import {
+  resolveMotionDurationMs,
+  shouldEnableNonEssentialMotion,
+} from '../../utils/motionPreference';
+import {
+  CHART_GRAPHIC_ROLE,
+  buildCoreMarketChartAccessibleSemantics,
+} from './chartAccessibility';
 
 echarts.use([
   CandlestickChart,
@@ -234,6 +243,7 @@ function buildChartOption({
   enabledOverlays,
   renderMode,
   compact,
+  reducedMotion,
 }: {
   points: ChartPoint[];
   language: 'zh' | 'en';
@@ -241,7 +251,12 @@ function buildChartOption({
   enabledOverlays: string[];
   renderMode: CoreMarketRenderMode;
   compact: boolean;
+  reducedMotion: boolean;
 }): CoreMarketChartOption {
+  // Series animation stays off: DESIGN warns against chart motion that obscures comparison.
+  // Tooltip/axis pointer motion is preference-aware only.
+  const enablePointerMotion = shouldEnableNonEssentialMotion(reducedMotion);
+  const tooltipTransition = resolveMotionDurationMs(reducedMotion, 80) / 1000;
   const dates = points.map((point) => point.label || point.date);
   const xLabelInterval = Math.max(0, Math.ceil(points.length / (compact ? 4 : 8)) - 1);
   const grids: GridComponentOption[] = hasVolume
@@ -397,6 +412,8 @@ function buildChartOption({
 
   return {
     animation: false,
+    animationDuration: 0,
+    animationDurationUpdate: 0,
     backgroundColor: 'transparent',
     grid: grids,
     tooltip: {
@@ -406,8 +423,8 @@ function buildChartOption({
       appendTo: 'body',
       confine: false,
       showDelay: 0,
-      hideDelay: 50,
-      transitionDuration: 0.08,
+      hideDelay: reducedMotion ? 0 : 50,
+      transitionDuration: tooltipTransition,
       borderWidth: 1,
       borderColor: 'rgba(166,176,230,0.16)',
       backgroundColor: 'rgba(7,11,19,0.96)',
@@ -421,6 +438,7 @@ function buildChartOption({
           color: 'rgba(248,250,252,0.82)',
           fontSize: 10,
         },
+        animation: enablePointerMotion,
       },
       formatter: (params: unknown) => {
         const first = Array.isArray(params) ? params[0] as { dataIndex?: number } | undefined : undefined;
@@ -470,6 +488,7 @@ export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
   const chartRef = useRef<ECharts | null>(null);
   const [activeRange, setActiveRange] = useState<CoreMarketChartRange>('ALL');
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const reducedMotion = usePrefersReducedMotion();
 
   const usablePoints = useMemo(() => normalizePoints(points, compact), [compact, points]);
   const visiblePoints = useMemo(() => visibleRangePoints(usablePoints, activeRange), [activeRange, usablePoints]);
@@ -484,9 +503,38 @@ export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
     : [];
   const latestPoint = visiblePoints.at(-1);
   const hoveredPoint = hoveredIndex == null ? null : visiblePoints[hoveredIndex] ?? null;
-  const ariaSummary = hasChart
-    ? `${title}: ${visiblePoints.length} ${language === 'en' ? 'returned bars' : '根返回 K 线'}, ${formatDateLabel(visiblePoints[0]?.date)} ${language === 'en' ? 'to' : '至'} ${formatDateLabel(latestPoint?.date)}`
-    : `${title}: ${emptyTitle}`;
+  const accessibleSemantics = useMemo(() => buildCoreMarketChartAccessibleSemantics({
+    testId,
+    title,
+    language,
+    hasChart,
+    emptyTitle,
+    barCount: visiblePoints.length,
+    startDate: visiblePoints[0]?.date,
+    endDate: latestPoint?.date,
+    renderMode,
+    latestLabel: latestLabel || (latestPoint ? formatNumber(latestPoint.close, language) : null),
+    changeLabel,
+    rangeLabel,
+    sourceLabel,
+    statusLabel,
+    coverageLabel,
+  }), [
+    changeLabel,
+    coverageLabel,
+    emptyTitle,
+    hasChart,
+    language,
+    latestLabel,
+    latestPoint,
+    rangeLabel,
+    renderMode,
+    sourceLabel,
+    statusLabel,
+    testId,
+    title,
+    visiblePoints,
+  ]);
   const option = useMemo(() => (
     hasChart
       ? buildChartOption({
@@ -496,9 +544,10 @@ export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
           enabledOverlays,
           renderMode,
           compact,
+          reducedMotion,
         })
       : null
-  ), [compact, enabledOverlays, hasChart, hasVolume, language, renderMode, visiblePoints]);
+  ), [compact, enabledOverlays, hasChart, hasVolume, language, reducedMotion, renderMode, visiblePoints]);
 
   useEffect(() => {
     const host = chartNodeRef.current;
@@ -528,6 +577,34 @@ export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
     setHoveredIndex(Math.round(ratio * (visiblePoints.length - 1)));
   };
 
+  const handleChartFrameKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!visiblePoints.length) return;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+      event.preventDefault();
+      setHoveredIndex((current) => {
+        const last = visiblePoints.length - 1;
+        if (current == null) return event.key === 'ArrowRight' ? 0 : last;
+        if (event.key === 'ArrowRight') return Math.min(last, current + 1);
+        return Math.max(0, current - 1);
+      });
+      return;
+    }
+    if (event.key === 'Home') {
+      event.preventDefault();
+      setHoveredIndex(0);
+      return;
+    }
+    if (event.key === 'End') {
+      event.preventDefault();
+      setHoveredIndex(visiblePoints.length - 1);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setHoveredIndex(null);
+    }
+  };
+
   return (
     <section
       className={[
@@ -545,6 +622,9 @@ export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
       data-volume-panel={hasVolume ? 'true' : 'false'}
       data-datazoom-mode="inside"
       data-enabled-overlays={enabledOverlays.length ? enabledOverlays.join(',') : 'none'}
+      data-prefers-reduced-motion={reducedMotion ? 'true' : 'false'}
+      data-chart-animation="disabled"
+      data-tooltip-motion={shouldEnableNonEssentialMotion(reducedMotion) ? 'enabled' : 'disabled'}
     >
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -611,17 +691,37 @@ export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
           </div>
 
           <div
-            className={compact ? 'relative h-[210px] min-w-0 max-w-full overflow-visible' : 'relative h-[320px] min-w-0 max-w-full overflow-visible sm:h-[360px]'}
+            className={compact
+              ? 'relative h-[210px] min-w-0 max-w-full overflow-visible outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--wolfy-surface-muted)]'
+              : 'relative h-[320px] min-w-0 max-w-full overflow-visible outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--wolfy-surface-muted)] sm:h-[360px]'}
             data-testid="core-market-chart-frame"
+            tabIndex={0}
+            role="group"
+            aria-label={accessibleSemantics.exploreLabel}
             onMouseMove={handleMouseMove}
             onMouseLeave={() => setHoveredIndex(null)}
+            onKeyDown={handleChartFrameKeyDown}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                setHoveredIndex(null);
+              }
+            }}
           >
             <figure
               ref={chartNodeRef}
               className="size-full min-h-full min-w-0"
-              aria-label={ariaSummary}
+              role={CHART_GRAPHIC_ROLE}
+              aria-label={accessibleSemantics.ariaLabel}
+              aria-describedby={accessibleSemantics.descriptionId}
               data-testid="core-market-echarts-node"
             />
+            <p
+              id={accessibleSemantics.descriptionId}
+              className="sr-only"
+              data-testid="core-market-chart-text-alternative"
+            >
+              {accessibleSemantics.description}
+            </p>
             {hoveredPoint ? (
               <output
                 className="sr-only"
