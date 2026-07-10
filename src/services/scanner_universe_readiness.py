@@ -379,18 +379,12 @@ def build_scanner_universe_readiness_from_coverage(
     }
     lifecycle_activation_state = str(metadata.get("activationState") or "").strip().lower()
     lifecycle_generated_from = str(metadata.get("generatedFrom") or "").strip().lower()
-    lifecycle_has_snapshot_identity = bool(
-        (lifecycle_readiness or {}).get("universeVersion")
-        or (lifecycle_readiness or {}).get("sourceArtifactIdentity")
-        or (lifecycle_readiness or {}).get("sourcePath")
-    )
     lifecycle_is_authoritative = bool(
         lifecycle_readiness
         and (
             lifecycle_activation_state == "active"
             or lifecycle_generated_from == "scanner_universe_lifecycle"
             or (lifecycle_readiness or {}).get("usable") is True
-            or lifecycle_has_snapshot_identity
         )
     )
     runtime_universe_exists = bool(
@@ -465,7 +459,11 @@ def build_scanner_universe_readiness_from_coverage(
         provider_calls_enabled=bool(metadata.get("providerCallsEnabled", False)),
         read_only=bool(metadata.get("readOnly", True)),
         activation_state=str(metadata.get("activationState") or status),
-        lifecycle_readiness=lifecycle_readiness,
+        lifecycle_readiness=(
+            lifecycle_readiness
+            if lifecycle_may_override_runtime_universe
+            else None
+        ),
     )
 
 

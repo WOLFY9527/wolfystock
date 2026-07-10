@@ -7,6 +7,7 @@ import json
 import unittest
 import os
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -290,13 +291,14 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
     def test_operator_universe_readiness_projects_active_lifecycle_metadata(self) -> None:
         lifecycle_root = Path(self._cache_temp_dir.name) / "scanner-universe-lifecycle"
         source_path = Path(self._cache_temp_dir.name) / "cn-lifecycle-source.json"
+        generated_at = datetime.now(timezone.utc).replace(microsecond=0)
         source_path.write_text(
             json.dumps(
                 {
                     "market": "cn",
                     "sourceClass": "repo_fixture",
-                    "generatedAt": "2026-07-05T00:00:00+00:00",
-                    "asOf": "2026-07-05",
+                    "generatedAt": generated_at.isoformat(),
+                    "asOf": generated_at.date().isoformat(),
                     "symbols": ["600001", "SH600001", "300123", "000005"],
                 }
             ),
@@ -307,6 +309,7 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
             store=ScannerUniverseLifecycleStore(root=lifecycle_root),
             market="cn",
             minimum_coverage_threshold=2,
+            activated_at=generated_at,
         )
         ops_service = MarketScannerOperationsService(
             scanner_service=self.scanner_service,
