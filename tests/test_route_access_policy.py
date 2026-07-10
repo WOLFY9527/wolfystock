@@ -1,9 +1,34 @@
 # -*- coding: utf-8 -*-
 """Focused contracts for public baseline route matching."""
 
-from api.middlewares.auth import _path_exempt
+from unittest.mock import patch
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from api.middlewares.auth import _path_exempt, add_auth_middleware
 from api.middlewares.public_abuse_limiter import _EXEMPT_PREFIXES
 from api.route_access_policy import is_public_baseline_read, normalize_policy_path
+from src import auth
+
+
+PUBLIC_MARKET_SECONDARY_READS = (
+    "/api/v1/market/cn-breadth",
+    "/api/v1/market/cn-flows",
+    "/api/v1/market/cn-short-sentiment",
+    "/api/v1/market/crypto",
+    "/api/v1/market/crypto/stream",
+    "/api/v1/market/futures",
+    "/api/v1/market/fx-commodities",
+    "/api/v1/market/liquidity-monitor",
+    "/api/v1/market/rates",
+    "/api/v1/market/regime-read-model",
+    "/api/v1/market/rotation-radar",
+    "/api/v1/market/sector-rotation",
+    "/api/v1/market/sentiment",
+    "/api/v1/market/temperature",
+    "/api/v1/market/us-breadth",
+)
 
 
 def test_normalize_policy_path_trims_trailing_slash() -> None:
@@ -22,6 +47,38 @@ def test_market_overview_routes_are_public_baseline_reads() -> None:
     assert is_public_baseline_read("GET", "/api/v1/market-overview/")
     assert is_public_baseline_read("GET", "/api/v1/market-overview/indices")
     assert is_public_baseline_read("GET", "/api/v1/market-overview/macro")
+
+
+def test_guest_market_secondary_reads_are_public_baseline_reads() -> None:
+    for path in PUBLIC_MARKET_SECONDARY_READS:
+        assert is_public_baseline_read("GET", path)
+        assert is_public_baseline_read("get", f"{path}/")
+        assert not is_public_baseline_read("POST", path)
+
+
+def test_auth_middleware_keeps_only_guest_market_secondary_reads_public() -> None:
+    app = FastAPI()
+    add_auth_middleware(app)
+
+    @app.get("/api/v1/{path:path}")
+    def get_api_path(path: str) -> dict[str, str]:
+        return {"path": path}
+
+    with TestClient(app) as client, patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
+        auth._auth_enabled = None
+        for path in PUBLIC_MARKET_SECONDARY_READS:
+            assert client.get(path).status_code == 200
+        assert client.get("/api/v1/market/data-readiness").status_code == 401
+        assert client.get("/api/v1/portfolio/accounts").status_code == 401
+        assert client.get("/api/v1/scanner/themes").status_code == 401
+        assert client.get("/api/v1/admin/users").status_code == 401
+
+    with TestClient(app) as client, patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
+        auth._auth_enabled = None
+        assert client.get("/api/v1/market/rotation-radar").status_code == 200
+        assert client.get("/api/v1/portfolio/accounts").status_code == 200
+
+    auth._auth_enabled = None
 
 
 def test_adjacent_stock_research_routes_are_not_public_baseline_reads() -> None:

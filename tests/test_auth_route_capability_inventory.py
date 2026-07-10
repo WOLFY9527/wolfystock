@@ -127,6 +127,7 @@ FRONTEND_ADMIN_READ_CAPABILITY_LABELS = {
     "ops:system_config:read",
 }
 SURFACE_CLASSIFICATION_VOCABULARY = {
+    "public_market_read",
     "public_static_docs",
     "public_fixture_analysis",
     "authenticated_member",
@@ -747,6 +748,11 @@ def test_backend_route_surface_classification_vocabulary_and_no_go_markers_are_e
         if classification in {"unclassified", "debug_or_schema_surface", "public_fixture_analysis"}:
             marker = entry.get("no_go_marker")
             assert marker and "TODO/NO-GO" in marker, entry["route_id"]
+        if classification == "public_market_read":
+            assert entry["auth_dependency_label"] == "public", entry["route_id"]
+            assert entry["capability_label"] is None, entry["route_id"]
+            assert entry["no_go_marker"] is None, entry["route_id"]
+            assert "route-access policy" in str(entry["transitional_note"]), entry["route_id"]
         if classification == "operator_diagnostic" and entry["auth_dependency_label"] == "public":
             marker = entry.get("no_go_marker")
             assert marker and "TODO/NO-GO" in marker, entry["route_id"]
@@ -782,6 +788,8 @@ def test_backend_route_surface_classification_covers_target_live_surfaces() -> N
             assert live["auth_dependency_label"] is None
         elif entry["surface_classification"] == "public_fixture_analysis":
             assert live["auth_dependency_label"] is None
+        elif entry["surface_classification"] == "public_market_read":
+            assert live["auth_dependency_label"] in {None, "optional_current_user"}
         else:
             assert live["auth_dependency_label"] == (None if expected_dependency == "public" else expected_dependency)
         assert live["capability_label"] == entry["capability_label"]

@@ -7,7 +7,24 @@ import re
 
 PUBLIC_BASELINE_PATHS = frozenset(
     {
+        # Guest Market Overview secondary reads. These endpoints return only
+        # consumer-safe market observations and do not expose user or operator data.
+        "/api/v1/market/cn-breadth",
+        "/api/v1/market/cn-flows",
+        "/api/v1/market/cn-short-sentiment",
+        "/api/v1/market/crypto",
+        "/api/v1/market/crypto/stream",
+        "/api/v1/market/futures",
+        "/api/v1/market/fx-commodities",
+        "/api/v1/market/liquidity-monitor",
         "/api/v1/market/market-briefing",
+        "/api/v1/market/rates",
+        "/api/v1/market/regime-read-model",
+        "/api/v1/market/rotation-radar",
+        "/api/v1/market/sector-rotation",
+        "/api/v1/market/sentiment",
+        "/api/v1/market/temperature",
+        "/api/v1/market/us-breadth",
         "/api/v1/market-overview",
         "/api/v1/market-overview/indices",
         "/api/v1/market-overview/volatility",
