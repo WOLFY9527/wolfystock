@@ -413,6 +413,10 @@ if (productAuthFixture) {
         const harness = await openProductRouteWithHarness(page, '/zh/options-lab');
 
         await appExpect(page.getByRole('heading', { name: '期权实验室' })).toBeVisible({ timeout: 15_000 });
+        expect(harness.requests.count('POST', '/api/v1/options/strategies/compare')).toBe(0);
+        expect(harness.requests.count('POST', '/api/v1/options/decision/evaluate')).toBe(0);
+        await page.getByRole('button', { name: '运行结构比较' }).click();
+        await page.getByRole('button', { name: '评估情景准备度' }).click();
         await appExpect(page.getByTestId('options-lab-decision-engine')).toBeVisible();
         await appExpect(page.getByTestId('options-lab-decision-summary')).toBeVisible();
         const analysisDetails = page.getByTestId('options-lab-analysis-details');

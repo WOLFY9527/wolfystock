@@ -753,12 +753,41 @@ function mockHappyPath(
   }, readiness));
 }
 
-function renderPage() {
-  return render(
+function renderPage({ autoRun = true }: { autoRun?: boolean } = {}) {
+  const view = render(
     <MemoryRouter initialEntries={['/zh/options-lab']}>
       <OptionsLabPage />
     </MemoryRouter>,
   );
+
+  if (autoRun) {
+    const runWhenReady = () => {
+      if (!view.container.isConnected) {
+        observer.disconnect();
+        return;
+      }
+      const buttons = [
+        screen.queryByRole('button', { name: '运行结构比较' }),
+        screen.queryByRole('button', { name: '评估情景准备度' }),
+        screen.queryByRole('button', { name: '运行策略分析' }),
+      ];
+      if (buttons.some((button) => !button || button.hasAttribute('disabled'))) {
+        return;
+      }
+      observer.disconnect();
+      buttons.forEach((button) => fireEvent.click(button as HTMLButtonElement));
+    };
+    const observer = new MutationObserver(runWhenReady);
+    observer.observe(document.body, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+      attributeFilter: ['disabled', 'data-control-state'],
+    });
+    runWhenReady();
+  }
+
+  return view;
 }
 
 async function expectContractSymbolVisible(symbol: string) {
@@ -769,6 +798,55 @@ describe('OptionsLabPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockHappyPath();
+  });
+
+  it('keeps passive mount free of compare, evaluate, and analyze requests', async () => {
+    renderPage({ autoRun: false });
+
+    await expectContractSymbolVisible('TEM260619C00055000');
+
+    expect(vi.mocked(optionsLabApi.compareStrategies)).not.toHaveBeenCalled();
+    expect(vi.mocked(optionsLabApi.evaluateDecision)).not.toHaveBeenCalled();
+    expect(vi.mocked(optionsLabApi.analyzeStrategies)).not.toHaveBeenCalled();
+  });
+
+  it('runs strategy comparison only after the explicit comparison action', async () => {
+    renderPage({ autoRun: false });
+
+    await expectContractSymbolVisible('TEM260619C00055000');
+    fireEvent.click(screen.getByRole('button', { name: '运行结构比较' }));
+
+    await waitFor(() => {
+      expect(vi.mocked(optionsLabApi.compareStrategies)).toHaveBeenCalledTimes(1);
+    });
+    expect(vi.mocked(optionsLabApi.evaluateDecision)).not.toHaveBeenCalled();
+    expect(vi.mocked(optionsLabApi.analyzeStrategies)).not.toHaveBeenCalled();
+  });
+
+  it('runs decision evaluation only after the explicit evaluation action', async () => {
+    renderPage({ autoRun: false });
+
+    await expectContractSymbolVisible('TEM260619C00055000');
+    fireEvent.click(screen.getByRole('button', { name: '评估情景准备度' }));
+
+    await waitFor(() => {
+      expect(vi.mocked(optionsLabApi.evaluateDecision)).toHaveBeenCalledTimes(1);
+    });
+    expect(vi.mocked(optionsLabApi.compareStrategies)).not.toHaveBeenCalled();
+    expect(vi.mocked(optionsLabApi.analyzeStrategies)).not.toHaveBeenCalled();
+  });
+
+  it('runs strategy analysis only after the explicit analyzer action', async () => {
+    renderPage({ autoRun: false });
+
+    await expectContractSymbolVisible('TEM260619C00055000');
+    fireEvent.click(screen.getByRole('button', { name: '运行策略分析' }));
+
+    await waitFor(() => {
+      expect(vi.mocked(optionsLabApi.analyzeStrategies)).toHaveBeenCalledTimes(1);
+    });
+    expect(vi.mocked(optionsLabApi.compareStrategies)).not.toHaveBeenCalled();
+    expect(vi.mocked(optionsLabApi.evaluateDecision)).not.toHaveBeenCalled();
   });
 
   it('renders the Chinese-first scenario console with command area, main workspace, and dense chain matrices', async () => {
@@ -2560,6 +2638,8 @@ describe('OptionsLabPage', () => {
     await waitFor(() => {
       expect(vi.mocked(optionsLabApi.getOptionChain)).toHaveBeenCalledWith('TEM', '2026-07-17');
     });
+    fireEvent.click(screen.getByRole('button', { name: '运行结构比较' }));
+    fireEvent.click(screen.getByRole('button', { name: '评估情景准备度' }));
     await waitFor(() => {
       expect(vi.mocked(optionsLabApi.compareStrategies)).toHaveBeenLastCalledWith(expect.objectContaining({
         symbol: 'TEM',
