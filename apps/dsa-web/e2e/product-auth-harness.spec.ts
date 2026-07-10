@@ -107,14 +107,72 @@ test.describe('mocked product route auth browser harness', () => {
       await expect(page.getByTestId('options-lab-calls-table')).toBeVisible();
       expect(harness.requests.count('GET', '/api/v1/auth/status')).toBeGreaterThan(0);
       expect(harness.requests.count('GET', '/api/v1/options/underlyings/TEM/summary')).toBeGreaterThan(0);
-      expect(harness.requests.count('POST', '/api/v1/options/strategies/compare')).toBeGreaterThan(0);
-      expect(harness.requests.count('POST', '/api/v1/options/decision/evaluate')).toBeGreaterThan(0);
+      expect(harness.requests.count('POST', '/api/v1/options/strategies/compare')).toBe(0);
+      expect(harness.requests.count('POST', '/api/v1/options/decision/evaluate')).toBe(0);
+      expect(harness.requests.count('POST', '/api/v1/options/strategies/analyze')).toBe(0);
+      await expect(page.getByTestId('options-lab-product-hero')).toContainText(/演示|仅观察/);
+
+      await page.getByRole('button', { name: '运行结构比较' }).click();
+      await expect.poll(() => harness.requests.count('POST', '/api/v1/options/strategies/compare')).toBe(1);
+      expect(harness.requests.count('POST', '/api/v1/options/decision/evaluate')).toBe(0);
+      expect(harness.requests.count('POST', '/api/v1/options/strategies/analyze')).toBe(0);
+
+      await page.getByRole('button', { name: '评估情景准备度' }).click();
+      await expect.poll(() => harness.requests.count('POST', '/api/v1/options/decision/evaluate')).toBe(1);
+      expect(harness.requests.count('POST', '/api/v1/options/strategies/analyze')).toBe(0);
+
+      await page.getByRole('button', { name: '运行策略分析' }).click();
+      await expect.poll(() => harness.requests.count('POST', '/api/v1/options/strategies/analyze')).toBe(1);
       await expect(page).not.toHaveURL(/\/guest(?:$|[/?#])/);
       await expectRootNonEmpty(page);
       await expectNoHorizontalOverflow(page);
       await expectForbiddenTradingWordingAbsent(page);
       await page.unrouteAll({ behavior: 'ignoreErrors' });
     }
+  });
+
+  test('keeps unavailable Options Lab passive and execution controls disabled', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const harness = await installProductAuthHarness(page);
+    await page.route(/\/api\/v1\/options\/underlyings\/[^/]+\/chain(?:\?|$)/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          symbol: 'TEM',
+          expiration: '2026-06-19',
+          underlying: null,
+          calls: [],
+          puts: [],
+          filters_applied: {},
+          chain_as_of: null,
+          source: 'unavailable',
+          limitations: ['options_chain_unavailable'],
+          metadata: {
+            read_only: true,
+            fixture_backed: false,
+            no_order_placement: true,
+            no_broker_connection: true,
+            no_portfolio_mutation: true,
+          },
+        }),
+      });
+    });
+
+    await page.goto('/zh/options-lab');
+    await page.waitForLoadState('domcontentloaded');
+
+    await expect(page.getByText('暂无数据', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('options-lab-strategy-comparison')).toContainText('请先加载合约');
+    await expect(page.getByRole('button', { name: '运行结构比较' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: '评估情景准备度' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: '运行策略分析' })).toBeDisabled();
+    await expect(page.getByTestId('options-lab-strategy-grid')).toHaveCount(0);
+    await expect(page.getByTestId('options-lab-decision-summary')).toHaveCount(0);
+    expect(harness.requests.count('POST', '/api/v1/options/strategies/compare')).toBe(0);
+    expect(harness.requests.count('POST', '/api/v1/options/decision/evaluate')).toBe(0);
+    expect(harness.requests.count('POST', '/api/v1/options/strategies/analyze')).toBe(0);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
   });
 
   test('keeps Options Lab reachable after client navigation from the product shell', async ({ page }) => {

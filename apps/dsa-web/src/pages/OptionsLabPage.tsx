@@ -2276,8 +2276,10 @@ const StrategyComparisonPanel: React.FC<{
   loading: boolean;
   emptyMessage: string | null;
   chain: OptionsChainResponse | null;
+  onRun: () => void;
+  runDisabled: boolean;
   className?: string;
-}> = ({ comparisonState, decision, loading, emptyMessage, chain, className }) => {
+}> = ({ comparisonState, decision, loading, emptyMessage, chain, onRun, runDisabled, className }) => {
   const comparison = comparisonState.comparison;
   const comparisonMetadata = comparison?.metadata ?? {};
   const strategies = asArray(comparison?.strategies);
@@ -2300,6 +2302,15 @@ const StrategyComparisonPanel: React.FC<{
       <SectionHeader eyebrow="主工作区" title="观察结构样例" icon={Layers3}>
         <div className="flex flex-wrap justify-end gap-2">
           <Pill tone="info">{freshness ? limitationLabel(String(freshness)) : '等待快照'}</Pill>
+          <TerminalButton
+            type="button"
+            variant="secondary"
+            data-action-intent="execute"
+            disabled={runDisabled || comparisonState.loading}
+            onClick={onRun}
+          >
+            运行结构比较
+          </TerminalButton>
         </div>
       </SectionHeader>
       <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
@@ -2467,8 +2478,10 @@ const StrategyAnalysisCard: React.FC<{ analysis: OptionsStrategyAnalysis; index:
 
 const StrategyAnalyzerPanel: React.FC<{
   analyzerState: StrategyAnalyzerState;
+  onRun: () => void;
+  runDisabled: boolean;
   className?: string;
-}> = ({ analyzerState, className }) => {
+}> = ({ analyzerState, onRun, runDisabled, className }) => {
   const analyses = asArray(analyzerState.analysis?.analyses).slice(0, 3);
   const observationOnly = analyzerState.analysis?.observationOnly !== false;
   const decisionGrade = analyzerState.analysis?.decisionGrade === true;
@@ -2480,6 +2493,15 @@ const StrategyAnalyzerPanel: React.FC<{
           <Pill tone="info">{OPTIONS_RESEARCH_RECORD_COPY}</Pill>
           <Pill tone="warn">{OPTIONS_NON_TRADING_INSTRUCTION_COPY}</Pill>
           <Pill tone="neutral">{OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY}</Pill>
+          <TerminalButton
+            type="button"
+            variant="secondary"
+            data-action-intent="execute"
+            disabled={runDisabled || analyzerState.loading}
+            onClick={onRun}
+          >
+            运行策略分析
+          </TerminalButton>
         </div>
       </SectionHeader>
       <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
@@ -2715,7 +2737,13 @@ const StructureSignalPacketPanel: React.FC<{
   );
 };
 
-const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: string | null; className?: string }> = ({ decisionState, emptyMessage, className }) => {
+const DecisionPanel: React.FC<{
+  decisionState: DecisionState;
+  emptyMessage: string | null;
+  onRun: () => void;
+  runDisabled: boolean;
+  className?: string;
+}> = ({ decisionState, emptyMessage, onRun, runDisabled, className }) => {
   const decision = decisionState.decision;
   const label = decisionStatusLabel(decision);
   const expectedMove = decision?.expectedMove;
@@ -2771,6 +2799,15 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
         <div className="flex flex-wrap justify-end gap-2">
           <Pill tone={label === OPTIONS_NO_CONCLUSION_COPY || label.includes('不建议') ? 'risk' : 'warn'}>{label}</Pill>
           {decision?.dataQuality?.dataQualityTier ? <Pill tone="info">{dataTierLabel(decision.dataQuality.dataQualityTier)}</Pill> : null}
+          <TerminalButton
+            type="button"
+            variant="secondary"
+            data-action-intent="execute"
+            disabled={runDisabled || decisionState.loading}
+            onClick={onRun}
+          >
+            评估情景准备度
+          </TerminalButton>
         </div>
       </SectionHeader>
       {emptyMessage ? (
@@ -3123,8 +3160,25 @@ const OptionsLabPageContent: React.FC = () => {
     loading: false,
     error: null,
     analysis: null,
-    blockedReason: '等待合约链加载',
+    blockedReason: '加载合约链后，可选择“运行策略分析”。',
   });
+  const [comparisonRunKey, setComparisonRunKey] = useState(0);
+  const [decisionRunKey, setDecisionRunKey] = useState(0);
+  const [analyzerRunKey, setAnalyzerRunKey] = useState(0);
+
+  const resetExecutionStates = useCallback(() => {
+    setComparisonRunKey(0);
+    setDecisionRunKey(0);
+    setAnalyzerRunKey(0);
+    setComparisonState({ loading: false, error: null, comparison: null });
+    setDecisionState({ loading: false, error: null, decision: null });
+    setStrategyAnalyzerState({
+      loading: false,
+      error: null,
+      analysis: null,
+      blockedReason: '加载合约链后，可选择“运行策略分析”。',
+    });
+  }, []);
 
   useEffect(() => {
     let ignored = false;
@@ -3174,6 +3228,7 @@ const OptionsLabPageContent: React.FC = () => {
   }, [activeSymbol, reloadKey, selectedExpiration]);
 
   useEffect(() => {
+    if (comparisonRunKey === 0) return;
     let ignored = false;
     let timeoutId: number | undefined;
 
@@ -3190,12 +3245,7 @@ const OptionsLabPageContent: React.FC = () => {
         return;
       }
 
-      setComparisonState({
-        loading: true,
-        error: null,
-        comparison: null,
-      });
-
+      setComparisonState({ loading: true, error: null, comparison: null });
       timeoutId = window.setTimeout(() => {
         if (ignored) return;
         setComparisonState({
@@ -3218,11 +3268,7 @@ const OptionsLabPageContent: React.FC = () => {
         });
         if (ignored) return;
         window.clearTimeout(timeoutId);
-        setComparisonState({
-          loading: false,
-          error: null,
-          comparison,
-        });
+        setComparisonState({ loading: false, error: null, comparison });
       } catch {
         if (ignored) return;
         window.clearTimeout(timeoutId);
@@ -3244,6 +3290,7 @@ const OptionsLabPageContent: React.FC = () => {
     };
   }, [
     activeSymbol,
+    comparisonRunKey,
     direction,
     riskBudget,
     riskProfile,
@@ -3257,6 +3304,7 @@ const OptionsLabPageContent: React.FC = () => {
   ]);
 
   useEffect(() => {
+    if (decisionRunKey === 0) return;
     let ignored = false;
 
     async function loadDecision() {
@@ -3301,6 +3349,7 @@ const OptionsLabPageContent: React.FC = () => {
     };
   }, [
     activeSymbol,
+    decisionRunKey,
     riskBudget,
     selectedExpiration,
     state.chain,
@@ -3313,21 +3362,12 @@ const OptionsLabPageContent: React.FC = () => {
   ]);
 
   useEffect(() => {
+    if (analyzerRunKey === 0) return;
     let ignored = false;
 
     async function loadStrategyAnalysis() {
       const baseReady = !state.loading && !state.error && state.summary && state.expirations && state.chain;
       if (!baseReady) {
-        setStrategyAnalyzerState({
-          loading: false,
-          error: null,
-          analysis: null,
-          blockedReason: state.loading
-            ? '正在加载基础数据，稍后将自动计算策略分析器。'
-            : state.error
-              ? '期权链暂不可用，策略分析已暂停。'
-              : '等待合约链加载',
-        });
         return;
       }
 
@@ -3389,6 +3429,7 @@ const OptionsLabPageContent: React.FC = () => {
     };
   }, [
     activeSymbol,
+    analyzerRunKey,
     direction,
     riskProfile,
     selectedExpiration,
@@ -3401,8 +3442,21 @@ const OptionsLabPageContent: React.FC = () => {
     targetPrice,
   ]);
 
+  const runComparison = useCallback(() => {
+    setComparisonRunKey((current) => current + 1);
+  }, []);
+
+  const runDecision = useCallback(() => {
+    setDecisionRunKey((current) => current + 1);
+  }, []);
+
+  const runStrategyAnalysis = useCallback(() => {
+    setAnalyzerRunKey((current) => current + 1);
+  }, []);
+
   const handleSubmit = useCallback(() => {
     const normalized = symbolInput.trim().toUpperCase() || 'TEM';
+    resetExecutionStates();
     setSymbolInput(normalized);
     setState((current) => ({ ...current, loading: true, error: null }));
     if (normalized === activeSymbol) {
@@ -3410,37 +3464,83 @@ const OptionsLabPageContent: React.FC = () => {
       return;
     }
     setActiveSymbol(normalized);
-  }, [activeSymbol, symbolInput]);
+  }, [activeSymbol, resetExecutionStates, symbolInput]);
 
   const handleExpirationSelect = useCallback((expiration: string) => {
+    resetExecutionStates();
     setState((current) => ({ ...current, loading: true, error: null }));
     setSelectedExpiration(expiration);
-  }, []);
+  }, [resetExecutionStates]);
+
+  const handleSymbolChange = useCallback((value: string) => {
+    resetExecutionStates();
+    setSymbolInput(value);
+  }, [resetExecutionStates]);
+
+  const handleDirectionChange = useCallback((value: OptionsDirection) => {
+    resetExecutionStates();
+    setDirection(value);
+  }, [resetExecutionStates]);
+
+  const handleRiskProfileChange = useCallback((value: OptionsRiskProfile) => {
+    resetExecutionStates();
+    setRiskProfile(value);
+  }, [resetExecutionStates]);
+
+  const handleTargetPriceChange = useCallback((value: string) => {
+    resetExecutionStates();
+    setTargetPrice(value);
+  }, [resetExecutionStates]);
+
+  const handleTargetDateChange = useCallback((value: string) => {
+    resetExecutionStates();
+    setTargetDate(value);
+  }, [resetExecutionStates]);
+
+  const handleRiskBudgetChange = useCallback((value: string) => {
+    resetExecutionStates();
+    setRiskBudget(value);
+  }, [resetExecutionStates]);
 
   const expirations = asArray(state.expirations?.expirations).length ? asArray(state.expirations?.expirations) : EMPTY_EXPIRATIONS;
   const calls = asArray(state.chain?.calls).length ? asArray(state.chain?.calls) : EMPTY_CONTRACTS;
   const puts = asArray(state.chain?.puts).length ? asArray(state.chain?.puts) : EMPTY_CONTRACTS;
   const hasChainRows = calls.length > 0 || puts.length > 0;
+  const targetPriceValue = Number(targetPrice);
+  const analyticalExecutionReady = Boolean(
+    !state.loading
+    && !state.error
+    && state.summary
+    && state.expirations
+    && state.chain
+    && expirations.length > 0
+    && hasChainRows
+    && Number.isFinite(targetPriceValue)
+    && targetPriceValue > 0
+    && targetDate.trim(),
+  );
   const comparisonEmptyMessage = useMemo(() => {
-    if (state.loading) return '正在加载基础数据，稍后将自动计算结构样例比较。';
+    if (state.loading) return '正在加载基础数据。';
     if (state.error) return '期权链暂不可用，结构样例比较已暂停。';
-    const targetPriceValue = Number(targetPrice);
-    const hasTargetPrice = Number.isFinite(targetPriceValue) && targetPriceValue > 0;
+    const nextTargetPriceValue = Number(targetPrice);
+    const hasTargetPrice = Number.isFinite(nextTargetPriceValue) && nextTargetPriceValue > 0;
     const hasTargetDate = targetDate.trim().length > 0;
     const hasExpirations = expirations.length > 0;
     const hasContracts = hasChainRows;
     if (!state.summary || !state.expirations || !state.chain) return COMPARISON_EMPTY_MESSAGE;
     if (!hasTargetPrice || !hasTargetDate || !hasExpirations || !hasContracts) return COMPARISON_EMPTY_MESSAGE;
-    return null;
-  }, [expirations.length, hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
+    if (comparisonState.loading || comparisonState.error || comparisonState.comparison) return null;
+    return '基础数据已加载。选择“运行结构比较”后才会执行分析。';
+  }, [comparisonState.comparison, comparisonState.error, comparisonState.loading, expirations.length, hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
   const decisionEmptyMessage = useMemo(() => {
-    if (state.loading) return '正在加载基础数据，稍后将自动计算情景准备度。';
+    if (state.loading) return '正在加载基础数据。';
     if (state.error) return '期权链暂不可用，情景准备度已暂停。';
-    const targetPriceValue = Number(targetPrice);
+    const nextTargetPriceValue = Number(targetPrice);
     if (!state.summary || !state.expirations || !state.chain || !hasChainRows) return '等待合约链加载';
-    if (!Number.isFinite(targetPriceValue) || targetPriceValue <= 0 || !targetDate.trim()) return '补齐假设价格与目标日期';
-    return null;
-  }, [hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
+    if (!Number.isFinite(nextTargetPriceValue) || nextTargetPriceValue <= 0 || !targetDate.trim()) return '补齐假设价格与目标日期';
+    if (decisionState.loading || decisionState.error || decisionState.decision) return null;
+    return '基础数据已加载。选择“评估情景准备度”后才会执行分析。';
+  }, [decisionState.decision, decisionState.error, decisionState.loading, hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
   const consumerAvailability = useMemo(
     () => consumerAvailabilitySummary(state, comparisonState, decisionState, hasChainRows),
     [comparisonState, decisionState, hasChainRows, state],
@@ -3548,13 +3648,13 @@ const OptionsLabPageContent: React.FC = () => {
                 riskBudget={riskBudget}
                 expirations={expirations}
                 selectedExpiration={selectedExpiration}
-                onSymbolChange={setSymbolInput}
+                onSymbolChange={handleSymbolChange}
                 onSubmit={handleSubmit}
-                onDirectionChange={setDirection}
-                onRiskProfileChange={setRiskProfile}
-                onTargetPriceChange={setTargetPrice}
-                onTargetDateChange={setTargetDate}
-                onRiskBudgetChange={setRiskBudget}
+                onDirectionChange={handleDirectionChange}
+                onRiskProfileChange={handleRiskProfileChange}
+                onTargetPriceChange={handleTargetPriceChange}
+                onTargetDateChange={handleTargetDateChange}
+                onRiskBudgetChange={handleRiskBudgetChange}
                 onExpirationSelect={handleExpirationSelect}
               />
               <div className="border-t border-[color:var(--wolfy-divider)] pt-4">
@@ -3576,11 +3676,15 @@ const OptionsLabPageContent: React.FC = () => {
                   loading={comparisonState.loading}
                   emptyMessage={comparisonEmptyMessage}
                   chain={state.chain}
+                  onRun={() => void runComparison()}
+                  runDisabled={!analyticalExecutionReady}
                   className="xl:col-start-1 xl:row-start-1"
                 />
                 <DecisionPanel
                   decisionState={decisionState}
                   emptyMessage={decisionEmptyMessage}
+                  onRun={() => void runDecision()}
+                  runDisabled={!analyticalExecutionReady}
                   className="xl:col-start-1 xl:row-start-2"
                 />
                 <RiskBoundaryPanel
@@ -3599,6 +3703,8 @@ const OptionsLabPageContent: React.FC = () => {
                 />
                 <StrategyAnalyzerPanel
                   analyzerState={strategyAnalyzerState}
+                  onRun={() => void runStrategyAnalysis()}
+                  runDisabled={!analyticalExecutionReady}
                   className="xl:col-start-2 xl:row-start-3"
                 />
                 <ResearchVisualsPanel

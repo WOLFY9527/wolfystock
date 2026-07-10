@@ -125,8 +125,9 @@ productTest.describe('no-secret critical product surfaces', () => {
       await expectOptionsLabSurfaceClean(page);
 
       expect(harness.requests.count('GET', '/api/v1/options/underlyings/TEM/summary')).toBeGreaterThan(0);
-      expect(harness.requests.count('POST', '/api/v1/options/strategies/compare')).toBeGreaterThan(0);
-      expect(harness.requests.count('POST', '/api/v1/options/decision/evaluate')).toBeGreaterThan(0);
+      expect(harness.requests.count('POST', '/api/v1/options/strategies/compare')).toBe(0);
+      expect(harness.requests.count('POST', '/api/v1/options/decision/evaluate')).toBe(0);
+      expect(harness.requests.count('POST', '/api/v1/options/strategies/analyze')).toBe(0);
       await page.unrouteAll({ behavior: 'ignoreErrors' });
     }
   });
