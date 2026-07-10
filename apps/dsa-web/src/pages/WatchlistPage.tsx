@@ -3,6 +3,7 @@ import {
   BarChart3,
   CheckSquare,
   Copy,
+  MoreHorizontal,
   Play,
   RefreshCw,
   Search,
@@ -1379,6 +1380,7 @@ function WatchlistConsumerObservationBoard({
     : selected
       ? getWatchlistConsumerNextAction(selected, language)
       : '--';
+  const visibleItems = items.slice(0, 6);
 
   return (
     <section
@@ -1407,60 +1409,68 @@ function WatchlistConsumerObservationBoard({
           </div>
         </div>
         <div className="mt-3 divide-y divide-[color:var(--wolfy-divider)]">
-          {items.slice(0, 8).map((item) => {
+          {visibleItems.map((item) => {
             const price = getWatchlistConsumerPrice(item, language);
             const change = getWatchlistConsumerChange(item);
             const gaps = getWatchlistConsumerGapLabels(item, language);
             const researchLabel = getWatchlistConsumerResearchLabel(item, language);
             const nextAction = getWatchlistConsumerNextAction(item, language);
             const isActive = selected?.id === item.id;
+            const statusLine = gaps.length
+              ? (language === 'en' ? `Review gaps: ${gaps.join(', ')}` : `复核缺口：${gaps.join('、')}`)
+              : nextAction;
             return (
-              <div key={item.id} className="grid min-w-0 gap-2 py-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-center">
+              <div
+                key={item.id}
+                data-testid={`watchlist-observation-row-${item.symbol}`}
+                className="grid min-w-0 gap-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+              >
                 <div className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{item.symbol}</span>
                     <TerminalChip variant="neutral">{formatMarket(item.market)}</TerminalChip>
+                    {isActive ? (
+                      <TerminalChip variant="info">{language === 'en' ? 'Inspecting' : '查看中'}</TerminalChip>
+                    ) : null}
                   </div>
                   <p className="mt-1 break-words text-xs text-[color:var(--wolfy-text-muted)] md:truncate">{buildWatchlistIdentityLabel(item, language)}</p>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+                  <p className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">
                     {price}
                     {change ? <span className={change.startsWith('-') ? 'ml-2 text-[color:var(--state-danger-text)]' : 'ml-2 text-[color:var(--state-success-text)]'}>{change}</span> : null}
                   </p>
                   <p className="mt-1 text-xs text-[color:var(--wolfy-text-secondary)]">{researchLabel}</p>
                   <p className="mt-1 break-words text-xs text-[color:var(--wolfy-text-muted)] md:truncate">
-                    {gaps.length ? (language === 'en' ? `Review gaps: ${gaps.join(', ')}` : `复核缺口：${gaps.join('、')}`) : nextAction}
+                    {statusLine}
                   </p>
-                  {!item.rowResearchPacket ? (
-                    <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{nextAction}</p>
-                  ) : null}
                 </div>
-                <div className="flex min-w-0 flex-wrap justify-start gap-1.5 md:justify-end">
+                <div
+                  data-testid={`watchlist-observation-actions-${item.symbol}`}
+                  className="flex min-w-0 flex-wrap justify-start gap-1.5 sm:justify-end"
+                >
                   <button
                     type="button"
                     aria-pressed={isActive}
-                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-2.5 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
+                    data-watchlist-action="select-inspector"
+                    className={`rounded-md border px-2.5 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)] ${
+                      isActive
+                        ? 'border-[color:var(--wolfy-accent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_10%,var(--wolfy-surface-input))] text-[color:var(--wolfy-text-primary)]'
+                        : 'border-[color:var(--wolfy-border-subtle)] text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)]'
+                    }`}
                     onClick={() => onSelect(item)}
                   >
                     {language === 'en' ? `View ${item.symbol} details` : `查看 ${item.symbol} 详情`}
                   </button>
                   <button
                     type="button"
+                    data-watchlist-action="primary-research"
                     className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-2.5 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
-                    onClick={() => navigate(buildStockStructurePath(item, language))}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      navigate(buildStockStructurePath(item, language));
+                    }}
                   >
                     {language === 'en' ? 'View stock structure' : '查看个股结构'}
                   </button>
-                  {!item.rowResearchPacket ? (
-                    <button
-                      type="button"
-                      className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-2.5 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
-                      onClick={() => navigate(buildLocalizedPath('/research/radar', language))}
-                    >
-                      {language === 'en' ? 'Open Research Radar view' : '打开研究雷达视图'}
-                    </button>
-                  ) : null}
                 </div>
               </div>
             );
@@ -1470,7 +1480,7 @@ function WatchlistConsumerObservationBoard({
       {selected ? (
         <aside
           data-testid="watchlist-consumer-detail-panel"
-          className="min-w-0 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3"
+          className="min-w-0 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 max-lg:hidden"
         >
           <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Selected symbol' : '当前标的'}</p>
           <h2 className="mt-1 text-lg font-semibold text-[color:var(--wolfy-text-primary)]">{selected.symbol}</h2>
@@ -1725,6 +1735,9 @@ function getCopy(language: 'zh' | 'en') {
       sourceUnknownNeedsRefresh: 'Research status is pending; no refresh progress is assumed.',
       added: 'Added',
       actions: 'Actions',
+      moreActions: 'More',
+      moreActionsAria: 'More actions',
+      primaryResearchAction: 'Structure',
       analyze: 'Analyze',
       analyzing: 'Analyzing...',
       backtest: 'Backtest',
@@ -1732,6 +1745,7 @@ function getCopy(language: 'zh' | 'en') {
       removing: 'Removing...',
       copySymbol: 'Copy symbol',
       copied: 'Copied',
+      inspecting: 'Inspecting',
       emptyTitle: 'No tracked candidates yet.',
       emptyBody: 'Under the current saved coverage, no watchlist rows are available yet. Start with one manual symbol research task here, then save only if you decide to keep observing it.',
       emptyHelp: 'Saved rows return here after you explicitly keep a symbol for ongoing observation.',
@@ -1838,6 +1852,9 @@ function getCopy(language: 'zh' | 'en') {
     sourceUnknownNeedsRefresh: '研究状态待确认，未推断刷新进度。',
     added: '加入时间',
     actions: '操作',
+    moreActions: '更多',
+    moreActionsAria: '更多操作',
+    primaryResearchAction: '结构',
     analyze: '分析',
     analyzing: '分析中...',
     backtest: '回测',
@@ -1845,6 +1862,7 @@ function getCopy(language: 'zh' | 'en') {
     removing: '移除中...',
     copySymbol: '复制代码',
     copied: '已复制',
+    inspecting: '查看中',
     emptyTitle: '还没有观察标的',
       emptyBody: '当前已保存覆盖下还没有可用观察行。可先在这里手动研究一个代码，确认后再决定是否保存到观察列表。',
     emptyHelp: '只有你明确保留观察后，已保存的候选证据与状态才会回到这里。',
@@ -1961,6 +1979,7 @@ const WatchlistPage: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [useSelectedScope, setUseSelectedScope] = useState(false);
   const [activeItemId, setActiveItemId] = useState<number | null>(null);
+  const [openRowActionsId, setOpenRowActionsId] = useState<number | null>(null);
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
 
@@ -2183,6 +2202,13 @@ const WatchlistPage: React.FC = () => {
       setActiveItemId(filteredItems[0].id);
     }
   }, [activeItemId, filteredItems]);
+
+  useEffect(() => {
+    if (openRowActionsId == null) return;
+    if (!filteredItems.some((item) => item.id === openRowActionsId)) {
+      setOpenRowActionsId(null);
+    }
+  }, [filteredItems, openRowActionsId]);
 
   const selectedItems = useMemo(
     () => filteredItems.filter((item) => selectedIds.has(item.id)),
@@ -2790,10 +2816,10 @@ const WatchlistPage: React.FC = () => {
             <ConsoleBoard
               data-testid="watchlist-ledger-scroll-region"
               role="region"
-              aria-label={language === 'en' ? 'Watchlist ledger horizontal scroll region' : '观察列表台账横向滚动区域'}
+              aria-label={language === 'en' ? 'Watchlist ledger region' : '观察列表台账区域'}
               tabIndex={0}
               onFocusCapture={scrollFocusedDescendantIntoHorizontalView}
-              className="overflow-x-auto overscroll-x-contain rounded-none border-0 bg-transparent px-1 pb-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--wolfy-accent-focus)]"
+              className="overflow-x-hidden overscroll-x-contain rounded-none border-0 bg-transparent px-1 pb-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--wolfy-accent-focus)] lg:overflow-x-auto"
             >
               {!isWatchlistEmptyWorkspace ? (
                 <div className="flex min-w-0 items-center justify-between gap-3 border-b border-[color:var(--wolfy-divider)] px-4 py-3">
@@ -2804,6 +2830,21 @@ const WatchlistPage: React.FC = () => {
                   <TerminalChip variant="neutral" className="font-mono">
                     {actionScopeLabel}
                   </TerminalChip>
+                </div>
+              ) : null}
+              {filteredItems.length > 0 && activeItem ? (
+                <div
+                  data-testid="watchlist-selected-context-bar"
+                  className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_6%,var(--wolfy-surface-input))] px-3 py-2 lg:hidden"
+                >
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Selected context' : '当前查看'}</p>
+                    <p className="truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
+                      {activeItem.symbol}
+                      <span className="ml-2 font-normal text-[color:var(--wolfy-text-secondary)]">{activeIdentityLabel}</span>
+                    </p>
+                  </div>
+                  <TerminalChip variant="info">{copy.inspecting}</TerminalChip>
                 </div>
               ) : null}
               {isLoading ? (
@@ -2817,7 +2858,7 @@ const WatchlistPage: React.FC = () => {
                   aria-label={language === 'en' ? 'Watchlist research ledger' : '观察列表研究台账'}
                   aria-colcount={4}
                   aria-rowcount={filteredItems.length + 1}
-                  className="min-w-[860px] py-1"
+                  className="min-w-0 py-1 lg:min-w-[860px]"
                 >
                   <div
                     data-testid="watchlist-list-header"
@@ -2892,8 +2933,9 @@ const WatchlistPage: React.FC = () => {
                         ].filter(Boolean).join(' · ');
                     const rowNotes = rowPacketView
                       ? [
-                          rowPacketView.missingSummary,
-                          rowPacketView.nextDataActionLabel,
+                          rowPacketView.missingSummary && rowPacketView.missingSummary !== rowObservation
+                            ? rowPacketView.missingSummary
+                            : null,
                         ].filter(Boolean).join(' · ')
                       : [
                           rowStatus.missingSummary,
@@ -2917,9 +2959,10 @@ const WatchlistPage: React.FC = () => {
                         data-testid={`watchlist-row-${item.symbol}`}
                         role="row"
                         aria-rowindex={index + 2}
+                        aria-selected={isActive}
                         className={`min-w-0 border-b border-[color:var(--wolfy-divider)] px-3 py-4 transition-colors md:px-4 ${isActive ? 'bg-[color:color-mix(in_srgb,var(--wolfy-accent)_7%,transparent)]' : 'bg-transparent hover:bg-[var(--wolfy-surface-input)]'}`}
                       >
-                        <div className="grid min-w-0 grid-cols-[minmax(0,1.35fr)_minmax(0,1.15fr)_minmax(0,1.05fr)_auto] items-start gap-4 py-0.5">
+                        <div className="grid min-w-0 grid-cols-1 items-start gap-3 py-0.5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1.15fr)_minmax(0,1.05fr)_auto] lg:gap-4">
                           <div role="cell" aria-colindex={1} className="flex min-w-0 gap-3">
                             <button
                               type="button"
@@ -2931,7 +2974,10 @@ const WatchlistPage: React.FC = () => {
                               role="checkbox"
                               aria-checked={selectedIds.has(item.id)}
                               aria-label={`${language === 'zh' ? '选择' : 'Select'} ${item.symbol}`}
-                              onClick={() => toggleSelected(item)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                toggleSelected(item);
+                              }}
                             >
                               <span
                                 aria-hidden="true"
@@ -3062,7 +3108,10 @@ const WatchlistPage: React.FC = () => {
                                     type="button"
                                     aria-label={rowDecisionContext.evidenceStackAriaLabel}
                                     className="inline-flex min-h-[28px] items-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-2 text-[color:var(--wolfy-text-secondary)] transition hover:border-[color:var(--wolfy-accent)] hover:bg-[var(--wolfy-surface-panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
-                                    onClick={() => navigate(buildStockStructurePath(item, language))}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      navigate(buildStockStructurePath(item, language));
+                                    }}
                                   >
                                     {rowDecisionContext.evidenceStackLabel}
                                   </button>
@@ -3083,72 +3132,139 @@ const WatchlistPage: React.FC = () => {
                             ) : null}
                           </div>
 
-                          <div role="cell" aria-colindex={4} className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+                          <div
+                            role="cell"
+                            aria-colindex={4}
+                            data-testid={`watchlist-row-actions-${item.symbol}`}
+                            className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end"
+                          >
                             <TerminalButton
                               type="button"
                               variant="compact"
+                              data-watchlist-action="primary-research"
                               aria-label={`${language === 'zh' ? '查看个股结构' : 'Open stock structure'} ${item.symbol}`}
-                              onClick={() => navigate(buildStockStructurePath(item, language))}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                navigate(buildStockStructurePath(item, language));
+                              }}
                             >
                               <Search className="h-3.5 w-3.5" />
-                              {language === 'zh' ? '结构' : 'Structure'}
+                              {copy.primaryResearchAction}
                             </TerminalButton>
-                            <TerminalButton
-                              type="button"
-                              variant="compact"
-                              aria-label={`${language === 'zh' ? '打开扫描器' : 'Open scanner'} ${item.symbol}`}
-                              onClick={() => navigate(buildScannerPath(item, language))}
+                            <div
+                              className="relative min-w-0"
+                              data-testid={`watchlist-row-secondary-actions-${item.symbol}`}
                             >
-                              <RefreshCw className="h-3.5 w-3.5" />
-                              {language === 'zh' ? '扫描器' : 'Scanner'}
-                            </TerminalButton>
-                            <TerminalButton
-                              type="button"
-                              variant="compact"
-                              onClick={() => void handleAnalyze(item)}
-                              disabled={pendingAnalyzeId === item.id}
-                            >
-                              <Play className="h-3.5 w-3.5" />
-                              {pendingAnalyzeId === item.id ? copy.analyzing : copy.analyze}
-                            </TerminalButton>
-                            <TerminalButton
-                              type="button"
-                              variant="compact"
-                              onClick={() => navigate(buildBacktestPath(item, language))}
-                            >
-                              <BarChart3 className="h-3.5 w-3.5" />
-                              {copy.backtest}
-                            </TerminalButton>
-                            {backtest?.lastResultId != null ? (
                               <TerminalButton
                                 type="button"
                                 variant="compact"
-                                className="font-mono text-[11px]"
-                                onClick={() => navigate(buildLocalizedPath(`/backtest/results/${backtest.lastResultId}`, language))}
+                                data-watchlist-action="secondary-disclosure"
+                                aria-expanded={openRowActionsId === item.id}
+                                aria-haspopup="menu"
+                                aria-controls={openRowActionsId === item.id ? `watchlist-row-secondary-menu-${item.symbol}` : undefined}
+                                aria-label={`${copy.moreActionsAria} ${item.symbol}`}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setOpenRowActionsId((current) => (current === item.id ? null : item.id));
+                                }}
                               >
-                                {copy.resultPrefix} {backtest.lastResultId}
+                                <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+                                {copy.moreActions}
                               </TerminalButton>
-                            ) : null}
-                            <TerminalButton
-                              type="button"
-                              aria-label={`${copy.copySymbol} ${item.symbol}`}
-                              title={copiedId === item.id ? copy.copied : copy.copySymbol}
-                              variant="compact"
-                              className="h-[34px] min-h-[34px] w-[34px] px-0 text-[color:var(--wolfy-text-muted)]"
-                              onClick={() => void handleCopy(item)}
-                            >
-                              <Copy className="h-3.5 w-3.5" />
-                            </TerminalButton>
-                            <TerminalButton
-                              type="button"
-                              aria-label={`${copy.remove} ${item.symbol}`}
-                              variant="danger"
-                              className="h-[34px] min-h-[34px] w-[34px] px-0"
-                              onClick={() => void handleRemove(item)}
-                              disabled={pendingRemoveId === item.id}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </TerminalButton>
+                              {openRowActionsId === item.id ? (
+                                <div
+                                  id={`watchlist-row-secondary-menu-${item.symbol}`}
+                                  data-testid={`watchlist-row-secondary-menu-${item.symbol}`}
+                                  className="absolute left-0 z-20 mt-2 grid min-w-[11.5rem] gap-1.5 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-2 shadow-[var(--wolfy-shadow-panel)] lg:left-auto lg:right-0"
+                                >
+                                  <TerminalButton
+                                    type="button"
+                                    variant="compact"
+                                    className="w-full justify-start"
+                                    aria-label={`${language === 'zh' ? '打开扫描器' : 'Open scanner'} ${item.symbol}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setOpenRowActionsId(null);
+                                      navigate(buildScannerPath(item, language));
+                                    }}
+                                  >
+                                    <RefreshCw className="h-3.5 w-3.5" />
+                                    {language === 'zh' ? '扫描器' : 'Scanner'}
+                                  </TerminalButton>
+                                  <TerminalButton
+                                    type="button"
+                                    variant="compact"
+                                    className="w-full justify-start"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setOpenRowActionsId(null);
+                                      void handleAnalyze(item);
+                                    }}
+                                    disabled={pendingAnalyzeId === item.id}
+                                  >
+                                    <Play className="h-3.5 w-3.5" />
+                                    {pendingAnalyzeId === item.id ? copy.analyzing : copy.analyze}
+                                  </TerminalButton>
+                                  <TerminalButton
+                                    type="button"
+                                    variant="compact"
+                                    className="w-full justify-start"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setOpenRowActionsId(null);
+                                      navigate(buildBacktestPath(item, language));
+                                    }}
+                                  >
+                                    <BarChart3 className="h-3.5 w-3.5" />
+                                    {copy.backtest}
+                                  </TerminalButton>
+                                  {backtest?.lastResultId != null ? (
+                                    <TerminalButton
+                                      type="button"
+                                      variant="compact"
+                                      className="w-full justify-start font-mono text-[11px]"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setOpenRowActionsId(null);
+                                        navigate(buildLocalizedPath(`/backtest/results/${backtest.lastResultId}`, language));
+                                      }}
+                                    >
+                                      {copy.resultPrefix} {backtest.lastResultId}
+                                    </TerminalButton>
+                                  ) : null}
+                                  <TerminalButton
+                                    type="button"
+                                    aria-label={`${copy.copySymbol} ${item.symbol}`}
+                                    title={copiedId === item.id ? copy.copied : copy.copySymbol}
+                                    variant="compact"
+                                    className="w-full justify-start text-[color:var(--wolfy-text-muted)]"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setOpenRowActionsId(null);
+                                      void handleCopy(item);
+                                    }}
+                                  >
+                                    <Copy className="h-3.5 w-3.5" />
+                                    {copy.copySymbol}
+                                  </TerminalButton>
+                                  <TerminalButton
+                                    type="button"
+                                    aria-label={`${copy.remove} ${item.symbol}`}
+                                    variant="danger"
+                                    className="w-full justify-start"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setOpenRowActionsId(null);
+                                      void handleRemove(item);
+                                    }}
+                                    disabled={pendingRemoveId === item.id}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    {copy.remove}
+                                  </TerminalButton>
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
                       </article>

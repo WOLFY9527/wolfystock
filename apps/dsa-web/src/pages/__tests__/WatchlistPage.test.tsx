@@ -420,11 +420,11 @@ describe('WatchlistPage', () => {
     expect(screen.getByTestId('watchlist-command-bar')).toHaveAttribute('data-terminal-primitive', 'dense-command-bar');
     expect(screen.getByRole('table', { name: '观察列表研究台账' })).toBe(screen.getByTestId('watchlist-candidate-list'));
     expect(screen.getByTestId('watchlist-candidate-list')).toHaveAttribute('data-linear-primitive', 'dense-rows');
-    expect(screen.getByTestId('watchlist-candidate-list')).toHaveClass('min-w-[860px]');
-    const ledgerScrollRegion = screen.getByRole('region', { name: '观察列表台账横向滚动区域' });
+    expect(screen.getByTestId('watchlist-candidate-list')).toHaveClass('min-w-0', 'lg:min-w-[860px]');
+    const ledgerScrollRegion = screen.getByRole('region', { name: '观察列表台账区域' });
     expect(ledgerScrollRegion).toBe(screen.getByTestId('watchlist-ledger-scroll-region'));
     expect(ledgerScrollRegion).toHaveAttribute('tabindex', '0');
-    expect(ledgerScrollRegion).toHaveClass('overflow-x-auto', 'overscroll-x-contain');
+    expect(ledgerScrollRegion).toHaveClass('overflow-x-hidden', 'overscroll-x-contain', 'lg:overflow-x-auto');
     expect(screen.getByTestId('watchlist-list-header')).toHaveAttribute('role', 'row');
     expect(screen.getByTestId('watchlist-primary-work-region')).toHaveAttribute('data-layout-zone', 'PrimaryWorkRegion');
     expect(screen.getByTestId('watchlist-detail-rail')).toHaveAttribute('data-linear-primitive', 'context-rail');
@@ -586,7 +586,8 @@ describe('WatchlistPage', () => {
     expect(board).toHaveTextContent('SHOP');
     expect(board).toHaveTextContent('报价暂缺');
     expect(board).toHaveTextContent('先打开个股结构页，仍可查看已保存信息。');
-    expect(board).toHaveTextContent('打开研究雷达');
+    expect(within(board).getByTestId('watchlist-observation-actions-SHOP').querySelectorAll('button')).toHaveLength(2);
+    expect(board).not.toHaveTextContent(/打开研究雷达|Open Research Radar view/);
     expect(board).not.toHaveTextContent(/待补.*待补.*待补.*待补/s);
     expect(board).not.toHaveTextContent(/available|missing|not configured|provider_missing|blockedProductSurfaces|missingDataFamilies|sourceClass|sourcePath|contractVersion|inputSource|noExternalCalls|providerCallsEnabled|not_requested|provider|runtime|schema|requestId|traceId|raw|observationOnly|buy setup|buy|sell|hold|target price|position sizing|买入|卖出|持有|目标价|仓位/i);
 
@@ -986,6 +987,7 @@ describe('WatchlistPage', () => {
     expect(within(row).getByText('研究已更新')).toBeInTheDocument();
     expect(within(row).getByText('已回测')).toBeInTheDocument();
     expect(within(row).getByText(/更新 05\/01 13:30 · 命中 56% · 回测 \+24.6%/)).toBeInTheDocument();
+    fireEvent.click(within(row).getByRole('button', { name: '更多操作 NVDA' }));
     fireEvent.click(within(row).getByRole('button', { name: /结果 33/ }));
     expect(screen.getByText('backtest result')).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/zh/backtest/results/33');
@@ -1107,6 +1109,10 @@ describe('WatchlistPage', () => {
     expect(queue).toHaveTextContent('价格与历史数据待补');
     expect(queue).toHaveTextContent('扫描评分待更新');
     expect(within(row).getByRole('button', { name: '查看个股结构 600519' })).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: '更多操作 600519' })).toHaveAttribute('aria-expanded', 'false');
+    expect(within(row).queryByRole('button', { name: '打开扫描器 600519' })).not.toBeInTheDocument();
+    fireEvent.click(within(row).getByRole('button', { name: '更多操作 600519' }));
+    expect(within(row).getByRole('button', { name: '更多操作 600519' })).toHaveAttribute('aria-expanded', 'true');
     expect(within(row).getByRole('button', { name: '打开扫描器 600519' })).toBeInTheDocument();
     expect(within(row).getByRole('button', { name: '分析' })).toBeInTheDocument();
     expect(within(row).getByRole('button', { name: '回测' })).toBeInTheDocument();
@@ -2336,6 +2342,7 @@ describe('WatchlistPage', () => {
     const row = await screen.findByTestId('watchlist-row-NVDA');
     expect(within(row).getByText(/更新 05\/03 17:01 · 命中 56% · 回测 \+14.2%/)).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-detail-rail')).toHaveTextContent(/收益 \+14.2% · 回撤 -3.2% · Sharpe 1.50 · 交易 5/);
+    fireEvent.click(within(row).getByRole('button', { name: '更多操作 NVDA' }));
     fireEvent.click(within(row).getByRole('button', { name: /结果 701/ }));
     expect(screen.getByText('backtest result')).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/zh/backtest/results/701');
@@ -2373,16 +2380,36 @@ describe('WatchlistPage', () => {
 
     const row = await screen.findByTestId('watchlist-row-NVDA');
     expect(screen.getByTestId('watchlist-board-shell')).toHaveClass('grid', 'min-w-0');
+    expect(screen.getByTestId('watchlist-candidate-list')).toHaveClass('min-w-0', 'lg:min-w-[860px]');
+    expect(screen.getByTestId('watchlist-ledger-scroll-region')).toHaveClass('overflow-x-hidden', 'lg:overflow-x-auto');
+    expect(screen.getByTestId('watchlist-selected-context-bar')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-identity-NVDA')).toHaveClass('break-words', 'whitespace-normal');
     expect(screen.getByTestId('watchlist-row-origin-NVDA')).toHaveClass('break-words', 'whitespace-normal');
     expect(screen.getByTestId('watchlist-row-state-NVDA')).toHaveClass('break-words', 'whitespace-normal');
-    expect(within(row).getByTestId('watchlist-row-note-NVDA')).toHaveClass('break-words');
+    expect(within(row).getByTestId('watchlist-row-actions-NVDA').querySelectorAll('[data-terminal-primitive="button"]')).toHaveLength(2);
+    if (within(row).queryByTestId('watchlist-row-note-NVDA')) {
+      expect(within(row).getByTestId('watchlist-row-note-NVDA')).toHaveClass('break-words');
+    }
+  });
+
+  it('keeps inspector selection stable when secondary row actions are opened', async () => {
+    renderWatchlist();
+    const tsmRow = await screen.findByTestId('watchlist-row-TSM');
+    fireEvent.click(within(tsmRow).getByRole('button', { name: '查看详情 TSM' }));
+    expect(screen.getByTestId('watchlist-detail-rail')).toHaveTextContent('TSM');
+
+    const nvdaRow = screen.getByTestId('watchlist-row-NVDA');
+    fireEvent.click(within(nvdaRow).getByRole('button', { name: '更多操作 NVDA' }));
+    expect(within(nvdaRow).getByRole('button', { name: '更多操作 NVDA' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('watchlist-detail-rail')).toHaveTextContent('TSM');
+    expect(within(nvdaRow).queryByRole('button', { name: '分析' })).toBeInTheDocument();
   });
 
   it('starts analysis for a candidate and navigates to the workspace', async () => {
     renderWatchlist();
     const row = await screen.findByTestId('watchlist-row-NVDA');
 
+    fireEvent.click(within(row).getByRole('button', { name: '更多操作 NVDA' }));
     fireEvent.click(within(row).getByRole('button', { name: /分析/ }));
 
     await waitFor(() => expect(analyzeAsync).toHaveBeenCalledWith(expect.objectContaining({
@@ -2431,6 +2458,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
     const row = await screen.findByTestId('watchlist-row-NVDA');
 
+    fireEvent.click(within(row).getByRole('button', { name: '更多操作 NVDA' }));
     fireEvent.click(within(row).getByRole('button', { name: /回测/ }));
 
     expect(screen.getByText('backtest')).toBeInTheDocument();
@@ -2581,6 +2609,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
     const row = await screen.findByTestId('watchlist-row-NVDA');
 
+    fireEvent.click(within(row).getByRole('button', { name: '更多操作 NVDA' }));
     fireEvent.click(within(row).getByRole('button', { name: '移除 NVDA' }));
 
     await waitFor(() => expect(removeWatchlistItem).toHaveBeenCalledWith(1));
@@ -2591,6 +2620,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
     const row = await screen.findByTestId('watchlist-row-NVDA');
 
+    fireEvent.click(within(row).getByRole('button', { name: '更多操作 NVDA' }));
     fireEvent.click(within(row).getByRole('button', { name: '复制代码 NVDA' }));
 
     await waitFor(() => expect(writeTextMock).toHaveBeenCalledWith('NVDA'));
