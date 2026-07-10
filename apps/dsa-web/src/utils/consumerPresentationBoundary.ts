@@ -236,15 +236,21 @@ export function consumerPresentationText(
   const raw = String(value ?? '').trim();
   if (!raw) return fallback ?? FALLBACK_COPY[locale];
 
-  const tokenLabel = consumerPresentationTokenLabel(raw, locale);
-  if (tokenLabel) return tokenLabel;
+  // Compact tokens (product_ready, risk_on_confirming) resolve via exact copy first.
+  const exactToken = normalizeConsumerStatusToken(raw);
+  const exactCopy = INTERNAL_COPY_BY_KEY[exactToken]?.[locale];
+  if (exactCopy && !/\s/.test(raw)) return exactCopy;
+
+  // Multi-word free text prefers phrase maps before generic data-state collapse.
+  for (const [pattern, copy] of INTERNAL_PHRASE_COPY) {
+    if (pattern.test(raw)) return copy[locale];
+  }
 
   const mapped = mapConsumerStatusText(raw, locale);
   if (mapped !== raw) return mapped;
 
-  for (const [pattern, copy] of INTERNAL_PHRASE_COPY) {
-    if (pattern.test(raw)) return copy[locale];
-  }
+  const tokenLabel = consumerPresentationTokenLabel(raw, locale);
+  if (tokenLabel) return tokenLabel;
 
   if (INTERNAL_PRESENTATION_PATTERN.test(raw) || /\b[a-z]+(?:_[a-z0-9]+)+\b/i.test(raw)) {
     const sanitized = sanitizeUserFacingDataIssue(raw, locale);

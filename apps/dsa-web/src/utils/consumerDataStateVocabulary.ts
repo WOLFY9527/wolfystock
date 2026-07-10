@@ -167,14 +167,14 @@ export function normalizeConsumerStateToken(value: string | null | undefined): s
 
 export function isConsumerDataStateToken(value: string | null | undefined): boolean {
   const token = normalizeConsumerStateToken(value);
-  return Boolean(
-    token
-    && (
-      CONSUMER_DATA_STATE_TOKEN_MAP[token]
-      || token.includes('stale')
-      || token.includes('unavailable')
-    ),
-  );
+  if (!token) return false;
+  if (CONSUMER_DATA_STATE_TOKEN_MAP[token]) return true;
+  // Free-text limitation sentences normalize into long snake tokens such as
+  // `growth_proxy_evidence_is_unavailable`. Those must not collapse to the
+  // generic unavailable/stale state label — phrase maps own the wording.
+  const parts = token.split('_').filter(Boolean);
+  if (parts.length > 3) return false;
+  return token.includes('stale') || token.includes('unavailable');
 }
 
 export function resolveConsumerDataState(value: string | null | undefined): ConsumerDataState {

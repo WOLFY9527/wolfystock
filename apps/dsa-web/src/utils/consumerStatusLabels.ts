@@ -57,7 +57,21 @@ export function getConsumerStatusLabel(
   value: string | null | undefined,
   locale: ConsumerStatusLocale = 'zh',
 ): string | null {
-  const token = normalizeConsumerStatusToken(value);
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return null;
+  }
+  // Multi-word free-text limitation sentences must not collapse to generic
+  // data-state labels. Compact state phrases (e.g. "freshness unavailable")
+  // and snake tokens still resolve through the state vocabulary.
+  const wordCount = raw.split(/\s+/).filter(Boolean).length;
+  const looksLikeSentence = wordCount > 3 || /[.。!?]/.test(raw);
+  if (looksLikeSentence) {
+    const phrase = PHRASE_LABELS[normalizePhraseKey(raw)];
+    if (phrase) return phrase[locale];
+    return null;
+  }
+  const token = normalizeConsumerStatusToken(raw);
   if (!token) {
     return null;
   }

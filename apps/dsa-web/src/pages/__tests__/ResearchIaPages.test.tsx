@@ -1155,12 +1155,17 @@ describe('research IA pages', () => {
     expect(page).toHaveTextContent('今日观察队列');
     expect(page).not.toHaveTextContent('研究情景工作台');
     const overview = await within(page).findByTestId('research-radar-consumer-overview');
+    expect(overview).toHaveAttribute(
+      'data-discovery-sequence',
+      'candidate-queue>selected-detail>factor>limitation>next-check>comparison-ledger',
+    );
     expect(overview).toHaveTextContent('观察候选');
     expect(overview).toHaveTextContent('证据质量分布');
     expect(overview).toHaveTextContent('队列健康');
     expect(overview).toHaveTextContent('研究观察，不构成投资建议。');
     expect((overview.textContent || '').match(/不构成投资建议/g)?.length).toBe(1);
     expect(within(overview).getByTestId('research-radar-candidate-ledger')).toBeInTheDocument();
+    expect(within(overview).getByTestId('research-radar-candidate-ledger').getAttribute('data-discovery-role') || '').toContain('comparison-ledger');
     const candidate = within(overview).getByTestId('research-radar-candidate-ALFA');
     expect(candidate).toHaveTextContent('ALFA');
     expect(candidate).toHaveTextContent('相对强弱已达到研究阈值');
@@ -1169,12 +1174,14 @@ describe('research IA pages', () => {
     expect(ledger).toHaveTextContent('限制');
     expect(ledger).toHaveTextContent('下一步检查');
     const selectedCandidate = within(overview).getByTestId('research-radar-selected-candidate-detail');
+    expect(selectedCandidate).toHaveAttribute('data-discovery-role', 'selected-candidate-detail');
     expect(selectedCandidate).toHaveTextContent('当前研究观察');
     expect(selectedCandidate).toHaveTextContent('因子贡献');
     expect(selectedCandidate).toHaveTextContent('相对强弱');
     expect(selectedCandidate).toHaveTextContent('限制 / 风险');
     expect(selectedCandidate).toHaveTextContent('数据时效');
     expect(selectedCandidate).toHaveTextContent('下一步研究检查');
+    expect(within(selectedCandidate).getByTestId('research-radar-factor-section')).toHaveAttribute('data-module-density', 'compact');
     expect(within(selectedCandidate).getByTestId('research-radar-factor-bars')).toHaveTextContent('70');
     expect(within(selectedCandidate).getByRole('link', { name: '查看个股研究' })).toHaveAttribute('href', expect.stringContaining('/zh/stocks/ALFA/structure-decision'));
     expect(within(selectedCandidate).getByRole('link', { name: '查看个股研究' })).toHaveAttribute('href', expect.stringContaining('source=scanner'));

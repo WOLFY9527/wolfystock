@@ -155,9 +155,18 @@ function evidenceHubStatusTone(value: string | null | undefined): string {
 
 function readModelLabel(value: string | null | undefined, locale: 'zh' | 'en'): string {
   const raw = String(value || '').trim();
-  const mapped = consumerStatusValue(value, locale);
-  if (mapped !== '--' && mapped !== raw) return mapped;
-  return raw ? consumerPresentationText(raw, locale, '--') : '--';
+  if (!raw) return '--';
+  // Prefer presentation boundary so compact product tokens (product_ready) and
+  // free-text limitation phrases keep specific wording instead of generic states.
+  return consumerPresentationText(raw, locale, '--');
+}
+
+type ModuleDensity = 'full' | 'compact' | 'hide';
+
+function resolveModuleDensity(meaningfulFieldCount: number): ModuleDensity {
+  if (meaningfulFieldCount >= 3) return 'full';
+  if (meaningfulFieldCount >= 1) return 'compact';
+  return 'hide';
 }
 
 function freshnessLabel(state: UnifiedResearchQueueItem['freshness']['state'], locale: 'zh' | 'en'): string {
@@ -217,27 +226,24 @@ function evidenceQualityTone(item: ResearchRadarItem, fallbackQuality: string | 
 }
 
 function candidateReason(item: ResearchRadarItem, locale: 'zh' | 'en') {
+  if (!item.whyOnRadar?.some((value) => String(value || '').trim())) {
+    return locale === 'en' ? 'Queued for observation; reason not reported.' : '已入观察队列，原因未报告。';
+  }
   return safeResearchQueueList(
     item.whyOnRadar,
     locale,
-    locale === 'en' ? 'Added to the observation queue for follow-up research.' : '该标的进入观察队列，适合继续做研究复核。',
+    locale === 'en' ? 'Queued for observation; reason not reported.' : '已入观察队列，原因未报告。',
   )[0];
-}
-
-function candidateMainGap(item: ResearchRadarItem, locale: 'zh' | 'en') {
-  const gap = safeResearchQueueList(
-    item.riskFlags?.length ? item.riskFlags : item.whatToVerify,
-    locale,
-    locale === 'en' ? 'No primary evidence gap reported.' : '未报告主要证据缺口。',
-  )[0];
-  return gap;
 }
 
 function candidateNextAction(item: ResearchRadarItem, locale: 'zh' | 'en') {
+  if (!item.whatToVerify?.length) {
+    return locale === 'en' ? 'Next check not reported' : '下一步检查未报告';
+  }
   return safeResearchQueueList(
     item.whatToVerify,
     locale,
-    locale === 'en' ? 'Open the structure panel and review the supporting evidence.' : '打开结构面板，复核该标的的支持证据。',
+    locale === 'en' ? 'Next check not reported' : '下一步检查未报告',
   )[0];
 }
 
@@ -245,20 +251,41 @@ function candidateSymbol(item: ResearchRadarItem): string {
   return String(item.ticker || item.symbol || '').trim().toUpperCase();
 }
 
+function candidateLimitationSource(item: ResearchRadarItem): string[] {
+  if (item.riskFlags?.length) return item.riskFlags;
+  if (item.invalidationObservations?.length) return item.invalidationObservations;
+  return [];
+}
+
 function candidateLimitations(item: ResearchRadarItem, locale: 'zh' | 'en'): string[] {
+  const source = candidateLimitationSource(item);
+  if (!source.length) return [];
   return safeResearchQueueList(
-    item.riskFlags?.length ? item.riskFlags : item.invalidationObservations,
+    source,
     locale,
-    locale === 'en' ? 'No primary limitation reported; keep the observation bounded.' : '未报告主要限制，继续保持观察边界。',
+    locale === 'en' ? 'Limitation not reported' : '限制未报告',
   );
 }
 
 function candidateVerificationItems(item: ResearchRadarItem, locale: 'zh' | 'en'): string[] {
+  if (!item.whatToVerify?.length) return [];
   return safeResearchQueueList(
     item.whatToVerify,
     locale,
-    locale === 'en' ? 'Review structure evidence before extending the research loop.' : '继续研究前先复核结构证据。',
+    locale === 'en' ? 'Next check not reported' : '下一步检查未报告',
   );
+}
+
+function candidateMainGap(item: ResearchRadarItem, locale: 'zh' | 'en') {
+  const source = candidateLimitationSource(item);
+  if (!source.length && !item.whatToVerify?.length) {
+    return locale === 'en' ? 'Limitation not reported' : '限制未报告';
+  }
+  return safeResearchQueueList(
+    source.length ? source : item.whatToVerify,
+    locale,
+    locale === 'en' ? 'Limitation not reported' : '限制未报告',
+  )[0];
 }
 
 function candidateDriverScoreRows(item: ResearchRadarItem, locale: 'zh' | 'en') {
@@ -309,6 +336,11 @@ function ResearchRadarQueueOverview({
   }, [items, selectedKey]);
   const selectedSymbol = selectedItem ? candidateSymbol(selectedItem) : null;
   const selectedFactors = selectedItem ? candidateDriverScoreRows(selectedItem, locale) : [];
+  const selectedLimitations = selectedItem ? candidateLimitations(selectedItem, locale) : [];
+  const selectedVerification = selectedItem ? candidateVerificationItems(selectedItem, locale) : [];
+  const factorDensity = resolveModuleDensity(selectedFactors.length);
+  const limitationDensity = resolveModuleDensity(selectedLimitations.length);
+  const nextCheckDensity = resolveModuleDensity(selectedVerification.length);
   const summaryItems = [
     {
       key: 'candidate-count',
@@ -335,7 +367,11 @@ function ResearchRadarQueueOverview({
   const isEmptyQueue = items.length === 0;
 
   return (
-    <div className="border-b border-[color:var(--wolfy-divider)] p-3" data-testid="research-radar-consumer-overview">
+    <div
+      className="border-b border-[color:var(--wolfy-divider)] p-3"
+      data-testid="research-radar-consumer-overview"
+      data-discovery-sequence="candidate-queue>selected-detail>factor>limitation>next-check>comparison-ledger"
+    >
       <RoughSectionCard
         eyebrow={locale === 'en' ? 'Observation queue' : '观察队列'}
         title={locale === 'en' ? 'Today’s observation queue' : '今日观察队列'}
@@ -344,7 +380,9 @@ function ResearchRadarQueueOverview({
           {isEmptyQueue ? (
             <div
               data-testid="research-radar-empty-queue-band"
-              className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-4"
+              data-discovery-role="empty-queue"
+              data-module-density="bounded-empty"
+              className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-3"
             >
               <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 space-y-1">
@@ -354,10 +392,10 @@ function ResearchRadarQueueOverview({
                   <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
                     {locale === 'en' ? 'Zero candidates in the research queue' : '研究队列候选为 0'}
                   </p>
-                  <p className="max-w-[68ch] text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+                  <p className="max-w-[68ch] text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                     {locale === 'en'
-                      ? 'No symbols have entered the priority queue yet. This is an empty queue, not missing market data by itself.'
-                      : '当前还没有标的进入优先级队列。这是空队列，不等于市场数据本身不可用。'}
+                      ? 'Empty queue, not missing market data by itself. Open Scanner or market overview next.'
+                      : '这是空队列，不等于市场数据本身不可用。下一步可打开扫描器或市场概览。'}
                   </p>
                 </div>
                 <div className="flex min-w-0 flex-wrap gap-2">
@@ -365,7 +403,7 @@ function ResearchRadarQueueOverview({
                   <TerminalChip variant="neutral">{market || (locale === 'en' ? 'All markets' : '全部市场')}</TerminalChip>
                 </div>
               </div>
-              <dl className="mt-3 grid gap-2 text-xs text-[color:var(--wolfy-text-secondary)] sm:grid-cols-3">
+              <dl className="mt-2 grid gap-2 text-xs text-[color:var(--wolfy-text-secondary)] sm:grid-cols-3">
                 <div className="min-w-0">
                   <dt className="text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Candidates' : '观察候选'}</dt>
                   <dd className="mt-0.5 font-mono font-semibold text-[color:var(--wolfy-text-primary)]">0</dd>
@@ -379,14 +417,14 @@ function ResearchRadarQueueOverview({
                   <dd className="mt-0.5 font-mono">{formatDateTime(data.generatedAt, { locale: locale === 'en' ? 'en-US' : 'zh-CN' })}</dd>
                 </div>
               </dl>
-              <div className="mt-4">
+              <div className="mt-3">
                 <ConsumerResearchEmptyState
                   data-testid="research-radar-queue-empty-state"
                   locale={locale}
                   state={buildConsumerResearchEmptyState('noQueueItems', locale)}
                 />
               </div>
-              <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+              <div className="mt-2 flex min-w-0 flex-wrap gap-2">
                 <Link
                   to={buildResearchWorkspacePath('scanner', linkLocale, { market, source: 'manual' })}
                   className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-3 text-xs font-medium text-[color:var(--theme-button-primary-text)] transition-colors hover:bg-[var(--sage-deep)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
@@ -407,12 +445,13 @@ function ResearchRadarQueueOverview({
           <div className="flex flex-wrap gap-2 text-xs text-[color:var(--wolfy-text-muted)]">
             <TerminalChip variant="neutral">{market || (locale === 'en' ? 'All markets' : '全部市场')}</TerminalChip>
             <TerminalChip variant="info">
-              {locale === 'en' ? 'Symbols for research observation' : '仅展示研究观察标的'}
+              {locale === 'en' ? 'Research observation candidates, not recommendations' : '研究观察候选，不是推荐'}
             </TerminalChip>
           </div>
             <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(24rem,0.9fr)]">
               <div
                 data-testid="research-radar-candidate-ledger"
+                data-discovery-role="candidate-queue comparison-ledger"
                 role="region"
                 aria-label={locale === 'en' ? 'Research Radar candidate ledger horizontal scroll region' : '研究雷达候选台账横向滚动区域'}
                 tabIndex={0}
@@ -477,6 +516,7 @@ function ResearchRadarQueueOverview({
               {selectedItem && selectedSymbol ? (
                 <section
                   data-testid="research-radar-selected-candidate-detail"
+                  data-discovery-role="selected-candidate-detail"
                   aria-labelledby="research-radar-selected-candidate-title"
                   className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)] p-4"
                 >
@@ -494,16 +534,20 @@ function ResearchRadarQueueOverview({
                     />
                   </div>
 
-                  <div className="mt-4 space-y-4">
-                    <section>
+                  <div className="mt-4 space-y-3">
+                    <section data-discovery-role="candidate-reason">
                       <h4 className="text-xs font-semibold text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Current observation' : '当前研究观察'}</h4>
                       <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{candidateReason(selectedItem, locale)}</p>
                     </section>
-                    <section>
+                    <section
+                      data-discovery-role="factor-contribution"
+                      data-module-density={factorDensity === 'hide' ? 'bounded-empty' : factorDensity}
+                      data-testid="research-radar-factor-section"
+                    >
                       <h4 className="text-xs font-semibold text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Factor contribution' : '因子贡献'}</h4>
                       {selectedFactors.length ? (
-                        <div className="mt-2 space-y-2" data-testid="research-radar-factor-bars">
-                          {selectedFactors.map((factor) => (
+                        <div className={`mt-2 space-y-2 ${factorDensity === 'compact' ? 'max-h-28 overflow-y-auto no-scrollbar ui-scroll-y-quiet' : ''}`} data-testid="research-radar-factor-bars">
+                          {(factorDensity === 'compact' ? selectedFactors.slice(0, 2) : selectedFactors).map((factor) => (
                             <div key={factor.key} className="grid min-w-0 grid-cols-[7.5rem_minmax(0,1fr)_3rem] items-center gap-2 text-xs">
                               <span className="truncate text-[color:var(--wolfy-text-secondary)]">{factor.label}</span>
                               <div
@@ -520,33 +564,53 @@ function ResearchRadarQueueOverview({
                           ))}
                         </div>
                       ) : (
-                        <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-                          {locale === 'en' ? 'No factor dimensions are available for this candidate.' : '该候选暂无可展示的真实因子维度。'}
+                        <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                          {locale === 'en' ? 'No factor dimensions available for this candidate.' : '该候选暂无可展示的真实因子维度。'}
                         </p>
                       )}
                     </section>
-                    <section>
+                    <section
+                      data-discovery-role="risk-limitation"
+                      data-module-density={limitationDensity === 'hide' ? 'bounded-empty' : limitationDensity}
+                      data-testid="research-radar-limitation-section"
+                    >
                       <h4 className="text-xs font-semibold text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Limitation / risk' : '限制 / 风险'}</h4>
-                      <RoughBulletList
-                        items={candidateLimitations(selectedItem, locale)}
-                        emptyText={locale === 'en' ? 'No limitation reported.' : '未报告限制。'}
-                      />
+                      {selectedLimitations.length ? (
+                        <RoughBulletList
+                          items={limitationDensity === 'compact' ? selectedLimitations.slice(0, 2) : selectedLimitations}
+                          emptyText={locale === 'en' ? 'Limitation not reported.' : '限制未报告。'}
+                        />
+                      ) : (
+                        <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                          {locale === 'en' ? 'Limitation not reported.' : '限制未报告。'}
+                        </p>
+                      )}
                     </section>
-                    <section>
+                    <section data-discovery-role="data-freshness" data-module-density="compact">
                       <h4 className="text-xs font-semibold text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Data freshness' : '数据时效'}</h4>
                       <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                         {locale === 'en' ? 'Queue updated ' : '队列更新 '}
                         <span className="font-mono">{formatDateTime(data.generatedAt, { locale: locale === 'en' ? 'en-US' : 'zh-CN' })}</span>
                       </p>
                     </section>
-                    <section>
+                    <section
+                      data-discovery-role="next-research-check"
+                      data-module-density={nextCheckDensity === 'hide' ? 'bounded-empty' : nextCheckDensity}
+                      data-testid="research-radar-next-check-section"
+                    >
                       <h4 className="text-xs font-semibold text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Next research check' : '下一步研究检查'}</h4>
-                      <RoughBulletList
-                        items={candidateVerificationItems(selectedItem, locale)}
-                        emptyText={locale === 'en' ? 'No next check reported.' : '暂未报告下一步检查。'}
-                      />
+                      {selectedVerification.length ? (
+                        <RoughBulletList
+                          items={nextCheckDensity === 'compact' ? selectedVerification.slice(0, 2) : selectedVerification}
+                          emptyText={locale === 'en' ? 'Next check not reported.' : '下一步检查未报告。'}
+                        />
+                      ) : (
+                        <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                          {locale === 'en' ? 'Next check not reported.' : '下一步检查未报告。'}
+                        </p>
+                      )}
                     </section>
-                    <div className="flex min-w-0 flex-wrap gap-2 pt-1">
+                    <div className="flex min-w-0 flex-wrap gap-2 pt-1" data-discovery-role="research-handoff">
                       <Link
                         to={buildResearchWorkspacePath('stock-structure', linkLocale, { symbol: selectedSymbol, market, source: 'scanner' })}
                         className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
