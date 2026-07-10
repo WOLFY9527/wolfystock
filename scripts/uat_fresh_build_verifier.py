@@ -10,6 +10,7 @@ repo-local static/ output.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import subprocess
@@ -57,6 +58,8 @@ GENERATED_ARTIFACT_PATHS = (
     "apps/dsa-web/node_modules/.cache",
     ".cache",
 )
+FRONTEND_BUILD_IDENTITY_CONTRACT = "wolfystock_frontend_build_identity_v1"
+FRONTEND_BUILD_IDENTITY_FILENAME = ".wolfystock-build-identity.json"
 
 
 @dataclass(frozen=True)
@@ -74,6 +77,7 @@ def verify_frontend_static_build(
     repo_root: Path | str,
     require_fresh: bool = True,
     allow_unknown_freshness: bool = False,
+    require_build_identity: bool = False,
 ) -> VerificationResult:
     """Verify the static frontend bundle against backend HEAD provenance."""
 
@@ -107,11 +111,112 @@ def verify_frontend_static_build(
     elif freshness_status == "unavailable":
         errors.append("frontend_static_build_unavailable")
 
+    if require_build_identity:
+        identity_result = verify_frontend_build_identity(
+            static_root=root,
+            backend_info=backend_info,
+            repo_root=repo,
+            local_payload=payload,
+        )
+        payload["frontendBuildIdentity"] = identity_result.payload or None
+        errors.extend(identity_result.error_codes)
+
     return VerificationResult(
         ok=not errors,
         payload=payload,
         error_codes=_dedupe(errors),
         warning_codes=_dedupe(warnings),
+    )
+
+
+def write_frontend_build_identity(
+    *,
+    static_root: Path | str,
+    backend_info: BackendBuildInfo,
+    repo_root: Path | str,
+) -> VerificationResult:
+    root = Path(static_root)
+    repo = Path(repo_root).resolve()
+    local_payload = build_build_provenance(static_root=root, backend_info=backend_info, repo_root=repo)
+    main_asset = str(local_payload.get("frontendMainAssetFilename") or "")
+    identity = {
+        "contract": FRONTEND_BUILD_IDENTITY_CONTRACT,
+        "gitSha": str(backend_info.git_sha or "").strip() or None,
+        "repositoryRoot": str(repo),
+        "indexHtmlSha256": _sha256_file(root / "index.html"),
+        "mainJsAssetFilename": main_asset or None,
+        "mainJsAssetSha256": _sha256_file(_main_asset_path(root, main_asset)),
+    }
+    errors = _validate_frontend_build_identity_fields(identity)
+    if errors:
+        return VerificationResult(ok=False, payload=identity, error_codes=errors)
+
+    identity_path = root / FRONTEND_BUILD_IDENTITY_FILENAME
+    try:
+        identity_path.write_text(
+            json.dumps(identity, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    except Exception:
+        return VerificationResult(
+            ok=False,
+            payload=identity,
+            error_codes=["frontend_build_identity_write_failed"],
+        )
+    return VerificationResult(ok=True, payload=identity)
+
+
+def verify_frontend_build_identity(
+    *,
+    static_root: Path | str,
+    backend_info: BackendBuildInfo,
+    repo_root: Path | str,
+    local_payload: dict[str, Any],
+) -> VerificationResult:
+    root = Path(static_root)
+    repo = Path(repo_root).resolve()
+    identity_path = root / FRONTEND_BUILD_IDENTITY_FILENAME
+    if not identity_path.is_file():
+        return VerificationResult(
+            ok=False,
+            payload={},
+            error_codes=["frontend_build_identity_missing"],
+        )
+    try:
+        identity = json.loads(identity_path.read_text(encoding="utf-8"))
+    except Exception:
+        return VerificationResult(
+            ok=False,
+            payload={},
+            error_codes=["frontend_build_identity_unreadable"],
+        )
+    if not isinstance(identity, dict):
+        return VerificationResult(
+            ok=False,
+            payload={},
+            error_codes=["frontend_build_identity_invalid"],
+        )
+
+    errors = _validate_frontend_build_identity_fields(identity)
+    if identity.get("contract") != FRONTEND_BUILD_IDENTITY_CONTRACT:
+        errors.append("frontend_build_identity_contract_mismatch")
+    if str(identity.get("repositoryRoot") or "") != str(repo):
+        errors.append("frontend_build_identity_repo_root_mismatch")
+    if str(identity.get("gitSha") or "") != str(backend_info.git_sha or ""):
+        errors.append("frontend_build_identity_git_sha_mismatch")
+
+    main_asset = str(local_payload.get("frontendMainAssetFilename") or "")
+    if str(identity.get("mainJsAssetFilename") or "") != main_asset:
+        errors.append("frontend_build_identity_main_asset_mismatch")
+    if str(identity.get("indexHtmlSha256") or "") != str(_sha256_file(root / "index.html") or ""):
+        errors.append("frontend_build_identity_index_hash_mismatch")
+    if str(identity.get("mainJsAssetSha256") or "") != str(_sha256_file(_main_asset_path(root, main_asset)) or ""):
+        errors.append("frontend_build_identity_main_asset_hash_mismatch")
+
+    return VerificationResult(
+        ok=not errors,
+        payload=dict(identity),
+        error_codes=_dedupe(errors),
     )
 
 
@@ -195,6 +300,17 @@ def run_frontend_build(repo_root: Path) -> int:
         if completed.returncode != 0:
             print("ERROR: frontend bootstrap failed; static assets were not accepted for UAT.", file=sys.stderr)
             return int(completed.returncode)
+    identity_result = write_frontend_build_identity(
+        static_root=repo_root / "static",
+        backend_info=read_backend_info(repo_root),
+        repo_root=repo_root,
+    )
+    if not identity_result.ok:
+        print(
+            "ERROR: frontend build identity failed: " + ", ".join(identity_result.error_codes),
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
@@ -295,6 +411,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         backend_info=backend_info,
         repo_root=repo_root,
         allow_unknown_freshness=bool(args.allow_unknown_freshness),
+        require_build_identity=True,
     )
     _print_local_result(local_result)
     if not local_result.ok:
@@ -367,6 +484,45 @@ def _main_asset_exists(static_root: Path, filename: str) -> bool:
     if not assets_dir.is_dir():
         return False
     return any(path.is_file() and path.name == filename for path in assets_dir.rglob(filename))
+
+
+def _main_asset_path(static_root: Path, filename: str) -> Path:
+    direct = static_root / "assets" / filename
+    if direct.is_file() or not filename:
+        return direct
+    assets_dir = static_root / "assets"
+    if assets_dir.is_dir():
+        for path in assets_dir.rglob(filename):
+            if path.is_file():
+                return path
+    return direct
+
+
+def _sha256_file(path: Path) -> str | None:
+    try:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except Exception:
+        return None
+
+
+def _validate_frontend_build_identity_fields(identity: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    required = {
+        "contract": "frontend_build_identity_contract_missing",
+        "gitSha": "frontend_build_identity_git_sha_missing",
+        "repositoryRoot": "frontend_build_identity_repo_root_missing",
+        "indexHtmlSha256": "frontend_build_identity_index_hash_missing",
+        "mainJsAssetFilename": "frontend_build_identity_main_asset_missing",
+        "mainJsAssetSha256": "frontend_build_identity_main_asset_hash_missing",
+    }
+    for field_name, error_code in required.items():
+        if not str(identity.get(field_name) or "").strip():
+            errors.append(error_code)
+    return errors
 
 
 def _git_output(repo_root: Path, *args: str) -> str | None:

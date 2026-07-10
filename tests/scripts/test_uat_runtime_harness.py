@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -16,14 +17,21 @@ class _FakeResponse:
     def __init__(self, status_code: int, text: str = "") -> None:
         self.status_code = status_code
         self.text = text
+        self.content = text.encode("utf-8")
 
     def json(self) -> dict[str, object]:
         return json.loads(self.text or "{}")
 
 
 class _FakeClient:
-    def __init__(self, *, asset_name: str = "index-CKPdXr8Q.js") -> None:
+    def __init__(
+        self,
+        *,
+        asset_name: str = "index-CKPdXr8Q.js",
+        main_asset_body: str = "console.log('ok');\n",
+    ) -> None:
         self.asset_name = asset_name
+        self.main_asset_body = main_asset_body
         self.calls: list[tuple[str, str]] = []
 
     def request(self, method: str, url: str, headers: dict[str, str] | None = None) -> _FakeResponse:
@@ -36,7 +44,9 @@ class _FakeClient:
                 f'<html><title>WolfyStock</title><script type="module" src="/assets/{self.asset_name}"></script></html>',
             )
         if url.endswith(f"/assets/{self.asset_name}"):
-            return _FakeResponse(200, "console.log('ok');")
+            return _FakeResponse(200, self.main_asset_body)
+        if url.endswith("/assets/index-CSS123.css"):
+            return _FakeResponse(200, "body{color:#111}\n")
         return _FakeResponse(200, "{}")
 
 
@@ -104,6 +114,46 @@ def _local_build(asset_name: str = "index-CKPdXr8Q.js") -> VerificationResult:
     )
 
 
+def _evidence_asset_identity(repo_root: Path, *, git_sha: str = "45b6965d") -> dict[str, object]:
+    asset_name = "index-CKPdXr8Q.js"
+    index_body = (
+        f'<html><title>WolfyStock</title><script type="module" src="/assets/{asset_name}"></script></html>'
+    )
+    main_body = "console.log('ok');\n"
+    css_body = "body{color:#111}\n"
+    index_hash = hashlib.sha256(index_body.encode("utf-8")).hexdigest()
+    main_hash = hashlib.sha256(main_body.encode("utf-8")).hexdigest()
+    css_hash = hashlib.sha256(css_body.encode("utf-8")).hexdigest()
+    return {
+        "indexHtmlHash": index_hash,
+        "mainJsAssetFilename": asset_name,
+        "mainCssAssetFilenames": ["index-CSS123.css"],
+        "assetHashes": {
+            asset_name: main_hash,
+            "index-CSS123.css": css_hash,
+        },
+        "buildIdentity": {
+            "contract": "wolfystock_frontend_build_identity_v1",
+            "gitSha": git_sha,
+            "repositoryRoot": str(repo_root.resolve()),
+            "indexHtmlSha256": index_hash,
+            "mainJsAssetFilename": asset_name,
+            "mainJsAssetSha256": main_hash,
+        },
+    }
+
+
+def _evidence_interpreter() -> dict[str, object]:
+    executable = str(Path(sys.executable).resolve())
+    return {
+        "status": "verified",
+        "expectedRequestedPath": sys.executable,
+        "expectedResolvedPath": executable,
+        "observedPath": executable,
+        "observedResolvedPath": executable,
+    }
+
+
 def _valid_source(expected_sha: str = "45b6965d") -> dict[str, object]:
     return {
         "ok": True,
@@ -140,7 +190,7 @@ def _write_uat_evidence(
         "pid": pid,
         "cwd": str(evidence_dir.resolve()),
         "port": port,
-        "assetIdentity": {"mainJsAssetFilename": "index-CKPdXr8Q.js"},
+        "assetIdentity": _evidence_asset_identity(evidence_dir, git_sha=source_sha or run_sha or "45b6965d"),
         "runLogPath": str(evidence_dir / f"{run_id}-runtime.log"),
     }
     if run_sha is not None:
@@ -151,6 +201,7 @@ def _write_uat_evidence(
         "ownedByHarness": True,
         "processStartTime": "2026-07-05T00:00:00+00:00",
         "command": f"{sys.executable} main.py --serve-only --port {port}",
+        "interpreter": _evidence_interpreter(),
         "listener": {"host": "127.0.0.1", "port": port},
     }
     if runtime_sha is not None:
@@ -161,7 +212,7 @@ def _write_uat_evidence(
         "source": source,
         "run": run,
         "runtime": runtime,
-        "frontend": {"mainJsAssetFilename": "index-CKPdXr8Q.js"},
+        "frontend": dict(run["assetIdentity"]),
     }
     if generated_at is not None:
         payload["generatedAt"] = generated_at
@@ -176,6 +227,7 @@ def _patch_preflight_identity_ok(monkeypatch, tmp_path: Path, *, port: int = 810
     command = f"{sys.executable} main.py --serve-only --port {port}"
     monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
     monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path.resolve()))
+    monkeypatch.setattr(harness, "process_executable", lambda _pid: str(Path(sys.executable).resolve()))
     monkeypatch.setattr(harness, "process_start_time", lambda _pid: "2026-07-05T00:00:00+00:00")
     monkeypatch.setattr(harness, "process_command", lambda _pid: command)
     monkeypatch.setattr(
@@ -508,6 +560,37 @@ def test_build_uat_runtime_env_removes_proxy_vars_and_sets_isolation_flags() -> 
     assert "localhost" in env["NO_PROXY"]
 
 
+def test_direct_http_client_reads_full_raw_response_bytes() -> None:
+    body = b"x" * (1024 * 1024 + 37)
+    read_args: list[tuple[object, ...]] = []
+
+    class _RawResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self, *args):
+            read_args.append(args)
+            return body
+
+    class _RawOpener:
+        def open(self, *_args, **_kwargs):
+            return _RawResponse()
+
+    client = harness.DirectNoProxyHttpClient()
+    client._opener = _RawOpener()
+
+    response = client.request("GET", "http://127.0.0.1:8000/assets/index-large.js")
+
+    assert response.content == body
+    assert len(response.text) == len(body)
+    assert read_args == [()]
+
+
 def test_frontend_dependency_bootstrap_runs_npm_ci_when_required(monkeypatch, tmp_path: Path) -> None:
     web_dir = tmp_path / "apps" / "dsa-web"
     (web_dir / "node_modules" / ".bin").mkdir(parents=True)
@@ -636,6 +719,7 @@ def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(mo
     monkeypatch.setattr(harness, "read_backend_info", lambda _repo_root: object())
     monkeypatch.setattr(harness, "start_runtime", lambda *_args, **_kwargs: fake_process)
     monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path.resolve()))
+    monkeypatch.setattr(harness, "process_executable", lambda _pid: str(Path(sys.executable).resolve()))
     monkeypatch.setattr(harness, "process_command", lambda _pid: "python main.py --serve-only --host 127.0.0.1 --port 8000")
     monkeypatch.setattr(harness, "process_start_time", lambda _pid: "Sun Jul  5 00:00:00 2026")
     monkeypatch.setattr(harness, "DirectNoProxyHttpClient", lambda: _FakeClient())
@@ -668,6 +752,7 @@ def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(mo
     assert evidence["status"] == "PASS"
     assert evidence["runtime"]["pid"] == 43210
     assert evidence["runtime"]["cwd"] == str(tmp_path.resolve())
+    assert evidence["runtime"]["interpreter"]["status"] == "verified"
     assert evidence["frontend"]["mainJsAssetFilename"] == "index-CKPdXr8Q.js"
     assert evidence["frontend"]["mainCssAssetFilenames"] == ["index-CSS123.css"]
     assert evidence["directHttpHtml"]["ok"] is True
@@ -684,6 +769,98 @@ def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(mo
     assert written["contract"] == "wolfystock_uat_runtime_harness_v1"
     assert written["workbuddyHandoff"]["expectedGitSha"] == "45b6965d"
     assert written["run"]["evidencePath"] == evidence["evidencePath"]
+
+
+def test_run_harness_fails_closed_for_wrong_process_cwd(monkeypatch, tmp_path: Path) -> None:
+    _write_static(tmp_path)
+    fake_process = _FakeProcess()
+    monkeypatch.setattr(harness, "validate_source", lambda _repo_root, _expected_sha: _valid_source())
+    monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
+    monkeypatch.setattr(
+        harness,
+        "ensure_frontend_dependencies",
+        lambda _repo_root: {"action": "skipped", "required": False, "reasonCodes": []},
+    )
+    monkeypatch.setattr(harness, "verify_frontend_static_build", lambda **_kwargs: _local_build())
+    monkeypatch.setattr(harness, "read_backend_info", lambda _repo_root: object())
+    monkeypatch.setattr(harness, "start_runtime", lambda *_args, **_kwargs: fake_process)
+    monkeypatch.setattr(harness, "process_cwd", lambda _pid: str((tmp_path / "other").resolve()))
+    monkeypatch.setattr(harness, "process_executable", lambda _pid: str(Path(sys.executable).resolve()))
+    monkeypatch.setattr(harness, "process_command", lambda _pid: "python main.py --serve-only --host 127.0.0.1 --port 8000")
+    monkeypatch.setattr(harness, "process_start_time", lambda _pid: "Sun Jul  5 00:00:00 2026")
+    monkeypatch.setattr(harness, "DirectNoProxyHttpClient", lambda: _FakeClient())
+    monkeypatch.setattr(
+        harness,
+        "run_runtime_smoke",
+        lambda **_kwargs: {"checks": {"runtimeBundle": {"status": "PASS"}}, "summaryStatus": "PARTIAL"},
+    )
+
+    exit_code, evidence = harness.run_harness(
+        repo_root=tmp_path,
+        expected_sha="45b6965d",
+        host="127.0.0.1",
+        port=8000,
+        evidence_dir=tmp_path / "output" / "runtime-verification",
+        skip_build=True,
+        stop_runtime_after=True,
+    )
+
+    assert exit_code == 1
+    assert evidence["status"] == "FAIL"
+    assert "runtime_cwd_mismatch" in evidence["identityErrors"]
+
+
+def test_run_harness_fails_closed_for_mismatched_interpreter(monkeypatch, tmp_path: Path) -> None:
+    _write_static(tmp_path)
+    fake_process = _FakeProcess()
+    monkeypatch.setattr(harness, "validate_source", lambda _repo_root, _expected_sha: _valid_source())
+    monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
+    monkeypatch.setattr(
+        harness,
+        "ensure_frontend_dependencies",
+        lambda _repo_root: {"action": "skipped", "required": False, "reasonCodes": []},
+    )
+    monkeypatch.setattr(harness, "verify_frontend_static_build", lambda **_kwargs: _local_build())
+    monkeypatch.setattr(harness, "read_backend_info", lambda _repo_root: object())
+    monkeypatch.setattr(harness, "start_runtime", lambda *_args, **_kwargs: fake_process)
+    monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path.resolve()))
+    monkeypatch.setattr(harness, "process_executable", lambda _pid: "/usr/bin/false")
+    monkeypatch.setattr(harness, "process_command", lambda _pid: "python main.py --serve-only --host 127.0.0.1 --port 8000")
+    monkeypatch.setattr(harness, "process_start_time", lambda _pid: "Sun Jul  5 00:00:00 2026")
+    monkeypatch.setattr(harness, "DirectNoProxyHttpClient", lambda: _FakeClient())
+    monkeypatch.setattr(
+        harness,
+        "run_runtime_smoke",
+        lambda **_kwargs: {"checks": {"runtimeBundle": {"status": "PASS"}}, "summaryStatus": "PARTIAL"},
+    )
+
+    exit_code, evidence = harness.run_harness(
+        repo_root=tmp_path,
+        expected_sha="45b6965d",
+        host="127.0.0.1",
+        port=8000,
+        evidence_dir=tmp_path / "output" / "runtime-verification",
+        skip_build=True,
+        stop_runtime_after=True,
+    )
+
+    assert exit_code == 1
+    assert evidence["runtime"]["interpreter"]["status"] == "mismatch"
+    assert "runtime_interpreter_mismatch" in evidence["identityErrors"]
+
+
+def test_direct_http_asset_identity_rejects_same_filename_with_different_bytes(tmp_path: Path) -> None:
+    _write_static(tmp_path)
+    identity = harness.build_asset_identity(tmp_path / "static", _local_build().payload)
+
+    result = harness.verify_direct_asset_identity(
+        _FakeClient(main_asset_body="console.log('stale bundle');\n"),
+        "http://127.0.0.1:8000",
+        identity,
+    )
+
+    assert result["ok"] is False
+    assert "served_asset_hash_mismatch" in result["reasonCodes"]
 
 
 def test_run_harness_fails_when_dependency_bootstrap_fails(monkeypatch, tmp_path: Path) -> None:
@@ -720,6 +897,7 @@ def test_run_harness_fails_when_dependency_bootstrap_fails(monkeypatch, tmp_path
 
 def test_preflight_pass_reports_machine_readable_current_run_identity(monkeypatch, tmp_path: Path) -> None:
     expected_command = "python main.py --serve-only --host 127.0.0.1 --port 8102"
+    asset_identity = _evidence_asset_identity(tmp_path)
     evidence = {
         "contract": "wolfystock_uat_runtime_harness_v1",
         "status": "PASS",
@@ -730,7 +908,7 @@ def test_preflight_pass_reports_machine_readable_current_run_identity(monkeypatc
             "cwd": str(tmp_path.resolve()),
             "startTime": "2026-07-05T00:00:00+00:00",
             "port": 8102,
-            "assetIdentity": {"indexHtmlHash": "indexhash", "mainJsAssetFilename": "index-CKPdXr8Q.js"},
+            "assetIdentity": asset_identity,
             "evidencePath": str(tmp_path / "evidence.json"),
             "runLogPath": str(tmp_path / "run.log"),
         },
@@ -740,15 +918,17 @@ def test_preflight_pass_reports_machine_readable_current_run_identity(monkeypatc
             "ownedByHarness": True,
             "processStartTime": "2026-07-05T00:00:00+00:00",
             "command": expected_command,
+            "interpreter": _evidence_interpreter(),
             "listener": {"port": 8102},
         },
-        "frontend": {"indexHtmlHash": "indexhash", "mainJsAssetFilename": "index-CKPdXr8Q.js"},
+        "frontend": asset_identity,
         "directHttpHtml": {"ok": True},
         "runtimeLog": {"path": str(tmp_path / "run.log"), "startTime": "2026-07-05T00:00:00+00:00"},
     }
     evidence_path = tmp_path / "evidence.json"
     evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
     monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path.resolve()))
+    monkeypatch.setattr(harness, "process_executable", lambda _pid: str(Path(sys.executable).resolve()))
     monkeypatch.setattr(harness, "process_start_time", lambda _pid: "2026-07-05T00:00:00+00:00")
     monkeypatch.setattr(harness, "process_command", lambda _pid: expected_command)
     monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
@@ -773,6 +953,8 @@ def test_preflight_pass_reports_machine_readable_current_run_identity(monkeypatc
     assert result["checks"]["ownedByHarness"]["status"] == "PASS"
     assert result["checks"]["processStartTime"]["status"] == "PASS"
     assert result["checks"]["commandIdentity"]["status"] == "PASS"
+    assert result["checks"]["interpreterIdentity"]["status"] == "PASS"
+    assert result["checks"]["buildIdentity"]["status"] == "PASS"
     assert result["checks"]["directNoProxyHttp"]["status"] == "PASS"
     assert result["run"]["runId"] == "uat-20260705T000000Z-abc12345"
     assert result["run"]["runLogPath"] == str(tmp_path / "run.log")
@@ -783,6 +965,7 @@ def test_preflight_windows_allows_unobservable_cwd_when_stronger_identity_matche
     tmp_path: Path,
 ) -> None:
     expected_command = "python main.py --serve-only --host 127.0.0.1 --port 8102"
+    asset_identity = _evidence_asset_identity(tmp_path)
     evidence_path = tmp_path / "evidence.json"
     evidence_path.write_text(
         json.dumps(
@@ -796,7 +979,7 @@ def test_preflight_windows_allows_unobservable_cwd_when_stronger_identity_matche
                     "cwd": str(tmp_path.resolve()),
                     "startTime": "2026-07-05T00:00:00+00:00",
                     "port": 8102,
-                    "assetIdentity": {"mainJsAssetFilename": "index-CKPdXr8Q.js"},
+                    "assetIdentity": asset_identity,
                     "evidencePath": str(evidence_path),
                     "runLogPath": str(tmp_path / "run.log"),
                 },
@@ -804,9 +987,10 @@ def test_preflight_windows_allows_unobservable_cwd_when_stronger_identity_matche
                     "ownedByHarness": True,
                     "processStartTime": "2026-07-05T00:00:00+00:00",
                     "command": expected_command,
+                    "interpreter": _evidence_interpreter(),
                     "listener": {"host": "127.0.0.1", "port": 8102},
                 },
-                "frontend": {"mainJsAssetFilename": "index-CKPdXr8Q.js"},
+                "frontend": asset_identity,
             }
         ),
         encoding="utf-8",
@@ -814,6 +998,7 @@ def test_preflight_windows_allows_unobservable_cwd_when_stronger_identity_matche
     monkeypatch.setattr(harness, "is_windows", lambda: True)
     monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
     monkeypatch.setattr(harness, "process_cwd", lambda _pid: None)
+    monkeypatch.setattr(harness, "process_executable", lambda _pid: str(Path(sys.executable).resolve()))
     monkeypatch.setattr(harness, "process_start_time", lambda _pid: "2026-07-05T00:00:00+00:00")
     monkeypatch.setattr(harness, "process_command", lambda _pid: expected_command)
     monkeypatch.setattr(
@@ -836,7 +1021,57 @@ def test_preflight_windows_allows_unobservable_cwd_when_stronger_identity_matche
     assert result["checks"]["ownedByHarness"]["status"] == "PASS"
     assert result["checks"]["processStartTime"]["status"] == "PASS"
     assert result["checks"]["commandIdentity"]["status"] == "PASS"
+    assert result["checks"]["interpreterIdentity"]["status"] == "PASS"
+    assert result["checks"]["buildIdentity"]["status"] == "PASS"
     assert result["checks"]["pidOwnsPort"]["status"] == "PASS"
+
+
+def test_preflight_fails_closed_when_identity_evidence_is_missing(monkeypatch, tmp_path: Path) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(
+        json.dumps(
+            {
+                "status": "PASS",
+                "source": {"gitSha": "45b6965d"},
+                "run": {
+                    "runId": "uat-run",
+                    "pid": 43210,
+                    "cwd": str(tmp_path.resolve()),
+                    "startTime": "2026-07-05T00:00:00+00:00",
+                    "port": 8102,
+                    "assetIdentity": {"mainJsAssetFilename": "index-CKPdXr8Q.js"},
+                    "runLogPath": str(tmp_path / "run.log"),
+                },
+                "runtime": {
+                    "ownedByHarness": True,
+                    "processStartTime": "2026-07-05T00:00:00+00:00",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
+    monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path.resolve()))
+    monkeypatch.setattr(harness, "process_executable", lambda _pid: str(Path(sys.executable).resolve()))
+    monkeypatch.setattr(harness, "process_start_time", lambda _pid: "2026-07-05T00:00:00+00:00")
+    monkeypatch.setattr(
+        harness,
+        "find_port_owner",
+        lambda _host, _port: harness.PortOwner(pid=43210, cwd=str(tmp_path.resolve()), command=None),
+    )
+    monkeypatch.setattr(harness, "DirectNoProxyHttpClient", lambda: _FakeClient())
+
+    result = harness.run_preflight(
+        evidence_path=evidence_path,
+        expected_sha="45b6965d",
+        host="127.0.0.1",
+        port=8102,
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["checks"]["assetIdentity"]["status"] == "FAIL"
+    assert result["checks"]["buildIdentity"]["status"] == "FAIL"
+    assert result["checks"]["interpreterIdentity"]["status"] == "FAIL"
 
 
 def test_preflight_windows_rejects_observable_cwd_mismatch(monkeypatch, tmp_path: Path) -> None:
