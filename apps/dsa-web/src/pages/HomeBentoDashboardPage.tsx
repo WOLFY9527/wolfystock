@@ -2582,7 +2582,7 @@ function DecisionSourceDetailsPanel({
               {isEnglish ? 'Missing' : '缺口'}
             </p>
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-emerald-200/80">{quickDecisionText}</p>
+              <p className="text-xs font-semibold text-[color:var(--state-success-text)]/80">{quickDecisionText}</p>
               <p className="mt-1 break-words text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                 {missingFields.length ? missingFields.join('、') : missingCritical}
               </p>
@@ -3265,12 +3265,12 @@ function symbolReadinessTierLabel(locale: DashboardLocale, tier: SymbolEvidenceR
 
 function symbolReadinessTierClass(tier: SymbolEvidenceReadiness['readinessTier']): string {
   if (tier === 'sufficient') {
-    return 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100';
+    return 'border-[color:var(--state-success-border)] bg-[var(--state-success-bg)] text-[color:var(--state-success-text)]';
   }
   if (tier === 'partial') {
     return 'border-amber-300/20 bg-amber-300/10 text-amber-100';
   }
-  return 'border-rose-300/20 bg-rose-300/10 text-rose-100';
+  return 'border-[color:var(--state-danger-border)] bg-[var(--state-danger-bg)] text-[color:var(--state-danger-text)]';
 }
 
 function symbolReadinessEvidenceLabel(locale: DashboardLocale, value: string): string {
@@ -6408,9 +6408,9 @@ function timelineStatusLabel(status: 'pending' | 'running' | 'completed' | 'fail
 }
 
 function timelineDotTone(status: 'pending' | 'running' | 'completed' | 'failed'): string {
-  if (status === 'completed') return 'bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.45)]';
+  if (status === 'completed') return 'bg-[color:var(--state-success-text)] ';
   if (status === 'running') return 'bg-indigo-200 shadow-[0_0_18px_rgba(165,180,252,0.55)] animate-pulse';
-  if (status === 'failed') return 'bg-rose-300 shadow-[0_0_14px_rgba(251,113,133,0.45)]';
+  if (status === 'failed') return 'bg-[color:var(--state-danger-text)] ';
   return 'bg-[var(--wolfy-surface-inset)]';
 }
 
@@ -6649,10 +6649,10 @@ function GuestPreviewUnavailableState({ locale }: { locale: DashboardLocale }) {
 function GuestPaywallOverlay({ locale, registrationPath }: { locale: DashboardLocale; registrationPath: string }) {
   return (
     <div
-      className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-[rgba(8,12,24,0.58)] px-6 text-center backdrop-blur-[8px]"
+      className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--surface)_92%,var(--paper-deep))] px-6 text-center shadow-[var(--shadow-tight)]"
       data-testid="guest-home-frosted-lock"
     >
-      <Lock className="h-7 w-7 text-[color:var(--wolfy-text-primary)] drop-shadow-[0_0_14px_rgba(99,102,241,0.55)]" />
+      <Lock className="h-7 w-7 text-[color:var(--sage-deep)]" aria-hidden="true" />
       <p className="mt-4 max-w-xs text-sm font-medium leading-6 text-[color:var(--wolfy-text-secondary)]">
         {locale === 'en'
           ? 'Unlock the full research framework, price observations, and technical context.'
@@ -6660,7 +6660,7 @@ function GuestPaywallOverlay({ locale, registrationPath }: { locale: DashboardLo
       </p>
       <Link
         to={registrationPath}
-        className="mt-5 inline-flex items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-3 text-sm font-medium text-[color:var(--wolfy-text-primary)] shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all hover:from-blue-400 hover:to-purple-500"
+        className="mt-5 inline-flex items-center justify-center rounded-full border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-8 py-3 text-sm font-medium text-[color:var(--theme-button-primary-text)] shadow-none transition-colors hover:bg-[var(--sage-deep)]"
       >
         {locale === 'en' ? 'Create free account' : '免费创建账户'}
       </Link>
@@ -8637,7 +8637,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   variant="ghost"
                   size="sm"
                   disabled={isDeletingHistory}
-                  className="shrink-0 border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 text-[color:var(--wolfy-text-secondary)] hover:border-rose-400/30 hover:bg-rose-400/10 hover:text-rose-100"
+                  className="shrink-0 border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--state-danger-border)] hover:bg-[var(--state-danger-bg)] hover:text-[color:var(--state-danger-text)]"
                   onClick={() => setPendingHistoryDelete({ mode: 'single', recordIds: [item.id] })}
                   data-testid={`home-bento-history-delete-${item.id}`}
                 >

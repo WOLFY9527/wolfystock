@@ -254,20 +254,20 @@ export default function LeveragedEtfMapper({
       summary={copy.summary}
       className={className}
     >
-      <div className="space-y-3 text-xs leading-5 text-white/68">
+      <div className="space-y-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
         <div className="flex min-w-0 items-start gap-2 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
           <Calculator className="mt-0.5 h-4 w-4 shrink-0 text-cyan-100/75" aria-hidden="true" />
           <div className="min-w-0 space-y-1">
-            <p className="text-white/75">{copy.warningOne}</p>
-            <p className="text-white/55">{copy.warningTwo}</p>
-            <p className="font-mono text-[11px] text-white/42">{copy.formulaHint}</p>
+            <p className="text-[color:var(--wolfy-text-secondary)]">{copy.warningOne}</p>
+            <p className="text-[color:var(--wolfy-text-muted)]">{copy.warningTwo}</p>
+            <p className="font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.formulaHint}</p>
           </div>
         </div>
 
         <div className="grid min-w-0 gap-3">
           <section className="min-w-0 space-y-2">
             <div className="flex min-w-0 items-center justify-between gap-2">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-white/38">{copy.symbolGroup}</p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.symbolGroup}</p>
               <TerminalChip variant="neutral" className="shrink-0">{language === 'zh' ? '手动' : 'Manual'}</TerminalChip>
             </div>
             <div className="grid min-w-0 gap-2 sm:grid-cols-2">
@@ -290,7 +290,7 @@ export default function LeveragedEtfMapper({
           </section>
 
           <section className="min-w-0 space-y-2">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-white/38">{copy.referenceGroup}</p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.referenceGroup}</p>
             <div className="grid min-w-0 gap-2 sm:grid-cols-3">
               <Input
                 label={copy.leverage}
@@ -324,7 +324,7 @@ export default function LeveragedEtfMapper({
           </section>
 
           <section className="min-w-0 space-y-2">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-white/38">{copy.targetGroup}</p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.targetGroup}</p>
             <div className="grid min-w-0 gap-2 sm:grid-cols-2">
               <Input
                 label={copy.underlyingTarget}
@@ -348,7 +348,7 @@ export default function LeveragedEtfMapper({
           </section>
 
           <section className="min-w-0 space-y-2">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-white/38">{copy.optionalGroup}</p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.optionalGroup}</p>
             <div className="grid min-w-0 gap-2 sm:grid-cols-3">
               <Input
                 label={copy.etfEntry}
@@ -397,10 +397,10 @@ export default function LeveragedEtfMapper({
             {result.impliedUnderlying !== null ? (
               <div
                 data-testid="leveraged-etf-reverse-output"
-                className="rounded-lg border border-white/10 bg-white/[0.025] px-3 py-2"
+                className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-3 py-2"
               >
-                <p className="text-[11px] text-white/46">{copy.reverseTitle}</p>
-                <p className="mt-1 font-mono text-sm text-white/78">
+                <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.reverseTitle}</p>
+                <p className="mt-1 font-mono text-sm text-[color:var(--wolfy-text-secondary)]">
                   {cleanUnderlyingSymbol} {copy.impliedPrefix} {formatPrice(result.impliedUnderlying)}
                 </p>
               </div>
@@ -410,11 +410,11 @@ export default function LeveragedEtfMapper({
                 data-testid="leveraged-etf-optional-marks"
                 className="divide-y divide-[color:var(--wolfy-divider)] rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-1"
               >
-                <p className="py-2 text-[11px] text-white/42">{copy.marksTitle}</p>
+                <p className="py-2 text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.marksTitle}</p>
                 {result.optionalMarks.map((item) => (
                   <div key={item.key} className="flex min-w-0 items-center justify-between gap-3 py-2">
-                    <span className="truncate text-white/50">{item.label}</span>
-                    <span className="shrink-0 font-mono text-white/76">
+                    <span className="truncate text-[color:var(--wolfy-text-muted)]">{item.label}</span>
+                    <span className="shrink-0 font-mono text-[color:var(--wolfy-text-secondary)]">
                       {item.value !== null ? formatPrice(item.value) : '--'}
                     </span>
                   </div>

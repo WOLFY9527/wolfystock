@@ -74,11 +74,11 @@ function verdictLabel(
 
 function toneClass(state: ResearchReadinessState | string | undefined): string {
   const normalized = normalizeState(state);
-  if (normalized === 'ready') return 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100';
-  if (normalized === 'blocked') return 'border-rose-400/25 bg-rose-400/10 text-rose-100';
+  if (normalized === 'ready') return 'border-[color:var(--state-success-border)] bg-[var(--state-success-bg)] text-[color:var(--state-success-text)]';
+  if (normalized === 'blocked') return 'border-[color:var(--state-danger-border)] bg-[var(--state-danger-bg)] text-[color:var(--state-danger-text)]';
   if (normalized === 'insufficient') return 'border-amber-400/25 bg-amber-400/10 text-amber-100';
   if (normalized === 'observe_only') return 'border-blue-400/25 bg-blue-400/10 text-blue-100';
-  return 'border-white/10 bg-white/[0.04] text-white/70';
+  return 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] text-[color:var(--wolfy-text-secondary)]';
 }
 
 function domainStateLabel(state: string | null | undefined, observationOnly: boolean, language: 'zh' | 'en'): string {
@@ -188,7 +188,7 @@ export function ScannerCandidateEvidenceStrip({
           ? 'border-blue-400/20 bg-blue-400/10 text-blue-100'
           : normalizeState(item.state) === 'missing' || normalizeState(item.state) === 'blocked'
             ? 'border-amber-400/20 bg-amber-400/10 text-amber-100'
-            : 'border-white/10 bg-white/[0.04] text-white/72',
+            : 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] text-[color:var(--wolfy-text-secondary)]',
       };
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
@@ -205,12 +205,12 @@ export function ScannerCandidateEvidenceStrip({
           <span className="truncate">{verdictLabel(readiness, language)}</span>
         </span>
         {summary ? (
-          <span className="truncate text-[10px] text-white/52" title={summary}>
+          <span className="truncate text-[10px] text-[color:var(--wolfy-text-muted)]" title={summary}>
             {summary}
           </span>
         ) : null}
         {provenanceLabels.slice(0, 3).map((label) => (
-          <span key={label} className="truncate text-[10px] text-white/46" title={label}>
+          <span key={label} className="truncate text-[10px] text-[color:var(--wolfy-text-muted)]" title={label}>
             {label}
           </span>
         ))}
@@ -225,25 +225,25 @@ export function ScannerCandidateEvidenceStrip({
           <span className="truncate">{verdictLabel(readiness, language)}</span>
         </span>
         {summary ? (
-          <span className="text-xs leading-relaxed text-white/60">{summary}</span>
+          <span className="text-xs leading-relaxed text-[color:var(--wolfy-text-muted)]">{summary}</span>
         ) : null}
       </div>
       <div className="flex min-w-0 flex-wrap gap-1.5">
         {orderedDomains.map((domain) => (
           <TerminalChip key={domain.key} variant="neutral" className={`px-1.5 py-0.5 text-[10px] font-sans ${domain.toneClass}`}>
-            <span className="text-white/48">{domain.label}</span>
+            <span className="text-[color:var(--wolfy-text-muted)]">{domain.label}</span>
             <span>{domain.state}</span>
           </TerminalChip>
         ))}
       </div>
       {provenanceLabels.length ? (
         <div className="space-y-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
             {language === 'en' ? 'Source context' : '来源依据'}
           </p>
           <div className="flex min-w-0 flex-wrap gap-1.5">
             {provenanceLabels.map((label) => (
-              <TerminalChip key={label} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+              <TerminalChip key={label} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">
                 {label}
               </TerminalChip>
             ))}

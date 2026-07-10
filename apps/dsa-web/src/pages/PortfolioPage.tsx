@@ -1439,12 +1439,12 @@ function ManualTradeForm({
         <div className="mt-3 rounded-lg bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
           {tradeCurrencyHint}
           {tradeCurrencyWarning ? (
-            <span className="mt-1 block text-amber-200">{tradeCurrencyWarning}</span>
+            <span className="mt-1 block text-[color:var(--state-warning-text)]">{tradeCurrencyWarning}</span>
           ) : null}
         </div>
         <Input label={copy.note} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.optional} value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
         {!writableAccountId ? (
-          <div className="mt-3 rounded-lg border border-amber-300/15 bg-amber-300/10 px-3 py-2 text-xs text-amber-200">
+          <div className="mt-3 rounded-lg border border-amber-300/15 bg-amber-300/10 px-3 py-2 text-xs text-[color:var(--state-warning-text)]">
             {language === 'zh' ? '请选择具体账户后保存持仓流水' : 'Select a specific account before saving holding records'}
           </div>
         ) : null}
@@ -2892,12 +2892,12 @@ const PortfolioPage: React.FC = () => {
           ? (language === 'zh' ? '集中' : 'Concentrated')
           : (language === 'zh' ? '高度集中' : 'Highly concentrated');
   const concentrationToneClass = topPositionPercent >= 50
-    ? 'text-rose-300'
+    ? 'text-[color:var(--state-danger-text)]'
     : topPositionPercent >= 35
-      ? 'text-amber-300'
+      ? 'text-[color:var(--state-warning-text)]'
       : topPositionPercent >= 20
         ? 'text-[color:var(--wolfy-accent)]'
-        : 'text-emerald-300';
+        : 'text-[color:var(--state-success-text)]';
   const concentrationDescription = !hasHoldings || !topPosition
     ? (language === 'zh' ? '完成首笔持仓后，系统会按真实持仓自动生成集中度与暴露判断。' : 'After the first holding is saved, concentration and exposure are generated from real positions automatically.')
     : language === 'zh'
@@ -3816,7 +3816,7 @@ const PortfolioPage: React.FC = () => {
         <div>
           <h2 className="text-xs uppercase tracking-widest text-muted-text">{recentActivityTitle}</h2>
           {!hasHoldings && hasHistory ? (
-            <p className="mt-1 text-xs text-amber-200/80">{noHoldingsHistoryNote}</p>
+            <p className="mt-1 text-xs text-[color:var(--state-warning-text)]/80">{noHoldingsHistoryNote}</p>
           ) : null}
         </div>
         {hasHistory && hasSmallHistory ? (
@@ -4036,7 +4036,7 @@ const PortfolioPage: React.FC = () => {
                       <div data-testid="portfolio-pnl-total" className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{pnlLabels.total}</div>
                       <div
                         data-testid="portfolio-summary-pnl-value"
-                        className={`mt-2 break-words font-mono text-[1.75rem] font-semibold leading-none tabular-nums md:text-[2.1rem] ${totalPnl >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}
+                        className={`mt-2 break-words font-mono text-[1.75rem] font-semibold leading-none tabular-nums md:text-[2.1rem] ${totalPnl >= 0 ? 'text-[color:var(--state-success-text)]' : 'text-[color:var(--state-danger-text)]'}`}
                       >
                         {totalPnlDisplay ? formatSignedMoney(totalPnlDisplay.value, displayCurrency) : formatSignedMoney(totalPnl, pnlSourceCurrency)}
                       </div>
@@ -4438,7 +4438,7 @@ const PortfolioPage: React.FC = () => {
                                         })}
                                       </p>
                                     </div>
-                                    <div className={`shrink-0 text-right font-mono text-sm ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    <div className={`shrink-0 text-right font-mono text-sm ${row.unrealizedPnlBase >= 0 ? 'text-[color:var(--state-success-text)]' : 'text-[color:var(--state-danger-text)]'}`}>
                                       {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
                                       <div className="mt-1 text-xs text-[color:var(--wolfy-text-secondary)]">{formatPercent(row.unrealizedPnlPct)}</div>
                                     </div>
@@ -4458,7 +4458,7 @@ const PortfolioPage: React.FC = () => {
                                       {row.valuationCurrency !== displayCurrency ? (
                                         <p className="mt-1 break-words text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{formatConvertedDisplay(row.marketValueBase, row.valuationCurrency)}</p>
                                       ) : null}
-                                      <p className={`mt-1 text-xs leading-5 ${row.isPriceFallback ? 'text-amber-300' : 'text-[color:var(--wolfy-text-secondary)]'}`}>
+                                      <p className={`mt-1 text-xs leading-5 ${row.isPriceFallback ? 'text-[color:var(--state-warning-text)]' : 'text-[color:var(--wolfy-text-secondary)]'}`}>
                                         {row.priceAsOf
                                           ? `${formatMoney(row.lastPrice, row.currency)} · ${language === 'zh' ? `截至 ${row.priceAsOf}` : `As of ${row.priceAsOf}`}`
                                           : `${formatMoney(row.lastPrice, row.currency)} · ${positionPriceFreshnessExplanation(row, language)}`}
@@ -4528,13 +4528,13 @@ const PortfolioPage: React.FC = () => {
                                   <td className="px-3 py-2 font-mono">
                                     {formatMoney(row.marketValueBase, row.valuationCurrency)}
                                     {row.valuationCurrency !== displayCurrency ? <div className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{formatConvertedDisplay(row.marketValueBase, row.valuationCurrency)}</div> : null}
-                                    <div className={`mt-1 text-[11px] ${row.isPriceFallback ? 'text-amber-300' : 'text-[color:var(--wolfy-text-muted)]'}`}>
+                                    <div className={`mt-1 text-[11px] ${row.isPriceFallback ? 'text-[color:var(--state-warning-text)]' : 'text-[color:var(--wolfy-text-muted)]'}`}>
                                       {row.priceAsOf
                                         ? `${formatMoney(row.lastPrice, row.currency)} · ${language === 'zh' ? `截至 ${row.priceAsOf}` : `As of ${row.priceAsOf}`}`
                                         : `${formatMoney(row.lastPrice, row.currency)} · ${positionPriceFreshnessExplanation(row, language)}`}
                                     </div>
                                   </td>
-                                  <td className={`px-3 py-2 font-mono ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                  <td className={`px-3 py-2 font-mono ${row.unrealizedPnlBase >= 0 ? 'text-[color:var(--state-success-text)]' : 'text-[color:var(--state-danger-text)]'}`}>
                                     {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
                                     <div className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{formatPercent(row.unrealizedPnlPct)}</div>
                                   </td>
@@ -4772,12 +4772,12 @@ const PortfolioPage: React.FC = () => {
                                 </div>
                               </div>
                               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--wolfy-surface-rail)]">
-                                <div className="h-full rounded-full bg-emerald-400/70" style={{ width: `${Math.max(2, Math.min(100, row.percent || 0))}%` }} />
+                                <div className="h-full rounded-full bg-[color:var(--state-success-text)]" style={{ width: `${Math.max(2, Math.min(100, row.percent || 0))}%` }} />
                               </div>
                               {exposureTab === 'symbol' && row.unrealizedPnl != null ? (
                                 <div className="mt-2 flex justify-between gap-3 text-xs text-[color:var(--wolfy-text-muted)]">
                                   <span>{copy.positionUnrealized}</span>
-                                  <span className={Number(row.unrealizedPnl) >= 0 ? 'text-emerald-300' : 'text-rose-300'}>
+                                  <span className={Number(row.unrealizedPnl) >= 0 ? 'text-[color:var(--state-success-text)]' : 'text-[color:var(--state-danger-text)]'}>
                                     {formatSignedMoney(Number(row.unrealizedPnl), row.displayCurrency || snapshotCurrency)}
                                     {' '}
                                     {formatPercent(row.unrealizedPnlPct)}
@@ -4797,7 +4797,7 @@ const PortfolioPage: React.FC = () => {
                     <div>
                       <h2 className="text-xs uppercase tracking-widest text-muted-text">{language === 'zh' ? '数据说明' : 'Data notes'}</h2>
                       {consumerDataNotice ? (
-                        <p data-testid="portfolio-consumer-data-notice" className="mt-2 text-sm leading-6 text-amber-200/80">
+                        <p data-testid="portfolio-consumer-data-notice" className="mt-2 text-sm leading-6 text-[color:var(--state-warning-text)]/80">
                           {consumerDataNotice}
                         </p>
                       ) : (
@@ -4927,15 +4927,15 @@ const PortfolioPage: React.FC = () => {
               <div data-testid="portfolio-trade-station-summary" className="mt-3 flex flex-col gap-1 border-y border-[color:var(--wolfy-border-subtle)] py-2">
                 <div className="flex justify-between gap-3 text-xs"><span className="text-muted-text">{copy.totalCash}</span><span className="font-mono text-foreground">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</span></div>
                 <div className="flex justify-between gap-3 text-xs"><span className="text-muted-text">{copy.totalMarketValue}</span><span className="font-mono text-foreground">{formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}</span></div>
-                <div className="flex justify-between text-xs"><span className="text-muted-text">{copy.fxState}</span><span data-testid="portfolio-bento-hero-fx-value" className={snapshot?.fxStale ? 'text-amber-300' : 'text-emerald-400'}>{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</span></div>
+                <div className="flex justify-between text-xs"><span className="text-muted-text">{copy.fxState}</span><span data-testid="portfolio-bento-hero-fx-value" className={snapshot?.fxStale ? 'text-[color:var(--state-warning-text)]' : 'text-[color:var(--state-success-text)]'}>{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</span></div>
               </div>
               {tradeFeedback ? (
                 <div
                   data-testid="portfolio-trade-feedback"
                   className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
                     tradeFeedback.tone === 'success'
-                      ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'
-                      : 'border-rose-400/20 bg-rose-400/10 text-rose-300'
+                      ? 'border-[color:var(--state-success-border)] bg-[var(--state-success-bg)] text-[color:var(--state-success-text)]'
+                      : 'border-[color:var(--state-danger-border)] bg-[var(--state-danger-bg)] text-[color:var(--state-danger-text)]'
                   }`}
                 >
                   {tradeFeedback.text}
@@ -5249,9 +5249,9 @@ const PortfolioPage: React.FC = () => {
                   {fxRefreshFeedback ? (
                     <p className={`text-xs ${
                       fxRefreshFeedback.tone === 'success'
-                        ? 'text-emerald-300'
+                        ? 'text-[color:var(--state-success-text)]'
                         : fxRefreshFeedback.tone === 'warning'
-                          ? 'text-amber-200'
+                          ? 'text-[color:var(--state-warning-text)]'
                           : 'text-secondary-text'
                     }`}>
                       {fxRefreshFeedback.text}

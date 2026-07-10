@@ -661,7 +661,11 @@ describe('HomeSurfacePage', () => {
     expect(guestMarketPreviewStrip).toHaveClass('rounded-[10px]', 'bg-[var(--wolfy-surface-input)]');
     expect(screen.getByText('WolfyStock 是面向独立研究者与自驱投资者的股票研究工作区。你可以先查看单个标的预览，登录后再保存报告、回看历史，并继续进入组合或扫描工作台。')).toBeInTheDocument();
     expect(guestMarketPreviewStrip).toHaveTextContent('当前市场观察');
-    expect(guestMarketPreviewStrip).toHaveTextContent('公开市场观察已准备');
+    // Strip mounts in loading state; wait for public-safe briefing settlement (ready != loading).
+    await waitFor(() => {
+      expect(guestMarketPreviewStrip).toHaveTextContent('公开市场观察已准备');
+    });
+    expect(guestMarketPreviewStrip).not.toHaveTextContent('正在整理公开市场观察');
     expect(guestMarketPreviewStrip).toHaveTextContent('市场广度改善');
     expect(guestMarketPreviewStrip).toHaveTextContent('主要宽度与资金线索继续支持观察。');
     expect(guestMarketPreviewStrip).toHaveTextContent('研究观察，不构成投资建议。');
@@ -960,8 +964,8 @@ describe('HomeSurfacePage', () => {
     expect(targetMetric).toHaveAttribute('data-key-level-order', '3');
     expect(entryMetric).not.toHaveClass('bg-white/[0.02]', 'border-white/[0.08]', 'p-6', 'col-span-2');
     expect(within(entryMetric).getByText('$121.80 - $124.60')).toHaveClass('text-sm', 'font-semibold');
-    expect(within(targetMetric).getByText('$133.50')).toHaveClass('text-sm', 'font-semibold', 'text-emerald-400');
-    expect(within(stopLossMetric).getByText('$117.40')).toHaveClass('text-sm', 'font-semibold', 'text-rose-400');
+    expect(within(targetMetric).getByText('$133.50')).toHaveClass('text-sm', 'font-semibold', 'text-[color:var(--state-success-text)]');
+    expect(within(stopLossMetric).getByText('$117.40')).toHaveClass('text-sm', 'font-semibold', 'text-[color:var(--state-danger-text)]');
 
     expect(chartWorkspace).toContainElement(await screen.findByTestId('home-candlestick-chart-frame', undefined, { timeout: CHART_IMPORT_TIMEOUT }));
     expect(primaryWorkspace.closest('[data-layout-zone="PrimaryWorkRegion"]')).toContainElement(chartWorkspace);
@@ -981,7 +985,7 @@ describe('HomeSurfacePage', () => {
     const macdSignal = screen.getByTestId('home-bento-tech-signal-MACD');
     const macdSignalValue = within(macdSignal).getByText('二次扩张');
     expect(macdSignal).toHaveClass('flex', 'min-w-0', 'flex-col', 'gap-1');
-    expect(macdSignalValue).toHaveClass('text-xs', 'font-semibold', 'text-emerald-400', 'drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]');
+    expect(macdSignalValue).toHaveClass('text-xs', 'font-semibold', 'text-[color:var(--state-success-text)]');
     expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveClass('block', 'w-full', 'overflow-hidden', 'text-ellipsis', 'whitespace-nowrap', 'text-xs', 'text-[color:var(--wolfy-text-muted)]');
     expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveAttribute('title', '零轴上方，动能再扩张。');
 
@@ -1458,8 +1462,8 @@ describe('HomeSurfacePage', () => {
 
     await screen.findByText('Oracle Corporation');
     expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-[color:var(--wolfy-text-primary)]');
-    expect(within(screen.getByTestId('home-bento-strategy-metric-上方观察区')).getByText('$133.50')).toHaveClass('text-rose-400');
-    expect(within(screen.getByTestId('home-bento-strategy-metric-风险失效线')).getByText('$117.40')).toHaveClass('text-emerald-400');
+    expect(within(screen.getByTestId('home-bento-strategy-metric-上方观察区')).getByText('$133.50')).toHaveClass('text-[color:var(--state-danger-text)]');
+    expect(within(screen.getByTestId('home-bento-strategy-metric-风险失效线')).getByText('$117.40')).toHaveClass('text-[color:var(--state-success-text)]');
   });
 
   it('lazy-loads the full decision report drawer only after the trigger is opened', async () => {

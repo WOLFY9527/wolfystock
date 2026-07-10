@@ -31,16 +31,16 @@ export const LiquidityImpulseSynthesisHeader: React.FC<{
     dense
     data-testid="liquidity-impulse-synthesis-header"
     data-market-research-flow="liquidity-impulse"
-    className="relative overflow-hidden bg-white/[0.02]"
+    className="relative overflow-hidden bg-[var(--wolfy-surface-rail)]"
   >
     <div
       className={cn(
         'absolute inset-x-0 top-0 h-px',
         view.state === 'ready'
-          ? 'bg-gradient-to-r from-emerald-400/0 via-cyan-300/55 to-sky-400/0'
+          ? 'bg-gradient-to-r from-transparent via-[color:color-mix(in_srgb,var(--ok)_40%,transparent)] to-transparent'
           : view.state === 'missing'
             ? 'bg-gradient-to-r from-white/0 via-white/18 to-white/0'
-            : 'bg-gradient-to-r from-amber-400/0 via-amber-200/50 to-rose-300/0',
+            : 'bg-gradient-to-r from-transparent via-[color:color-mix(in_srgb,var(--warn)_40%,transparent)] to-transparent',
       )}
       aria-hidden="true"
     />
@@ -48,16 +48,16 @@ export const LiquidityImpulseSynthesisHeader: React.FC<{
       <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] font-bold tracking-[0.24em] text-white/38">流动性脉冲</p>
+            <p className="text-[10px] font-bold tracking-[0.24em] text-[color:var(--wolfy-text-muted)]">流动性脉冲</p>
             <p
               data-testid="liquidity-impulse-synthesis-title"
-              className="mt-1 text-base font-semibold leading-6 text-white/90 md:text-lg"
+              className="mt-1 text-base font-semibold leading-6 text-[color:var(--wolfy-text-primary)] md:text-lg"
             >
               {view.title}
             </p>
             <p
               data-testid="liquidity-impulse-synthesis-summary"
-              className="mt-2 max-w-2xl text-xs leading-5 text-white/56"
+              className="mt-2 max-w-2xl text-xs leading-5 text-[color:var(--wolfy-text-muted)]"
             >
               {view.summary}
             </p>
@@ -78,7 +78,7 @@ export const LiquidityImpulseSynthesisHeader: React.FC<{
               variant={view.state === 'ready' ? 'success' : 'neutral'}
               className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest"
             >
-              <span className="text-white/36">结论</span>
+              <span className="text-[color:var(--wolfy-text-muted)]">结论</span>
               <span className="max-w-[240px] truncate font-mono normal-case tracking-normal">
                 {view.impulseLabel}
               </span>
@@ -90,7 +90,7 @@ export const LiquidityImpulseSynthesisHeader: React.FC<{
               variant="neutral"
               className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest"
             >
-              <span className="text-white/36">子类型</span>
+              <span className="text-[color:var(--wolfy-text-muted)]">子类型</span>
               <span className="max-w-[220px] truncate font-mono normal-case tracking-normal">
                 {view.subtypeLabel}
               </span>
@@ -101,7 +101,7 @@ export const LiquidityImpulseSynthesisHeader: React.FC<{
             variant={view.state === 'ready' ? 'success' : view.state === 'missing' ? 'neutral' : 'caution'}
             className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest"
           >
-            <span className="text-white/36">置信度</span>
+            <span className="text-[color:var(--wolfy-text-muted)]">置信度</span>
             <span className="font-mono normal-case tracking-normal">
               {view.confidenceLabel}
               {view.confidenceValueText ? ` · ${view.confidenceValueText}` : ''}
@@ -113,7 +113,7 @@ export const LiquidityImpulseSynthesisHeader: React.FC<{
               variant="neutral"
               className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest"
             >
-              <span className="text-white/36">方向分</span>
+              <span className="text-[color:var(--wolfy-text-muted)]">方向分</span>
               <span className="font-mono normal-case tracking-normal">
                 {view.directionScoreText}
               </span>
@@ -124,7 +124,7 @@ export const LiquidityImpulseSynthesisHeader: React.FC<{
         {view.qualityLine ? (
           <p
             data-testid="liquidity-impulse-synthesis-quality-line"
-            className="mt-3 truncate font-mono text-[11px] leading-5 text-white/34"
+            className="mt-3 truncate font-mono text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]"
           >
             {view.qualityLine}
           </p>
@@ -133,7 +133,7 @@ export const LiquidityImpulseSynthesisHeader: React.FC<{
         {view.notInvestmentAdvice ? (
           <p
             data-testid="liquidity-impulse-synthesis-disclaimer"
-            className="mt-3 text-[11px] leading-5 text-white/34"
+            className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]"
           >
             非投资建议
           </p>

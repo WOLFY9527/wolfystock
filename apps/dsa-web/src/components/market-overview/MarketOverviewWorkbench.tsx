@@ -1168,8 +1168,8 @@ function heroToneClass(item: MarketOverviewItem | undefined): string {
     return 'text-[color:var(--wolfy-text-muted)]';
   }
   return item.changePct >= 0
-    ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.36)]'
-    : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.36)]';
+    ? 'text-[color:var(--state-success-text)] '
+    : 'text-[color:var(--state-danger-text)] ';
 }
 
 function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
@@ -1302,9 +1302,9 @@ function scoreTone(score: MarketTemperatureScore, pressure = false): string {
     return 'text-[color:var(--wolfy-text-muted)]';
   }
   if (pressure) {
-    return score.value >= 65 ? 'text-rose-400' : score.value >= 55 ? 'text-amber-300' : 'text-emerald-400';
+    return score.value >= 65 ? 'text-[color:var(--state-danger-text)]' : score.value >= 55 ? 'text-[color:var(--state-warning-text)]' : 'text-[color:var(--state-success-text)]';
   }
-  return score.value >= 76 ? 'text-amber-200' : score.value >= 61 ? 'text-emerald-400' : score.value <= 45 ? 'text-sky-300' : 'text-[color:var(--wolfy-text-primary)]';
+  return score.value >= 76 ? 'text-[color:var(--state-warning-text)]' : score.value >= 61 ? 'text-[color:var(--state-success-text)]' : score.value <= 45 ? 'text-[color:var(--blue)]' : 'text-[color:var(--wolfy-text-primary)]';
 }
 
 const MarketOverviewWorkbenchGridFallback: React.FC<{ language: 'zh' | 'en' }> = ({ language }) => {
@@ -2494,7 +2494,7 @@ const CnShortSentimentCard: React.FC<{
           <div className="flex items-end justify-between gap-3">
             <div className="min-w-0">
               <p className="text-xs text-[color:var(--wolfy-text-muted)]">{t('marketOverviewPage.cards.cnShortSentiment.score')}</p>
-              <p className={cn('mt-1 font-mono text-2xl font-semibold', fallbackOnly ? 'text-[color:var(--wolfy-text-muted)]' : 'text-emerald-400')}>{data.sentimentScore}</p>
+              <p className={cn('mt-1 font-mono text-2xl font-semibold', fallbackOnly ? 'text-[color:var(--wolfy-text-muted)]' : 'text-[color:var(--state-success-text)]')}>{data.sentimentScore}</p>
             </div>
             <p className="min-w-0 max-w-[220px] truncate text-right text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{data.summary}</p>
           </div>
@@ -3235,7 +3235,7 @@ function useMarketOverviewWorkbenchModel({
   };
   const briefingSummary: MarketOverviewBriefingSummaryView = {
     confidenceLabel: confidenceLabel(panels.briefing.confidence),
-    toneClass: panels.briefing.isReliable === false || panels.briefing.isFallback ? 'text-amber-200' : 'text-[color:var(--wolfy-text-primary)]',
+    toneClass: panels.briefing.isReliable === false || panels.briefing.isFallback ? 'text-[color:var(--state-warning-text)]' : 'text-[color:var(--wolfy-text-primary)]',
     leadMessage: panels.briefing.items[0]?.message || panels.briefing.warning || '暂无简报',
     warning: panels.briefing.warning || undefined,
   };

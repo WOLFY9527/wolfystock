@@ -143,10 +143,10 @@ function escapeHtml(value: string): string {
 }
 
 function toneClass(tone: CoreMarketChartTone): string {
-  if (tone === 'success') return 'border-emerald-400/24 bg-emerald-400/10 text-emerald-100';
+  if (tone === 'success') return 'border-[color:var(--state-success-border)] bg-[var(--state-success-bg)] text-[color:var(--state-success-text)]';
   if (tone === 'warning') return 'border-amber-300/24 bg-amber-300/10 text-amber-100';
-  if (tone === 'error') return 'border-rose-300/24 bg-rose-300/10 text-rose-100';
-  return 'border-white/[0.10] bg-white/[0.04] text-white/72';
+  if (tone === 'error') return 'border-[color:var(--state-danger-border)] bg-[var(--state-danger-bg)] text-[color:var(--state-danger-text)]';
+  return 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] text-[color:var(--wolfy-text-secondary)]';
 }
 
 function movingAverage(values: number[], index: number, length: number): number | undefined {
@@ -559,8 +559,8 @@ export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
         <div className="flex min-w-0 flex-wrap justify-end gap-1.5 text-[11px]">
           <span className={`rounded-full border px-2 py-1 font-medium ${toneClass(statusTone)}`}>{statusLabel}</span>
           {warningLabel ? <span className={`rounded-full border px-2 py-1 font-medium ${toneClass('warning')}`}>{warningLabel}</span> : null}
-          <span className="rounded-full border border-white/[0.10] bg-white/[0.035] px-2 py-1 text-[color:var(--wolfy-text-secondary)]">{freshnessLabel}</span>
-          {coverageLabel ? <span className="rounded-full border border-white/[0.10] bg-white/[0.035] px-2 py-1 text-[color:var(--wolfy-text-secondary)]">{coverageLabel}</span> : null}
+          <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2 py-1 text-[color:var(--wolfy-text-secondary)]">{freshnessLabel}</span>
+          {coverageLabel ? <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2 py-1 text-[color:var(--wolfy-text-secondary)]">{coverageLabel}</span> : null}
         </div>
       </div>
 
@@ -579,7 +579,7 @@ export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
                       'min-h-9 rounded-md border px-2.5 text-xs font-semibold transition-colors',
                       activeRange === optionItem.key
                         ? 'border-[color:var(--wolfy-accent)] bg-[color:var(--wolfy-accent)]/16 text-[color:var(--wolfy-text-primary)]'
-                        : 'border-white/[0.10] bg-white/[0.03] text-[color:var(--wolfy-text-secondary)] hover:border-white/[0.20] hover:text-[color:var(--wolfy-text-primary)]',
+                        : 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-border-subtle)] hover:text-[color:var(--wolfy-text-primary)]',
                       disabled ? 'cursor-not-allowed opacity-45' : 'cursor-pointer',
                     ].join(' ')}
                     aria-pressed={activeRange === optionItem.key}
@@ -670,15 +670,15 @@ export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
         </div>
       ) : (
         <div
-          className="mt-4 rounded-md border border-dashed border-[color:var(--wolfy-border-subtle)] bg-black/10 p-4"
+          className="mt-4 rounded-md border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-4"
           data-testid={`${testId}-empty-state`}
         >
           <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{emptyTitle}</p>
           <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{emptyDetail}</p>
           <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
             <span className={`rounded-full border px-2 py-1 font-medium ${toneClass(statusTone)}`}>{statusLabel}</span>
-            <span className="rounded-full border border-white/[0.10] bg-white/[0.035] px-2 py-1 text-[color:var(--wolfy-text-secondary)]">{freshnessLabel}</span>
-            <span className="rounded-full border border-white/[0.10] bg-white/[0.035] px-2 py-1 text-[color:var(--wolfy-text-secondary)]">{sourceLabel}</span>
+            <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2 py-1 text-[color:var(--wolfy-text-secondary)]">{freshnessLabel}</span>
+            <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2 py-1 text-[color:var(--wolfy-text-secondary)]">{sourceLabel}</span>
           </div>
         </div>
       )}

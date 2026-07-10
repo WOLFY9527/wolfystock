@@ -537,8 +537,8 @@ const MarketOverviewDirectionSummary: React.FC<{ summary: MarketDirectionalSumma
     </div>
     <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-3">
       {[
-        { key: 'supporting', title: summary.supportingTitle, items: summary.supportingDrivers, tone: 'text-emerald-200' },
-        { key: 'blocking', title: summary.blockingTitle, items: summary.blockingDrivers, tone: 'text-amber-200' },
+        { key: 'supporting', title: summary.supportingTitle, items: summary.supportingDrivers, tone: 'text-[color:var(--state-success-text)]' },
+        { key: 'blocking', title: summary.blockingTitle, items: summary.blockingDrivers, tone: 'text-[color:var(--state-warning-text)]' },
         { key: 'watch', title: summary.watchTitle, items: summary.watchItems, tone: 'text-[color:var(--wolfy-text-secondary)]' },
       ].map((block) => (
         <div key={block.key} className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-3">
@@ -1455,14 +1455,14 @@ const MarketRegimeSynthesisResearchBlock: React.FC<{
           title="支持证据"
           emptyLabel="等待支持证据"
           items={supportiveEvidence}
-          accentClassName="text-emerald-200"
+          accentClassName="text-[color:var(--state-success-text)]"
         />
         <SynthesisEvidenceColumn
           testId="market-regime-synthesis-contradictory-evidence"
           title="反证"
           emptyLabel="暂无反证"
           items={contradictoryEvidence}
-          accentClassName="text-amber-200"
+          accentClassName="text-[color:var(--state-warning-text)]"
         />
         <SynthesisEvidenceColumn
           testId="market-regime-synthesis-missing-evidence"
@@ -1715,7 +1715,7 @@ const MarketOverviewCategoryControls: React.FC<{
       data-testid="market-overview-category-tabs"
       data-selector-position="static-safe"
       data-mobile-order="controls"
-      className="flex w-full min-w-0 flex-col gap-2 overflow-visible rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-2 backdrop-blur-md md:flex-row md:items-center md:justify-between"
+      className="flex w-full min-w-0 flex-col gap-2 overflow-visible rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-2 md:flex-row md:items-center md:justify-between"
     >
       <div className="flex w-full min-w-0 items-center gap-2 overflow-visible md:w-auto">
         <span className="shrink-0 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-2 py-1 text-[10px] font-semibold text-[color:var(--wolfy-text-muted)]">

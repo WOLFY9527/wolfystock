@@ -63,12 +63,12 @@ const REGIME_LABELS: Record<LiquidityMonitorRegime, string> = {
 };
 
 const REGIME_TONE: Record<LiquidityMonitorRegime, string> = {
-  abundant: 'text-emerald-300',
+  abundant: 'text-[color:var(--state-success-text)]',
   supportive: 'text-cyan-200',
-  neutral: 'text-white/78',
-  tight: 'text-amber-200',
-  stress: 'text-rose-300',
-  unavailable: 'text-white/38',
+  neutral: 'text-[color:var(--wolfy-text-secondary)]',
+  tight: 'text-[color:var(--state-warning-text)]',
+  stress: 'text-[color:var(--state-danger-text)]',
+  unavailable: 'text-[color:var(--wolfy-text-muted)]',
 };
 
 const FRESHNESS_LABELS: Record<LiquidityMonitorFreshness, string> = {
@@ -913,7 +913,7 @@ const LiquidityBreadthTruthStrip: React.FC<{
   return (
     <div
       data-testid={testId}
-      className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5"
+      className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5"
     >
       <div className="flex min-w-0 flex-wrap gap-1.5">
         <TerminalChip variant={view.stateVariant}>{view.stateLabel}</TerminalChip>
@@ -921,15 +921,15 @@ const LiquidityBreadthTruthStrip: React.FC<{
         <TerminalChip variant={view.freshnessVariant}>{view.freshnessLabel}</TerminalChip>
         <TerminalChip variant={view.coverageVariant}>{view.coverageLabel}</TerminalChip>
       </div>
-      <p className="mt-2 text-xs leading-5 text-white/68">{view.summary}</p>
+      <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{view.summary}</p>
       {view.sourceDetail ? (
-        <p className="mt-1 text-xs leading-5 text-white/52">依据：{view.sourceDetail}</p>
+        <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">依据：{view.sourceDetail}</p>
       ) : null}
       {view.missingSummary ? (
-        <p className="mt-1 text-xs leading-5 text-white/52">{view.missingSummary}</p>
+        <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{view.missingSummary}</p>
       ) : null}
       {view.limitationSummary ? (
-        <p className="mt-1 text-xs leading-5 text-white/52">限制：{view.limitationSummary}</p>
+        <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">限制：{view.limitationSummary}</p>
       ) : null}
     </div>
   );
@@ -1055,7 +1055,7 @@ function buildLiquidityBiasSummary(
     return {
       label: '偏宽松',
       variant: 'success',
-      toneClassName: 'text-emerald-200',
+      toneClassName: 'text-[color:var(--state-success-text)]',
       detail: '流动性背景偏宽松，仍只作为研究背景。',
     };
   }
@@ -1063,7 +1063,7 @@ function buildLiquidityBiasSummary(
     return {
       label: '偏收紧',
       variant: 'caution',
-      toneClassName: 'text-amber-200',
+      toneClassName: 'text-[color:var(--state-warning-text)]',
       detail: '流动性压力更强，继续观察反向线索是否改善。',
     };
   }
@@ -1071,7 +1071,7 @@ function buildLiquidityBiasSummary(
     return {
       label: '偏宽松',
       variant: 'success',
-      toneClassName: 'text-emerald-200',
+      toneClassName: 'text-[color:var(--state-success-text)]',
       detail: '流动性背景偏宽松，仍只作为研究背景。',
     };
   }
@@ -1079,7 +1079,7 @@ function buildLiquidityBiasSummary(
     return {
       label: '偏收紧',
       variant: 'caution',
-      toneClassName: 'text-amber-200',
+      toneClassName: 'text-[color:var(--state-warning-text)]',
       detail: '流动性压力更强，继续观察反向线索是否改善。',
     };
   }
@@ -1087,7 +1087,7 @@ function buildLiquidityBiasSummary(
   return {
     label: '无明显方向',
     variant: 'neutral',
-    toneClassName: 'text-white/78',
+    toneClassName: 'text-[color:var(--wolfy-text-secondary)]',
     detail: '方向未明，继续观察',
   };
 }
@@ -1388,7 +1388,7 @@ function buildConsumerCoverageSegments(
       label: '可参考',
       count: coverageSummary.scoreGradeCount,
       chipVariant: 'success',
-      barClassName: 'bg-emerald-300/80',
+      barClassName: 'bg-[color:color-mix(in_srgb,var(--ok)_80%,transparent)]',
     },
     {
       key: 'observation',
@@ -1461,12 +1461,12 @@ function buildConsumerVisualDrivers(
         toneClassName: contractionLike
           ? 'text-amber-100'
           : expansionLike
-            ? 'text-emerald-100'
+            ? 'text-[color:var(--state-success-text)]'
             : 'text-cyan-100',
         barClassName: contractionLike
           ? 'from-amber-300/85 via-amber-200/70 to-transparent'
           : expansionLike
-            ? 'from-emerald-300/85 via-emerald-200/70 to-transparent'
+            ? 'from-[color:color-mix(in_srgb,var(--ok)_85%,transparent)] via-[color:color-mix(in_srgb,var(--ok)_55%,transparent)] to-transparent'
             : 'from-cyan-300/80 via-sky-200/65 to-transparent',
       };
     });
@@ -1591,37 +1591,37 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
     <section data-testid="liquidity-visual-evidence" className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
       <div
         data-testid="liquidity-visual-posture"
-        className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3"
+        className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-3"
       >
         <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-white/48">流动性格局</p>
+            <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">流动性格局</p>
             <p className={cn('mt-1 text-sm font-semibold', bias.toneClassName)}>{bias.label}</p>
-            <p className="mt-1 text-[11px] leading-5 text-white/56">{bias.detail}</p>
+            <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{bias.detail}</p>
           </div>
           <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
             <TerminalChip variant={bias.variant}>{REGIME_LABELS[data.score.regime]}</TerminalChip>
             <TerminalChip variant={readinessSummary.stateVariant}>{readinessSummary.stateLabel}</TerminalChip>
           </div>
         </div>
-        <div className="mt-3 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+        <div className="mt-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
           <div className="flex items-end justify-between gap-3">
             <div>
-              <p className="text-[10px] font-medium text-white/34">当前格局</p>
-              <p className="mt-2 font-mono text-3xl font-semibold text-white/86">{postureScoreLabel}</p>
+              <p className="text-[10px] font-medium text-[color:var(--wolfy-text-muted)]">当前格局</p>
+              <p className="mt-2 font-mono text-3xl font-semibold text-[color:var(--wolfy-text-primary)]">{postureScoreLabel}</p>
             </div>
-            <p className="text-[11px] leading-5 text-white/48">
+            <p className="text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
               {coverageSummary.directionLabel === '可参考' ? '当前格局可继续跟踪' : '当前格局先保持观察'}
             </p>
           </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.06]">
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--wolfy-surface-rail)]">
             <div
               className={cn(
                 'h-full rounded-full transition-[width]',
                 data.score.regime === 'stress' || data.score.regime === 'tight'
                   ? 'bg-gradient-to-r from-amber-300/85 to-amber-100/65'
                   : data.score.regime === 'supportive' || data.score.regime === 'abundant'
-                    ? 'bg-gradient-to-r from-emerald-300/85 to-cyan-200/65'
+                    ? 'bg-gradient-to-r from-[color:color-mix(in_srgb,var(--ok)_85%,transparent)] to-[color:color-mix(in_srgb,var(--blue)_55%,transparent)]'
                     : 'bg-gradient-to-r from-white/45 to-cyan-200/45',
               )}
               style={{ width: `${postureFillPct}%` }}
@@ -1632,21 +1632,21 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
 
       <div
         data-testid="liquidity-visual-coverage"
-        className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3"
+        className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-3"
       >
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-white/48">资金面线索</p>
-            <p className="mt-1 text-sm font-semibold text-white/84">
+            <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">资金面线索</p>
+            <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
               {coverageSummary.scoreGradeCount}/{Math.max(indicators.length, 1)} 项线索可参考
             </p>
-            <p className="mt-1 text-[11px] leading-5 text-white/56">
+            <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
               观察线索 {coverageSummary.observationOnlyCount} 项；其余待补信息按需展开查看。
             </p>
           </div>
           <TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.directionLabel}</TerminalChip>
         </div>
-        <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-white/[0.06]">
+        <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-[var(--wolfy-surface-rail)]">
           {coverageSegments.map((segment) => (
             <div
               key={segment.key}
@@ -1666,26 +1666,26 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
 
       <div
         data-testid="liquidity-visual-drivers"
-        className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3"
+        className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-3"
       >
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-white/48">压力来源</p>
-            <p className="mt-1 text-sm font-semibold text-white/84">美元、利率、波动等主要压力线索</p>
+            <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">压力来源</p>
+            <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">美元、利率、波动等主要压力线索</p>
           </div>
           <TerminalChip variant="neutral">最多 3 项</TerminalChip>
         </div>
         <div className="mt-3 grid gap-2">
           {visualDrivers.map((driver) => (
-            <div key={driver.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5">
+            <div key={driver.key} className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
               <div className="flex min-w-0 items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className={cn('truncate text-sm font-semibold', driver.toneClassName)}>{driver.label}</p>
-                  <p className="mt-1 text-[11px] leading-5 text-white/52">{driver.detail}</p>
+                  <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{driver.detail}</p>
                 </div>
-                <span className="shrink-0 text-[11px] font-medium text-white/40">{driver.valueLabel || `${driver.emphasisPct}%`}</span>
+                <span className="shrink-0 text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{driver.valueLabel || `${driver.emphasisPct}%`}</span>
               </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--wolfy-surface-rail)]">
                 <div
                   className={cn('h-full rounded-full bg-gradient-to-r', driver.barClassName)}
                   style={{ width: `${driver.emphasisPct}%` }}
@@ -1698,29 +1698,29 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
 
       <div
         data-testid="liquidity-visual-trend"
-        className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3"
+        className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-3"
       >
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-white/48">压力走势</p>
-            <p className="mt-1 text-sm font-semibold text-white/84">连续走势暂未返回，当前保持观察</p>
-            <p className="mt-1 text-[11px] leading-5 text-white/56">
+            <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">压力走势</p>
+            <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">连续走势暂未返回，当前保持观察</p>
+            <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
               当前页面没有连续走势数据，先对照读数、线索状态与压力来源继续观察。
             </p>
           </div>
           <TerminalChip variant="neutral">未返回走势</TerminalChip>
         </div>
-        <div className="mt-3 rounded-lg border border-dashed border-white/[0.08] bg-black/10 px-3 py-4">
+        <div className="mt-3 rounded-lg border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-4">
           <div className="grid grid-cols-12 gap-1 opacity-60" aria-hidden="true">
             {Array.from({ length: 12 }).map((_, index) => (
               <div
                 key={`trend-placeholder-${index}`}
-                className="h-10 rounded-sm bg-white/[0.03]"
+                className="h-10 rounded-sm bg-[var(--wolfy-surface-rail)]"
                 style={{ marginTop: `${(index % 3) * 6}px` }}
               />
             ))}
           </div>
-          <p className="mt-3 text-[11px] leading-5 text-white/48">
+          <p className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
             需要连续时间序列后才展示走势；当前不推断上升、下降或拐点。
           </p>
         </div>
@@ -1737,19 +1737,19 @@ const LiquiditySetupPath: React.FC<{ testId: string }> = ({ testId }) => (
     <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div className="min-w-0">
         <p className="text-[11px] font-semibold text-cyan-100/82">补齐阻塞判断的证据</p>
-        <p className="mt-1 max-w-3xl text-[11px] leading-5 text-white/52">
+        <p className="mt-1 max-w-3xl text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
           优先核对覆盖是否完整、更新时间与缺失项；是否进入判断仍以现有证据门槛为准。
         </p>
       </div>
       <div className="flex shrink-0 flex-wrap gap-2">
         <a
-          className="inline-flex min-h-8 items-center rounded-md border border-white/[0.08] bg-white/[0.035] px-2.5 py-1 text-[11px] font-semibold text-white/72 transition-colors hover:border-cyan-200/25 hover:bg-white/[0.06] hover:text-white"
+          className="inline-flex min-h-8 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-cyan-200/25 hover:bg-[var(--wolfy-surface-rail)] hover:text-[color:var(--wolfy-text-primary)]"
           href={buildProviderOpsSetupHref('liquidity_monitor')}
         >
           查看覆盖状态
         </a>
         <a
-          className="inline-flex min-h-8 items-center rounded-md border border-white/[0.08] bg-white/[0.035] px-2.5 py-1 text-[11px] font-semibold text-white/72 transition-colors hover:border-cyan-200/25 hover:bg-white/[0.06] hover:text-white"
+          className="inline-flex min-h-8 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-cyan-200/25 hover:bg-[var(--wolfy-surface-rail)] hover:text-[color:var(--wolfy-text-primary)]"
           href={buildDataSourcesSetupHref('liquidity_monitor')}
         >
           前往数据设置
@@ -1805,13 +1805,13 @@ const OfficialRiskBundleReadinessStrip: React.FC<{
   return (
     <section
       data-testid="liquidity-official-risk-readiness"
-      className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5"
+      className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-3 py-2.5"
     >
       <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-medium text-white/48">官方风险包</p>
-          <p className="mt-1 text-sm font-semibold text-white/84">{view.bundleLabel}</p>
-          <p className="mt-1 text-[11px] leading-5 text-white/52">{view.summary}</p>
+          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">官方风险包</p>
+          <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{view.bundleLabel}</p>
+          <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{view.summary}</p>
         </div>
         <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
           <TerminalChip variant={view.bundleVariant}>{view.bundleLabel}</TerminalChip>
@@ -1839,13 +1839,13 @@ const CapitalFlowSignalPanel: React.FC<{
   return (
     <div
       data-testid="liquidity-capital-flow-signal"
-      className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3"
+      className="mt-4 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-3 py-3"
     >
       <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-medium text-white/48">资金面</p>
-          <p className="mt-1 text-sm font-semibold text-white/84">{capitalFlowRegimeLabel(signal)}</p>
-          <p className="mt-1 text-[11px] leading-5 text-white/56">
+          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">资金面</p>
+          <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{capitalFlowRegimeLabel(signal)}</p>
+          <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
             作为流动性背景观察，不触发交易或主要方向判断。
           </p>
         </div>
@@ -1859,17 +1859,17 @@ const CapitalFlowSignalPanel: React.FC<{
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
-          <p className="text-[11px] font-medium text-white/48">资金方向</p>
-          <p className="mt-2 text-sm font-semibold text-white/82">{capitalFlowRegimeLabel(signal)}</p>
+        <div className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">资金方向</p>
+          <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{capitalFlowRegimeLabel(signal)}</p>
         </div>
-        <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
-          <p className="text-[11px] font-medium text-white/48">可能去向</p>
-          <p className="mt-2 text-sm font-semibold text-white/82">{capitalFlowAssetLabel(signal.likelyDestination)}</p>
+        <div className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">可能去向</p>
+          <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{capitalFlowAssetLabel(signal.likelyDestination)}</p>
         </div>
-        <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
-          <p className="text-[11px] font-medium text-white/48">状态强弱</p>
-          <p className="mt-2 text-sm font-semibold text-white/82">{capitalFlowConfidenceLabel(signal)}</p>
+        <div className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">状态强弱</p>
+          <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{capitalFlowConfidenceLabel(signal)}</p>
         </div>
       </div>
 
@@ -1892,11 +1892,11 @@ const CapitalFlowSignalPanel: React.FC<{
                 item.isStale ? 'stale' : '',
                 item.isPartial ? 'partial' : '',
               ].join('|')}
-              className="flex min-w-0 flex-col gap-2 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between"
+              className="flex min-w-0 flex-col gap-2 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-white/82">{capitalFlowAssetLabel(item.asset)}</p>
-                <p className="mt-1 text-[11px] leading-5 text-white/56">资产压力观察</p>
+                <p className="truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{capitalFlowAssetLabel(item.asset)}</p>
+                <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">资产压力观察</p>
               </div>
               <div className="flex min-w-0 flex-wrap gap-1.5 lg:justify-end">
                 <TerminalChip variant="info">{capitalFlowPressureLabel(item.pressure)}</TerminalChip>
@@ -1914,12 +1914,12 @@ const CapitalFlowSignalPanel: React.FC<{
           testId="liquidity-capital-flow-details"
           title="观察细节"
           summary="资产压力、反向线索与说明默认折叠"
-          className="mt-3 bg-black/10"
+          className="mt-3 bg-[var(--wolfy-surface-input)]"
         >
-          <div className="grid gap-3 text-[11px] leading-5 text-white/58">
+          <div className="grid gap-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
             {pressureRows.length ? (
               <div className="grid gap-2">
-                <p className="text-[11px] font-medium text-white/48">资产压力</p>
+                <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">资产压力</p>
                 {pressureRows.map((item) => (
                   <div
                     key={[
@@ -1930,11 +1930,11 @@ const CapitalFlowSignalPanel: React.FC<{
                       item.isStale ? 'stale' : '',
                       item.isPartial ? 'partial' : '',
                     ].join('|')}
-                    className="flex min-w-0 flex-col gap-2 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2 lg:flex-row lg:items-center lg:justify-between"
+                    className="flex min-w-0 flex-col gap-2 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 lg:flex-row lg:items-center lg:justify-between"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-white/82">{capitalFlowAssetLabel(item.asset)}</p>
-                      <p className="mt-1 text-[11px] leading-5 text-white/56">{capitalFlowPressureLabel(item.pressure)}</p>
+                      <p className="truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{capitalFlowAssetLabel(item.asset)}</p>
+                      <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{capitalFlowPressureLabel(item.pressure)}</p>
                     </div>
                     <div className="flex min-w-0 flex-wrap gap-1.5 lg:justify-end">
                       {item.isPartial ? <TerminalChip variant="caution">部分</TerminalChip> : null}
@@ -1947,7 +1947,7 @@ const CapitalFlowSignalPanel: React.FC<{
             ) : null}
             {signal.contradictionSignals?.length ? (
               <div className="grid gap-2">
-                <p className="text-[11px] font-medium text-white/48">反向线索</p>
+                <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">反向线索</p>
                 <div className="flex min-w-0 flex-wrap gap-1.5">
                   {signal.contradictionSignals.map((item) => (
                     <TerminalChip key={item} variant="neutral">{capitalFlowContradictionLabel(item)}</TerminalChip>
@@ -1957,7 +1957,7 @@ const CapitalFlowSignalPanel: React.FC<{
             ) : null}
             {signal.explanation ? (
               <div className="grid gap-1">
-                <p className="text-[11px] font-medium text-white/48">说明</p>
+                <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">说明</p>
                 <p>{signal.explanation}</p>
               </div>
             ) : null}
@@ -2301,7 +2301,7 @@ const LiquidityGuidancePanel: React.FC<{
           data-testid="liquidity-monitor-admin-details"
           title="技术细节"
           summary="流动性脉冲、完整指标矩阵、来源覆盖与运行边界默认折叠"
-          className="mt-4 bg-black/10"
+          className="mt-4 bg-[var(--wolfy-surface-input)]"
         >
           <div className="grid gap-4">
             <LiquidityImpulseSynthesisHeader view={synthesisView} />
@@ -2313,14 +2313,14 @@ const LiquidityGuidancePanel: React.FC<{
                 action={<TerminalChip variant={chipVariantForStatus(data.score.regime === 'unavailable' ? 'unavailable' : 'live')}>{REGIME_LABELS[data.score.regime]}</TerminalChip>}
               />
               <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="rounded-xl border border-white/[0.04] bg-black/20 p-4">
+                <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-[10px] uppercase tracking-widest text-white/35">分数</p>
+                      <p className="text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">分数</p>
                       <p className={cn('mt-2 font-mono text-5xl tracking-tight', REGIME_TONE[data.score.regime])}>{scoreLabel(data.score.value)}</p>
-                      <p className="mt-2 text-sm text-white/48">{REGIME_LABELS[data.score.regime]}</p>
+                      <p className="mt-2 text-sm text-[color:var(--wolfy-text-muted)]">{REGIME_LABELS[data.score.regime]}</p>
                     </div>
-                    <Gauge className="size-8 text-white/28" aria-hidden="true" />
+                    <Gauge className="size-8 text-[color:var(--wolfy-text-primary)]/28" aria-hidden="true" />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -2347,17 +2347,17 @@ const LiquidityGuidancePanel: React.FC<{
                     type="button"
                     data-testid={`liquidity-indicator-mobile-card-${indicator.key}`}
                     className={cn(
-                      'min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3 text-left transition-colors',
-                      active ? 'border-cyan-200/22 bg-cyan-200/[0.055]' : 'hover:border-white/12 hover:bg-white/[0.03]',
+                      'min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-left transition-colors',
+                      active ? 'border-[color:var(--blue)] bg-[color:color-mix(in_srgb,var(--blue)_10%,transparent)]' : 'hover:border-[color:var(--wolfy-border-subtle)] hover:bg-[var(--wolfy-surface-rail)]',
                     )}
                     onClick={() => onSelectIndicator(indicator.key)}
                   >
                     <div className="flex min-w-0 items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-white/82">{displayLabel(indicator)}</p>
-                        <p className="mt-1 text-sm leading-6 text-white/56">{indicator.summary || '—'}</p>
+                        <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{displayLabel(indicator)}</p>
+                        <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-muted)]">{indicator.summary || '—'}</p>
                       </div>
-                      <span className="shrink-0 font-mono text-sm text-white/70">{contributionLabel(indicator)}</span>
+                      <span className="shrink-0 font-mono text-sm text-[color:var(--wolfy-text-secondary)]">{contributionLabel(indicator)}</span>
                     </div>
                     <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
                       <TerminalChip variant={chipVariantForStatus(indicator.status)}>
@@ -2382,7 +2382,7 @@ const LiquidityGuidancePanel: React.FC<{
 
             <TerminalDenseTable data-testid="liquidity-indicator-table-shell" className="hidden md:block">
               <table className="w-full min-w-[760px] border-collapse text-left">
-              <thead className="border-b border-white/5 text-[10px] uppercase tracking-widest text-white/35">
+              <thead className="border-b border-[color:var(--wolfy-border-subtle)] text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
                 <tr>
                   <th className="px-3 py-2">指标</th>
                   <th className="px-3 py-2">状态</th>
@@ -2398,12 +2398,12 @@ const LiquidityGuidancePanel: React.FC<{
                     <tr
                       key={indicator.key}
                       className={cn(
-                        'cursor-pointer border-b border-white/[0.04] align-top transition-colors hover:bg-white/[0.02]',
-                        active ? 'bg-white/[0.03]' : '',
+                        'cursor-pointer border-b border-[color:var(--wolfy-border-subtle)] align-top transition-colors hover:bg-[var(--wolfy-surface-rail)]',
+                        active ? 'bg-[var(--wolfy-surface-rail)]' : '',
                       )}
                       onClick={() => onSelectIndicator(indicator.key)}
                     >
-                      <td className="px-3 py-2.5 text-sm text-white/80">{displayLabel(indicator)}</td>
+                      <td className="px-3 py-2.5 text-sm text-[color:var(--wolfy-text-primary)]">{displayLabel(indicator)}</td>
                       <td className="px-3 py-2.5">
                         <TerminalChip variant={chipVariantForStatus(indicator.status)}>
                           {statusLabel(indicator.status)}
@@ -2414,8 +2414,8 @@ const LiquidityGuidancePanel: React.FC<{
                           {FRESHNESS_LABELS[indicator.freshness]}
                         </TerminalChip>
                       </td>
-                      <td className="px-3 py-2.5 font-mono text-white/72">{contributionLabel(indicator)}</td>
-                      <td className="px-3 py-2.5 text-xs leading-5 text-white/48">
+                      <td className="px-3 py-2.5 font-mono text-[color:var(--wolfy-text-secondary)]">{contributionLabel(indicator)}</td>
+                      <td className="px-3 py-2.5 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
                         <div className="space-y-2">
                           <p>{indicator.summary || '—'}</p>
                           {isUsBreadthIndicator(indicator) ? (
@@ -2441,7 +2441,7 @@ const LiquidityGuidancePanel: React.FC<{
 
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               <TerminalPanel>
-                <TerminalSectionHeader eyebrow="选中指标" title="指标细节" action={<Waves className="size-4 text-white/28" aria-hidden="true" />} />
+                <TerminalSectionHeader eyebrow="选中指标" title="指标细节" action={<Waves className="size-4 text-[color:var(--wolfy-text-primary)]/28" aria-hidden="true" />} />
                 {selectedIndicator ? (
                   <div className="mt-4 grid grid-cols-1 gap-3">
                     <TerminalMetric label="当前指标" value={displayLabel(selectedIndicator)} valueClassName="text-sm font-sans leading-6" />
@@ -2457,12 +2457,12 @@ const LiquidityGuidancePanel: React.FC<{
                     ) : null}
                   </div>
                 ) : (
-                  <p className="mt-4 text-sm text-white/45">当前没有可展示的指标。</p>
+                  <p className="mt-4 text-sm text-[color:var(--wolfy-text-muted)]">当前没有可展示的指标。</p>
                 )}
               </TerminalPanel>
 
               <TerminalPanel data-testid="liquidity-monitor-source-disclosure">
-                <TerminalSectionHeader eyebrow="运行边界" title="来源与约束" action={<Activity className="size-4 text-white/28" aria-hidden="true" />} />
+                <TerminalSectionHeader eyebrow="运行边界" title="来源与约束" action={<Activity className="size-4 text-[color:var(--wolfy-text-primary)]/28" aria-hidden="true" />} />
                 <div className="mt-4 grid grid-cols-1 gap-3">
                   <TerminalMetric label="外部调用" value={data.sourceMetadata.externalProviderCalls ? '已发生' : '未发生'} valueClassName="text-sm font-sans" />
                   <TerminalMetric label="运行顺序" value={data.sourceMetadata.providerRuntimeChanged ? '已变更' : '未变更'} valueClassName="text-sm font-sans" />
@@ -2471,7 +2471,7 @@ const LiquidityGuidancePanel: React.FC<{
                   <TerminalMetric label="最新时间" value={formatDateTime(data.freshness.latestAsOf) || '待确认'} valueClassName="text-sm font-sans" />
                   <TerminalMetric label="当前判断" value={data.score.regime === 'unavailable' ? '数据不足' : '仅供研究观察'} valueClassName="text-sm font-sans leading-6" />
                 </div>
-                <p className="mt-4 text-sm leading-6 text-white/52">
+                <p className="mt-4 text-sm leading-6 text-[color:var(--wolfy-text-muted)]">
                   只读快照，不触发扫描、回测或组合动作，也不把 fallback 包装成实时结论。
                 </p>
               </TerminalPanel>

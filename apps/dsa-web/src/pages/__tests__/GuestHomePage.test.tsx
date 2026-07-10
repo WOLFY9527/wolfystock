@@ -138,7 +138,11 @@ describe('GuestHomePage', () => {
     expect(screen.getByRole('button', { name: '分析' })).toBeEnabled();
     expect(screen.getByText('WolfyStock 是面向独立研究者与自驱投资者的股票研究工作区。你可以先查看单个标的预览，登录后再保存报告、回看历史，并继续进入组合或扫描工作台。')).toBeInTheDocument();
     expect(marketPreviewStrip).toHaveTextContent('当前市场观察');
-    expect(marketPreviewStrip).toHaveTextContent('公开市场观察已准备');
+    // Strip mounts in loading state; wait for public-safe briefing settlement (ready != loading).
+    await waitFor(() => {
+      expect(marketPreviewStrip).toHaveTextContent('公开市场观察已准备');
+    });
+    expect(marketPreviewStrip).not.toHaveTextContent('正在整理公开市场观察');
     expect(marketPreviewStrip).toHaveTextContent('市场广度改善');
     expect(marketPreviewStrip).toHaveTextContent('研究观察，不构成投资建议。');
     expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/zh/register?redirect=%2Fzh');
@@ -170,6 +174,12 @@ describe('GuestHomePage', () => {
     expect(screen.queryByTestId('home-bento-decision-score-value')).not.toBeInTheDocument();
     expect(screen.getAllByText('趋势延续但需要等待更好的介入点。').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('guest-home-frosted-lock')).toHaveLength(2);
+    const paywall = screen.getAllByTestId('guest-home-frosted-lock')[0];
+    expect(paywall.className).not.toMatch(/from-blue|to-purple|backdrop-blur/);
+    expect(paywall.className).toMatch(/border-\[color:var\(--wolfy-border-subtle\)\]/);
+    const cta = screen.getAllByRole('link', { name: '免费创建账户' })[0];
+    expect(cta.className).toMatch(/theme-button-primary-bg|var\(--theme-button-primary-bg\)/);
+    expect(cta.className).not.toMatch(/from-blue|to-purple|shadow-\[0_0/);
     expect(screen.getAllByText('解锁完整研究框架、价格观察与技术形态解读')).toHaveLength(2);
     expect(screen.getAllByRole('link', { name: '免费创建账户' })).toHaveLength(2);
     expect(screen.getByTestId('home-research-context-rail')).toContainElement(screen.getAllByTestId('guest-home-frosted-lock')[1]);

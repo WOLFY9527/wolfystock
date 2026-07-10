@@ -107,7 +107,7 @@ const BacktestOverviewSummary: React.FC<BacktestOverviewSummaryProps> = ({
           eyebrow={resultPage('overview.subtitle')}
           title={resultPage('overview.title')}
         />
-        <p className="text-sm leading-6 text-white/60">{resultPage('overview.intro')}</p>
+        <p className="text-sm leading-6 text-[color:var(--wolfy-text-muted)]">{resultPage('overview.intro')}</p>
         <SummaryStrip
           items={[
             { label: resultPage('overview.metricAuditRows'), value: String(normalized.viewerMeta.rowCount) },
@@ -119,11 +119,11 @@ const BacktestOverviewSummary: React.FC<BacktestOverviewSummaryProps> = ({
         <TerminalNestedBlock data-testid="overview-walk-forward-summary" className="flex flex-col gap-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
                 {resultPage('overview.walkForwardEyebrow')}
               </p>
-              <h3 className="mt-1 text-sm font-medium text-white/90">{resultPage('overview.walkForwardTitle')}</h3>
-              <p className="mt-1 text-xs leading-5 text-white/50">{walkForwardBody}</p>
+              <h3 className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">{resultPage('overview.walkForwardTitle')}</h3>
+              <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{walkForwardBody}</p>
             </div>
             <TerminalChip variant={walkForwardStateVariant}>{walkForwardOverview.stateLabel}</TerminalChip>
           </div>
@@ -156,7 +156,7 @@ const BacktestOverviewSummary: React.FC<BacktestOverviewSummaryProps> = ({
                 valueClassName="text-xs font-semibold leading-5"
               />
             </div>
-            <p className="text-xs leading-5 text-white/40">{benchmarkStatusNote}</p>
+            <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{benchmarkStatusNote}</p>
             <AssumptionList assumptions={run.executionAssumptions} emptyText={resultPage('overview.emptyExecutionAssumptions')} />
           </div>
         </TerminalDisclosure>
@@ -164,8 +164,8 @@ const BacktestOverviewSummary: React.FC<BacktestOverviewSummaryProps> = ({
           <TerminalNestedBlock className="flex flex-col gap-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
-                <h3 className="text-sm font-medium text-white/90">{resultPage('overview.resultSummaryTitle')}</h3>
-                <p className="mt-2 text-sm leading-6 text-white/60">{resultPage('overview.resultSummaryBody')}</p>
+                <h3 className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">{resultPage('overview.resultSummaryTitle')}</h3>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-muted)]">{resultPage('overview.resultSummaryBody')}</p>
               </div>
               <div className="flex flex-wrap gap-2 lg:justify-end">
                 <TerminalButton variant="secondary" onClick={() => onExportDecisionReport('md')}>
@@ -188,7 +188,7 @@ const BacktestOverviewSummary: React.FC<BacktestOverviewSummaryProps> = ({
                     : (language === 'en' ? 'Copy full report' : '复制完整报告')}
                 </TerminalButton>
               </div>
-              <pre className="overflow-x-auto no-scrollbar rounded-lg border border-white/5 bg-black/30 p-3 text-xs leading-6 text-white/75">
+              <pre className="overflow-x-auto no-scrollbar rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-xs leading-6 text-[color:var(--wolfy-text-secondary)]">
                 {decisionReportMarkdown}
               </pre>
             </TerminalNestedBlock>

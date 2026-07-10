@@ -379,25 +379,25 @@ function renderRobustnessEvidencePreview(
       </TerminalNotice>
       <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
         <TerminalNestedBlock>
-          <p className="text-[11px] text-white/35">{diagnosticOnlyFlag.label}</p>
-          <p className="mt-1 text-sm text-white/82">{formatSafeFlagValue(diagnosticOnlyFlag)}</p>
+          <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{diagnosticOnlyFlag.label}</p>
+          <p className="mt-1 text-sm text-[color:var(--wolfy-text-primary)]">{formatSafeFlagValue(diagnosticOnlyFlag)}</p>
         </TerminalNestedBlock>
         <TerminalNestedBlock>
-          <p className="text-[11px] text-white/35">{decisionGradeFlag.label}</p>
-          <p className="mt-1 text-sm text-white/82">{formatSafeFlagValue(decisionGradeFlag)}</p>
+          <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{decisionGradeFlag.label}</p>
+          <p className="mt-1 text-sm text-[color:var(--wolfy-text-primary)]">{formatSafeFlagValue(decisionGradeFlag)}</p>
         </TerminalNestedBlock>
         <TerminalNestedBlock>
-          <p className="text-[11px] text-white/35">{language === 'en' ? 'Coverage' : '覆盖计数'}</p>
-          <p className="mt-1 font-mono text-sm text-white/82">
+          <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Coverage' : '覆盖计数'}</p>
+          <p className="mt-1 font-mono text-sm text-[color:var(--wolfy-text-primary)]">
             {language === 'en'
               ? `available ${availableFoldCount ?? '--'} · missing ${missingFoldCount ?? '--'} · skipped ${skippedFoldCount ?? '--'}`
               : `可用 ${availableFoldCount ?? '--'} · 缺失 ${missingFoldCount ?? '--'} · 跳过 ${skippedFoldCount ?? '--'}`}
           </p>
         </TerminalNestedBlock>
         <TerminalNestedBlock>
-          <p className="text-[11px] text-white/35">{language === 'en' ? 'Stored window span' : '存储窗口范围'}</p>
-          <p className="mt-1 font-mono text-sm text-white/82">{formatWindowRange(periodStart, periodEnd)}</p>
-          <p className="mt-1 text-[11px] leading-5 text-white/35">
+          <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Stored window span' : '存储窗口范围'}</p>
+          <p className="mt-1 font-mono text-sm text-[color:var(--wolfy-text-primary)]">{formatWindowRange(periodStart, periodEnd)}</p>
+          <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
             {language === 'en'
               ? `folds ${folds.length}${configuredMaxFolds != null ? ` / ${configuredMaxFolds}` : ''}`
               : `fold ${folds.length}${configuredMaxFolds != null ? ` / ${configuredMaxFolds}` : ''}`}
@@ -408,7 +408,7 @@ function renderRobustnessEvidencePreview(
         </TerminalNestedBlock>
       </div>
       <TerminalNestedBlock>
-        <p className="text-[11px] text-white/35">{language === 'en' ? 'Execution guardrails' : '执行护栏'}</p>
+        <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Execution guardrails' : '执行护栏'}</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {authorityFlags.map((flag) => (
             <TerminalChip
@@ -419,7 +419,7 @@ function renderRobustnessEvidencePreview(
             </TerminalChip>
           ))}
           {additionalAuthorityFlags.length === 0 && authorityFlags.length === 0 ? (
-            <span className="font-mono text-xs text-white/55">--</span>
+            <span className="font-mono text-xs text-[color:var(--wolfy-text-muted)]">--</span>
           ) : null}
           {additionalAuthorityFlags.map((flag) => (
             <TerminalChip key={flag.key} variant="neutral">
@@ -436,15 +436,15 @@ function renderRobustnessEvidencePreview(
           return (
             <TerminalNestedBlock key={getString(fold, ['foldId', 'fold_id']) || `stored-oos-fold-${index}`}>
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-medium text-white/88">{getDiagnosticWindowLabel(language, foldIndex)}</p>
+                <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">{getDiagnosticWindowLabel(language, foldIndex)}</p>
                 <TerminalChip variant="neutral">
                   {formatSafeFoldState(getString(fold, ['state']))}
                 </TerminalChip>
               </div>
               <div className="mt-2 grid gap-2 md:grid-cols-2">
                 <div>
-                  <p className="text-[11px] text-white/35">{language === 'en' ? 'Train window' : '训练窗口'}</p>
-                  <p className="mt-1 font-mono text-xs leading-5 text-white/68">
+                  <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Train window' : '训练窗口'}</p>
+                  <p className="mt-1 font-mono text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                     {formatWindowRange(
                       getString(trainWindow, ['startDate', 'start_date']),
                       getString(trainWindow, ['endDate', 'end_date']),
@@ -452,8 +452,8 @@ function renderRobustnessEvidencePreview(
                   </p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-white/35">{language === 'en' ? 'Test window' : '测试窗口'}</p>
-                  <p className="mt-1 font-mono text-xs leading-5 text-white/68">
+                  <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Test window' : '测试窗口'}</p>
+                  <p className="mt-1 font-mono text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                     {formatWindowRange(
                       getString(testWindow, ['startDate', 'start_date']),
                       getString(testWindow, ['endDate', 'end_date']),
@@ -602,7 +602,7 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
   });
 
   if (isLoading) {
-    return <p className="text-xs leading-5 text-white/45">{t('backtest.resultPage.supportExports.loading')}</p>;
+    return <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{t('backtest.resultPage.supportExports.loading')}</p>;
   }
 
   if (loadError) {
@@ -639,7 +639,7 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
       <TerminalNotice variant="info">
         {t('backtest.resultPage.supportExports.intro')}
       </TerminalNotice>
-      <p className="text-xs leading-5 text-white/35">{t('backtest.resultPage.supportExports.note')}</p>
+      <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{t('backtest.resultPage.supportExports.note')}</p>
       {downloadError ? <TerminalNotice variant="danger">{downloadError}</TerminalNotice> : null}
       {visibleDefinitions.map((definition) => {
         const item = getSupportExportItem(definition, items);
@@ -652,15 +652,15 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
           >
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-medium text-white/88">{getDefinitionCopy(definition, 'label')}</p>
+                <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">{getDefinitionCopy(definition, 'label')}</p>
                 <TerminalChip variant={isAvailable ? 'success' : 'neutral'}>
                   {isAvailable
                     ? t('backtest.resultPage.supportExports.available')
                     : t('backtest.resultPage.supportExports.unavailable')}
                 </TerminalChip>
               </div>
-              <p className="mt-2 text-xs leading-5 text-white/48">{getDefinitionCopy(definition, 'description')}</p>
-              <p className="mt-2 text-[11px] leading-5 text-white/35">{getAvailabilityText(item)}</p>
+              <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{getDefinitionCopy(definition, 'description')}</p>
+              <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{getAvailabilityText(item)}</p>
               {definition.id === 'robustnessEvidenceJson' && isAvailable ? (
                 <TerminalDisclosure
                   title="OOS diagnostic evidence"
@@ -669,7 +669,7 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
                   data-testid="backtest-oos-diagnostic-evidence-disclosure"
                 >
                   {robustnessPreview.status === 'loading' ? (
-                    <p className="text-xs leading-5 text-white/45">
+                    <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
                       {language === 'en' ? 'Loading stored OOS diagnostic evidence…' : '正在加载已存储的 OOS 诊断证据…'}
                     </p>
                   ) : null}

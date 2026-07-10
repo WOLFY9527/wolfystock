@@ -34,19 +34,19 @@ export function ScannerBacktestResultStrip({
   const resultHref = item.resultId ? buildLocalizedPath(`/backtest/results/${item.resultId}`, language) : null;
 
   return (
-    <div data-testid={`scanner-backtest-status-${item.symbol}`} className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-white/5 bg-black/20 px-2 py-1.5 text-[11px] text-white/52">
-      <span className="shrink-0 rounded border border-white/10 bg-white/[0.04] px-1.5 py-0.5 font-bold uppercase tracking-widest text-white/45">{statusLabel}</span>
+    <div data-testid={`scanner-backtest-status-${item.symbol}`} className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2 py-1.5 text-[11px] text-[color:var(--wolfy-text-muted)]">
+      <span className="shrink-0 rounded border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-1.5 py-0.5 font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{statusLabel}</span>
       {item.status === 'completed' || item.status === 'skipped_existing' ? (
         <>
-          <span className={item.totalReturnPct != null && item.totalReturnPct >= 0 ? 'font-mono text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]' : 'font-mono text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'}>
+          <span className={item.totalReturnPct != null && item.totalReturnPct >= 0 ? 'font-mono text-[color:var(--state-success-text)] ' : 'font-mono text-[color:var(--state-danger-text)] '}>
             {formatPercent(item.totalReturnPct)}
           </span>
-          <span className="font-mono text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]">{formatPercent(item.maxDrawdownPct)}</span>
-          <span className="font-mono text-white/70">{formatMetricNumber(item.sharpe)}</span>
+          <span className="font-mono text-[color:var(--state-danger-text)]">{formatPercent(item.maxDrawdownPct)}</span>
+          <span className="font-mono text-[color:var(--wolfy-text-secondary)]">{formatMetricNumber(item.sharpe)}</span>
           {resultHref ? <Link className="shrink-0 text-blue-200 hover:text-blue-100" to={resultHref}>{language === 'en' ? 'Report' : '查看报告'}</Link> : null}
         </>
       ) : null}
-      {item.status === 'failed' && item.error ? <span className="min-w-0 truncate text-rose-300" title={item.error}>{item.error}</span> : null}
+      {item.status === 'failed' && item.error ? <span className="min-w-0 truncate text-[color:var(--state-danger-text)]" title={item.error}>{item.error}</span> : null}
     </div>
   );
 }

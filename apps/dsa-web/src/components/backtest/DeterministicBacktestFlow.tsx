@@ -570,33 +570,33 @@ function PresetQuickList({
   const visiblePresets = presets.slice(0, 3);
 
   return (
-    <div className="bg-white/[0.02] border border-white/5 rounded-[24px] p-6" data-testid="backtest-setup-presets">
+    <div className="bg-[var(--wolfy-surface-rail)] border border-[color:var(--wolfy-border-subtle)] rounded-[24px] p-6" data-testid="backtest-setup-presets">
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
-          <h3 className="text-xs font-bold text-white/40 uppercase tracking-[0.22em]">{language === 'en' ? 'Preset shortcuts' : '快速预设'}</h3>
-          <p className="mt-2 text-sm text-white/50 leading-relaxed">
+          <h3 className="text-xs font-bold text-[color:var(--wolfy-text-muted)] uppercase tracking-[0.22em]">{language === 'en' ? 'Preset shortcuts' : '快速预设'}</h3>
+          <p className="mt-2 text-sm text-[color:var(--wolfy-text-muted)] leading-relaxed">
             {language === 'en' ? 'Apply a saved setup and continue editing in the launch panel.' : '直接复用最近预设，再在右侧发射台继续微调参数。'}
           </p>
         </div>
-        <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/45">{presets.length}</span>
+        <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-3 py-1 text-xs text-[color:var(--wolfy-text-muted)]">{presets.length}</span>
       </div>
       {visiblePresets.length === 0 ? (
-        <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] p-4 text-sm text-white/45">
+        <div className="rounded-[24px] border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-4 text-sm text-[color:var(--wolfy-text-muted)]">
           {language === 'en' ? 'No saved presets yet. Recent drafts will appear here after your first run.' : '当前还没有保存的预设。完成一次回测后，最近草稿会显示在这里。'}
         </div>
       ) : (
         <div className="flex flex-col gap-3">
           {visiblePresets.map((preset) => (
-            <div key={preset.id} className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+            <div key={preset.id} className="rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
                     {preset.kind === 'saved' ? (language === 'en' ? 'Saved preset' : '已保存预设') : (language === 'en' ? 'Recent draft' : '最近草稿')}
                   </p>
-                  <div className="mt-2 text-sm font-medium text-white">{language === 'en' && containsCjk(preset.name) ? preset.code : preset.name}</div>
-                  <div className="mt-1 text-xs text-white/35">{preset.startDate || '--'} {'->'} {preset.endDate || '--'}</div>
+                  <div className="mt-2 text-sm font-medium text-[color:var(--wolfy-text-primary)]">{language === 'en' && containsCjk(preset.name) ? preset.code : preset.name}</div>
+                  <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">{preset.startDate || '--'} {'->'} {preset.endDate || '--'}</div>
                 </div>
-                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/55">{preset.code}</span>
+                <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{preset.code}</span>
               </div>
               <div className="product-action-row mt-4">
                 <Button size="sm" variant="secondary" onClick={() => onApplyPreset(preset)}>{language === 'en' ? 'Apply' : '应用'}</Button>
@@ -636,11 +636,11 @@ function HistoryQuickList({
   const visibleHistoryItems = historyItems.slice(0, 3);
 
   return (
-    <div className="bg-white/[0.02] border border-white/5 rounded-[24px] p-6" data-testid="backtest-setup-history">
+    <div className="bg-[var(--wolfy-surface-rail)] border border-[color:var(--wolfy-border-subtle)] rounded-[24px] p-6" data-testid="backtest-setup-history">
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
-          <h3 className="text-xs font-bold text-white/40 uppercase tracking-[0.22em]">{language === 'en' ? 'Recent history' : '最近历史回测'}</h3>
-          <p className="mt-2 text-sm text-white/50 leading-relaxed">
+          <h3 className="text-xs font-bold text-[color:var(--wolfy-text-muted)] uppercase tracking-[0.22em]">{language === 'en' ? 'Recent history' : '最近历史回测'}</h3>
+          <p className="mt-2 text-sm text-[color:var(--wolfy-text-muted)] leading-relaxed">
             {language === 'en' ? 'Reopen the latest result pages directly from here.' : '最近完成的回测可以从这里直接重开独立结果页。'}
           </p>
         </div>
@@ -650,7 +650,7 @@ function HistoryQuickList({
       </div>
       {historyError ? <ApiErrorAlert error={historyError} className="mb-4" /> : null}
       {visibleHistoryItems.length === 0 ? (
-        <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] p-4 text-sm text-white/45">
+        <div className="rounded-[24px] border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-4 text-sm text-[color:var(--wolfy-text-muted)]">
           {isEmptyHistory
             ? (language === 'en' ? 'No saved rule-backtest runs yet. Your first completed run will appear here.' : '当前还没有已保存的规则回测记录。完成第一次回测后，最近历史会显示在这里。')
             : (language === 'en' ? 'History is loading or temporarily unavailable.' : '历史记录正在加载，或暂时不可用。')}
@@ -658,14 +658,14 @@ function HistoryQuickList({
       ) : (
         <div className="flex flex-col gap-3">
           {visibleHistoryItems.map((item) => (
-            <div key={item.id} className={`rounded-2xl border bg-white/[0.02] p-4 ${selectedRunId === item.id ? 'border-indigo-400/40' : 'border-white/8'}`}>
+            <div key={item.id} className={`rounded-2xl border bg-[var(--wolfy-surface-rail)] p-4 ${selectedRunId === item.id ? 'border-indigo-400/40' : 'border-[color:var(--wolfy-border-subtle)]'}`}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-white">{item.code || '--'} / {language === 'en' ? 'Rule backtest' : '规则回测'}</div>
-                  <div className="mt-1 text-xs text-white/35">{item.runAt?.slice(0, 10) || '--'} {'->'} {item.completedAt?.slice(0, 10) || item.runAt?.slice(0, 10) || '--'}</div>
-                  <div className="mt-2 text-xs text-white/45">{language === 'en' ? 'Status' : '状态'}: {item.status || '--'}</div>
+                  <div className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">{item.code || '--'} / {language === 'en' ? 'Rule backtest' : '规则回测'}</div>
+                  <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">{item.runAt?.slice(0, 10) || '--'} {'->'} {item.completedAt?.slice(0, 10) || item.runAt?.slice(0, 10) || '--'}</div>
+                  <div className="mt-2 text-xs text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Status' : '状态'}: {item.status || '--'}</div>
                 </div>
-                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/55">#{item.id}</span>
+                <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">#{item.id}</span>
               </div>
               <div className="product-action-row mt-4">
                 <Button size="sm" variant="secondary" onClick={() => onOpenHistoryRun(item)}>
@@ -676,7 +676,7 @@ function HistoryQuickList({
           ))}
         </div>
       )}
-      <p className="mt-4 text-xs text-white/35">
+      <p className="mt-4 text-xs text-[color:var(--wolfy-text-muted)]">
         {language === 'en' ? `${historyTotal} deterministic runs in history. Page ${historyPage}.` : `历史中共 ${historyTotal} 条确定性回测记录。当前页 ${historyPage}。`}
       </p>
     </div>
@@ -715,25 +715,25 @@ function SetupSidebar({
   onOpenHistoryRun: (run: RuleBacktestHistoryItem) => void;
 }) {
   const { language } = useI18n();
-  const subCardClass = 'rounded-[24px] border border-white/5 bg-white/[0.02] p-6';
-  const compactFieldLabelClass = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
+  const subCardClass = 'rounded-[24px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-6';
+  const compactFieldLabelClass = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]';
 
   return (
     <aside className="w-full min-w-0 shrink-0 flex flex-col gap-6" data-testid="backtest-cockpit-console">
-      <div className="bg-white/[0.02] border border-white/5 rounded-[24px] p-6" data-testid="backtest-entry-shell">
+      <div className="bg-[var(--wolfy-surface-rail)] border border-[color:var(--wolfy-border-subtle)] rounded-[24px] p-6" data-testid="backtest-entry-shell">
         <SectionEyebrow>{language === 'en' ? 'Deterministic lane' : '确定性链路'}</SectionEyebrow>
         <div className="mt-4 grid gap-3">
           <div className={subCardClass}>
             <p className={compactFieldLabelClass}>{language === 'en' ? 'Flow' : '流程'}</p>
-            <p className="mt-2 text-sm text-white">{language === 'en' ? 'Setup -> Compile -> Execute' : '配置 -> 编译 -> 执行'}</p>
+            <p className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{language === 'en' ? 'Setup -> Compile -> Execute' : '配置 -> 编译 -> 执行'}</p>
           </div>
           <div className={subCardClass}>
             <p className={compactFieldLabelClass}>{language === 'en' ? 'Current symbol' : '当前标的'}</p>
-            <p className="mt-2 text-sm text-white">{code || '--'}</p>
+            <p className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{code || '--'}</p>
           </div>
           <div className={subCardClass}>
             <p className={compactFieldLabelClass}>{language === 'en' ? 'Window' : '区间'}</p>
-            <p className="mt-2 text-sm text-white">{startDate || '--'} {'->'} {endDate || '--'}</p>
+            <p className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{startDate || '--'} {'->'} {endDate || '--'}</p>
           </div>
         </div>
       </div>
@@ -859,11 +859,11 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
     setPresets(deleteRuleBacktestPreset(presetId));
   };
 
-  const compactInputClass = 'w-full min-w-0 min-h-[44px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm leading-6 text-white outline-none transition-all focus:border-emerald-500/50 focus:bg-white/[0.05]';
-  const compactCheckboxClass = 'size-4 shrink-0 rounded border border-white/15 bg-white/[0.03] text-emerald-400 accent-emerald-400 disabled:opacity-45';
-  const compactFieldLabelClass = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
-  const denseCardClass = 'h-full bg-white/[0.02] border border-white/5 rounded-[24px] p-6 flex flex-col gap-5';
-  const subCardClass = 'rounded-[24px] border border-white/5 bg-white/[0.02] p-6';
+  const compactInputClass = 'w-full min-w-0 min-h-[44px] rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-3 py-2.5 text-sm leading-6 text-[color:var(--wolfy-text-primary)] outline-none transition-all focus:border-[color:var(--sage)] focus:bg-[var(--wolfy-surface-rail)]';
+  const compactCheckboxClass = 'size-4 shrink-0 rounded border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] text-[color:var(--state-success-text)] accent-[var(--ok)] disabled:opacity-45';
+  const compactFieldLabelClass = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]';
+  const denseCardClass = 'h-full bg-[var(--wolfy-surface-rail)] border border-[color:var(--wolfy-border-subtle)] rounded-[24px] p-6 flex flex-col gap-5';
+  const subCardClass = 'rounded-[24px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-6';
   const stickyStatusTitle = language === 'en'
     ? `Ready: ${code || 'Pending symbol'} ${parsedStrategy ? `· ${getLocalizedStrategyTypeLabel(parsedStrategy, language)}` : ''}`
     : `就绪: ${code || '--'} ${parsedStrategy ? getLocalizedStrategyTypeLabel(parsedStrategy, language) : '待解析策略'}`;
@@ -928,8 +928,8 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         <div className="flex items-start gap-3">
           <span className="mt-1 h-3 w-1 rounded-full bg-indigo-400" />
           <div>
-            <h3 className="text-sm font-bold text-white">{language === 'en' ? 'Instrument and date window' : '基础标的与区间'}</h3>
-            <p className="mt-1 text-sm text-white/45">{language === 'en' ? 'Keep the symbol and date window visible at a glance.' : '标的与时间窗口保持常驻可见，不再折叠切换。'}</p>
+            <h3 className="text-sm font-bold text-[color:var(--wolfy-text-primary)]">{language === 'en' ? 'Instrument and date window' : '基础标的与区间'}</h3>
+            <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Keep the symbol and date window visible at a glance.' : '标的与时间窗口保持常驻可见，不再折叠切换。'}</p>
           </div>
         </div>
         <div className="backtest-base-params-layout grid grid-cols-1 gap-6 xl:grid-cols-4" data-testid="backtest-base-params-layout">
@@ -1033,10 +1033,10 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
       <div className={denseCardClass}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-3">
-            <span className="mt-1 h-3 w-1 rounded-full bg-rose-500" />
+            <span className="mt-1 h-3 w-1 rounded-full bg-[color:var(--state-danger-text)]" />
             <div>
-              <h3 className="text-sm font-bold text-white">{language === 'en' ? 'Strategy engine and rule input' : '策略引擎与规则'}</h3>
-              <p className="mt-1 text-sm text-white/45">{language === 'en' ? 'Write or rewrite the rule in natural language, then normalize it without leaving the board.' : '自然语言策略、改写建议、解析动作都在同一块工作区内完成。'}</p>
+              <h3 className="text-sm font-bold text-[color:var(--wolfy-text-primary)]">{language === 'en' ? 'Strategy engine and rule input' : '策略引擎与规则'}</h3>
+              <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Write or rewrite the rule in natural language, then normalize it without leaving the board.' : '自然语言策略、改写建议、解析动作都在同一块工作区内完成。'}</p>
             </div>
           </div>
           <Button
@@ -1112,8 +1112,8 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         <div className="flex items-start gap-3">
           <span className="mt-1 h-3 w-1 rounded-full bg-indigo-500" />
           <div>
-            <h3 className="text-sm font-bold text-white">{language === 'en' ? 'Capital and execution settings' : '资金与执行设置'}</h3>
-            <p className="mt-1 text-sm text-white/45">{language === 'en' ? 'Keep benchmark, fees, slippage, and execution defaults in the same card.' : '资金、基准、滑点和执行默认值在同一卡片内连续校对。'}</p>
+            <h3 className="text-sm font-bold text-[color:var(--wolfy-text-primary)]">{language === 'en' ? 'Capital and execution settings' : '资金与执行设置'}</h3>
+            <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Keep benchmark, fees, slippage, and execution defaults in the same card.' : '资金、基准、滑点和执行默认值在同一卡片内连续校对。'}</p>
           </div>
         </div>
         {executionSettingsFields}
@@ -1139,8 +1139,8 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
           <div className="flex items-start gap-3">
             <span className="mt-1 h-3 w-1 rounded-full bg-amber-400" />
             <div>
-              <h3 className="text-sm font-bold text-white">{language === 'en' ? 'Parse review and executable spec' : '解析确认与可执行规格'}</h3>
-              <p className="mt-1 text-sm text-white/45">{language === 'en' ? 'Review the normalized rule inline, without collapsing into a separate step.' : '解析状态、可执行规格、默认假设与限制说明全部平铺展开。'}</p>
+              <h3 className="text-sm font-bold text-[color:var(--wolfy-text-primary)]">{language === 'en' ? 'Parse review and executable spec' : '解析确认与可执行规格'}</h3>
+              <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Review the normalized rule inline, without collapsing into a separate step.' : '解析状态、可执行规格、默认假设与限制说明全部平铺展开。'}</p>
             </div>
           </div>
           <Badge variant={parseMeta.tone === 'success' ? 'success' : parseMeta.tone === 'danger' ? 'danger' : parseMeta.tone === 'warning' ? 'warning' : 'default'}>
@@ -1399,8 +1399,8 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         <div className="flex items-start gap-3">
           <span className="mt-1 h-3 w-1 rounded-full bg-cyan-400" />
           <div>
-            <h3 className="text-sm font-bold text-white">{language === 'en' ? 'Launch rail and history context' : '发射协议与历史接力'}</h3>
-            <p className="mt-1 text-sm text-white/45">{language === 'en' ? 'The config page only launches runs. Full inspection still lives on the dedicated result route.' : '配置页只负责发起运行，完整分析仍在独立结果页完成。'}</p>
+            <h3 className="text-sm font-bold text-[color:var(--wolfy-text-primary)]">{language === 'en' ? 'Launch rail and history context' : '发射协议与历史接力'}</h3>
+            <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'The config page only launches runs. Full inspection still lives on the dedicated result route.' : '配置页只负责发起运行，完整分析仍在独立结果页完成。'}</p>
           </div>
         </div>
         <output className="backtest-inline-status" aria-live="polite">
@@ -1458,7 +1458,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
           onOpenHistoryRun={onOpenHistoryRun}
         />
       </div>
-      <main className="relative flex min-w-0 flex-col gap-6 rounded-[32px] border border-white/5 bg-white/[0.02] shadow-2xl backtest-setup-main xl:col-span-4" data-testid="backtest-cockpit-monitor">
+      <main className="relative flex min-w-0 flex-col gap-6 rounded-[32px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] shadow-2xl backtest-setup-main xl:col-span-4" data-testid="backtest-cockpit-monitor">
         <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
         <div className="p-6 md:p-8 xl:p-10" data-testid="backtest-setup-dashboard">
           <div className="flex flex-col gap-8 backtest-setup-form-stack">
@@ -1475,11 +1475,11 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
           </div>
         </div>
         <div className="p-4 pt-0 md:p-6 md:pt-0" data-testid="backtest-sticky-action-bar">
-          <div className="rounded-[24px] border border-white/10 bg-white/[0.05] p-4 shadow-2xl backdrop-blur-xl">
+          <div className="rounded-[24px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-4 shadow-2xl backdrop-blur-xl">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0">
-                <div className="text-sm font-bold text-white">{stickyStatusTitle}</div>
-                <div className="mt-1 text-xs text-white/40">{stickyStatusNote}</div>
+                <div className="text-sm font-bold text-[color:var(--wolfy-text-primary)]">{stickyStatusTitle}</div>
+                <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">{stickyStatusNote}</div>
               </div>
               <div className="flex items-center gap-3">
                 <Button variant="ghost" onClick={onReset}>{language === 'en' ? 'Reset' : '重置'}</Button>

@@ -1651,7 +1651,7 @@ const ThemeCorrelationBreadthSnapshotPanel: React.FC<{
       title="查看主题扩散快照"
       summary={snapshotSummary(snapshot)}
     >
-      <div className="grid gap-3 text-[11px] leading-5 text-white/56">
+      <div className="grid gap-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <TerminalChip variant={snapshot.participationState === 'broad_group' ? 'success' : snapshot.participationState === 'insufficient_evidence' ? 'caution' : 'info'}>
             {participationLabel}
@@ -1668,44 +1668,44 @@ const ThemeCorrelationBreadthSnapshotPanel: React.FC<{
         </div>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <div className="rounded-md border border-white/[0.05] bg-white/[0.02] px-2.5 py-2">
-            <p className="font-semibold text-white/74">龙头集中度</p>
+          <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-2">
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">龙头集中度</p>
             <p className="mt-1">
               {leadershipLabel} · {formatSnapshotPercent(snapshot.leadershipConcentration?.percent)}
             </p>
-            <p className="mt-1 text-white/42">
+            <p className="mt-1 text-[color:var(--wolfy-text-muted)]">
               广泛参与 {formatSnapshotPercent(snapshot.leadershipConcentration?.broadParticipationPercent)}
             </p>
             {topMembers.length ? (
-              <p className="mt-1 text-white/42">代表成员：{topMembers.join('、')}</p>
+              <p className="mt-1 text-[color:var(--wolfy-text-muted)]">代表成员：{topMembers.join('、')}</p>
             ) : null}
           </div>
-          <div className="rounded-md border border-white/[0.05] bg-white/[0.02] px-2.5 py-2">
-            <p className="font-semibold text-white/74">同步相关</p>
+          <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-2">
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">同步相关</p>
             <p className="mt-1">
               成员同步 {formatSnapshotPercent(snapshot.correlationEvidence?.sameDirectionPercent)}
             </p>
-            <p className="mt-1 text-white/42">
+            <p className="mt-1 text-[color:var(--wolfy-text-muted)]">
               均线同步 {formatSnapshotPercent(snapshot.correlationEvidence?.aboveVwapPercent)}
             </p>
-            <p className="mt-1 text-white/42">
+            <p className="mt-1 text-[color:var(--wolfy-text-muted)]">
               持续性 {formatSnapshotPercent(snapshot.correlationEvidence?.persistencePercent)}
             </p>
           </div>
-          <div className="rounded-md border border-white/[0.05] bg-white/[0.02] px-2.5 py-2">
-            <p className="font-semibold text-white/74">广度证据</p>
+          <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-2">
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">广度证据</p>
             <p className="mt-1">
               {formatSnapshotMemberCount(snapshot.breadthEvidence?.observedMembers, snapshot.breadthEvidence?.configuredMembers)}
             </p>
-            <p className="mt-1 text-white/42">
+            <p className="mt-1 text-[color:var(--wolfy-text-muted)]">
               上涨广度 {formatSnapshotPercent(snapshot.breadthEvidence?.percentUp)}
             </p>
-            <p className="mt-1 text-white/42">
+            <p className="mt-1 text-[color:var(--wolfy-text-muted)]">
               跑赢广度 {formatSnapshotPercent(snapshot.breadthEvidence?.percentOutperformingBenchmark)}
             </p>
           </div>
-          <div className="rounded-md border border-white/[0.05] bg-white/[0.02] px-2.5 py-2">
-            <p className="font-semibold text-white/74">观察边界</p>
+          <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-2">
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">观察边界</p>
             <div className="mt-1 flex min-w-0 flex-wrap gap-1.5">
               {boundaryLabels.map((label) => <TerminalChip key={label}>{label}</TerminalChip>)}
             </div>
@@ -1714,15 +1714,15 @@ const ThemeCorrelationBreadthSnapshotPanel: React.FC<{
 
         <div className="grid gap-2">
           <div>
-            <p className="font-semibold text-white/74">数据更新</p>
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">数据更新</p>
             <p className="mt-1">{staleLabels.join('、')}</p>
           </div>
           <div>
-            <p className="font-semibold text-white/74">输入缺口</p>
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">输入缺口</p>
             <p className="mt-1">{missingLabels.join('、')}</p>
           </div>
           <div>
-            <p className="font-semibold text-white/74">继续观察</p>
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">继续观察</p>
             <div className="mt-1 grid gap-1">
               {nextSteps.map((step, index) => (
                 <p key={`snapshot-next-step-${index}`}>· {step}</p>
@@ -1750,9 +1750,9 @@ const RotationFamilyRow: React.FC<{ view: RotationFamilyView }> = ({ view }) => 
       testId={`rotation-family-rollup-row-${view.familyKey}`}
       title={view.familyName}
       summary={summary || '家族级观察'}
-      className="bg-black/5 px-3 py-2.5"
+      className="bg-[var(--wolfy-surface-input)] px-3 py-2.5"
     >
-      <div className="grid gap-3 text-[11px] leading-5 text-white/58">
+      <div className="grid gap-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <TerminalChip variant={themeFlowChipVariant(signal?.themeFlowState)}>
             {stateLabel}
@@ -1763,7 +1763,7 @@ const RotationFamilyRow: React.FC<{ view: RotationFamilyView }> = ({ view }) => 
           {view.reasonLabels.map((label) => <TerminalChip key={`${view.familyKey}-${label}`}>{label}</TerminalChip>)}
         </div>
         <p>{view.preview}</p>
-        <div className="grid gap-1 text-[10px] leading-5 text-white/48">
+        <div className="grid gap-1 text-[10px] leading-5 text-[color:var(--wolfy-text-muted)]">
           {themeFlowEvidenceLines(signal).map((line, lineIndex) => (
             <p key={`${view.familyKey}-family-flow-evidence-${lineIndex}`}>{line}</p>
           ))}
@@ -1779,13 +1779,13 @@ const RotationEvidenceBoundaryStrip: React.FC<{ payload: MarketRotationRadarResp
   return (
     <div
       data-testid="rotation-evidence-boundary"
-      className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5"
+      className="mt-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-3 py-2.5"
     >
       <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-medium text-white/48">轮动证据边界</p>
-          <p className="mt-1 text-sm font-semibold text-white/84">{view.label}</p>
-          {view.note ? <p className="mt-1 text-[11px] leading-5 text-white/52">{view.note}</p> : null}
+          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">轮动证据边界</p>
+          <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{view.label}</p>
+          {view.note ? <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{view.note}</p> : null}
         </div>
         <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
           <TerminalChip variant={view.variant}>{view.label}</TerminalChip>
@@ -1794,7 +1794,7 @@ const RotationEvidenceBoundaryStrip: React.FC<{ payload: MarketRotationRadarResp
           ))}
         </div>
       </div>
-      <p className="mt-2 text-[11px] leading-5 text-white/48">{view.nextEvidence}</p>
+      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{view.nextEvidence}</p>
     </div>
   );
 };
@@ -1971,21 +1971,21 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
               testId="rotation-family-rollup-collapsed"
               title="查看低信号家族"
               summary={`${collapsedFamilies.length} 个默认折叠`}
-              className="mt-3 bg-black/5"
+              className="mt-3 bg-[var(--wolfy-surface-input)]"
             >
               <div className="grid gap-2">
                 {collapsedFamilies.map((view) => (
                   <div
                     key={view.familyKey}
                     data-testid={`rotation-family-rollup-collapsed-row-${view.familyKey}`}
-                    className="rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
+                    className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-3 py-2.5"
                   >
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <p className="min-w-0 text-sm font-semibold text-white/80">{view.familyName}</p>
+                      <p className="min-w-0 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{view.familyName}</p>
                       <TerminalChip variant="neutral">{formatThemeFlowState(view.item.themeFlowSignal?.themeFlowState)}</TerminalChip>
-                      <span className="text-[10px] text-white/42">{Math.max(0, view.signalThemeCount)}/{Math.max(view.themeCount, 0)} 个有信号</span>
+                      <span className="text-[10px] text-[color:var(--wolfy-text-muted)]">{Math.max(0, view.signalThemeCount)}/{Math.max(view.themeCount, 0)} 个有信号</span>
                     </div>
-                    <p className="mt-1 text-[11px] leading-5 text-white/56">{view.preview}</p>
+                    <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{view.preview}</p>
                   </div>
                 ))}
               </div>
@@ -1998,19 +1998,19 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
         testId="rotation-radar-mechanics-details"
         title="查看轮动说明"
         summary="默认折叠"
-        className="mt-4 bg-black/10"
+        className="mt-4 bg-[var(--wolfy-surface-input)]"
       >
-        <div className="grid gap-3 text-[11px] leading-5 text-white/56">
+        <div className="grid gap-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
           <div>
-            <p className="font-semibold text-white/74">轮动方向说明</p>
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">轮动方向说明</p>
             <p className="mt-1">{conclusion.whyNotConclusion}</p>
           </div>
           <div>
-            <p className="font-semibold text-white/74">默认可见范围</p>
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">默认可见范围</p>
             <p className="mt-1">{capitalSummary.cards.map((card) => `${card.label}：${card.value}`).join(' · ')}</p>
           </div>
           <div>
-            <p className="font-semibold text-white/74">继续观察</p>
+            <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">继续观察</p>
             <p className="mt-1">{conclusion.missingEvidence.join('、')}</p>
           </div>
         </div>
@@ -2034,8 +2034,8 @@ const CommandBar: React.FC<{
     className="min-h-[104px] gap-y-2 sm:min-h-[88px] lg:min-h-11"
     leading={(
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase text-white/35">
-          <SlidersHorizontal className="size-3.5 text-white/46" aria-hidden="true" />
+        <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase text-[color:var(--wolfy-text-muted)]">
+          <SlidersHorizontal className="size-3.5 text-[color:var(--wolfy-text-muted)]" aria-hidden="true" />
           市场
         </div>
         <div className="flex min-w-0 gap-2 overflow-x-auto no-scrollbar">
@@ -2051,8 +2051,8 @@ const CommandBar: React.FC<{
                   className={cn(
                     'shrink-0',
                     selectedMarket === market.id
-                      ? 'border-white/18 bg-white/[0.065] text-white hover:bg-white/[0.085] hover:text-white'
-                      : 'text-white/48 hover:border-white/10 hover:bg-white/[0.04] hover:text-white/75',
+                      ? 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] text-[color:var(--wolfy-text-primary)] hover:bg-[var(--overlay-hover)] hover:text-[color:var(--wolfy-text-primary)]'
+                      : 'text-[color:var(--wolfy-text-muted)] hover:border-[color:var(--wolfy-border-subtle)] hover:bg-[var(--wolfy-surface-rail)] hover:text-[color:var(--wolfy-text-secondary)]',
                   )}
                   onClick={() => onMarketChange(market.id)}
                 >
@@ -2068,12 +2068,12 @@ const CommandBar: React.FC<{
     trailing={(
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <TerminalNestedBlock data-testid="rotation-radar-freshness" className="inline-flex items-center gap-2 px-3 py-2">
-          <span className="text-[10px] font-bold uppercase text-white/35">更新时间</span>
+          <span className="text-[10px] font-bold uppercase text-[color:var(--wolfy-text-muted)]">更新时间</span>
           <DataFreshnessBadge freshness={freshness || 'fallback'} />
         </TerminalNestedBlock>
         <TerminalButton
           variant="compact"
-          className="size-10 rounded-xl p-0 text-white/50 disabled:cursor-wait disabled:text-white/30"
+          className="size-10 rounded-xl p-0 text-[color:var(--wolfy-text-muted)] disabled:cursor-wait disabled:text-[color:var(--wolfy-text-muted)]"
           onClick={onRefresh}
           disabled={loading}
           aria-label="刷新主题轮动雷达"
@@ -2085,9 +2085,9 @@ const CommandBar: React.FC<{
   >
     <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:gap-2">
       <label className="relative min-w-0 flex-1">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/35" aria-hidden="true" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[color:var(--wolfy-text-muted)]" aria-hidden="true" />
         <input
-          className="h-10 w-full rounded-lg border border-white/10 bg-black/25 py-2 pl-9 pr-3 text-sm text-white/78 outline-none transition-all placeholder:text-white/30 focus:border-white/24 focus:bg-white/[0.035]"
+          className="h-10 w-full rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] py-2 pl-9 pr-3 text-sm text-[color:var(--wolfy-text-secondary)] outline-none transition-all placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--sage)] focus:bg-[var(--wolfy-surface-rail)]"
           value={searchQuery}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="搜索主题、英文名或成员"
@@ -2096,10 +2096,10 @@ const CommandBar: React.FC<{
       </label>
       <div
         data-testid="rotation-taxonomy-mode-note"
-        className="inline-flex min-h-8 shrink-0 items-center gap-2 rounded-md border border-white/[0.06] bg-white/[0.025] px-2.5 text-[11px] text-white/46"
+        className="inline-flex min-h-8 shrink-0 items-center gap-2 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 text-[11px] text-[color:var(--wolfy-text-muted)]"
       >
-        <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase text-white/35">
-          <Gauge className="size-3.5 text-white/46" aria-hidden="true" />
+        <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase text-[color:var(--wolfy-text-muted)]">
+          <Gauge className="size-3.5 text-[color:var(--wolfy-text-muted)]" aria-hidden="true" />
           分类
         </div>
         <span>主题优先，行业/概念随结果展开</span>
@@ -2135,17 +2135,17 @@ const LeaderRow: React.FC<{
       onClick={onSelect}
       className={cn(
         'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_5.5rem_6.25rem] items-center gap-2 p-3 text-left transition-colors',
-        selected ? 'bg-white/[0.055]' : 'hover:bg-white/[0.025]',
+        selected ? 'bg-[var(--wolfy-surface-rail)]' : 'hover:bg-[var(--wolfy-surface-rail)]',
       )}
     >
       <span className="min-w-0">
-        <span className="block truncate text-sm font-semibold text-white/84">{theme.name}</span>
-        <span className="mt-1 block truncate text-[11px] text-white/38">{listSummary}</span>
+        <span className="block truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{theme.name}</span>
+        <span className="mt-1 block truncate text-[11px] text-[color:var(--wolfy-text-muted)]">{listSummary}</span>
       </span>
-      <span className="truncate text-right text-[11px] font-semibold text-white/62">{themeConsumerStateLabel(theme)}</span>
+      <span className="truncate text-right text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)]">{themeConsumerStateLabel(theme)}</span>
       <span className="text-right">
-        <span className="block truncate text-[11px] font-semibold text-white/70">{themeConfidenceSummary(theme)}</span>
-        <span className="block truncate text-[10px] text-white/38">{marketLabelText} · {mapDataStateLabel(theme)}</span>
+        <span className="block truncate text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)]">{themeConfidenceSummary(theme)}</span>
+        <span className="block truncate text-[10px] text-[color:var(--wolfy-text-muted)]">{marketLabelText} · {mapDataStateLabel(theme)}</span>
       </span>
     </button>
   );
@@ -2165,17 +2165,17 @@ const CompactThemeRow: React.FC<{
       onClick={onSelect}
       className={cn(
         'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_5.5rem_6.25rem] items-center gap-2 px-3 py-2.5 text-left text-xs transition-colors',
-        selected ? 'bg-white/[0.055]' : 'hover:bg-white/[0.025]',
+        selected ? 'bg-[var(--wolfy-surface-rail)]' : 'hover:bg-[var(--wolfy-surface-rail)]',
       )}
     >
       <span className="min-w-0">
-        <span className="block truncate font-semibold text-white/76">{theme.name}</span>
-        <span className="block truncate text-[10px] text-white/35">{listSummary}</span>
+        <span className="block truncate font-semibold text-[color:var(--wolfy-text-secondary)]">{theme.name}</span>
+        <span className="block truncate text-[10px] text-[color:var(--wolfy-text-muted)]">{listSummary}</span>
       </span>
-      <span className="truncate text-right text-[11px] text-white/58">{themeConsumerStateLabel(theme)}</span>
+      <span className="truncate text-right text-[11px] text-[color:var(--wolfy-text-muted)]">{themeConsumerStateLabel(theme)}</span>
       <span className="text-right">
-        <span className="block truncate text-[10px] font-semibold text-white/62">{themeConfidenceSummary(theme)}</span>
-        <span className="block truncate text-[10px] text-white/35">{marketLabelText} · {mapDataStateLabel(theme)}</span>
+        <span className="block truncate text-[10px] font-semibold text-[color:var(--wolfy-text-secondary)]">{themeConfidenceSummary(theme)}</span>
+        <span className="block truncate text-[10px] text-[color:var(--wolfy-text-muted)]">{marketLabelText} · {mapDataStateLabel(theme)}</span>
       </span>
     </button>
   );
@@ -2319,7 +2319,7 @@ const ThemeDetailPanel: React.FC<{
               </div>
               {themeFlowReasonLabels(theme.themeFlowSignal).length ? (
                 <div>
-                  <p className="font-semibold text-white/74">观察项</p>
+                  <p className="font-semibold text-[color:var(--wolfy-text-secondary)]">观察项</p>
                   <div className="mt-1 flex min-w-0 flex-wrap gap-1.5">
                     {themeFlowReasonLabels(theme.themeFlowSignal).map((label) => <TerminalChip key={`${theme.id}-${label}`}>{label}</TerminalChip>)}
                   </div>
@@ -2383,7 +2383,7 @@ const LoadingPanel: React.FC<{ showFallback: boolean; onRefresh: () => void }> =
         className="mt-4 border-amber-300/20 bg-amber-300/[0.04] p-3 text-sm"
       >
         <div className="font-semibold text-amber-100">轮动数据暂未返回</div>
-        <p className="mt-2 leading-5 text-white/62">
+        <p className="mt-2 leading-5 text-[color:var(--wolfy-text-secondary)]">
           可稍后重试；当前不会补写临时轮动方向。
         </p>
         <TerminalButton

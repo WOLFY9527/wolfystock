@@ -46,13 +46,13 @@ export function ScannerBacktestLab({
     : `请求 ${requested} / 运行 ${running} / 完成 ${completed} / 失败 ${failed} / 复用 ${skipped}`;
 
   return (
-    <section data-testid="scanner-backtest-lab" className="grid gap-3 rounded-xl border border-white/5 bg-white/[0.015] p-3 text-xs">
+    <section data-testid="scanner-backtest-lab" className="grid gap-3 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-3 text-xs">
       <div className="flex min-w-0 items-center gap-2">
-        <LineChart className="size-3.5 text-white/38" aria-hidden="true" />
-        <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'en' ? 'Backtest Lab' : '回测实验室'}</h3>
+        <LineChart className="size-3.5 text-[color:var(--wolfy-text-muted)]" aria-hidden="true" />
+        <h3 className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Backtest Lab' : '回测实验室'}</h3>
       </div>
       <div className="grid gap-3 text-xs">
-        <div className="grid gap-2 rounded-xl border border-white/5 bg-black/20 p-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 sm:grid-cols-2 xl:grid-cols-4">
           {[
             [language === 'en' ? 'Mode' : '模式', language === 'en' ? 'Candidate single-symbol backtest' : '候选单标的回测'],
             [language === 'en' ? 'Range' : '区间', `${config.startDate} - ${config.endDate}`],
@@ -61,8 +61,8 @@ export function ScannerBacktestLab({
             [language === 'en' ? 'Fee/slip' : '费用/滑点', `${config.feeBps}/${config.slippageBps} bps`],
             [language === 'en' ? 'Strategy' : '策略', language === 'en' ? 'Default MA deterministic template' : '默认均线确定性模板'],
           ].map(([label, value]) => (
-            <TerminalChip key={`${label}-${value}`} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-              <span className="shrink-0 text-white/36">{label}</span>
+            <TerminalChip key={`${label}-${value}`} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">
+              <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{label}</span>
               <span className="min-w-0 truncate">{value}</span>
             </TerminalChip>
           ))}
@@ -73,11 +73,11 @@ export function ScannerBacktestLab({
           <ScannerActionButton label={language === 'en' ? 'Top 5' : '回测前 5 名'} icon={<TestTubeDiagonal className="size-3.5" />} onClick={() => onRunBatch('top_5')} disabled={isRunning || counts.top_5 === 0} />
           <ScannerActionButton label={language === 'en' ? 'Filtered' : '回测当前筛选'} icon={<TestTubeDiagonal className="size-3.5" />} onClick={() => onRunBatch('current_filter')} disabled={isRunning || counts.current_filter === 0} />
         </div>
-        <div className="rounded-lg border border-white/5 bg-black/20 px-3 py-2 font-mono text-[11px] text-white/45">{statusText}</div>
+        <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{statusText}</div>
         {items.length ? (
-          <div className="overflow-x-auto no-scrollbar rounded-xl border border-white/5 bg-white/[0.02]">
+          <div className="overflow-x-auto no-scrollbar rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)]">
             <table className="min-w-[720px] w-full text-left text-[11px]">
-              <thead className="border-b border-white/5 text-[10px] uppercase tracking-widest text-white/40">
+              <thead className="border-b border-[color:var(--wolfy-border-subtle)] text-[10px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
                 <tr>
                   <th className="p-2">{language === 'en' ? 'Symbol' : '代码'}</th>
                   <th className="p-2">{language === 'en' ? 'Status' : '状态'}</th>
@@ -92,8 +92,8 @@ export function ScannerBacktestLab({
                 {items.map((item) => {
                   const resultHref = item.resultId ? buildLocalizedPath(`/backtest/results/${item.resultId}`, language) : null;
                   return (
-                    <tr key={item.symbol} className="border-b border-white/5 text-white/62">
-                      <td className="p-2 font-mono text-white">{item.symbol}</td>
+                    <tr key={item.symbol} className="border-b border-[color:var(--wolfy-border-subtle)] text-[color:var(--wolfy-text-secondary)]">
+                      <td className="p-2 font-mono text-[color:var(--wolfy-text-primary)]">{item.symbol}</td>
                       <td className="p-2">{item.status}</td>
                       <td className="p-2 font-mono">{formatPercent(item.totalReturnPct)}</td>
                       <td className="p-2 font-mono">{formatPercent(item.maxDrawdownPct)}</td>
@@ -101,10 +101,10 @@ export function ScannerBacktestLab({
                       <td className="p-2 font-mono">{item.tradeCount ?? '--'}</td>
                       <td className="p-2">
                         <div className="flex gap-1.5">
-                          {resultHref ? <Link className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white/70 hover:bg-white/10" to={resultHref}>{language === 'en' ? 'Report' : '查看报告'}</Link> : null}
-                          <button type="button" className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white/70 hover:bg-white/10" onClick={() => onCopySymbol(item.symbol)}>{language === 'en' ? 'Copy' : '复制'}</button>
+                          {resultHref ? <Link className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2 py-1 text-[color:var(--wolfy-text-secondary)] hover:bg-[var(--wolfy-surface-rail)]" to={resultHref}>{language === 'en' ? 'Report' : '查看报告'}</Link> : null}
+                          <button type="button" className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2 py-1 text-[color:var(--wolfy-text-secondary)] hover:bg-[var(--wolfy-surface-rail)]" onClick={() => onCopySymbol(item.symbol)}>{language === 'en' ? 'Copy' : '复制'}</button>
                         </div>
-                        {item.status === 'failed' && item.error ? <p className="mt-1 max-w-[220px] truncate text-rose-300" title={item.error}>{item.error}</p> : null}
+                        {item.status === 'failed' && item.error ? <p className="mt-1 max-w-[220px] truncate text-[color:var(--state-danger-text)]" title={item.error}>{item.error}</p> : null}
                       </td>
                     </tr>
                   );
