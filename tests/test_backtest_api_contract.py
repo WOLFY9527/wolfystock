@@ -1946,6 +1946,24 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "fallback_used": False,
             "pricing_resolved_source": "Unknown",
             "pricing_fallback_used": False,
+            "probePolicy": {
+                "scope": "aggregate",
+                "runtimeProbeMode": "disabled_by_default",
+                "liveProviderProbingAllowed": False,
+                "maxRuntimeProbeSymbols": 0,
+                "activeHydrationAllowed": False,
+                "samplePreparationAllowed": False,
+                "backtestExecutionAllowed": False,
+                "readinessSources": ["existing_database_rows", "local_us_parquet_cache"],
+                "consumerSafe": True,
+            },
+            "writePolicy": {
+                "scope": "aggregate",
+                "mode": "read_only",
+                "cacheWritesAllowed": False,
+                "databaseWritesAllowed": False,
+                "consumerSafe": True,
+            },
         }
 
         with patch("api.v1.endpoints.backtest.BacktestService", return_value=service):
@@ -1957,6 +1975,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.sample_readiness_state, "missing")
         self.assertEqual(response.sample_blocking_reasons, ["provider_missing"])
         self.assertEqual(response.historicalOhlcvReadiness["providerState"], "provider_missing")
+        self.assertFalse(response.probePolicy["liveProviderProbingAllowed"])
+        self.assertFalse(response.probePolicy["activeHydrationAllowed"])
+        self.assertFalse(response.writePolicy["cacheWritesAllowed"])
+        self.assertFalse(response.writePolicy["databaseWritesAllowed"])
         service.get_sample_status.assert_called_once_with(code=None)
         service.prepare_backtest_samples.assert_not_called()
         service.run_backtest.assert_not_called()

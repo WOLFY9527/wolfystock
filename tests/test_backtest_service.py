@@ -245,6 +245,7 @@ class BacktestServiceTestCase(unittest.TestCase):
 
         ensure_market_history.assert_not_called()
         ensure_cached_samples.assert_not_called()
+        self._history_fetch_mock.assert_not_called()
         self.assertEqual(status["prepared_count"], 0)
         self.assertEqual(status["sample_readiness_state"], "no_samples")
         self.assertFalse(status["execution_readiness"]["result_contract_available"])
@@ -252,6 +253,58 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(status["resolved_source"], "DatabaseCache")
         self.assertFalse(status["fallback_used"])
         self.assertEqual(status["historicalOhlcvReadiness"]["overallState"], "ready")
+        self.assertEqual(
+            status["probePolicy"],
+            {
+                "scope": "single",
+                "runtimeProbeMode": "bounded_provider_observation",
+                "liveProviderProbingAllowed": True,
+                "maxRuntimeProbeSymbols": 1,
+                "activeHydrationAllowed": False,
+                "samplePreparationAllowed": False,
+                "backtestExecutionAllowed": False,
+                "readinessSources": [
+                    "existing_database_rows",
+                    "local_us_parquet_cache",
+                    "bounded_provider_observation",
+                ],
+                "consumerSafe": True,
+            },
+        )
+        self.assertEqual(
+            status["writePolicy"],
+            {
+                "scope": "single",
+                "mode": "read_only",
+                "cacheWritesAllowed": False,
+                "databaseWritesAllowed": False,
+                "consumerSafe": True,
+            },
+        )
+
+    def test_historical_readiness_helper_requires_explicit_runtime_probe_opt_in(self) -> None:
+        service = BacktestService(self.db)
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": "",
+                "US_STOCK_PARQUET_DIR": "",
+            },
+            clear=False,
+        ), patch(
+            "src.services.backtest_service.fetch_daily_history_with_local_us_fallback",
+            side_effect=AssertionError("runtime provider observation requires explicit opt-in"),
+        ) as fetch_mock:
+            readiness = service._build_historical_ohlcv_readiness(
+                code="TSLA",
+                rows=[],
+                required_bars=3,
+            )
+
+        fetch_mock.assert_not_called()
+        self.assertEqual(readiness["providerState"], "provider_missing")
+        self.assertEqual(readiness["overallState"], "blocked")
 
     def test_sample_status_reads_local_us_parquet_without_preparing_samples(self) -> None:
         self._allow_history_fetch()
@@ -830,8 +883,14 @@ class BacktestServiceTestCase(unittest.TestCase):
             status = service.get_sample_status(code="TSLA")
 
         fetch_mock.assert_called_once()
+        self.assertEqual(fetch_mock.call_args.args, ("TSLA",))
+        self.assertEqual(fetch_mock.call_args.kwargs["days"], 3)
+        self.assertTrue(fetch_mock.call_args.kwargs["allow_provider_fallback"])
         ensure_market_history.assert_not_called()
         ensure_cached_samples.assert_not_called()
+        with self.db.get_session() as session:
+            self.assertEqual(session.query(StockDaily).filter(StockDaily.code == "TSLA").count(), 0)
+            self.assertEqual(session.query(AnalysisHistory).filter(AnalysisHistory.code == "TSLA").count(), 0)
         self.assertEqual(status["prepared_count"], 0)
         self.assertEqual(status["sample_readiness_state"], "no_samples")
         self.assertFalse(status["execution_readiness"]["result_contract_available"])
@@ -839,6 +898,11 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(status["historicalOhlcvReadiness"]["providerState"], "available")
         self.assertEqual(status["historicalOhlcvReadiness"]["missingBars"], 0)
         self.assertNotIn("provider_missing", status["sample_blocking_reasons"])
+        self.assertEqual(status["probePolicy"]["runtimeProbeMode"], "bounded_provider_observation")
+        self.assertTrue(status["probePolicy"]["liveProviderProbingAllowed"])
+        self.assertFalse(status["probePolicy"]["activeHydrationAllowed"])
+        self.assertFalse(status["writePolicy"]["cacheWritesAllowed"])
+        self.assertFalse(status["writePolicy"]["databaseWritesAllowed"])
 
     def test_aggregate_sample_status_uses_configured_tier1_truth_without_collapsing_to_provider_missing(self) -> None:
         service = BacktestService(self.db)

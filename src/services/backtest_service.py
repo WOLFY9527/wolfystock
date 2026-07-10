@@ -40,6 +40,7 @@ from src.storage import AnalysisHistory, BacktestResult, BacktestRun, BacktestSu
 logger = logging.getLogger(__name__)
 LOCAL_BACKTEST_STARTER_SYMBOLS = starter_us_ohlcv_coverage_symbols()
 AGGREGATE_RUNTIME_PROBE_SKIPPED_REASON = "aggregate_side_effect_boundary"
+SINGLE_SYMBOL_RUNTIME_PROBE_MODE = "bounded_provider_observation"
 
 
 @dataclass(frozen=True)
@@ -471,11 +472,14 @@ class BacktestService:
             code=code,
             rows=stock_rows,
             required_bars=settings.eval_window_days,
+            allow_runtime_probe=True,
         )
         source_metadata = self._prefer_more_truthful_source_metadata(
             primary=source_metadata,
             fallback=ohlcv_source_metadata,
         )
+        probe_policy = self._single_symbol_probe_policy()
+        write_policy = self._single_symbol_write_policy()
         sample_state, sample_reasons = self._sample_readiness_from_inputs(
             prepared_count=len(rows),
             ohlcv_readiness=ohlcv_readiness,
@@ -517,6 +521,8 @@ class BacktestService:
                     "samplesInitializing": len(rows) <= 0 and sample_state == "no_samples",
                 }
             ),
+            "probePolicy": probe_policy,
+            "writePolicy": write_policy,
             "historicalOhlcvReadiness": ohlcv_readiness,
         }
 
@@ -1132,7 +1138,7 @@ class BacktestService:
         required_bars: int,
         benchmark_required: bool = False,
         benchmark_symbol: Optional[str] = None,
-        allow_runtime_probe: bool = True,
+        allow_runtime_probe: bool = False,
     ) -> Dict[str, Any]:
         readiness, _ = self._build_historical_ohlcv_readiness_with_metadata(
             code=code,
@@ -1152,7 +1158,7 @@ class BacktestService:
         required_bars: int,
         benchmark_required: bool = False,
         benchmark_symbol: Optional[str] = None,
-        allow_runtime_probe: bool = True,
+        allow_runtime_probe: bool = False,
     ) -> tuple[Dict[str, Any], BacktestSourceMetadata]:
         if rows:
             start = rows[0].date
@@ -1504,6 +1510,34 @@ class BacktestService:
             "runtimeProbeSkippedSymbols": symbol_count,
             "runtimeProbeSkippedReason": AGGREGATE_RUNTIME_PROBE_SKIPPED_REASON,
             "readinessSources": ["existing_database_rows", "local_us_parquet_cache"],
+            "consumerSafe": True,
+        }
+
+    @staticmethod
+    def _single_symbol_probe_policy() -> Dict[str, Any]:
+        return {
+            "scope": "single",
+            "runtimeProbeMode": SINGLE_SYMBOL_RUNTIME_PROBE_MODE,
+            "liveProviderProbingAllowed": True,
+            "maxRuntimeProbeSymbols": 1,
+            "activeHydrationAllowed": False,
+            "samplePreparationAllowed": False,
+            "backtestExecutionAllowed": False,
+            "readinessSources": [
+                "existing_database_rows",
+                "local_us_parquet_cache",
+                SINGLE_SYMBOL_RUNTIME_PROBE_MODE,
+            ],
+            "consumerSafe": True,
+        }
+
+    @staticmethod
+    def _single_symbol_write_policy() -> Dict[str, Any]:
+        return {
+            "scope": "single",
+            "mode": "read_only",
+            "cacheWritesAllowed": False,
+            "databaseWritesAllowed": False,
             "consumerSafe": True,
         }
 
