@@ -11,14 +11,13 @@
     "candidateMarkdownAfterPolicy": 3,
     "excludedByReason": {
       "legacy_external_product_doc": 1,
-      "legacy_untracked_agent_mirror": 3,
       "not_in_hard_collapse_source_set": 3,
       "required_ai_governance_symlink": 1,
       "required_github_workflow_markdown": 7,
       "required_repository_skill_asset": 4
     },
     "includedSourceCount": 3,
-    "markdownDiscovered": 22,
+    "markdownDiscovered": 19,
     "prunedDirectoryNames": [
       ".cache",
       ".codex",
@@ -59,12 +58,12 @@
     "path": "scripts/build_ai_project_manual.py",
     "readsProductionDataPaths": false,
     "requiresApiKeys": false,
-    "sha256": "71001e1b197e87b633cf227179b5de4e3a411eeaaf69c3d8ea4e29f8fea0485f",
+    "sha256": "3029292d3dc643b338fb257ed870aedbd845d5d91725006d622e545ea20a333a",
     "version": 4
   },
   "includedSources": [
     {
-      "bytes": 4788,
+      "bytes": 4886,
       "categories": [
         "governance",
         "workflow"
@@ -72,11 +71,11 @@
       "lineCount": 98,
       "path": "AGENTS.md",
       "purpose": "repository AI-agent rules and hard safety boundaries",
-      "sha256": "397ea8fc66abf770c022f9802b7c5cb5c25f90a432eaac5d51ba1bdef7576ffa",
+      "sha256": "29352d889b1f2c0d27a9c0639067a008be2dce6a0bca8cf6697bbc2dceb91f65",
       "title": "AGENTS.md"
     },
     {
-      "bytes": 5699,
+      "bytes": 5859,
       "categories": [
         "onboarding",
         "product"
@@ -84,11 +83,11 @@
       "lineCount": 160,
       "path": "README.md",
       "purpose": "human product entrypoint and supported run commands",
-      "sha256": "bafe6ca124757314ac2e77189a5b6fcd99f34691e4d02eb9d148f3b1a43ec7b9",
+      "sha256": "28944b8efb00339002025a7c26a1dc424d8393d525c160e20bb52b5918956078",
       "title": "WolfyStock"
     },
     {
-      "bytes": 738,
+      "bytes": 755,
       "categories": [
         "governance",
         "sources"
@@ -96,14 +95,14 @@
       "lineCount": 17,
       "path": "docs/DOCS_INDEX.md",
       "purpose": "tiny canonical documentation pointer",
-      "sha256": "2ea80605b35f2ee1bdcc17a74f7b53f31f6f15a5d912c0f3105a28ed95504281",
+      "sha256": "c42fdefe65806eb5d4ae7519f150019d5695cad6b16f4774df24ea15349019e7",
       "title": "WolfyStock Docs Index"
     }
   ],
   "outputs": {
     "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
     "manual": "docs/AI_PROJECT_MANUAL.md",
-    "manualSha256": "00ce5aef3256937111d45e6f4baee58ca50ea8ac4557a147215eb466cc07ee22"
+    "manualSha256": "a4e04e9ffe4855c25c6476aa39570b58c06e06e5c31551fd7f261089ee41142e"
   },
   "schemaVersion": 2,
   "sections": [
