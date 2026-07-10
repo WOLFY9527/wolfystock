@@ -1580,8 +1580,8 @@ const BacktestPage: React.FC = () => {
           </header>
           <p data-testid="backtest-consumer-status-sentence" className="max-w-4xl text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
             {language === 'en'
-              ? 'Configure a strategy, check data readiness, then inspect the result preview or latest saved run before opening a full report.'
-              : '先配置策略与区间，再核对数据就绪度；运行前可预览将展示的结果结构或最近保存记录。'}
+              ? 'Configure a strategy, check data readiness, then execute explicitly. A real result workspace opens only after a successful run—not from readiness alone.'
+              : '先配置策略与区间，再核对数据就绪度，再显式执行。真实结果工作区仅在成功运行后打开，就绪度本身不是结果。'}
           </p>
           <div
             data-testid="backtest-subnav"

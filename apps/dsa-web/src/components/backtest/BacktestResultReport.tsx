@@ -1363,6 +1363,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
     { id: '交易', label: isEnglish ? 'Trades' : '交易' },
     { id: '归因', label: isEnglish ? 'Attribution' : '归因' },
     { id: '风险', label: isEnglish ? 'Risk' : '风险' },
+    { id: 'breaks', label: isEnglish ? 'Where It Breaks' : '失效条件' },
     { id: '证据', label: isEnglish ? 'Review' : '复查' },
   ];
   const detailTabs = [
@@ -1391,12 +1392,12 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           className="grid min-w-0 gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-xs text-[color:var(--wolfy-text-secondary)] md:grid-cols-3 xl:grid-cols-6"
         >
           {[
-            '收益曲线与基准',
-            '回撤',
-            '核心指标',
-            '交易与事件账本',
-            '假设与成本',
-            '限制',
+            isEnglish ? 'Equity / benchmark' : '收益曲线与基准',
+            isEnglish ? 'Drawdown' : '回撤',
+            isEnglish ? 'Core metrics' : '核心指标',
+            isEnglish ? 'Trade ledger' : '交易与事件账本',
+            isEnglish ? 'Assumptions & costs' : '假设与成本',
+            'Where It Breaks',
           ].map((label, index) => (
             <li key={label} className="flex min-w-0 items-center gap-2">
               <span className="font-mono text-[color:var(--sage-deep)]">{index + 1}</span>
@@ -1659,6 +1660,61 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             </p>
             <p className="mt-2 text-xs text-[color:var(--wolfy-text-muted)]">风险提示：回撤、波动和极端日只说明历史压力，不代表真实成交或未来表现。</p>
           </div>
+        </div>
+
+        <div id="backtest-report-breaks" data-testid="backtest-report-where-it-breaks" className={GHOST_SECTION_CLASS}>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className={LABEL_CLASS}>Where It Breaks</p>
+              <h3 className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
+                {isEnglish ? 'Failure conditions and research limits' : '失效条件与研究限制'}
+              </h3>
+            </div>
+            <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
+              {isEnglish ? 'Observation only' : '仅观察'}
+            </span>
+          </div>
+          <ul className="mt-3 grid gap-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)] sm:grid-cols-2">
+            {(
+              readinessSummary.limitationLabels.length
+                ? readinessSummary.limitationLabels
+                : [
+                  isEnglish
+                    ? 'Historical simulation does not prove future return.'
+                    : '历史模拟不能证明未来收益。',
+                  isEnglish
+                    ? 'Sample coverage, costs, and benchmark gaps can invalidate the interpretation.'
+                    : '样本覆盖、成本与基准缺口可能使解读失效。',
+                  isEnglish
+                    ? 'Missing or stale market data keeps claims observation-only.'
+                    : '缺失或过期行情会把结论限制在仅观察。',
+                  isEnglish
+                    ? 'No allocation, target price, or stop-loss instruction is implied.'
+                    : '不隐含配置建议、目标价或止损指令。',
+                ]
+            ).slice(0, 6).map((item) => (
+              <li key={item} className={`rounded-lg px-3 py-2 ${PAPER_PANEL_CLASS}`}>
+                {item}
+              </li>
+            ))}
+          </ul>
+          {dataQualityWarnings.length ? (
+            <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+              {dataQualityWarnings.slice(0, 4).map((warning, index) => (
+                <span
+                  key={`${warning}-${index}`}
+                  className="max-w-full truncate rounded-lg border border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] px-2 py-1 text-[11px] text-[color:var(--state-warning-text)]"
+                >
+                  {warning}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+            {isEnglish
+              ? 'Where It Breaks is part of the real result workspace: use it after equity, drawdown, metrics, and the trade ledger—not as a substitute for a run.'
+              : 'Where It Breaks 属于真实结果工作区：在收益曲线、回撤、指标与交易账本之后阅读，不能替代一次真实运行。'}
+          </p>
         </div>
 
         <div data-testid="backtest-report-trade-table" data-visible-rows={visibleTrades.length} data-total-rows={trades.length} className={GHOST_SECTION_CLASS}>

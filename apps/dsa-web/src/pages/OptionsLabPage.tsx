@@ -740,11 +740,15 @@ const DataQualityBanner: React.FC<{
     >
       <div className="flex flex-wrap gap-2">
         <Pill tone="warn">演示样本</Pill>
+        <Pill tone="warn">仅观察 · 非官方实时权威</Pill>
         <Pill tone="warn">波动结构待确认</Pill>
         <Pill tone="info">{OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY}</Pill>
         <Pill tone="neutral">{availability.freshnessLabel}</Pill>
         <Pill tone="risk">风险边界</Pill>
       </div>
+      <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+        演示或延迟样本仅用于界面与情景验证，不作为官方实时权威或可执行判断依据。
+      </p>
     </div>
   );
 };
@@ -3510,11 +3514,29 @@ const OptionsLabPageContent: React.FC = () => {
               readinessGates={optionsResearchReadiness}
             />
 
+            <ol
+              data-testid="options-lab-research-sequence"
+              className="flex flex-wrap gap-x-3 gap-y-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5 text-xs text-[color:var(--wolfy-text-secondary)]"
+            >
+              {[
+                '研究上下文',
+                '可观察证据',
+                '数据质量 / 限制',
+                '情景或分析检视',
+                '下一步研究检查',
+              ].map((item, index) => (
+                <li key={item} className="inline-flex min-w-0 items-center gap-1.5">
+                  <span className="font-mono text-[color:var(--sage-deep)]">{index + 1}</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ol>
+
             <WorkspaceRegion
               testId="options-lab-input-region"
               eyebrow="结构输入"
               title="情景参数"
-              summary="先确认标的、方向、到期与假设价格，再阅读可用证据与限制。"
+              summary="先确认标的、方向、到期与假设价格，再阅读可用证据与限制。演示或延迟样本保持仅观察，不作为官方实时权威。"
               icon={Search}
             >
               <AssumptionPanel
@@ -3544,7 +3566,7 @@ const OptionsLabPageContent: React.FC = () => {
               testId="options-lab-output-region"
               eyebrow="研究工作区"
               title="分析结果"
-              summary="输出区统一承载观察结构样例、情景判断、图形证据、链表与风险边界。先看结构与风险，再下钻图形和明细。"
+              summary="按研究顺序阅读：可观察证据 → 数据质量与限制 → 情景/分析检视 → 下一步证据。先看结构与风险，再下钻图形和明细；演示或延迟状态保持仅观察。"
               icon={BarChart3}
             >
               <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.82fr)] xl:items-start">

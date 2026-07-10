@@ -290,13 +290,16 @@ describe('ScenarioLabPage', () => {
     });
 
     renderRoute(<ScenarioLabPage />);
-    const setupOrder = within(await screen.findByTestId('scenario-lab-setup-idle')).getByTestId('scenario-productization-order');
-    expect(setupOrder).toHaveTextContent('显式情景设置');
+    const setupIdle = await screen.findByTestId('scenario-lab-setup-idle');
+    const setupOrder = within(setupIdle).getByTestId('scenario-productization-order');
+    expect(setupOrder).toHaveTextContent('情景配置');
     expect(setupOrder).toHaveTextContent('显式评估');
-    expect(setupOrder).toHaveTextContent('对比');
-    expect(setupOrder).toHaveTextContent('敏感度');
-    expect(setupOrder).toHaveTextContent('不确定性');
+    expect(setupOrder).toHaveTextContent('冲击影响图');
+    expect(setupOrder).toHaveTextContent('资产敏感度');
+    expect(setupOrder).toHaveTextContent('Watchlist 映射');
+    expect(setupOrder).toHaveTextContent('解释路径');
     expect(setupOrder).toHaveTextContent('限制');
+    expect(within(setupIdle).getByTestId('scenario-evaluation-not-persistence')).toHaveTextContent('评估不等于持久化');
     await evaluateScenarioFromIdle();
 
     const page = await screen.findByTestId('scenario-lab-page');
@@ -323,6 +326,11 @@ describe('ScenarioLabPage', () => {
     expect(page).toHaveTextContent('最敏感的证据族');
     expect(page).toHaveTextContent('所选压力情景下，市场广度会较快转弱。');
     expect(page).toHaveTextContent('波动结构会转入偏防御状态。');
+    expect(screen.getByTestId('scenario-evaluation-ephemeral-notice')).toHaveTextContent('不是可复用的持久基线');
+    expect(screen.getByTestId('scenario-impact-map')).toBeInTheDocument();
+    expect(screen.getByTestId('scenario-asset-sensitivity')).toBeInTheDocument();
+    expect(screen.getByTestId('scenario-watchlist-mapping')).toHaveTextContent('Watchlist');
+    expect(screen.getByTestId('scenario-explanation-path')).toBeInTheDocument();
     const registry = screen.getByTestId('scenario-evidence-pack-registry');
     expect(registry).toHaveTextContent('研究记录');
     expect(registry).toHaveTextContent('情景研究记录');
