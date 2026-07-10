@@ -34,6 +34,9 @@ describe('ResearchWorkspaceFlowPanel', () => {
 
     const backtestLink = screen.getByTestId('research-workspace-link-backtest');
     expect(backtestLink).toHaveAttribute('href', expect.stringContaining('/en/backtest?'));
+    const scannerLink = screen.getByTestId('research-workspace-link-scanner');
+    expect(scannerLink).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByTestId('research-workspace-flow').querySelectorAll('[aria-current="page"]')).toHaveLength(0);
     for (const link of screen.getAllByRole('link')) {
       expect(link).toHaveAttribute('href', expect.not.stringMatching(/scannerRunId|scannerRank|watchlistItemId|themeId|universeType|debug|runtime|cache|provider/i));
     }
