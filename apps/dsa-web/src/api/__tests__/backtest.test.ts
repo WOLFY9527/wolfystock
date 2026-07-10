@@ -624,4 +624,47 @@ describe('backtestApi support export contract exposure', () => {
       },
     });
   });
+
+  it('fail-closes incomplete history/results list payloads without fabricating metrics', async () => {
+    vi.mocked(apiClient.get)
+      .mockResolvedValueOnce({
+        // G031 backtest crash shape: idle object without items
+        data: {
+          status: 'idle',
+          readiness: { ready: true, state: 'ready', blockers: [] },
+          result: null,
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        data: {
+          page: 2,
+          // items omitted
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        data: {
+          total: 0,
+          page: 1,
+          limit: 20,
+          // items null
+          items: null,
+        },
+      } as never);
+
+    const history = await backtestApi.getHistory();
+    expect(history.items).toEqual([]);
+    expect(history.total).toBe(0);
+    expect(history.page).toBe(1);
+    expect(history.items.find).toEqual(expect.any(Function));
+
+    const ruleHistory = await backtestApi.getRuleBacktestRuns();
+    expect(ruleHistory.items).toEqual([]);
+    expect(ruleHistory.page).toBe(2);
+
+    const results = await backtestApi.getResults();
+    expect(results.items).toEqual([]);
+    expect(results.total).toBe(0);
+    // No synthetic metric rows
+    expect(results.items).not.toContainEqual(expect.objectContaining({ totalReturnPct: 0 }));
+  });
 });

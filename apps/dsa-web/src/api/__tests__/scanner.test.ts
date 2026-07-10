@@ -602,4 +602,52 @@ describe('scannerApi investor signal normalization', () => {
     expect(payload.shortlist[1].candidateResearchPacket).toBeUndefined();
     expect(JSON.stringify(packet)).not.toMatch(/provider_timeout|reasonCodes|sourceRefs|providerDiagnostics|debugRef|trace_id|buy now|买入建议|目标价|止损|交易建议|raw_payload/i);
   });
+
+  it('fail-closes incomplete run and history payloads without fabricating candidates', async () => {
+    const { scannerApi } = await import('../scanner');
+
+    get
+      .mockResolvedValueOnce({
+        data: {
+          id: 77,
+          market: 'us',
+          profile: 'us_preopen_v1',
+          status: 'failed',
+          // Missing shortlist / selected / candidates / notes / diagnostics
+        },
+      })
+      .mockResolvedValueOnce({
+        // Malformed history: no items array (G031 scanner crash shape)
+        data: {
+          status: 'idle',
+          readiness: { ready: true, blockers: [] },
+          lastRun: null,
+          results: [],
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          // themes without items
+          market: 'us',
+        },
+      });
+
+    const runDetail = await scannerApi.getRun(77);
+    expect(runDetail.shortlist).toEqual([]);
+    expect(runDetail.selected).toEqual([]);
+    expect(runDetail.candidates).toEqual([]);
+    expect(runDetail.universeNotes).toEqual([]);
+    expect(runDetail.scoringNotes).toEqual([]);
+    expect(runDetail.rejectedSymbols).toEqual([]);
+    expect(runDetail.diagnostics).toEqual({});
+    expect(runDetail.shortlist).not.toContainEqual(expect.objectContaining({ symbol: expect.any(String) }));
+
+    const history = await scannerApi.getRuns({ market: 'us' });
+    expect(history.items).toEqual([]);
+    expect(history.total).toBe(0);
+    expect(history.page).toBe(1);
+
+    const themes = await scannerApi.getThemes({ market: 'us' });
+    expect(themes.items).toEqual([]);
+  });
 });

@@ -28,6 +28,33 @@ import type {
   RuleBacktestExecutionTraceExportResponse,
 } from '../types/backtest';
 
+// ============ Fail-closed list/result normalization ============
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizePaginationCount(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function normalizeBacktestListResponse<TItem>(
+  payload: unknown,
+  mapItem?: (item: unknown) => TItem,
+): { total: number; page: number; limit: number; items: TItem[] } {
+  const normalized = toCamelCase<{ total?: number; page?: number; limit?: number; items?: unknown }>(
+    isRecord(payload) ? payload : {},
+  );
+  const rawItems = Array.isArray(normalized.items) ? normalized.items : [];
+  return {
+    total: normalizePaginationCount(normalized.total, 0),
+    page: normalizePaginationCount(normalized.page, 1),
+    limit: normalizePaginationCount(normalized.limit, 0),
+    // Absent list sections stay empty — never invent runs/results/metrics.
+    items: mapItem ? rawItems.map(mapItem) : (rawItems as TItem[]),
+  };
+}
+
 // ============ API ============
 
 export const backtestApi = {
@@ -143,7 +170,10 @@ export const backtestApi = {
       '/api/v1/backtest/rule/runs',
       { params: queryParams },
     );
-    return toCamelCase<RuleBacktestHistoryResponse>(response.data);
+    return normalizeBacktestListResponse(
+      response.data,
+      (item) => toCamelCase<RuleBacktestHistoryResponse['items'][number]>(item as Record<string, unknown>),
+    );
   },
 
   getRuleBacktestRun: async (runId: number): Promise<RuleBacktestRunResponse> => {
@@ -271,7 +301,10 @@ export const backtestApi = {
       { params: queryParams },
     );
 
-    return toCamelCase<BacktestRunHistoryResponse>(response.data);
+    return normalizeBacktestListResponse(
+      response.data,
+      (item) => toCamelCase<BacktestRunHistoryResponse['items'][number]>(item as Record<string, unknown>),
+    );
   },
 
   clearSamples: async (code: string): Promise<BacktestClearResponse> => {
@@ -312,13 +345,10 @@ export const backtestApi = {
       { params: queryParams },
     );
 
-    const data = toCamelCase<BacktestResultsResponse>(response.data);
-    return {
-      total: data.total,
-      page: data.page,
-      limit: data.limit,
-      items: (data.items || []).map(item => toCamelCase<BacktestResultItem>(item)),
-    };
+    return normalizeBacktestListResponse(
+      response.data,
+      (item) => toCamelCase<BacktestResultItem>(item as Record<string, unknown>),
+    );
   },
 
   /**

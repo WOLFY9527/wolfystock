@@ -2798,15 +2798,16 @@ const UserScannerPage: React.FC = () => {
         page,
         limit: HISTORY_PAGE_SIZE,
       });
-      setHistoryItems(response.items);
-      setHistoryTotal(response.total);
-      setHistoryPage(response.page);
+      const historyItemsNext = Array.isArray(response.items) ? response.items : [];
+      setHistoryItems(historyItemsNext);
+      setHistoryTotal(typeof response.total === 'number' ? response.total : 0);
+      setHistoryPage(typeof response.page === 'number' ? response.page : page);
       setHistoryError(null);
 
       const currentSelectedRunId = selectedRunIdRef.current;
       const targetRunId = preferredRunId
-        || (currentSelectedRunId && response.items.some((item) => item.id === currentSelectedRunId) ? currentSelectedRunId : null)
-        || response.items[0]?.id
+        || (currentSelectedRunId && historyItemsNext.some((item) => item.id === currentSelectedRunId) ? currentSelectedRunId : null)
+        || historyItemsNext[0]?.id
         || null;
       if (targetRunId && targetRunId !== currentSelectedRunId) {
         void loadRun(targetRunId);

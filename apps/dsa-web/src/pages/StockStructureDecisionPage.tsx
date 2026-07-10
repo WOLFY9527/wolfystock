@@ -3169,21 +3169,81 @@ function buildPacketFacts(
   return facts;
 }
 
+/**
+ * Page-local fail-closed adapter for incomplete structure payloads.
+ * Keeps required nested objects present without inventing bars/scores/evidence.
+ * Lives here (not only API layer) so incomplete mock/runtime shapes cannot NPE render.
+ */
+function toStructureDecisionViewModel(
+  payload: StockStructureDecisionResponse | null | undefined,
+): StockStructureDecisionResponse | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const dataQuality = payload.dataQuality && typeof payload.dataQuality === 'object'
+    ? payload.dataQuality
+    : {};
+  const explanation = payload.explanation && typeof payload.explanation === 'object'
+    ? payload.explanation
+    : {};
+  const researchNotes = payload.researchNotes && typeof payload.researchNotes === 'object'
+    ? payload.researchNotes
+    : {};
+
+  return {
+    ...payload,
+    componentScores: payload.componentScores && typeof payload.componentScores === 'object'
+      ? payload.componentScores
+      : {},
+    explanation: {
+      whyThisStructure: explanation.whyThisStructure ?? null,
+      whatConfirmsIt: Array.isArray(explanation.whatConfirmsIt) ? explanation.whatConfirmsIt : [],
+      whatInvalidatesIt: Array.isArray(explanation.whatInvalidatesIt) ? explanation.whatInvalidatesIt : [],
+      keyLevels: Array.isArray(explanation.keyLevels) ? explanation.keyLevels : [],
+    },
+    researchNotes: {
+      watchNext: Array.isArray(researchNotes.watchNext) ? researchNotes.watchNext : [],
+      needsMoreEvidence: Array.isArray(researchNotes.needsMoreEvidence) ? researchNotes.needsMoreEvidence : [],
+      riskFlags: Array.isArray(researchNotes.riskFlags) ? researchNotes.riskFlags : [],
+    },
+    keyLevels: Array.isArray(payload.keyLevels) ? payload.keyLevels : [],
+    evidenceNotes: Array.isArray(payload.evidenceNotes) ? payload.evidenceNotes : [],
+    riskObservations: Array.isArray(payload.riskObservations) ? payload.riskObservations : [],
+    evidenceGaps: Array.isArray(payload.evidenceGaps) ? payload.evidenceGaps : [],
+    dataQuality: {
+      status: dataQuality.status ?? null,
+      source: dataQuality.source ?? null,
+      period: dataQuality.period ?? null,
+      // Preserve null/undefined — do not coerce missing bars to 0.
+      requestedDays: dataQuality.requestedDays ?? null,
+      observedBars: dataQuality.observedBars ?? null,
+      usableBars: dataQuality.usableBars ?? null,
+      reason: dataQuality.reason ?? null,
+    },
+    historicalOhlcvReadiness: payload.historicalOhlcvReadiness ?? null,
+    missingEvidence: Array.isArray(payload.missingEvidence) ? payload.missingEvidence : [],
+    degradedInputs: Array.isArray(payload.degradedInputs) ? payload.degradedInputs : [],
+    consumerIssues: Array.isArray(payload.consumerIssues) ? payload.consumerIssues : [],
+    drilldownLinks: Array.isArray(payload.drilldownLinks) ? payload.drilldownLinks : [],
+  };
+}
+
 function hasMinimumResearchPacket(
   data: StockStructureDecisionResponse,
   scoreRows: Array<{ key: string; label: string; value: number }>,
   language: 'zh' | 'en',
 ): boolean {
-  const usableBars = numericValue(data.dataQuality.usableBars);
+  // Null-safe: incomplete structure payloads may omit dataQuality / nested sections.
+  const usableBars = numericValue(data.dataQuality?.usableBars);
   const hasUsablePriceHistory = usableBars !== null && usableBars > 0;
   const hasStructureState = Boolean(safeOptionalConsumerText(data.structureState, language))
     && !isUnavailableStructureState(data.structureState);
-  const hasExplanation = Boolean(safeOptionalConsumerText(data.explanation.whyThisStructure, language))
-    || safeConsumerList(data.explanation.whatConfirmsIt ?? [], language).length > 0
-    || safeConsumerList(data.explanation.whatInvalidatesIt ?? [], language).length > 0;
-  const hasResearchNotes = safeConsumerList(data.researchNotes.watchNext ?? [], language).length > 0
-    || safeConsumerList(data.researchNotes.riskFlags ?? [], language).length > 0;
-  const hasKeyLevels = (data.explanation.keyLevels ?? []).some((level) => (
+  const explanation = data.explanation ?? { whyThisStructure: null, whatConfirmsIt: [], whatInvalidatesIt: [], keyLevels: [] };
+  const researchNotes = data.researchNotes ?? { watchNext: [], needsMoreEvidence: [], riskFlags: [] };
+  const hasExplanation = Boolean(safeOptionalConsumerText(explanation.whyThisStructure, language))
+    || safeConsumerList(explanation.whatConfirmsIt ?? [], language).length > 0
+    || safeConsumerList(explanation.whatInvalidatesIt ?? [], language).length > 0;
+  const hasResearchNotes = safeConsumerList(researchNotes.watchNext ?? [], language).length > 0
+    || safeConsumerList(researchNotes.riskFlags ?? [], language).length > 0;
+  const hasKeyLevels = (explanation.keyLevels ?? []).some((level) => (
     level.value != null || Boolean(safeOptionalConsumerText(level.description, language))
   ));
 
@@ -3924,7 +3984,7 @@ export default function StockStructureDecisionPage() {
           throw responseResult.reason;
         }
         const response = responseResult.value;
-        setData(response.items[0] ?? null);
+        setData(toStructureDecisionViewModel(response.items[0] ?? null));
         setComparePacket(response.symbolCompareEvidencePacket ?? null);
         setOptionsStructure(null);
         setOptionsStructureFailed(false);
@@ -3999,7 +4059,7 @@ export default function StockStructureDecisionPage() {
           throw responseResult.reason;
         }
         const response = responseResult.value;
-        setData(response);
+        setData(toStructureDecisionViewModel(response));
         setComparePacket(null);
       }
     } catch (err) {

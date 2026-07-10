@@ -2163,4 +2163,38 @@ describe('StockStructureDecisionPage', () => {
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/No verified local peer group metadata|Add verified local peer group metadata|Load recent local daily OHLCV|Peer correlation was not evaluated because structure evidence exceeded the latency boundary/i);
     expect(findConsumerRawLeakage(snapshot.textContent || '')).toEqual([]);
   });
+
+  it('fail-closes sparse structure payloads without crashing on usableBars or fabricating scores', async () => {
+    getStructureDecisionMock.mockResolvedValue({
+      schemaVersion: 'stock_structure_decision_api_v1',
+      ticker: 'AAPL',
+      symbol: 'AAPL',
+      structureState: 'unavailable',
+      confidence: 'low',
+      // Omit dataQuality, explanation, researchNotes, arrays (G031 crash shape)
+      observationOnly: true,
+      decisionGrade: false,
+      noAdviceDisclosure: 'Observation only.',
+    });
+    getResearchPacketMock.mockRejectedValue(new Error('packet unavailable'));
+    getHistoryMock.mockRejectedValue(new Error('history unavailable'));
+    getQuoteMock.mockRejectedValue(new Error('quote unavailable'));
+    getTechnicalIndicatorsMock.mockRejectedValue(new Error('indicators unavailable'));
+    getStockEvidenceMock.mockRejectedValue(new Error('evidence unavailable'));
+    getOptionsStructureMock.mockRejectedValue(new Error('options unavailable'));
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    // Must not hit error-boundary / crash shell
+    expect(within(page).queryByText(/页面暂时无法加载/)).not.toBeInTheDocument();
+    expect(page.textContent || '').not.toMatch(/usableBars|TypeError|Cannot read properties/i);
+    // No fabricated neutral score or zero bars presented as evidence
+    expect(page.textContent || '').not.toMatch(/Usable bars:\s*0|可用 K 线：0/);
+    expect(page.textContent || '').not.toMatch(/\b50\b.*score|score.*\b50\b/i);
+  });
 });

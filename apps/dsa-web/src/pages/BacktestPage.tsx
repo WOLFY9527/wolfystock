@@ -547,9 +547,9 @@ const BacktestPage: React.FC = () => {
       limit: HISTORICAL_PAGE_SIZE,
     })
       .then((response) => {
-        setResults(response.items);
-        setTotalResults(response.total);
-        setCurrentPage(response.page);
+        setResults(Array.isArray(response.items) ? response.items : []);
+        setTotalResults(typeof response.total === 'number' ? response.total : 0);
+        setCurrentPage(typeof response.page === 'number' ? response.page : page);
         setPageError(null);
       })
       .catch((error) => {
@@ -564,9 +564,9 @@ const BacktestPage: React.FC = () => {
     setIsLoadingHistory(true);
     return backtestApi.getHistory({ code: code || undefined, page, limit: HISTORY_PAGE_SIZE })
       .then((response) => {
-        setHistoryItems(response.items);
-        setHistoryTotal(response.total);
-        setHistoryPage(response.page);
+        setHistoryItems(Array.isArray(response.items) ? response.items : []);
+        setHistoryTotal(typeof response.total === 'number' ? response.total : 0);
+        setHistoryPage(typeof response.page === 'number' ? response.page : page);
         setHistoryError(null);
       })
       .catch((error) => {
@@ -602,9 +602,9 @@ const BacktestPage: React.FC = () => {
     setIsLoadingRuleHistory(true);
     return backtestApi.getRuleBacktestRuns({ code: code || undefined, page, limit: RULE_HISTORY_PAGE_SIZE })
       .then((response) => {
-        setRuleHistoryItems(response.items);
-        setRuleHistoryTotal(response.total);
-        setRuleHistoryPage(response.page);
+        setRuleHistoryItems(Array.isArray(response.items) ? response.items : []);
+        setRuleHistoryTotal(typeof response.total === 'number' ? response.total : 0);
+        setRuleHistoryPage(typeof response.page === 'number' ? response.page : page);
         setRuleHistoryError(null);
       })
       .catch((error) => {
@@ -773,9 +773,9 @@ const BacktestPage: React.FC = () => {
           limit: HISTORICAL_PAGE_SIZE,
         })
           .then((response) => {
-            setResults(response.items);
-            setTotalResults(response.total);
-            setCurrentPage(response.page);
+            setResults(Array.isArray(response.items) ? response.items : []);
+            setTotalResults(typeof response.total === 'number' ? response.total : 0);
+            setCurrentPage(typeof response.page === 'number' ? response.page : 1);
             setPageError(null);
           })
           .catch((error) => {
@@ -788,9 +788,9 @@ const BacktestPage: React.FC = () => {
         setIsLoadingHistory(true);
         void backtestApi.getHistory({ code: undefined, page: 1, limit: HISTORY_PAGE_SIZE })
           .then((response) => {
-            setHistoryItems(response.items);
-            setHistoryTotal(response.total);
-            setHistoryPage(response.page);
+            setHistoryItems(Array.isArray(response.items) ? response.items : []);
+            setHistoryTotal(typeof response.total === 'number' ? response.total : 0);
+            setHistoryPage(typeof response.page === 'number' ? response.page : 1);
             setHistoryError(null);
           })
           .catch((error) => {
@@ -803,9 +803,9 @@ const BacktestPage: React.FC = () => {
         setIsLoadingRuleHistory(true);
         void backtestApi.getRuleBacktestRuns({ code: undefined, page: 1, limit: RULE_HISTORY_PAGE_SIZE })
           .then((response) => {
-            setRuleHistoryItems(response.items);
-            setRuleHistoryTotal(response.total);
-            setRuleHistoryPage(response.page);
+            setRuleHistoryItems(Array.isArray(response.items) ? response.items : []);
+            setRuleHistoryTotal(typeof response.total === 'number' ? response.total : 0);
+            setRuleHistoryPage(typeof response.page === 'number' ? response.page : 1);
             setRuleHistoryError(null);
           })
           .catch((error) => {
