@@ -1,8 +1,8 @@
 import type { MarketOverviewItem, MarketRiskDirection } from '../../api/marketOverview';
 
 const directionTone: Record<MarketRiskDirection, string> = {
-  increasing: 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.36)]',
-  decreasing: 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.36)]',
+  increasing: 'text-[color:var(--state-danger-text)] ',
+  decreasing: 'text-[color:var(--state-success-text)] ',
   neutral: 'text-[color:var(--wolfy-text-muted)]',
 };
 

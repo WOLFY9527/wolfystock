@@ -4,6 +4,17 @@ export type SemanticSignalTone = 'bullish' | 'bearish' | 'neutral';
 export const MARKET_COLOR_CONVENTION_STORAGE_KEY = 'dsa-market-color-convention';
 export const DEFAULT_MARKET_COLOR_CONVENTION: MarketColorConvention = 'redDownGreenUp';
 
+/** Paper-theme positive (gain) — matches --state-success-text / WCAG AA on surface. */
+const PAPER_POSITIVE_HEX = '#466a4d';
+/** Paper-theme negative (loss) — matches --state-danger-text / WCAG AA on surface. */
+const PAPER_NEGATIVE_HEX = '#894a42';
+/** Paper-theme neutral body text — matches --ink-soft. */
+const PAPER_NEUTRAL_HEX = '#3d3831';
+
+const PAPER_POSITIVE_TEXT_CLASS = 'text-[color:var(--state-success-text)]';
+const PAPER_NEGATIVE_TEXT_CLASS = 'text-[color:var(--state-danger-text)]';
+const PAPER_NEUTRAL_TEXT_CLASS = 'text-[color:var(--wolfy-text-secondary)]';
+
 export function normalizeMarketColorConvention(
   value?: string | null,
 ): MarketColorConvention {
@@ -17,16 +28,17 @@ export function getMarketColorPalette(convention: MarketColorConvention): {
   upHsl: string;
   downHsl: string;
 } {
+  // Paper ok/danger HSL (aligned with DESIGN --ok / --danger, not Tailwind emerald/rose).
   if (convention === 'redUpGreenDown') {
     return {
-      upHsl: '4 82% 62%',
-      downHsl: '145 66% 52%',
+      upHsl: '8 32% 49%',
+      downHsl: '127 18% 44%',
     };
   }
 
   return {
-    upHsl: '145 66% 52%',
-    downHsl: '4 82% 62%',
+    upHsl: '127 18% 44%',
+    downHsl: '8 32% 49%',
   };
 }
 
@@ -40,26 +52,26 @@ export function getToneColor(
 } {
   if (tone === 'neutral') {
     return {
-      colorHex: '#F8FAFC',
+      colorHex: PAPER_NEUTRAL_HEX,
       glowShadow: 'none',
-      textClass: 'text-white',
+      textClass: PAPER_NEUTRAL_TEXT_CLASS,
     };
   }
 
-  const useEmerald = (tone === 'bullish' && convention === 'redDownGreenUp')
+  const usePositive = (tone === 'bullish' && convention === 'redDownGreenUp')
     || (tone === 'bearish' && convention === 'redUpGreenDown');
 
-  if (useEmerald) {
+  if (usePositive) {
     return {
-      colorHex: '#34D399',
-      glowShadow: '0 0 8px rgba(52, 211, 153, 0.4)',
-      textClass: 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]',
+      colorHex: PAPER_POSITIVE_HEX,
+      glowShadow: 'none',
+      textClass: PAPER_POSITIVE_TEXT_CLASS,
     };
   }
 
   return {
-    colorHex: '#FB7185',
-    glowShadow: '0 0 8px rgba(251, 113, 133, 0.4)',
-    textClass: 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]',
+    colorHex: PAPER_NEGATIVE_HEX,
+    glowShadow: 'none',
+    textClass: PAPER_NEGATIVE_TEXT_CLASS,
   };
 }

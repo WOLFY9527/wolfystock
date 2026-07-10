@@ -1426,7 +1426,7 @@ function WatchlistConsumerObservationBoard({
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
                     {price}
-                    {change ? <span className={change.startsWith('-') ? 'ml-2 text-rose-300' : 'ml-2 text-emerald-300'}>{change}</span> : null}
+                    {change ? <span className={change.startsWith('-') ? 'ml-2 text-[color:var(--state-danger-text)]' : 'ml-2 text-[color:var(--state-success-text)]'}>{change}</span> : null}
                   </p>
                   <p className="mt-1 text-xs text-[color:var(--wolfy-text-secondary)]">{researchLabel}</p>
                   <p className="mt-1 break-words text-xs text-[color:var(--wolfy-text-muted)] md:truncate">

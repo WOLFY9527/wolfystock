@@ -596,7 +596,7 @@ function useSidebarNavView({
           routeActive
             ? showAsDrawerChild
               ? 'is-active text-[color:var(--wolfy-text-primary)]'
-              : 'is-active bg-[color:color-mix(in_srgb,var(--sage)_14%,transparent)] font-semibold text-[color:var(--sage-deep)]'
+              : 'is-active bg-[color:color-mix(in_srgb,var(--sage)_10%,var(--surface))] font-semibold text-[color:var(--wolfy-text-primary)]'
             : '',
         )}
       >
@@ -633,7 +633,7 @@ function useSidebarNavView({
           <div
             className={cn(
               'px-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]',
-              groupActive ? 'text-[color:var(--sage-deep)]' : '',
+              groupActive ? 'text-[color:var(--wolfy-text-primary)]' : '',
             )}
             data-testid={`shell-nav-group-label-${groupKey}`}
           >

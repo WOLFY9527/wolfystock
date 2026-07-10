@@ -75,11 +75,11 @@ const REPORT_BRAND = 'WolfyStock Research Report';
 
 function TraceBadge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'used' | 'warning' | 'missing' }) {
   const toneClass = tone === 'used'
-    ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100'
+    ? 'border-[color:var(--state-success-border)] bg-[var(--state-success-bg)] text-[color:var(--state-success-text)]'
     : tone === 'warning'
       ? 'border-amber-300/20 bg-amber-300/10 text-amber-100'
       : tone === 'missing'
-        ? 'border-rose-300/20 bg-rose-300/10 text-rose-100'
+        ? 'border-[color:var(--state-danger-border)] bg-[var(--state-danger-bg)] text-[color:var(--state-danger-text)]'
         : 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)]';
   return (
     <span className={`inline-flex min-w-0 max-w-full items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${toneClass}`}>

@@ -29,12 +29,12 @@ const ScannerTopDownContextStrip: React.FC<ScannerTopDownContextStripProps> = ({
   <section
     data-testid={testId}
     className={cn(
-      'rounded-lg border border-white/[0.08] bg-white/[0.025] px-3 py-2.5',
+      'rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-3 py-2.5',
       className,
     )}
   >
     <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
         {title}
       </span>
       <TerminalChip variant={variantForTone(context.tone)}>
@@ -46,7 +46,7 @@ const ScannerTopDownContextStrip: React.FC<ScannerTopDownContextStripProps> = ({
         </TerminalChip>
       ))}
     </div>
-    <p className="mt-2 text-xs leading-5 text-white/64">
+    <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
       {context.summaryLine}
     </p>
   </section>

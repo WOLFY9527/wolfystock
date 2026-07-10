@@ -146,25 +146,25 @@ function ResultStatePanel({
       data-testid={isCompleted ? 'deterministic-result-empty-state' : 'deterministic-result-pending-state'}
     >
       <div className="backtest-void-workspace">
-        <div className="backtest-void-workspace__chart-card min-h-[320px] border-white/10 bg-white/[0.02] px-5 py-6">
+        <div className="backtest-void-workspace__chart-card min-h-[320px] border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-5 py-6">
           <div className="flex h-full flex-col justify-between gap-5">
             <div className="space-y-3">
               <p className="backtest-void-workspace__eyebrow">
                 {language === 'en' ? 'Research simulation only' : '仅供研究模拟'}
               </p>
               <div>
-                <h3 className="text-base font-semibold text-white">{title}</h3>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-white/68">{body}</p>
+                <h3 className="text-base font-semibold text-[color:var(--wolfy-text-primary)]">{title}</h3>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{body}</p>
               </div>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
               {chips.map((chip) => (
                 <div
                   key={chip.key}
-                  className="rounded-[1rem] border border-white/8 bg-[rgba(15,23,42,0.32)] px-3 py-3"
+                  className="rounded-[1rem] border border-[color:var(--wolfy-border-subtle)] bg-[rgba(15,23,42,0.32)] px-3 py-3"
                 >
                   <p className="metric-card__label">{chip.label}</p>
-                  <p className="mt-1 text-sm font-medium text-white">{chip.value}</p>
+                  <p className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">{chip.value}</p>
                 </div>
               ))}
             </div>
@@ -185,10 +185,10 @@ function ChartWorkspaceLoadingPlaceholder() {
       <div className="backtest-void-workspace__body">
         <div className="backtest-void-workspace__chart-card min-h-[340px] items-center justify-center border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-5 py-8">
           <div className="flex flex-col items-center gap-3 text-center">
-            <div className="h-2 w-28 overflow-hidden rounded-full bg-white/[0.06]">
+            <div className="h-2 w-28 overflow-hidden rounded-full bg-[var(--wolfy-surface-rail)]">
               <div className="h-full w-1/2 rounded-full bg-[var(--wolfy-accent)]" />
             </div>
-            <p className="text-xs font-medium text-white/70">图表加载中</p>
+            <p className="text-xs font-medium text-[color:var(--wolfy-text-secondary)]">图表加载中</p>
           </div>
         </div>
       </div>
@@ -338,21 +338,21 @@ export const DeterministicBacktestResultView: React.FC<{
             {riskMetricCards.map((card) => (
               <div
                 key={card.key}
-                className="rounded-[1rem] border border-white/8 bg-[rgba(15,23,42,0.24)] px-3 py-3"
+                className="rounded-[1rem] border border-[color:var(--wolfy-border-subtle)] bg-[rgba(15,23,42,0.24)] px-3 py-3"
               >
                 <p className="metric-card__label">{card.label}</p>
                 <p
                   className={`mt-1 text-sm font-semibold ${
                     card.tone === 'positive'
-                      ? 'text-emerald-300'
+                      ? 'text-[color:var(--state-success-text)]'
                       : card.tone === 'negative'
-                        ? 'text-rose-300'
-                        : 'text-white'
+                        ? 'text-[color:var(--state-danger-text)]'
+                        : 'text-[color:var(--wolfy-text-primary)]'
                   }`}
                 >
                   {card.value}
                 </p>
-                <p className="mt-1 text-[11px] leading-5 text-white/45">
+                <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                   {language === 'en' ? 'Historical simulation only.' : '仅反映历史模拟结果。'}
                 </p>
               </div>

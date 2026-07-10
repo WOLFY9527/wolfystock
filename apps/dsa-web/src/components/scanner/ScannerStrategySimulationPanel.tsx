@@ -23,8 +23,8 @@ function formatMetricNumber(value?: number | null, digits = 2): string {
 function simulationToneClass(value?: number | null): string {
   if (value == null || !Number.isFinite(value)) return 'font-mono text-[color:var(--wolfy-text-muted)]';
   return value >= 0
-    ? 'font-mono text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]'
-    : 'font-mono text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]';
+    ? 'font-mono text-[color:var(--state-success-text)] '
+    : 'font-mono text-[color:var(--state-danger-text)] ';
 }
 
 function formatRatio(value?: number | null): string {
@@ -128,7 +128,7 @@ export function ScannerStrategySimulationPanel({
           <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Status' : '状态'}</span>
           <span className="font-mono text-[color:var(--wolfy-text-primary)]" data-testid="scanner-strategy-simulation-status">{statusLabel}</span>
           {compactMessage ? <span className="min-w-0 truncate text-[color:var(--wolfy-text-muted)]" data-testid="scanner-strategy-simulation-compact-message">{compactMessage}</span> : null}
-          {error ? <span className="min-w-0 truncate text-rose-300" data-testid="scanner-strategy-simulation-error">{error}</span> : null}
+          {error ? <span className="min-w-0 truncate text-[color:var(--state-danger-text)]" data-testid="scanner-strategy-simulation-error">{error}</span> : null}
         </div>
         {summary && result?.status !== 'insufficient_history' ? (
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6" data-testid="scanner-strategy-simulation-summary">

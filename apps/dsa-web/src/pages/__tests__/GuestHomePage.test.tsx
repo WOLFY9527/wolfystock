@@ -170,6 +170,12 @@ describe('GuestHomePage', () => {
     expect(screen.queryByTestId('home-bento-decision-score-value')).not.toBeInTheDocument();
     expect(screen.getAllByText('趋势延续但需要等待更好的介入点。').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('guest-home-frosted-lock')).toHaveLength(2);
+    const paywall = screen.getAllByTestId('guest-home-frosted-lock')[0];
+    expect(paywall.className).not.toMatch(/from-blue|to-purple|backdrop-blur/);
+    expect(paywall.className).toMatch(/border-\[color:var\(--wolfy-border-subtle\)\]/);
+    const cta = screen.getAllByRole('link', { name: '免费创建账户' })[0];
+    expect(cta.className).toMatch(/theme-button-primary-bg|var\(--theme-button-primary-bg\)/);
+    expect(cta.className).not.toMatch(/from-blue|to-purple|shadow-\[0_0/);
     expect(screen.getAllByText('解锁完整研究框架、价格观察与技术形态解读')).toHaveLength(2);
     expect(screen.getAllByRole('link', { name: '免费创建账户' })).toHaveLength(2);
     expect(screen.getByTestId('home-research-context-rail')).toContainElement(screen.getAllByTestId('guest-home-frosted-lock')[1]);

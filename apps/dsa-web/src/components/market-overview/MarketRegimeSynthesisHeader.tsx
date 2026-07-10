@@ -53,8 +53,8 @@ export const MarketRegimeSynthesisHeader: React.FC<{ view: MarketRegimeSynthesis
       className={cn(
         'absolute inset-x-0 top-0 h-px',
         view.state === 'ready'
-          ? 'bg-gradient-to-r from-emerald-400/0 via-emerald-300/55 to-transparent'
-          : 'bg-gradient-to-r from-amber-400/0 via-amber-200/50 to-rose-300/0',
+          ? 'bg-gradient-to-r from-transparent via-[color:color-mix(in_srgb,var(--ok)_45%,transparent)] to-transparent'
+          : 'bg-gradient-to-r from-transparent via-[color:color-mix(in_srgb,var(--warn)_40%,transparent)] to-transparent',
       )}
       aria-hidden="true"
     />
@@ -136,14 +136,14 @@ export const MarketRegimeSynthesisHeader: React.FC<{ view: MarketRegimeSynthesis
           title="正向驱动"
           emptyLabel="暂无可展示驱动"
           items={view.topDrivers}
-          accentClassName="text-emerald-300"
+          accentClassName="text-[color:var(--state-success-text)]"
         />
         <SynthesisEvidenceColumn
           testId="market-regime-synthesis-counter-evidence"
           title="反证"
           emptyLabel="暂无显式反证"
           items={view.counterEvidence}
-          accentClassName="text-amber-200"
+          accentClassName="text-[color:var(--state-warning-text)]"
         />
         <SynthesisEvidenceColumn
           testId="market-regime-synthesis-data-gaps"

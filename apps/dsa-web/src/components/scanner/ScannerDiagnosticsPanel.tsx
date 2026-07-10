@@ -197,40 +197,40 @@ export const ScannerDiagnosticsPanel = Object.assign(function ScannerDiagnostics
   if (!hasAnyDiagnostics) return null;
 
   return (
-    <section data-testid="scanner-diagnostics-panel" className="mt-2 border-t border-white/10 pt-1">
-      <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+    <section data-testid="scanner-diagnostics-panel" className="mt-2 border-t border-[color:var(--wolfy-border-subtle)] pt-1">
+      <h3 className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
         {language === 'en' ? 'Data status' : '数据状态'}
       </h3>
       <div className="mt-1 grid gap-x-4 gap-y-0 lg:grid-cols-2">
         {coverage ? (
-          <section className="min-w-0 border-t border-white/8 py-2">
-            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+          <section className="min-w-0 border-t border-[color:var(--wolfy-border-subtle)] py-2">
+            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
               {language === 'en' ? 'Coverage summary' : '覆盖摘要'}
             </h5>
             <div className="flex flex-wrap gap-2">
-              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-                <span className="shrink-0 text-white/36">{language === 'en' ? 'Input' : '输入'}</span>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">
+                <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Input' : '输入'}</span>
                 <span className="min-w-0 truncate">{String(coverage.inputUniverseSize)}</span>
               </TerminalChip>
-              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-                <span className="shrink-0 text-white/36">{language === 'en' ? 'Liquidity' : '流动性后'}</span>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">
+                <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Liquidity' : '流动性后'}</span>
                 <span className="min-w-0 truncate">{String(coverage.eligibleAfterLiquidityFilter)}</span>
               </TerminalChip>
-              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-                <span className="shrink-0 text-white/36">{language === 'en' ? 'Data OK' : '数据可用'}</span>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">
+                <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Data OK' : '数据可用'}</span>
                 <span className="min-w-0 truncate">{String(coverage.eligibleAfterDataAvailabilityFilter)}</span>
               </TerminalChip>
-              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-                <span className="shrink-0 text-white/36">{language === 'en' ? 'Ranked' : '已排名'}</span>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">
+                <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Ranked' : '已排名'}</span>
                 <span className="min-w-0 truncate">{String(coverage.rankedCandidateCount)}</span>
               </TerminalChip>
-              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-                <span className="shrink-0 text-white/36">{language === 'en' ? 'Selected' : '入选'}</span>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">
+                <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Selected' : '入选'}</span>
                 <span className="min-w-0 truncate">{String(coverage.shortlistedCount)}</span>
               </TerminalChip>
               {coverage.likelyBottleneckLabel || coverage.likelyBottleneck ? (
-                <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-                  <span className="shrink-0 text-white/36">{language === 'en' ? 'Bottleneck' : '瓶颈'}</span>
+                <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">
+                  <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Bottleneck' : '瓶颈'}</span>
                   <span className="min-w-0 truncate">
                     {sanitizeScannerDiagnosticNote(coverage.likelyBottleneckLabel || coverage.likelyBottleneck || '', language)}
                   </span>
@@ -240,21 +240,21 @@ export const ScannerDiagnosticsPanel = Object.assign(function ScannerDiagnostics
           </section>
         ) : null}
         {provider ? (
-          <section className="min-w-0 border-t border-white/8 py-2">
-            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+          <section className="min-w-0 border-t border-[color:var(--wolfy-border-subtle)] py-2">
+            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
               {language === 'en' ? 'Source' : '来源'}
             </h5>
-            <p className="text-xs leading-relaxed text-white/64">{formatProviderDiagnostics(provider, language)}</p>
+            <p className="text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">{formatProviderDiagnostics(provider, language)}</p>
           </section>
         ) : null}
         {universeNotes.length ? (
-          <section className="min-w-0 border-t border-white/8 py-2">
-            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+          <section className="min-w-0 border-t border-[color:var(--wolfy-border-subtle)] py-2">
+            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
               {language === 'en' ? 'Scope' : '范围'}
             </h5>
             <ul className="space-y-1">
               {universeNotes.map((note) => (
-                <li key={note} className="text-xs leading-relaxed text-white/64">
+                <li key={note} className="text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
                   {note}
                 </li>
               ))}
@@ -262,8 +262,8 @@ export const ScannerDiagnosticsPanel = Object.assign(function ScannerDiagnostics
           </section>
         ) : null}
         {runDetail.scoringNotes.length ? (
-          <section className="min-w-0 border-t border-white/8 py-2">
-            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+          <section className="min-w-0 border-t border-[color:var(--wolfy-border-subtle)] py-2">
+            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
               {language === 'en' ? 'Scoring' : '评分'}
             </h5>
             <ul className="space-y-1">
@@ -271,7 +271,7 @@ export const ScannerDiagnosticsPanel = Object.assign(function ScannerDiagnostics
                 const safeNote = sanitizeScannerDiagnosticNote(note, language);
                 if (!safeNote) return null;
                 return (
-                  <li key={note} className="text-xs leading-relaxed text-white/64">
+                  <li key={note} className="text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
                     {safeNote}
                   </li>
                 );
@@ -280,30 +280,30 @@ export const ScannerDiagnosticsPanel = Object.assign(function ScannerDiagnostics
           </section>
         ) : null}
         {hasReviewSummary(runDetail.reviewSummary) ? (
-          <section className="min-w-0 border-t border-white/8 py-2">
-            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+          <section className="min-w-0 border-t border-[color:var(--wolfy-border-subtle)] py-2">
+            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
               {language === 'en' ? 'Review' : '复盘'}
             </h5>
             <div className="flex flex-wrap gap-2">
-              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-                <span className="shrink-0 text-white/36">{language === 'en' ? 'Status' : '状态'}</span>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">
+                <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Status' : '状态'}</span>
                 <span className="min-w-0 truncate">{runDetail.reviewSummary.reviewStatus}</span>
               </TerminalChip>
-              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-                <span className="shrink-0 text-white/36">{language === 'en' ? 'Reviewed' : '已复盘'}</span>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">
+                <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Reviewed' : '已复盘'}</span>
                 <span className="min-w-0 truncate">
                   {`${runDetail.reviewSummary.reviewedCount}/${runDetail.reviewSummary.candidateCount}`}
                 </span>
               </TerminalChip>
               {runDetail.reviewSummary.hitRatePct != null ? (
-                <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-                  <span className="shrink-0 text-white/36">{language === 'en' ? 'Hit rate' : '命中率'}</span>
+                <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">
+                  <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Hit rate' : '命中率'}</span>
                   <span className="min-w-0 truncate">{formatPercent(runDetail.reviewSummary.hitRatePct)}</span>
                 </TerminalChip>
               ) : null}
               {runDetail.reviewSummary.avgReviewWindowReturnPct != null ? (
-                <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-                  <span className="shrink-0 text-white/36">{language === 'en' ? 'Avg return' : '平均收益'}</span>
+                <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">
+                  <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Avg return' : '平均收益'}</span>
                   <span className="min-w-0 truncate">{formatPercent(runDetail.reviewSummary.avgReviewWindowReturnPct)}</span>
                 </TerminalChip>
               ) : null}
@@ -311,36 +311,36 @@ export const ScannerDiagnosticsPanel = Object.assign(function ScannerDiagnostics
           </section>
         ) : null}
         {hasComparison(runDetail.comparisonToPrevious) ? (
-          <section className="min-w-0 border-t border-white/8 py-2">
-            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+          <section className="min-w-0 border-t border-[color:var(--wolfy-border-subtle)] py-2">
+            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
               {language === 'en' ? 'Previous run' : '相对上次'}
             </h5>
             <div className="flex flex-wrap gap-2">
-              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-                <span className="shrink-0 text-white/36">{language === 'en' ? 'New' : '新增'}</span>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">
+                <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'New' : '新增'}</span>
                 <span className="min-w-0 truncate">{String(runDetail.comparisonToPrevious.newCount)}</span>
               </TerminalChip>
-              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-                <span className="shrink-0 text-white/36">{language === 'en' ? 'Retained' : '保留'}</span>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">
+                <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Retained' : '保留'}</span>
                 <span className="min-w-0 truncate">{String(runDetail.comparisonToPrevious.retainedCount)}</span>
               </TerminalChip>
-              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-                <span className="shrink-0 text-white/36">{language === 'en' ? 'Dropped' : '移出'}</span>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">
+                <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Dropped' : '移出'}</span>
                 <span className="min-w-0 truncate">{String(runDetail.comparisonToPrevious.droppedCount)}</span>
               </TerminalChip>
             </div>
           </section>
         ) : null}
         {aiDiagnostics ? (
-          <section className="min-w-0 border-t border-white/8 py-2">
-            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+          <section className="min-w-0 border-t border-[color:var(--wolfy-border-subtle)] py-2">
+            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
               {language === 'en' ? 'AI' : 'AI'}
             </h5>
             <div className="flex flex-wrap gap-2">
               {aiDiagnosticDisplayEntries
                 .map(({ key, label, value }) => (
-                  <TerminalChip key={key} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-                    <span className="shrink-0 text-white/36">{label}</span>
+                  <TerminalChip key={key} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-[color:var(--wolfy-text-secondary)]">
+                    <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{label}</span>
                     <span className="min-w-0 truncate">{value}</span>
                   </TerminalChip>
                 ))}

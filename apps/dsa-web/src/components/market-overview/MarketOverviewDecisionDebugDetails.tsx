@@ -82,7 +82,7 @@ const MarketBriefingCompactSummary: React.FC<{ summary: MarketOverviewBriefingSu
     meta={(
       <div className="min-w-0">
         <p data-testid="market-briefing-card" className="truncate text-[color:var(--wolfy-text-muted)]">{summary.leadMessage}</p>
-        {summary.warning ? <p data-testid="market-briefing-warning" className="truncate text-amber-200/70">{summary.warning}</p> : null}
+        {summary.warning ? <p data-testid="market-briefing-warning" className="truncate text-[color:var(--state-warning-text)]/70">{summary.warning}</p> : null}
       </div>
     )}
   />
@@ -273,7 +273,7 @@ export const MarketOverviewDecisionDebugDetails: React.FC<MarketOverviewDecision
             className={cn(
               'rounded-md border px-2 py-1 text-[10px] font-semibold',
               boundary.allowed
-                ? 'border-emerald-300/14 bg-emerald-300/[0.06] text-emerald-100/70'
+                ? 'border-[color:var(--state-success-border)] bg-[var(--state-success-bg)] text-[color:var(--state-success-text)]/70'
                 : 'border-amber-300/14 bg-amber-300/[0.06] text-amber-100/70',
             )}
           >

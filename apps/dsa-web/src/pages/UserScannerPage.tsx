@@ -1817,7 +1817,7 @@ function buildCoverageSegments(
       key: 'available',
       label: language === 'en' ? 'Available' : '可用',
       count: coverage.availableCount ?? 0,
-      toneClassName: 'bg-emerald-300/85',
+      toneClassName: 'bg-[color:var(--state-success-text)]',
     },
     {
       key: 'partial',
@@ -1850,7 +1850,7 @@ function buildMarketCoverageSegments(
       key: 'score_grade',
       label: language === 'en' ? 'Score-grade' : '评分可用',
       count: coverage.scoreGradeCount ?? 0,
-      toneClassName: 'bg-emerald-300/85',
+      toneClassName: 'bg-[color:var(--state-success-text)]',
     },
     {
       key: 'observe_only',
@@ -1946,7 +1946,7 @@ function buildScannerVisualEvidenceSummary(
         key: 'strong',
         label: language === 'en' ? '80+' : '80+',
         count: scoreBands.strong,
-        toneClassName: 'bg-emerald-300/85',
+        toneClassName: 'bg-[color:var(--state-success-text)]',
       },
       {
         key: 'building',
@@ -4135,12 +4135,12 @@ const UserScannerPage: React.FC = () => {
                 )}
               />
 	            {pageError ? (
-	              <div className="mx-3 mt-3 rounded-xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-sm text-rose-100" role="alert" data-testid="scanner-page-error-summary">
+	              <div className="mx-3 mt-3 rounded-xl border border-[color:var(--state-danger-border)] bg-[var(--state-danger-bg)] px-3 py-2 text-sm text-[color:var(--state-danger-text)]" role="alert" data-testid="scanner-page-error-summary">
 	                <div className="flex flex-wrap items-center gap-2">
 	                  <span className="font-medium">{language === 'en' ? 'Scan did not complete' : '扫描未完成'}</span>
-	                  <span className="rounded border border-rose-300/25 bg-rose-50/10 px-1.5 py-0.5 text-[11px]">{pageErrorSummary}</span>
+	                  <span className="rounded border border-[color:var(--state-danger-border)] bg-[var(--state-danger-bg)] px-1.5 py-0.5 text-[11px]">{pageErrorSummary}</span>
 	                </div>
-	                <p className="mt-2 text-xs text-rose-50/70">
+	                <p className="mt-2 text-xs text-[color:var(--state-danger-text)]">
 	                  {language === 'en' ? 'Internal error details are hidden on this page.' : '内部错误详情已隐藏。'}
 	                </p>
 	              </div>
@@ -4153,7 +4153,7 @@ const UserScannerPage: React.FC = () => {
                       ? 'border-red-400/20 bg-red-400/10 text-red-100'
                       : actionNotice.tone === 'warning'
                         ? 'border-amber-400/20 bg-amber-400/10 text-amber-100'
-                        : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
+                        : 'border-[color:var(--state-success-border)] bg-[var(--state-success-bg)] text-[color:var(--state-success-text)]'
                   }`}
                 >
                   {actionNotice.message}
@@ -4563,7 +4563,7 @@ const UserScannerPage: React.FC = () => {
                                 aria-hidden="true"
                                 className={`select-field__overlay pointer-events-none flex h-12 w-full min-w-0 items-center rounded-lg border bg-[var(--wolfy-surface-input)] px-3 py-2 text-sm text-[color:var(--wolfy-text-primary)] transition-all md:h-9 md:px-2.5 md:py-1.5 md:text-xs ${
                                   validationErrors.theme
-                                    ? 'border-rose-500/50 text-rose-100'
+                                    ? 'border-[color:var(--state-danger-border)] text-[color:var(--state-danger-text)]'
                                     : 'border-[color:var(--wolfy-divider)] group-focus-within:border-[color:var(--wolfy-accent)]'
                                 }`}
                               >
@@ -4581,7 +4581,7 @@ const UserScannerPage: React.FC = () => {
                               </p>
                             ) : null}
                             {validationErrors.theme ? (
-                              <p id="scanner-theme-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                              <p id="scanner-theme-error" role="alert" className="text-[11px] leading-relaxed text-[color:var(--state-danger-text)]">
                                 {validationErrors.theme}
                               </p>
                             ) : null}
@@ -4602,7 +4602,7 @@ const UserScannerPage: React.FC = () => {
                                 placeholder={language === 'en' ? 'White House Stocks' : 'White House Stocks'}
                               />
                               {validationErrors.customThemeLabel ? (
-                                <p id="scanner-ai-theme-label-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                                <p id="scanner-ai-theme-label-error" role="alert" className="text-[11px] leading-relaxed text-[color:var(--state-danger-text)]">
                                   {validationErrors.customThemeLabel}
                                 </p>
                               ) : null}
@@ -4619,7 +4619,7 @@ const UserScannerPage: React.FC = () => {
                                 className="w-full resize-none rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-sm text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)] md:px-2.5 md:py-1.5 md:text-xs"
                               />
                               {validationErrors.customThemePrompt ? (
-                                <p id="scanner-ai-theme-prompt-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                                <p id="scanner-ai-theme-prompt-error" role="alert" className="text-[11px] leading-relaxed text-[color:var(--state-danger-text)]">
                                   {validationErrors.customThemePrompt}
                                 </p>
                               ) : null}
@@ -4634,7 +4634,7 @@ const UserScannerPage: React.FC = () => {
                                 placeholder={language === 'en' ? 'Optional: add symbols, e.g. NVDA PLTR' : '可选：手动补充代码，例如 NVDA PLTR'}
                               />
                               {validationErrors.customThemeManualSymbols ? (
-                                <p id="scanner-ai-theme-manual-symbols-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                                <p id="scanner-ai-theme-manual-symbols-error" role="alert" className="text-[11px] leading-relaxed text-[color:var(--state-danger-text)]">
                                   {validationErrors.customThemeManualSymbols}
                                 </p>
                               ) : null}
@@ -4684,7 +4684,7 @@ const UserScannerPage: React.FC = () => {
                               {language === 'en' ? `Parsed ${parsedCustomSymbols.length}` : `已解析 ${parsedCustomSymbols.length}`}
                             </p>
                             {validationErrors.customSymbols ? (
-                              <p id="scanner-custom-symbols-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                              <p id="scanner-custom-symbols-error" role="alert" className="text-[11px] leading-relaxed text-[color:var(--state-danger-text)]">
                                 {validationErrors.customSymbols}
                               </p>
                             ) : null}
@@ -4693,7 +4693,7 @@ const UserScannerPage: React.FC = () => {
                       </AdvancedDisclosure>
                     ) : null}
                     {validationErrors.run ? (
-                      <p role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                      <p role="alert" className="text-[11px] leading-relaxed text-[color:var(--state-danger-text)]">
                         {validationErrors.run}
                       </p>
                     ) : null}

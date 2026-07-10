@@ -212,14 +212,14 @@ export default function RuleBacktestCompareHeatmapProjectionPanel({
           className="grid gap-2 min-w-[32rem]"
           style={{ gridTemplateColumns: `minmax(7rem, 1.05fr) repeat(${xValues.length}, minmax(8rem, 1fr))` }}
         >
-          <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+          <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-3">
             <p className="metric-card__label">{yAxisLabel}</p>
             <p className="product-footnote">{`横向 ${xAxisLabel}`}</p>
           </div>
           {xValues.map((xValue) => (
             <div
               key={`compare-heatmap-x-${formatSensitivityValue(xValue)}`}
-              className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3"
+              className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-3"
             >
               <p className="metric-card__label">{xAxisLabel}</p>
               <p className="preview-card__text">{formatSensitivityValue(xValue)}</p>
@@ -228,7 +228,7 @@ export default function RuleBacktestCompareHeatmapProjectionPanel({
 
           {yValues.map((yValue, yIndex) => (
             <Fragment key={`compare-heatmap-y-${formatSensitivityValue(yValue)}`}>
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+              <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-3">
                 <p className="metric-card__label">{yAxisLabel}</p>
                 <p className="preview-card__text">{formatSensitivityValue(yValue)}</p>
               </div>

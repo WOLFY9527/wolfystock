@@ -387,7 +387,7 @@ export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; 
         </span>
       </div>
       {shouldShowInlineWarning(resolvedMeta) ? (
-        <p className="text-[10px] leading-4 text-amber-200/75">{resolvedMeta?.warning}</p>
+        <p className="text-[10px] leading-4 text-[color:var(--state-warning-text)]/75">{resolvedMeta?.warning}</p>
       ) : null}
     </div>
   );
@@ -408,9 +408,9 @@ export const MarketDataRow: React.FC<{
   const itemDetails = metaText(item);
   const compactDetails = compactMetaText(item);
   const sparklineTone = direction === 'increasing'
-    ? 'text-rose-400'
+    ? 'text-[color:var(--state-danger-text)]'
     : direction === 'decreasing'
-      ? 'text-emerald-400'
+      ? 'text-[color:var(--state-success-text)]'
       : 'text-[color:var(--wolfy-text-muted)]';
 
   return (
@@ -476,9 +476,9 @@ export const MarketOverviewDenseQuoteItem: React.FC<{
   const itemDetails = metaText(item);
   const compactDetails = compactMetaText(item);
   const sparklineTone = direction === 'increasing'
-    ? 'text-rose-400'
+    ? 'text-[color:var(--state-danger-text)]'
     : direction === 'decreasing'
-      ? 'text-emerald-400'
+      ? 'text-[color:var(--state-success-text)]'
       : 'text-[color:var(--wolfy-text-muted)]';
 
   return (
