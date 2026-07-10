@@ -62,6 +62,19 @@ PORTFOLIO_VALUATION_LINEAGE_SIDECAR_VERSION = "portfolio_valuation_lineage_sidec
 class PortfolioConflictError(Exception):
     """Raised when request conflicts with existing portfolio state."""
 
+    def __init__(
+        self,
+        message: str = "Portfolio request conflicts with current portfolio state.",
+        *,
+        reason_code: str = "portfolio_conflict",
+        identifier_name: Optional[str] = None,
+        identifier_value: Optional[Any] = None,
+    ) -> None:
+        self.reason_code = str(reason_code or "portfolio_conflict")
+        self.identifier_name = identifier_name
+        self.identifier_value = identifier_value
+        super().__init__(message)
+
 
 class PortfolioOversellError(ValueError):
     """Raised when a sell would exceed the available position quantity."""
@@ -286,7 +299,10 @@ class PortfolioService:
                 owner_id=resolved_owner_id,
             )
         except DuplicateBrokerConnectionRefError as exc:
-            raise PortfolioConflictError(str(exc)) from exc
+            raise PortfolioConflictError(
+                str(exc),
+                reason_code="broker_connection_conflict",
+            ) from exc
         return self._broker_connection_to_dict(row, portfolio_account_name=account.name)
 
     def list_broker_connections(
@@ -379,7 +395,10 @@ class PortfolioService:
         try:
             row = self.repo.update_broker_connection(connection_id, fields, **self._owner_kwargs())
         except DuplicateBrokerConnectionRefError as exc:
-            raise PortfolioConflictError(str(exc)) from exc
+            raise PortfolioConflictError(
+                str(exc),
+                reason_code="broker_connection_conflict",
+            ) from exc
         if row is None:
             return None
         if portfolio_account_name is None:
@@ -491,7 +510,8 @@ class PortfolioService:
             raise ValueError(f"Broker connection not found: {broker_connection_id}")
         if int(connection["portfolio_account_id"]) != int(portfolio_account_id):
             raise PortfolioConflictError(
-                "Broker sync state cannot be written to a different portfolio account than the linked broker connection"
+                "Broker sync state cannot be written to a different portfolio account than the linked broker connection",
+                reason_code="broker_sync_mapping_conflict",
             )
         row = self.repo.replace_broker_sync_state(
             broker_connection_id=broker_connection_id,
@@ -620,8 +640,18 @@ class PortfolioService:
                     dedup_hash=dedup_hash_norm,
                 )
                 return {"id": int(row.id)}
-        except (DuplicateTradeUidError, DuplicateTradeDedupHashError) as exc:
-            raise PortfolioConflictError(str(exc)) from exc
+        except DuplicateTradeUidError as exc:
+            raise PortfolioConflictError(
+                str(exc),
+                reason_code="duplicate_trade_uid",
+                identifier_name="tradeUid",
+                identifier_value=trade_uid_norm,
+            ) from exc
+        except DuplicateTradeDedupHashError as exc:
+            raise PortfolioConflictError(
+                str(exc),
+                reason_code="duplicate_trade_dedup_hash",
+            ) from exc
 
     def record_cash_ledger(
         self,
@@ -3489,9 +3519,17 @@ class PortfolioService:
         session: Optional[Any] = None,
     ) -> None:
         if trade_uid and self._has_trade_uid(account_id=account_id, trade_uid=trade_uid, session=session):
-            raise PortfolioConflictError(f"Duplicate trade_uid for account_id={account_id}: {trade_uid}")
+            raise PortfolioConflictError(
+                f"Duplicate trade_uid for account_id={account_id}: {trade_uid}",
+                reason_code="duplicate_trade_uid",
+                identifier_name="tradeUid",
+                identifier_value=trade_uid,
+            )
         if dedup_hash and self._has_trade_dedup_hash(account_id=account_id, dedup_hash=dedup_hash, session=session):
-            raise PortfolioConflictError(f"Duplicate dedup_hash for account_id={account_id}: {dedup_hash}")
+            raise PortfolioConflictError(
+                f"Duplicate dedup_hash for account_id={account_id}: {dedup_hash}",
+                reason_code="duplicate_trade_dedup_hash",
+            )
 
     def _validate_sell_quantity(
         self,

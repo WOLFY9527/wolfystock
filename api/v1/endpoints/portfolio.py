@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 
 from api.deps import CurrentUser, get_current_user
 from api.v1.consumer_safe_response import consumer_safe_json_response
-from api.v1.errors import safe_api_error
+from api.v1.errors import safe_api_error, safe_error_identifier, safe_exception_message
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.portfolio import (
     PortfolioAccountCreateRequest,
@@ -78,6 +78,21 @@ IMPORT_CONFLICT_ERROR_MESSAGE = "Portfolio import conflicts with existing record
 IMPORT_INTERNAL_ERROR_MESSAGE = "Portfolio import is temporarily unavailable. Please retry later."
 PORTFOLIO_VALIDATION_ERROR_MESSAGE = "Portfolio request could not be processed."
 PORTFOLIO_INTERNAL_ERROR_MESSAGE = "Portfolio data is temporarily unavailable. Please retry later."
+PORTFOLIO_CONFLICT_ERROR_MESSAGE = "Portfolio request conflicts with current portfolio state."
+PORTFOLIO_TRADE_CONFLICT_ERROR_MESSAGE = "Portfolio trade conflicts with an existing record."
+PORTFOLIO_BUSY_ERROR_MESSAGE = "Portfolio state is busy. Please retry later."
+PORTFOLIO_OVERSELL_ERROR_MESSAGE = "Trade quantity exceeds the available portfolio position."
+_PORTFOLIO_CONFLICT_REASON_CODES = frozenset(
+    {
+        "portfolio_conflict",
+        "broker_connection_conflict",
+        "broker_sync_mapping_conflict",
+        "duplicate_trade_uid",
+        "duplicate_trade_dedup_hash",
+        "portfolio_busy",
+        "portfolio_oversell",
+    }
+)
 IMPORT_ARTIFACT_REDACTED = "<redacted>"
 _IMPORT_ARTIFACT_URL_RE = re.compile(r"\bhttps?://[^\s\"'<>]+", re.IGNORECASE)
 _IMPORT_ARTIFACT_SENSITIVE_TEXT_RE = re.compile(
@@ -1063,7 +1078,7 @@ def _bad_request(exc: Exception) -> HTTPException:
     return safe_api_error(
         status_code=400,
         error="validation_error",
-        message=str(exc) or PORTFOLIO_VALIDATION_ERROR_MESSAGE,
+        message=safe_exception_message(exc, fallback=PORTFOLIO_VALIDATION_ERROR_MESSAGE),
         fallback_message=PORTFOLIO_VALIDATION_ERROR_MESSAGE,
     )
 
@@ -1078,12 +1093,80 @@ def _internal_error(message: str, exc: Exception) -> HTTPException:
     )
 
 
-def _conflict_error(*, error: str, message: str) -> HTTPException:
+def _portfolio_error_detail(
+    *,
+    reason_code: str,
+    identifier_name: Optional[str] = None,
+    identifier_value: Any = None,
+) -> dict[str, Any]:
+    detail: dict[str, Any] = {"reasonCode": reason_code}
+    if identifier_name in {"symbol", "tradeUid"}:
+        safe_identifier = safe_error_identifier(identifier_value)
+        if safe_identifier:
+            detail[identifier_name] = safe_identifier
+    return detail
+
+
+def _safe_portfolio_conflict_reason_code(value: Any) -> str:
+    reason_code = safe_error_identifier(value)
+    if reason_code in _PORTFOLIO_CONFLICT_REASON_CODES:
+        return reason_code
+    return "portfolio_conflict"
+
+
+def _conflict_error(
+    *,
+    error: str,
+    message: str,
+    reason_code: str,
+    identifier_name: Optional[str] = None,
+    identifier_value: Any = None,
+) -> HTTPException:
     return safe_api_error(
         status_code=409,
         error=error,
         message=message,
         fallback_message="Portfolio request conflicts with current portfolio state.",
+        detail=_portfolio_error_detail(
+            reason_code=reason_code,
+            identifier_name=identifier_name,
+            identifier_value=identifier_value,
+        ),
+    )
+
+
+def _portfolio_conflict_error(exc: PortfolioConflictError) -> HTTPException:
+    reason_code = _safe_portfolio_conflict_reason_code(getattr(exc, "reason_code", None))
+    message = (
+        PORTFOLIO_TRADE_CONFLICT_ERROR_MESSAGE
+        if reason_code in {"duplicate_trade_uid", "duplicate_trade_dedup_hash"}
+        else PORTFOLIO_CONFLICT_ERROR_MESSAGE
+    )
+    identifier_name = "tradeUid" if reason_code == "duplicate_trade_uid" else None
+    return _conflict_error(
+        error="conflict",
+        message=message,
+        reason_code=reason_code,
+        identifier_name=identifier_name,
+        identifier_value=getattr(exc, "identifier_value", None),
+    )
+
+
+def _portfolio_busy_error() -> HTTPException:
+    return _conflict_error(
+        error="portfolio_busy",
+        message=PORTFOLIO_BUSY_ERROR_MESSAGE,
+        reason_code="portfolio_busy",
+    )
+
+
+def _portfolio_oversell_error(exc: PortfolioOversellError) -> HTTPException:
+    return _conflict_error(
+        error="portfolio_oversell",
+        message=PORTFOLIO_OVERSELL_ERROR_MESSAGE,
+        reason_code="portfolio_oversell",
+        identifier_name="symbol",
+        identifier_value=exc.symbol,
     )
 
 
@@ -1091,7 +1174,10 @@ def _ibkr_sync_error(exc: PortfolioIbkrSyncError) -> HTTPException:
     return safe_api_error(
         status_code=max(400, int(exc.status_code or 400)),
         error=exc.code,
-        message=sanitize_message(str(exc)),
+        message=safe_exception_message(
+            exc,
+            fallback="Portfolio broker sync could not be processed.",
+        ),
         fallback_message="Portfolio broker sync could not be processed.",
     )
 
@@ -1628,7 +1714,7 @@ def create_broker_connection(
         )
         return _build_broker_connection_item(row)
     except PortfolioConflictError as exc:
-        raise _conflict_error(error="conflict", message=str(exc))
+        raise _portfolio_conflict_error(exc) from exc
     except ValueError as exc:
         raise _bad_request(exc)
     except Exception as exc:
@@ -1696,7 +1782,7 @@ def update_broker_connection(
     except HTTPException:
         raise
     except PortfolioConflictError as exc:
-        raise _conflict_error(error="conflict", message=str(exc))
+        raise _portfolio_conflict_error(exc) from exc
     except ValueError as exc:
         raise _bad_request(exc)
     except Exception as exc:
@@ -1727,7 +1813,7 @@ def sync_ibkr_account_state(
     except PortfolioIbkrSyncError as exc:
         raise _ibkr_sync_error(exc)
     except PortfolioConflictError as exc:
-        raise _conflict_error(error="conflict", message=str(exc))
+        raise _portfolio_conflict_error(exc) from exc
     except ValueError as exc:
         raise _bad_request(exc)
     except Exception as exc:
@@ -1778,11 +1864,11 @@ def create_trade(
         )
         return PortfolioEventCreatedResponse(**data)
     except PortfolioBusyError as exc:
-        raise _conflict_error(error="portfolio_busy", message=str(exc))
+        raise _portfolio_busy_error() from exc
     except PortfolioOversellError as exc:
-        raise _conflict_error(error="portfolio_oversell", message=str(exc))
+        raise _portfolio_oversell_error(exc) from exc
     except PortfolioConflictError as exc:
-        raise _conflict_error(error="conflict", message=str(exc))
+        raise _portfolio_conflict_error(exc) from exc
     except ValueError as exc:
         raise _bad_request(exc)
     except Exception as exc:
@@ -1853,7 +1939,7 @@ def delete_trade(
         )
         return PortfolioDeleteResponse(deleted=1, delete_mode="soft")
     except PortfolioBusyError as exc:
-        raise _conflict_error(error="portfolio_busy", message=str(exc))
+        raise _portfolio_busy_error() from exc
     except HTTPException:
         raise
     except Exception as exc:
@@ -1909,9 +1995,9 @@ def update_trade(
         )
         return PortfolioTradeListItem(**updated)
     except PortfolioBusyError as exc:
-        raise _conflict_error(error="portfolio_busy", message=str(exc))
+        raise _portfolio_busy_error() from exc
     except PortfolioOversellError as exc:
-        raise _conflict_error(error="portfolio_oversell", message=str(exc))
+        raise _portfolio_oversell_error(exc) from exc
     except HTTPException:
         raise
     except ValueError as exc:
@@ -1951,7 +2037,7 @@ def create_cash_ledger(
         )
         return PortfolioEventCreatedResponse(**data)
     except PortfolioBusyError as exc:
-        raise _conflict_error(error="portfolio_busy", message=str(exc))
+        raise _portfolio_busy_error() from exc
     except ValueError as exc:
         raise _bad_request(exc)
     except Exception as exc:
@@ -2011,7 +2097,7 @@ def delete_cash_ledger(
             )
         return PortfolioDeleteResponse(deleted=1)
     except PortfolioBusyError as exc:
-        raise _conflict_error(error="portfolio_busy", message=str(exc))
+        raise _portfolio_busy_error() from exc
     except HTTPException:
         raise
     except Exception as exc:
@@ -2053,7 +2139,7 @@ def create_corporate_action(
         )
         return PortfolioEventCreatedResponse(**data)
     except PortfolioBusyError as exc:
-        raise _conflict_error(error="portfolio_busy", message=str(exc))
+        raise _portfolio_busy_error() from exc
     except ValueError as exc:
         raise _bad_request(exc)
     except Exception as exc:
@@ -2115,7 +2201,7 @@ def delete_corporate_action(
             )
         return PortfolioDeleteResponse(deleted=1)
     except PortfolioBusyError as exc:
-        raise _conflict_error(error="portfolio_busy", message=str(exc))
+        raise _portfolio_busy_error() from exc
     except HTTPException:
         raise
     except Exception as exc:

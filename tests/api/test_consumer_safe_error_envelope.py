@@ -25,6 +25,7 @@ except ModuleNotFoundError:
 import src.auth as auth
 from api.app import create_app
 from api.deps import CurrentUser, get_current_user
+from api.v1.errors import safe_error_identifier
 from src.config import Config
 from src.storage import DatabaseManager
 
@@ -187,6 +188,85 @@ def test_watchlist_internal_error_response_is_consumer_safe(client: TestClient, 
         error="internal_error",
         message="Watchlist data is temporarily unavailable. Please retry later.",
     )
+
+
+def test_watchlist_validation_error_preserves_bounded_safe_message(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RejectingWatchlistService:
+        def add_item(self, **kwargs):
+            raise ValueError("symbol contains invalid characters")
+
+    monkeypatch.setattr(
+        "api.v1.endpoints.watchlist._get_watchlist_service",
+        lambda: RejectingWatchlistService(),
+    )
+
+    response = client.post(
+        "/api/v1/watchlist/items",
+        json={"symbol": "AAPL", "market": "us", "source": "scanner"},
+    )
+
+    _assert_safe_error_payload(
+        response,
+        status_code=400,
+        error="validation_error",
+        message="symbol contains invalid characters",
+    )
+
+
+def test_watchlist_validation_error_rejects_secret_like_exception_text(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    leaked_token = "sk-proj-0123456789abcdef"
+
+    class RejectingWatchlistService:
+        def add_item(self, **kwargs):
+            raise ValueError(leaked_token)
+
+    monkeypatch.setattr(
+        "api.v1.endpoints.watchlist._get_watchlist_service",
+        lambda: RejectingWatchlistService(),
+    )
+
+    response = client.post(
+        "/api/v1/watchlist/items",
+        json={"symbol": "AAPL", "market": "us", "source": "scanner"},
+    )
+
+    _assert_safe_error_payload(
+        response,
+        status_code=400,
+        error="validation_error",
+        message="Watchlist request could not be processed.",
+    )
+    assert leaked_token not in json.dumps(response.json(), ensure_ascii=False)
+
+
+def test_safe_error_identifier_preserves_bounded_operator_correlation_id() -> None:
+    assert safe_error_identifier("task-safe-id-291") == "task-safe-id-291"
+
+
+@pytest.mark.parametrize(
+    "unsafe_identifier",
+    (
+        "sk-proj-0123456789abcdef",
+        "ghp_0123456789abcdef",
+        "github_pat_0123456789abcdef",
+        "AKIAIOSFODNN7EXAMPLE",
+        "xoxb-0123456789-abcdef",
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature",
+        "a" * 129,
+        "/tmp/private/report-id",
+        "task-id\nforged-header",
+    ),
+)
+def test_safe_error_identifier_omits_secret_path_control_and_overlong_values(
+    unsafe_identifier: str,
+) -> None:
+    assert safe_error_identifier(unsafe_identifier) is None
 
 
 def test_history_internal_error_response_is_consumer_safe_and_logged(
