@@ -1111,66 +1111,8 @@ const MarketOverviewConclusionLayer: React.FC<{
     locale: researchLocale,
   });
 
-  // Plain same-origin anchors keep handoffs router-agnostic in unit harnesses
-  // (NextResearchAction Link requires a Router context that page unit tests omit).
-  const researchSteps: NextResearchActionItem[] = [
-    {
-      key: 'research-radar',
-      kind: 'inspect',
-      label: isEnglishRoute ? 'Research Radar' : '研究雷达',
-      description: isEnglishRoute
-        ? 'Inspect Research Radar priorities against the current market observation.'
-        : '查看研究雷达优先级，对照当前市场观察。',
-      onClick: () => {
-        const href = routeLocale ? buildLocalizedPath('/research/radar', routeLocale) : '/research/radar';
-        if (typeof window !== 'undefined') {
-          window.location.assign(href);
-        }
-      },
-    },
-    {
-      key: 'stock-structure',
-      kind: 'validate',
-      label: isEnglishRoute ? 'Stock Search' : '搜索个股',
-      description: isEnglishRoute
-        ? 'Validate single-name structure against this market context.'
-        : '用结构页在当前市场背景下验证个股证据。',
-      onClick: () => {
-        const href = routeLocale ? buildLocalizedPath('/stocks/structure-decision', routeLocale) : '/stocks/structure-decision';
-        if (typeof window !== 'undefined') {
-          window.location.assign(href);
-        }
-      },
-    },
-    {
-      key: 'decision-cockpit',
-      kind: 'compare',
-      label: isEnglishRoute ? 'Decision Cockpit' : '决策驾驶舱',
-      description: isEnglishRoute
-        ? 'Compare Decision Cockpit evidence without implying a trade.'
-        : '比较决策驾驶舱证据，不升级为交易建议。',
-      onClick: () => {
-        const href = routeLocale ? buildLocalizedPath('/market/decision-cockpit', routeLocale) : '/market/decision-cockpit';
-        if (typeof window !== 'undefined') {
-          window.location.assign(href);
-        }
-      },
-    },
-    {
-      key: 'scanner',
-      kind: 'handoff',
-      label: isEnglishRoute ? 'Scanner' : '扫描器',
-      description: isEnglishRoute
-        ? 'Continue research screening under the same observation constraints.'
-        : '继续到扫描器，在同一观察约束下筛选研究候选。',
-      onClick: () => {
-        const href = routeLocale ? buildLocalizedPath('/scanner', routeLocale) : '/scanner';
-        if (typeof window !== 'undefined') {
-          window.location.assign(href);
-        }
-      },
-    },
-  ];
+  // Next-research handoff is rendered after path / metrics / drivers / data state
+  // (MarketOverviewResearchHandoff) so first viewport stays market observation + path.
 
   return (
     <section
@@ -1329,20 +1271,119 @@ const MarketOverviewConclusionLayer: React.FC<{
           ]}
         />
 
-        <div data-testid="market-overview-quick-actions" className="min-w-0">
-          <NextResearchAction
-            density="research"
-            locale={researchLocale}
-            compact
-            data-testid="market-overview-next-research-action"
-            title={isEnglishRoute ? 'Next research step' : '下一步研究'}
-            steps={researchSteps}
-          />
-        </div>
-
         <p className="text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
           {isEnglishRoute ? 'Research observation, not investment advice.' : '研究观察，不构成投资建议。'}
         </p>
+      </div>
+    </section>
+  );
+};
+
+/**
+ * Journey handoff after market observation → path → metrics → drivers → data state.
+ * Uses onClick navigation so page unit harnesses without Router still exercise controls.
+ */
+export function buildMarketOverviewResearchHandoffSteps(
+  routeLocale: 'zh' | 'en' | null = null,
+): NextResearchActionItem[] {
+  const isEnglishRoute = routeLocale === 'en';
+  const assign = (path: string) => {
+    const href = routeLocale ? buildLocalizedPath(path, routeLocale) : path;
+    if (typeof window !== 'undefined') {
+      window.location.assign(href);
+    }
+  };
+  return [
+    {
+      key: 'research-radar',
+      kind: 'inspect',
+      label: isEnglishRoute ? 'Research Radar' : '研究雷达',
+      description: isEnglishRoute
+        ? 'Inspect Research Radar priorities against the current market observation.'
+        : '查看研究雷达优先级，对照当前市场观察。',
+      onClick: () => assign('/research/radar'),
+    },
+    {
+      key: 'watchlist',
+      kind: 'handoff',
+      label: isEnglishRoute ? 'Watchlist' : '观察列表',
+      description: isEnglishRoute
+        ? 'Carry market context into the research task ledger.'
+        : '把市场上下文带入观察列表研究任务账本。',
+      onClick: () => assign('/watchlist'),
+    },
+    {
+      key: 'stock-structure',
+      kind: 'validate',
+      label: isEnglishRoute ? 'Stock Search' : '搜索个股',
+      description: isEnglishRoute
+        ? 'Validate single-name structure against this market context.'
+        : '用结构页在当前市场背景下验证个股证据。',
+      onClick: () => assign('/stocks/structure-decision'),
+    },
+    {
+      key: 'decision-cockpit',
+      kind: 'compare',
+      label: isEnglishRoute ? 'Decision Cockpit' : '决策驾驶舱',
+      description: isEnglishRoute
+        ? 'Compare Decision Cockpit evidence without implying a trade decision.'
+        : '比较决策驾驶舱证据，不升级为交易结论。',
+      onClick: () => assign('/market/decision-cockpit'),
+    },
+    {
+      key: 'scanner',
+      kind: 'handoff',
+      label: isEnglishRoute ? 'Scanner' : '扫描器',
+      description: isEnglishRoute
+        ? 'Continue research screening under the same observation constraints.'
+        : '继续到扫描器，在同一观察约束下筛选研究候选。',
+      onClick: () => assign('/scanner'),
+    },
+  ];
+}
+
+export const MarketOverviewResearchHandoff: React.FC<{
+  locale?: 'zh' | 'en';
+  className?: string;
+}> = ({ locale, className }) => {
+  const routeLocale = locale
+    ?? (typeof window !== 'undefined' ? parseLocaleFromPathname(window.location.pathname) : null);
+  const isEnglishRoute = routeLocale === 'en';
+  const researchLocale = isEnglishRoute ? 'en' : 'zh';
+  const researchSteps = buildMarketOverviewResearchHandoffSteps(routeLocale);
+
+  return (
+    <section
+      data-testid="market-overview-quick-actions"
+      data-market-research-flow="next-research-handoff"
+      data-market-journey-step="next-research-handoff"
+      className={cn(
+        'min-w-0 rounded-xl border border-[color:var(--wolfy-divider)] bg-[color:var(--wolfy-surface-panel)] px-3 py-3 md:px-4',
+        className,
+      )}
+    >
+      <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">
+        {isEnglishRoute ? 'Continue from market context' : '从市场上下文继续'}
+      </p>
+      <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
+        {isEnglishRoute
+          ? 'Next research handoff — real routes only'
+          : '下一步研究交接 — 仅真实路由'}
+      </p>
+      <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-secondary)]">
+        {isEnglishRoute
+          ? 'After observation, path, metrics, drivers, and data state — open Radar, Watchlist, Stock Research, or Scanner without inventing candidates.'
+          : '在完成观察、路径、指标、驱动与数据状态后，进入雷达、观察列表、个股研究或扫描器；不编造候选。'}
+      </p>
+      <div className="mt-2.5 min-w-0">
+        <NextResearchAction
+          density="research"
+          locale={researchLocale}
+          compact
+          data-testid="market-overview-next-research-action"
+          title={isEnglishRoute ? 'Next research step' : '下一步研究'}
+          steps={researchSteps}
+        />
       </div>
     </section>
   );

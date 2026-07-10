@@ -168,6 +168,9 @@ type HomeResearchQueueItemView = {
   summary: string;
   action: string;
   priority: string;
+  /** Real symbol context when parseable from returned queue fields — never fabricated. */
+  symbol?: string;
+  href?: string;
 };
 
 type HomeDailyMetricView = {
@@ -5102,10 +5105,11 @@ function buildMemberMarketBriefView(
     reliabilityLabel,
     reliabilityDetail,
     evidence,
+    // Journey handoffs: Market → Radar / Stock Research / Watchlist (not a feature directory).
     actions: [
       { key: 'market-overview', label: isEnglish ? 'Open Market Research' : '查看市场研究', href: buildHref('/market-overview'), primary: true },
       { key: 'research-radar', label: isEnglish ? 'Open Research Radar' : '打开研究雷达', href: buildHref('/research/radar') },
-      { key: 'scanner', label: isEnglish ? 'Open Scanner' : '查看扫描器', href: buildHref('/scanner') },
+      { key: 'watchlist', label: isEnglish ? 'Open Watchlist' : '打开观察列表', href: buildHref('/watchlist') },
       { key: 'stock-search', label: isEnglish ? 'Search Symbol' : '搜索个股', href: buildHref('/stocks/structure-decision') },
     ],
     safety: isEnglish ? 'Research observation, not investment advice.' : '研究观察，不构成投资建议。',
@@ -5163,20 +5167,54 @@ function homeDailyLedgerSectionLabel(index: number, locale: DashboardLocale): st
     : `证据域 ${index + 1}`;
 }
 
+/**
+ * Extract a real symbol token from returned queue copy when present.
+ * Does not invent candidates — only links when a parseable ticker/code appears.
+ */
+function extractHomeQueueSymbolCandidate(title: string, summary: string): string {
+  const leading = title.trim().match(/^([A-Za-z]{1,5}|\d{6}|hk\d{5})\b/i);
+  if (leading?.[1]) {
+    const normalized = normalizeTickerQuery(leading[1]);
+    if (TICKER_FORMAT_RE.test(normalized) || /^HK\d{5}$/i.test(normalized) || /^\d{6}$/.test(normalized)) {
+      return normalized;
+    }
+  }
+  const paren = `${title} ${summary}`.match(/\(([A-Za-z]{1,5}|\d{6}|hk\d{5})\)/i);
+  if (paren?.[1]) {
+    const normalized = normalizeTickerQuery(paren[1]);
+    if (TICKER_FORMAT_RE.test(normalized) || /^HK\d{5}$/i.test(normalized) || /^\d{6}$/.test(normalized)) {
+      return normalized;
+    }
+  }
+  return '';
+}
+
 function buildHomeDailyResearchView(
   locale: DashboardLocale,
   brief: MemberMarketBriefView,
   overview: DashboardMarketIntelligenceOverview | null,
+  routeLocale: 'zh' | 'en' | null = null,
 ): HomeDailyResearchView {
   const isEnglish = locale === 'en';
+  const buildHref = (path: string) => (routeLocale ? buildLocalizedPath(path, routeLocale) : path);
   const marketPulse = overview?.marketPulse;
   const queue = (overview?.researchQueue.items || [])
-    .map((item) => ({
-      title: normalizeHomeDailyText(item.title),
-      summary: normalizeHomeDailyText(item.summary),
-      action: normalizeHomeDailyText(item.action),
-      priority: normalizeHomeDailyText(item.priority),
-    }))
+    .map((item) => {
+      const title = normalizeHomeDailyText(item.title);
+      const summary = normalizeHomeDailyText(item.summary);
+      const symbol = extractHomeQueueSymbolCandidate(title, summary);
+      const href = symbol
+        ? buildHref(`/stocks/${encodeURIComponent(symbol)}/structure-decision`)
+        : undefined;
+      return {
+        title,
+        summary,
+        action: normalizeHomeDailyText(item.action),
+        priority: normalizeHomeDailyText(item.priority),
+        symbol: symbol || undefined,
+        href,
+      };
+    })
     .filter((item) => item.title || item.summary || item.action)
     .slice(0, 4);
   const indexPath = [
@@ -7465,7 +7503,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       )
     : null;
   const homeDailyResearch = memberMarketBrief
-    ? buildHomeDailyResearchView(locale, memberMarketBrief, dashboardOverview)
+    ? buildHomeDailyResearchView(locale, memberMarketBrief, dashboardOverview, routeLocale)
     : null;
   const guestCommandConsoleCopy = locale === 'en'
     ? {
@@ -7594,6 +7632,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             className="mx-auto flex w-full max-w-[1880px] flex-1 min-w-0 flex-col px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
             data-testid="member-home-market-brief"
             data-research-density="editorial"
+            data-home-journey-sequence="morning-note>research-queue>watch-changes>index-path>data-ledger>handoffs"
           >
             <div className="flex w-full min-w-0 flex-col gap-2.5" data-testid="member-home-daily-research-stack">
               {omnibarModule}
@@ -7616,44 +7655,81 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     value: homeDailyResearch.reliabilityLabel,
                     tone: reliabilityTone,
                   },
-                  ...homeDailyResearch.dataLedger.slice(0, 2).map((item) => ({
-                    key: item.key,
-                    kind: /delay|延迟/.test(item.value)
-                      ? 'delayed' as const
-                      : /partial|部分|cached|缓存/.test(item.value)
-                        ? 'partial' as const
-                        : /unavailable|不可用|no evidence|证据不足/.test(item.value)
-                          ? 'unavailable' as const
-                          : 'coverage' as const,
-                    label: item.label,
-                    value: item.value,
-                    tone: /ready|可用/.test(item.value) ? 'success' as const : 'caution' as const,
-                  })),
                 ];
-                const queueNextSteps: NextResearchActionItem[] = [
-                  {
-                    key: 'queue-primary',
-                    kind: homeDailyResearch.queue.length > 0 ? 'continue' : 'gap',
-                    label: memberMarketBrief.actions[1]?.label || (isEnglish ? 'Open Research Radar' : '打开研究雷达'),
-                    description: homeDailyResearch.nextCheck,
-                    href: memberMarketBrief.actions[1]?.href || memberMarketBrief.actions[0]?.href || '#',
-                  },
-                ];
+                const firstQueueWithSymbol = homeDailyResearch.queue.find((item) => item.href && item.symbol);
+                const radarAction = memberMarketBrief.actions.find((action) => action.key === 'research-radar');
+                const marketAction = memberMarketBrief.actions.find((action) => action.key === 'market-overview');
+                const watchlistAction = memberMarketBrief.actions.find((action) => action.key === 'watchlist');
+                const stockSearchAction = memberMarketBrief.actions.find((action) => action.key === 'stock-search');
+                const queueNextSteps: NextResearchActionItem[] = firstQueueWithSymbol
+                  ? [
+                      {
+                        key: 'queue-symbol',
+                        kind: 'inspect',
+                        label: isEnglish
+                          ? `Open ${firstQueueWithSymbol.symbol} research`
+                          : `打开 ${firstQueueWithSymbol.symbol} 个股研究`,
+                        description: firstQueueWithSymbol.action || homeDailyResearch.nextCheck,
+                        href: firstQueueWithSymbol.href,
+                      },
+                      {
+                        key: 'queue-radar',
+                        kind: 'continue',
+                        label: radarAction?.label || (isEnglish ? 'Open Research Radar' : '打开研究雷达'),
+                        description: isEnglish
+                          ? 'Continue in Research Radar when the queue needs broader prioritization.'
+                          : '需要更完整优先级时，继续进入研究雷达。',
+                        href: radarAction?.href || marketAction?.href || '#',
+                      },
+                    ]
+                  : [
+                      {
+                        key: 'queue-primary',
+                        kind: homeDailyResearch.queue.length > 0 ? 'continue' : 'gap',
+                        label: radarAction?.label || (isEnglish ? 'Open Research Radar' : '打开研究雷达'),
+                        description: homeDailyResearch.nextCheck,
+                        href: radarAction?.href || marketAction?.href || '#',
+                      },
+                      {
+                        key: 'queue-market',
+                        kind: 'handoff',
+                        label: marketAction?.label || (isEnglish ? 'Open Market Research' : '查看市场研究'),
+                        description: isEnglish
+                          ? 'Recheck market context before inventing candidates.'
+                          : '先复核市场路径，再决定是否进入个股研究。',
+                        href: marketAction?.href || '#',
+                      },
+                    ];
+                const journeyHandoffActions = [
+                  marketAction,
+                  radarAction,
+                  watchlistAction,
+                  firstQueueWithSymbol
+                    ? {
+                        key: 'stock-research',
+                        label: isEnglish
+                          ? `Stock: ${firstQueueWithSymbol.symbol}`
+                          : `个股：${firstQueueWithSymbol.symbol}`,
+                        href: firstQueueWithSymbol.href || '#',
+                        primary: false as boolean | undefined,
+                      }
+                    : stockSearchAction,
+                ].filter((action): action is NonNullable<typeof action> => Boolean(action));
                 const riskMissing = homeDailyResearch.dataLedger
                   .filter((item) => !/ready|可用/.test(item.value))
                   .map((item) => ({
                     key: item.key,
                     body: item.detail ? `${item.label}: ${item.value} · ${item.detail}` : `${item.label}: ${item.value}`,
                   }));
-                const primaryWatch = homeDailyResearch.watchChanges[0];
 
                 return (
                   <>
-              {/* A. Compact research-state briefing — observation path only (no quality wall) */}
+              {/* A. Morning Decision Note — first read only; no duplicate quality wall */}
               <section
                 className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'overflow-hidden px-4 py-3 sm:px-5')}
                 data-testid="member-home-morning-decision-note"
                 data-member-home-zone="research-state"
+                data-home-journey-step="morning-note"
               >
                 <ObservationHead
                   density="editorial"
@@ -7671,15 +7747,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         </span>
                         {homeDailyResearch.why}
                       </span>
-                      {primaryWatch ? (
-                        <span className="block text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)]">
-                          <span className="mr-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
-                            {isEnglish ? 'Signal' : '信号'}
-                          </span>
-                          {primaryWatch.label}: {primaryWatch.value}
-                          {primaryWatch.detail ? ` · ${primaryWatch.detail}` : ''}
-                        </span>
-                      ) : null}
                       <span className="block text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)]">
                         <span className="mr-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
                           {isEnglish ? 'Evidence limit' : '证据边界'}
@@ -7707,17 +7774,16 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                 />
               </section>
 
-              {/* B. Material changes + research queue — primary workbench (before quality wall).
-                  Document order keeps queue before watch-changes for tests;
-                  visual order elevates material changes first on xl. */}
+              {/* B. Research Queue → Watch Changes (document + visual order; no xl reorder) */}
               <section
-                className="grid min-w-0 gap-2.5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"
+                className="grid min-w-0 gap-2.5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]"
                 data-testid="member-home-research-sequence"
                 data-member-home-zone="queue-and-changes"
               >
                 <section
-                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-3 sm:px-5 xl:order-2')}
+                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-3 sm:px-5')}
                   data-testid="member-home-research-queue"
+                  data-home-journey-step="research-queue"
                 >
                   <div className="flex min-w-0 items-start justify-between gap-4">
                     <div className="min-w-0">
@@ -7749,7 +7815,17 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                             ) : null}
                           </div>
                           {item.title ? (
-                            <p className="mt-1.5 text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">{item.title}</p>
+                            item.href ? (
+                              <Link
+                                to={item.href}
+                                className="mt-1.5 block text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)] underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-border-focus)]"
+                                data-testid={`member-home-research-queue-item-${index}-link`}
+                              >
+                                {item.title}
+                              </Link>
+                            ) : (
+                              <p className="mt-1.5 text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">{item.title}</p>
+                            )
                           ) : null}
                           {item.summary ? (
                             <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{item.summary}</p>
@@ -7778,15 +7854,29 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                 </section>
 
                 <section
-                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-3 sm:px-5 xl:order-1')}
+                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-3 sm:px-5')}
                   data-testid="member-home-watch-changes"
+                  data-home-journey-step="watch-changes"
                 >
-                  <MetaLabel>
-                    {isEnglish ? 'Watch Changes' : '观察变化'}
-                  </MetaLabel>
-                  <SectionTitle as="h2" className="mt-1">
-                    {isEnglish ? 'What changed' : '发生了什么变化'}
-                  </SectionTitle>
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <MetaLabel>
+                        {isEnglish ? 'Watch Changes' : '观察变化'}
+                      </MetaLabel>
+                      <SectionTitle as="h2" className="mt-1">
+                        {isEnglish ? 'What changed' : '发生了什么变化'}
+                      </SectionTitle>
+                    </div>
+                    {watchlistAction ? (
+                      <Link
+                        to={watchlistAction.href}
+                        className="shrink-0 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-border-focus)]"
+                        data-testid="member-home-watch-changes-action"
+                      >
+                        {watchlistAction.label}
+                      </Link>
+                    ) : null}
+                  </div>
                   {homeDailyResearch.watchChanges.length > 0 ? (
                     <ul className="mt-2.5 divide-y divide-[color:var(--wolfy-divider)] border-t border-[color:var(--wolfy-divider)]">
                       {homeDailyResearch.watchChanges.map((item) => (
@@ -7800,46 +7890,28 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       ))}
                     </ul>
                   ) : (
-                    <p className="mt-2.5 border-t border-dashed border-[color:var(--wolfy-divider)] py-2.5 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
-                      {isEnglish ? 'No meaningful watch change returned yet.' : '暂未返回有意义的变化线索。'}
-                    </p>
+                    <div
+                      className="mt-2.5 border-t border-dashed border-[color:var(--wolfy-divider)] py-2.5"
+                      data-testid="member-home-watch-changes-empty"
+                    >
+                      <p className="text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                        {isEnglish ? 'No meaningful watch change returned yet.' : '暂未返回有意义的变化线索。'}
+                      </p>
+                      {watchlistAction ? (
+                        <Link
+                          to={watchlistAction.href}
+                          className="mt-2 inline-flex text-xs font-semibold text-[color:var(--wolfy-text-secondary)] underline-offset-2 hover:text-[color:var(--wolfy-text-primary)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-border-focus)]"
+                          data-testid="member-home-watch-changes-empty-action"
+                        >
+                          {isEnglish ? 'Open Watchlist to review tasks' : '打开观察列表复核研究任务'}
+                        </Link>
+                      ) : null}
+                    </div>
                   )}
                 </section>
               </section>
 
-              {/* C. Evidence quality — subordinate strip after research state + queue, not a first-fold wall */}
-              <aside
-                className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'px-3.5 py-2 sm:px-4')}
-                data-testid="member-home-market-reliability"
-                data-member-home-zone="evidence-quality"
-              >
-                <ResearchDataQualityComposition
-                  density="editorial"
-                  locale={researchLocale}
-                  compact
-                  className="gap-1.5"
-                  title={isEnglish ? 'Reliability / freshness' : '可靠性 / 新鲜度'}
-                  facets={qualityFacets}
-                  statusSlot={(
-                    <ProductReadModelStatusStrip
-                      model={memberMarketBrief.productReadModel}
-                      language={locale}
-                      title={isEnglish ? 'Dashboard readiness' : 'Dashboard 就绪度'}
-                      testId="member-home-dashboard-product-read-model"
-                      className="!px-2.5 !py-2"
-                    />
-                  )}
-                >
-                  <p className="text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)]">
-                    <span className="mr-1.5 font-semibold text-[color:var(--wolfy-text-primary)]">
-                      {homeDailyResearch.reliabilityLabel}
-                    </span>
-                    {homeDailyResearch.reliabilityDetail}
-                  </p>
-                </ResearchDataQualityComposition>
-              </aside>
-
-              {/* D. Supporting evidence + market path + workflow continuity (subordinate) */}
+              {/* C. Index Path → Data Ledger (after queue/changes; reliability is ledger-adjacent) */}
               <section
                 className="grid min-w-0 gap-2.5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]"
                 data-testid="member-home-evidence-limits"
@@ -7848,6 +7920,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                 <section
                   className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-3 sm:px-5')}
                   data-testid="member-home-index-path"
+                  data-home-journey-step="index-path"
                 >
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -7859,11 +7932,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       </SectionTitle>
                     </div>
                     <Link
-                      to={memberMarketBrief.actions[0]?.href || '#'}
+                      to={marketAction?.href || '#'}
                       className="shrink-0 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-border-focus)]"
                       data-testid="member-home-index-path-action"
                     >
-                      {memberMarketBrief.actions[0]?.label || (isEnglish ? 'Open Market Research' : '查看市场研究')}
+                      {marketAction?.label || (isEnglish ? 'Open Market Research' : '查看市场研究')}
                     </Link>
                   </div>
                   {homeDailyResearch.indexPath.length > 0 ? (
@@ -7895,15 +7968,30 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-2.5 border-t border-dashed border-[color:var(--wolfy-divider)] py-2.5 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
-                      {isEnglish ? 'No usable index path returned yet.' : '暂未返回可用指数路径。'}
-                    </p>
+                    <div
+                      className="mt-2.5 border-t border-dashed border-[color:var(--wolfy-divider)] py-2.5"
+                      data-testid="member-home-index-path-empty"
+                    >
+                      <p className="text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                        {isEnglish ? 'No usable index path returned yet.' : '暂未返回可用指数路径。'}
+                      </p>
+                      {marketAction ? (
+                        <Link
+                          to={marketAction.href}
+                          className="mt-2 inline-flex text-xs font-semibold text-[color:var(--wolfy-text-secondary)] underline-offset-2 hover:text-[color:var(--wolfy-text-primary)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-border-focus)]"
+                          data-testid="member-home-index-path-empty-action"
+                        >
+                          {isEnglish ? 'Open Market Overview for the wider path' : '打开市场总览查看完整路径'}
+                        </Link>
+                      ) : null}
+                    </div>
                   )}
                 </section>
 
                 <section
                   className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-3 sm:px-5')}
                   data-testid="member-home-data-ledger"
+                  data-home-journey-step="data-ledger"
                 >
                   <MetaLabel>
                     {isEnglish ? 'Data Ledger' : '数据账本'}
@@ -7934,28 +8022,79 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       missingEvidence={homeDailyResearch.queue.length === 0 ? [{ key: 'queue', body: homeDailyResearch.queueEmptyDetail }] : undefined}
                     />
                   </div>
-                  {/* Workflow continuity: existing Radar / Market / Scanner paths only */}
-                  <div className="mt-2.5 grid min-w-0 gap-2 sm:grid-cols-3" data-testid="member-home-market-actions">
-                    {memberMarketBrief.actions.slice(0, 3).map((action) => (
-                      <Link
-                        key={action.key}
-                        to={action.href}
-                        className={cn(
-                          'inline-flex min-h-10 min-w-0 items-center justify-center rounded-lg border px-3 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-border-focus)]',
-                          action.primary
-                            ? 'theme-primary-action border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] text-[color:var(--theme-button-primary-text)] hover:bg-[var(--sage)]'
-                            : 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)]',
-                        )}
-                        data-testid={`member-home-market-action-${action.key}`}
-                      >
-                        <span className="truncate">{action.label}</span>
-                      </Link>
-                    ))}
-                  </div>
-                  <p data-testid="member-home-market-safety" className="mt-2.5 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
-                    {memberMarketBrief.safety}
-                  </p>
                 </section>
+              </section>
+
+              {/* D. Bounded reliability strip — after ledger content, not a first-fold wall */}
+              <aside
+                className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'px-3.5 py-2 sm:px-4')}
+                data-testid="member-home-market-reliability"
+                data-member-home-zone="evidence-quality"
+              >
+                <ResearchDataQualityComposition
+                  density="editorial"
+                  locale={researchLocale}
+                  compact
+                  className="gap-1.5"
+                  title={isEnglish ? 'Reliability / freshness' : '可靠性 / 新鲜度'}
+                  facets={qualityFacets}
+                  statusSlot={(
+                    <ProductReadModelStatusStrip
+                      model={memberMarketBrief.productReadModel}
+                      language={locale}
+                      title={isEnglish ? 'Dashboard readiness' : 'Dashboard 就绪度'}
+                      testId="member-home-dashboard-product-read-model"
+                      className="!px-2.5 !py-2"
+                    />
+                  )}
+                >
+                  <p className="text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)]">
+                    <span className="mr-1.5 font-semibold text-[color:var(--wolfy-text-primary)]">
+                      {homeDailyResearch.reliabilityLabel}
+                    </span>
+                    {homeDailyResearch.reliabilityDetail}
+                  </p>
+                </ResearchDataQualityComposition>
+              </aside>
+
+              {/* E. Contextual journey handoffs — real routes only; not a feature directory */}
+              <section
+                className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-3 sm:px-5')}
+                data-testid="member-home-journey-handoffs"
+                data-home-journey-step="handoffs"
+                data-member-home-zone="journey-handoffs"
+              >
+                <MetaLabel>
+                  {isEnglish ? 'Continue research' : '继续研究'}
+                </MetaLabel>
+                <SectionTitle as="h2" className="mt-1">
+                  {isEnglish ? 'Market → Radar / Stock / Watchlist' : '市场 → 雷达 / 个股 / 观察列表'}
+                </SectionTitle>
+                <p className="mt-1.5 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                  {isEnglish
+                    ? 'Use returned market context first, then open a real research surface. No fabricated candidates.'
+                    : '先用已返回的市场上下文，再进入真实研究入口；不编造候选。'}
+                </p>
+                <div className="mt-2.5 grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-4" data-testid="member-home-market-actions">
+                  {journeyHandoffActions.map((action) => (
+                    <Link
+                      key={action.key}
+                      to={action.href}
+                      className={cn(
+                        'inline-flex min-h-10 min-w-0 items-center justify-center rounded-lg border px-3 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-border-focus)]',
+                        action.primary
+                          ? 'theme-primary-action border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] text-[color:var(--theme-button-primary-text)] hover:bg-[var(--sage)]'
+                          : 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)]',
+                      )}
+                      data-testid={`member-home-market-action-${action.key}`}
+                    >
+                      <span className="truncate">{action.label}</span>
+                    </Link>
+                  ))}
+                </div>
+                <p data-testid="member-home-market-safety" className="mt-2.5 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+                  {memberMarketBrief.safety}
+                </p>
               </section>
                   </>
                 );

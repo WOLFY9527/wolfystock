@@ -35,6 +35,7 @@ import type {
 import {
   MarketOverviewWorkbenchTopSurface,
   MarketOverviewVisualEvidenceStrip,
+  MarketOverviewResearchHandoff,
   type MarketOverviewBriefingSummaryView,
   type MarketOverviewCategoryTabView,
   type MarketOverviewDataStateStripView,
@@ -3409,6 +3410,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
       data-bento-surface="true"
       data-market-overview-anatomy="research-evidence-composition"
       data-research-density="research"
+      data-market-journey-sequence="observation>main-path>key-metrics>drivers>data-state>next-research-handoff"
       className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden no-scrollbar text-[color:var(--wolfy-text-primary)]"
     >
       <MarketOverviewWorkbenchTopSurface
@@ -3437,6 +3439,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
         data-testid="market-overview-first-workbench"
         data-market-composition="research-workbench-path"
         data-market-research-flow="primary-market-path"
+        data-market-journey-step="main-path"
         aria-label={primaryPathLabel}
         className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] xl:items-stretch"
       >
@@ -3447,6 +3450,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
           data-testid="market-overview-hero-lane"
           data-card-tier="hero"
           data-evidence-group-role="regime-breadth"
+          data-market-journey-step="key-metrics"
           className="flex min-w-0 flex-col gap-4"
         >
           {heroRows}
@@ -3465,6 +3469,8 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
         />
       </Suspense>
       <MarketOverviewVisualEvidenceStrip cards={visualEvidenceCards} />
+      {/* After observation → path → metrics → drivers → data state */}
+      <MarketOverviewResearchHandoff locale={language === 'en' ? 'en' : 'zh'} />
     </div>
   );
 };

@@ -2968,9 +2968,17 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('member-home-research-queue').compareDocumentPosition(screen.getByTestId('member-home-watch-changes'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.getByTestId('member-home-watch-changes').compareDocumentPosition(screen.getByTestId('member-home-index-path'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.getByTestId('member-home-index-path').compareDocumentPosition(screen.getByTestId('member-home-data-ledger'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(screen.getByTestId('member-home-market-brief')).toHaveAttribute(
+      'data-home-journey-sequence',
+      'morning-note>research-queue>watch-changes>index-path>data-ledger>handoffs',
+    );
+    expect(screen.getByTestId('member-home-morning-decision-note').compareDocumentPosition(screen.getByTestId('member-home-research-queue'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(screen.getByTestId('member-home-data-ledger').compareDocumentPosition(screen.getByTestId('member-home-journey-handoffs'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.getByTestId('member-home-market-action-market-overview')).toHaveTextContent('查看市场研究');
     expect(screen.getByTestId('member-home-market-action-research-radar')).toHaveTextContent('打开研究雷达');
-    expect(screen.getByTestId('member-home-market-action-scanner')).toHaveTextContent('查看扫描器');
+    expect(screen.getByTestId('member-home-market-action-watchlist')).toHaveTextContent('打开观察列表');
+    expect(screen.getByTestId('member-home-market-action-stock-search')).toHaveTextContent('搜索个股');
+    expect(screen.queryByTestId('member-home-market-action-scanner')).not.toBeInTheDocument();
     expect(screen.getByTestId('member-home-market-safety')).toHaveTextContent('研究观察，不构成投资建议。');
     expect(screen.queryByTestId('member-home-beta-entry')).not.toBeInTheDocument();
     expect(screen.queryByTestId('member-home-beta-boundary')).not.toBeInTheDocument();
