@@ -711,12 +711,6 @@ const DeterministicBacktestResultPage: React.FC = () => {
   }, [run?.id]);
 
   useEffect(() => {
-    document.title = hasValidRunId
-      ? `${backtestCopy('resultPage.documentTitle')} #${parsedRunId} - WolfyStock`
-      : `${backtestCopy('resultPage.documentTitle')} - WolfyStock`;
-  }, [backtestCopy, hasValidRunId, parsedRunId]);
-
-  useEffect(() => {
     setAvailablePresets(loadRuleBacktestPresets());
   }, []);
 

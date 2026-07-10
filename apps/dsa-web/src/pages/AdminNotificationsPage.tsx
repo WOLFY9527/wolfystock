@@ -362,10 +362,6 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
   }, []);
 
   useEffect(() => {
-    document.title = isEnglish ? 'Admin Notifications - WolfyStock' : '管理通知 - WolfyStock';
-  }, [isEnglish]);
-
-  useEffect(() => {
     void loadAll();
   }, [loadAll]);
 

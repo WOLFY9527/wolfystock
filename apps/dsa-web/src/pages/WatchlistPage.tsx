@@ -1999,10 +1999,6 @@ const WatchlistPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    document.title = language === 'en' ? 'Watchlist - WolfyStock' : '观察列表 - WolfyStock';
-  }, [language]);
-
-  useEffect(() => {
     if (routeContext.symbol) {
       setQuery(routeContext.symbol);
     }

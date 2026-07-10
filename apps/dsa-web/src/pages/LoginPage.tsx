@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
@@ -212,10 +212,6 @@ const LoginPage: React.FC = () => {
         '游客预览仍可用，不改变账户状态。',
         '会话权限继续由现有 auth provider 负责。',
       ];
-
-  useEffect(() => {
-    document.title = copy.documentTitle;
-  }, [copy.documentTitle]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();

@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { WorkspacePageHeader } from '../components/common/WorkspacePageHeader';
 import { TerminalPageShell } from '../components/terminal/TerminalPrimitives';
 import { previewReport } from '../dev/reportPreviewFixture';
@@ -18,10 +18,6 @@ const PreviewFullReportDrawerPage: React.FC = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [language, setLanguage] = useState<ReportLanguage>('zh');
   const normalizedPreviewReport = normalizeFrontendReportContract(previewReport);
-
-  useEffect(() => {
-    document.title = t('previewFullReport.documentTitle');
-  }, [t]);
 
   const content = language === 'en'
     ? translate('en', 'previewFullReport.markdown')

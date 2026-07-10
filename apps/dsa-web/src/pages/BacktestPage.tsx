@@ -287,10 +287,6 @@ const BacktestPage: React.FC = () => {
   const ruleBacktestSubmitInFlightRef = useRef(false);
   const normalRuleLaunchInFlightRef = useRef(false);
 
-  useEffect(() => {
-    document.title = bt(language, 'page.documentTitle');
-  }, [language]);
-
   const [activeModule, setActiveModule] = useState<ActiveModule>('rule');
   const [controlPanelMode, setControlPanelMode] = useState<ControlPanelMode>('normal');
   const [codeFilter, setCodeFilter] = useState('');

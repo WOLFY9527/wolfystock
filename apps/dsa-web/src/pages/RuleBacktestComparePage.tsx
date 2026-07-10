@@ -1293,10 +1293,6 @@ const RuleBacktestComparePage: React.FC = () => {
   });
 
   useEffect(() => {
-    document.title = '规则回测比较工作台 - WolfyStock';
-  }, []);
-
-  useEffect(() => {
     let cancelled = false;
     queueMicrotask(() => {
       if (!cancelled) {

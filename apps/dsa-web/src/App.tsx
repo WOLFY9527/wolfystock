@@ -19,6 +19,7 @@ import {
   type AuthBootstrapRouteKind,
 } from './utils/appRouteGuards';
 import { canAccessAdminPath, isAdminMissionControlPath, isAdminMissionControlPrototypeEnabled } from './utils/adminCapabilities';
+import { DocumentTitleLifecycle } from './utils/DocumentTitleLifecycle';
 
 const APP_BOOT_SPLASH_MIN_MS = 320;
 const APP_BOOT_SPLASH_FADE_MS = 180;
@@ -748,7 +749,7 @@ export const AppContent: React.FC = () => {
 
 const PreviewRoutes: React.FC = () => {
   const location = useLocation();
-  const { setLanguage } = useI18n();
+  const { language, setLanguage } = useI18n();
   const routeLocale = parseLocaleFromPathname(location.pathname);
 
   useEffect(() => {
@@ -758,17 +759,20 @@ const PreviewRoutes: React.FC = () => {
   }, [routeLocale, setLanguage]);
 
   return (
-    <PreviewShell>
-      <Suspense fallback={<RouteLoadingFallback language={routeLocale || 'zh'} />}>
-        <Routes>
-          <Route path="/__preview/report" element={<PreviewReportPage />} />
-          <Route path="/__preview/full-report" element={<PreviewFullReportDrawerPage />} />
-          <Route path="/:locale/__preview/report" element={<PreviewReportPage />} />
-          <Route path="/:locale/__preview/full-report" element={<PreviewFullReportDrawerPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </Suspense>
-    </PreviewShell>
+    <>
+      <DocumentTitleLifecycle language={language} />
+      <PreviewShell>
+        <Suspense fallback={<RouteLoadingFallback language={routeLocale || 'zh'} />}>
+          <Routes>
+            <Route path="/__preview/report" element={<PreviewReportPage />} />
+            <Route path="/__preview/full-report" element={<PreviewFullReportDrawerPage />} />
+            <Route path="/:locale/__preview/report" element={<PreviewReportPage />} />
+            <Route path="/:locale/__preview/full-report" element={<PreviewFullReportDrawerPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </Suspense>
+      </PreviewShell>
+    </>
   );
 };
 
@@ -807,9 +811,20 @@ const AppBody: React.FC = () => {
   return (
     <AppErrorBoundary>
       <AuthProvider>
-        <AppContent />
+        <DocumentTitleOwner />
       </AuthProvider>
     </AppErrorBoundary>
+  );
+};
+
+const DocumentTitleOwner: React.FC = () => {
+  const { language } = useI18n();
+
+  return (
+    <>
+      <DocumentTitleLifecycle language={language} />
+      <AppContent />
+    </>
   );
 };
 

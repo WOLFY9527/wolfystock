@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
@@ -34,10 +34,6 @@ const ResetPasswordPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    document.title = resetCopy(language, 'documentTitle');
-  }, [language]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();

@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, lazy } from 'react';
 import { WorkspacePageHeader } from '../components/common/WorkspacePageHeader';
 import { TerminalPageShell } from '../components/terminal/TerminalPrimitives';
 import { previewChartFixtures, previewReport } from '../dev/reportPreviewFixture';
@@ -14,10 +14,6 @@ const LazyStandardReportPanel = lazy(async () => {
 const PreviewReportPage: React.FC = () => {
   const { t } = useI18n();
   const normalizedPreviewReport = normalizeFrontendReportContract(previewReport);
-
-  useEffect(() => {
-    document.title = t('previewReport.documentTitle');
-  }, [t]);
 
   return (
     <TerminalPageShell

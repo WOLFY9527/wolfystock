@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { translate } from '../../i18n/core';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
+import { getDocumentTitle } from '../../utils/documentTitle';
 import PreviewFullReportDrawerPage from '../PreviewFullReportDrawerPage';
 
 vi.mock('../../components/common/Drawer', () => ({
@@ -100,6 +101,6 @@ describe('PreviewFullReportDrawerPage', () => {
     expect(screen.getByText(translate('en', 'previewFullReport.description'))).toBeInTheDocument();
     expect(screen.getByText(translate('en', 'previewFullReport.fullModeTitle'))).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('en', 'previewFullReport.openEnglish') })).toBeInTheDocument();
-    expect(document.title).toBe(translate('en', 'previewFullReport.documentTitle'));
+    expect(getDocumentTitle('/en/__preview/full-report', 'zh')).toBe(translate('en', 'previewFullReport.documentTitle'));
   });
 });

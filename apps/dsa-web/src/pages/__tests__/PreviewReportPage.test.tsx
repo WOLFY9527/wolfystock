@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { translate } from '../../i18n/core';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { previewReport } from '../../dev/reportPreviewFixture';
+import { getDocumentTitle } from '../../utils/documentTitle';
 import PreviewReportPage from '../PreviewReportPage';
 
 const { standardReportPanelImportSpy } = vi.hoisted(() => ({
@@ -38,7 +39,7 @@ describe('PreviewReportPage', () => {
     expect(page).not.toHaveClass('workspace-page--preview');
     expect(screen.getByText(translate('zh', 'previewReport.title'))).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'previewReport.description'))).toBeInTheDocument();
-    expect(document.title).toBe(translate('zh', 'previewReport.documentTitle'));
+    expect(getDocumentTitle('/__preview/report', 'zh')).toBe(translate('zh', 'previewReport.documentTitle'));
     expect(screen.getByTestId('preview-report-loading')).toBeInTheDocument();
     expect(await screen.findByTestId('standard-report-panel')).toHaveTextContent(previewReport.summary.analysisSummary);
     await waitFor(() => {
@@ -60,7 +61,7 @@ describe('PreviewReportPage', () => {
 
     expect(screen.getByText(translate('en', 'previewReport.title'))).toBeInTheDocument();
     expect(screen.getByText(translate('en', 'previewReport.description'))).toBeInTheDocument();
-    expect(document.title).toBe(translate('en', 'previewReport.documentTitle'));
+    expect(getDocumentTitle('/en/__preview/report', 'zh')).toBe(translate('en', 'previewReport.documentTitle'));
     expect(await screen.findByTestId('standard-report-panel')).toBeInTheDocument();
   });
 });

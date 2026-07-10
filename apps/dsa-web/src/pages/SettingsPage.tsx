@@ -587,10 +587,6 @@ const SettingsPage: React.FC = () => {
   const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
 
   useEffect(() => {
-    document.title = t('settings.documentTitle');
-  }, [t]);
-
-  useEffect(() => {
     void load();
   }, [load]);
 
