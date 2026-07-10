@@ -3095,23 +3095,6 @@ const PortfolioPage: React.FC = () => {
         : 'Real holdings, risk, and recent activity appear automatically after completion',
     },
   ];
-  const emptyRiskPreviewItems = [
-    {
-      key: 'position',
-      label: language === 'zh' ? '集中度' : 'Concentration',
-      detail: language === 'zh' ? '首笔持仓后生成' : 'Appears after the first holding',
-    },
-    {
-      key: 'currency',
-      label: language === 'zh' ? '币种暴露' : 'Currency exposure',
-      detail: language === 'zh' ? '按真实持仓自动汇总' : 'Aggregated from real holdings automatically',
-    },
-    {
-      key: 'market',
-      label: language === 'zh' ? '市场暴露' : 'Market exposure',
-      detail: language === 'zh' ? '按组合结构自动分类' : 'Classified from the real portfolio structure',
-    },
-  ];
   const buildHoldingTrustItems = (row: FlatPosition) => uniqueTrustItems([
     {
       key: `${row.symbol}-freshness`,
@@ -3405,8 +3388,8 @@ const PortfolioPage: React.FC = () => {
       ? (language === 'zh' ? '确认FX与估值' : 'Confirm FX and valuation')
       : (language === 'zh' ? '查看风险暴露' : 'Review risk exposure');
   const portfolioProductizationOrder = language === 'zh'
-    ? ['账户上下文', '组合观察', '集中度 / 暴露', '持仓账本', '新鲜度', '限制', '导入预览', '显式确认', '个股研究交接']
-    : ['Account context', 'Portfolio observation', 'Concentration / exposure', 'Holdings ledger', 'Freshness', 'Limitations', 'Import preview', 'Explicit confirm', 'Stock Research handoff'];
+    ? ['账户上下文', '暴露摘要', '风险集中度', '估值新鲜度', '导入接入', '持仓账本', '个股研究交接', '限制', '导入预览', '显式确认']
+    : ['Account context', 'Exposure summary', 'Risk concentration', 'Valuation freshness', 'Import onboarding', 'Holdings ledger', 'Stock Research handoff', 'Limitations', 'Import preview', 'Explicit confirm'];
   const primaryResearchHolding = positionRows.find((row) => row.symbol);
   const stockResearchHandoffPath = primaryResearchHolding
     ? buildResearchWorkspacePath('stock-structure', language, {
@@ -4199,8 +4182,218 @@ const PortfolioPage: React.FC = () => {
               )}
             </div>
 
-            <div data-testid="portfolio-row-routing" className="order-3 col-span-12 min-w-0 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(340px,5fr)] 2xl:gap-5 items-start">
+            <div data-testid="portfolio-row-routing" className="order-3 col-span-12 min-w-0 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(320px,5fr)_minmax(0,7fr)] 2xl:gap-5 items-start">
               <div data-testid="portfolio-primary-lane" className="min-w-0 flex flex-col gap-4">
+                <TerminalPanel as="section" data-testid="portfolio-risk-card" className="min-w-0 flex flex-col gap-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{riskTitle}</h2>
+                      <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">
+                        {hasHoldings
+                          ? (language === 'zh' ? '先看集中度，再看币种与市场暴露。' : 'Start with concentration, then review currency and market exposure.')
+                          : (language === 'zh' ? '暂无持仓，风险画像将在持仓出现后自动生成。' : 'Risk profile appears automatically once holdings exist.')}
+                      </p>
+                    </div>
+                    <span data-testid="portfolio-concentration-label">
+                      <PillBadge
+                        variant={topPositionPercent >= 50 ? 'danger' : topPositionPercent >= 20 ? 'warning' : hasHoldings ? 'success' : 'default'}
+                        className={hasHoldings ? concentrationToneClass : 'text-[color:var(--wolfy-text-muted)]'}
+                      >
+                        {concentrationLabel}
+                      </PillBadge>
+                    </span>
+                  </div>
+                  {hasHoldings ? (
+                    <>
+                      <div data-testid="portfolio-risk-overview" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '最大持仓' : 'Largest Position'}</div>
+                          <div className="mt-2 truncate text-sm text-[color:var(--wolfy-text-primary)]">{topPosition?.label || '--'}</div>
+                          <div className="mt-1 font-mono text-xs text-[color:var(--wolfy-text-muted)]">{formatPercent(topPosition?.percent)}</div>
+                        </div>
+                        <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '主币种' : 'Primary Currency'}</div>
+                          <div className="mt-2 truncate text-sm text-[color:var(--wolfy-text-primary)]">{topCurrency?.label || '--'}</div>
+                          <div className="mt-1 font-mono text-xs text-[color:var(--wolfy-text-muted)]">{formatPercent(topCurrency?.percent)}</div>
+                        </div>
+                        <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '主市场' : 'Primary Market'}</div>
+                          <div className="mt-2 truncate text-sm text-[color:var(--wolfy-text-primary)]">{formatExposureMarketLabel(topMarket, language)}</div>
+                          <div className="mt-1 font-mono text-xs text-[color:var(--wolfy-text-muted)]">{formatPercent(topMarket?.percent)}</div>
+                        </div>
+                      </div>
+                      <div data-testid="portfolio-concentration-drilldown" className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '持仓集中度' : 'Concentration'}</div>
+                          <div className={`font-mono text-xs ${concentrationToneClass}`}>{formatPercent(topPosition?.percent)}</div>
+                        </div>
+                        <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{concentrationDescription}</p>
+                      </div>
+                      <div data-testid="portfolio-risk-hints" className="flex flex-wrap gap-1.5">
+                        {(riskHintTexts.length ? riskHintTexts : [language === 'zh' ? '暂无显著集中风险' : 'No notable concentration risk']).map((hint) => (
+                          <PillBadge key={hint} variant="default" className="text-[color:var(--wolfy-text-secondary)]">{hint}</PillBadge>
+                        ))}
+                        {filteredSafeRiskWarningLabels.map((warning) => (
+                          <PillBadge key={warning} variant="warning" className="text-[color:var(--wolfy-text-secondary)]">{warning}</PillBadge>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div data-testid="portfolio-risk-overview" className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
+                        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '风险与暴露' : 'Risk and exposure'}</div>
+                            <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{concentrationDescription}</p>
+                          </div>
+                          <TerminalChip variant="neutral">{language === 'zh' ? '等待首笔持仓' : 'Awaiting first holding'}</TerminalChip>
+                        </div>
+                      </div>
+                      <div data-testid="portfolio-concentration-drilldown" className="sr-only">
+                        {concentrationDescription}
+                      </div>
+                      <div data-testid="portfolio-risk-hints" className="flex flex-wrap gap-1.5">
+                        <PillBadge variant="default" className="text-[color:var(--wolfy-text-secondary)]">{language === 'zh' ? '首笔持仓后自动生成' : 'Generated after the first holding'}</PillBadge>
+                        {hasHistory ? <PillBadge variant="warning" className="text-[color:var(--wolfy-text-secondary)]">{noHoldingsHistoryNote}</PillBadge> : null}
+                      </div>
+                    </>
+                  )}
+                  <TerminalDisclosure
+                    title={exposureSummaryTitle}
+                    summary={exposureSummaryDisclosureSummary}
+                    data-testid="portfolio-risk-exposure-summary"
+                    className="border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]"
+                  >
+                    <div data-testid="portfolio-risk-exposure-summary-body" className="flex flex-col gap-3">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {exposureSummaryRows.map((item) => (
+                          <div key={item.key} className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{item.label}</div>
+                            <div className="mt-2 truncate text-sm font-medium text-[color:var(--wolfy-text-primary)]">{item.value}</div>
+                            <div className="mt-1 font-mono text-xs text-[color:var(--wolfy-text-muted)]">{item.detail}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                        {exposureSummaryBasisNote}
+                      </p>
+                      {exposureSummaryTrustItems.length ? (
+                        <PortfolioTrustStrip
+                          title={language === 'zh' ? '数据状态' : 'Data posture'}
+                          items={exposureSummaryTrustItems}
+                          data-testid="portfolio-risk-exposure-trust-strip"
+                        />
+                      ) : null}
+                    </div>
+                  </TerminalDisclosure>
+                  <PortfolioRiskExposureReadinessPanel
+                    readiness={snapshot?.riskExposureReadiness}
+                    language={language}
+                  />
+                  <PortfolioExposureResearchContextPanel
+                    context={snapshot?.exposureResearchContext}
+                    lineageSummary={portfolioLineageSummary}
+                    language={language}
+                  />
+                  {hasHoldings ? (
+                    <PortfolioScenarioRiskPanel
+                      snapshotAsOf={snapshot?.asOf}
+                      positions={scenarioRiskPositions}
+                      onRunScenario={(payload) => portfolioApi.projectScenarioRisk(payload)}
+                    />
+                  ) : (
+                    <TerminalNotice variant="neutral">
+                      {language === 'zh'
+                        ? '压力情景入口会在持仓出现后启用，并只基于真实可见持仓做观察性估算。'
+                        : 'Scenario entry becomes available after holdings exist and only runs observational estimates on visible real positions.'}
+                    </TerminalNotice>
+                  )}
+                </TerminalPanel>
+
+                <TerminalPanel as="section" data-testid="portfolio-valuation-panel" className={cn('min-w-0 flex flex-col', hasHoldings ? 'gap-4' : 'gap-2')}>
+                  <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '估值与新鲜度' : 'Valuation freshness'}</h2>
+                      <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">
+                        {hasFreshValuationState
+                          ? (language === 'zh' ? '当前估值可直接用于观察组合表现。' : 'Current valuation is ready for portfolio observation.')
+                          : consumerDataNotice || (language === 'zh' ? '部分估值信息仍在确认，请结合下方数据说明阅读。' : 'Some valuation details are still being confirmed. Review the notes below for context.')}
+                      </p>
+                    </div>
+                    {!hasHoldings ? (
+                      <TerminalChip variant="neutral">{language === 'zh' ? '首笔持仓后显示' : 'After first holding'}</TerminalChip>
+                    ) : null}
+                  </div>
+                  {hasHoldings ? (
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '价格快照' : 'Pricing snapshot'}</div>
+                        <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{valuationSnapshotNote}</div>
+                      </div>
+                      <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '汇率更新时间' : 'FX updated'}</div>
+                        <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{hasFxUnavailable ? fxUnavailableLabel : fxLastUpdated}</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                      {language === 'zh'
+                        ? '不会用示例价格或零值代替缺失估值；汇率缺失也不等于零。'
+                        : 'Missing valuation is not shown as zero; missing FX is not treated as zero.'}
+                    </div>
+                  )}
+                  <div data-testid="portfolio-valuation-next-evidence" className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                    {valuationNextEvidenceCopy}
+                  </div>
+                  {valuationTrustItems.length ? (
+                    <PortfolioTrustStrip
+                      title={language === 'zh' ? '估值状态' : 'Valuation state'}
+                      items={valuationTrustItems.slice(0, 3)}
+                      data-testid="portfolio-valuation-trust-strip"
+                    />
+                  ) : null}
+                  {hasHoldings ? (
+                    <div data-testid="portfolio-valuation-evidence-pack" className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
+                            {language === 'zh' ? '估值证据包' : 'Valuation evidence pack'}
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                            {portfolioValuationEvidencePack
+                              ? (language === 'zh'
+                                ? 'JSON 仅包含当前页面已展示或可安全派生的估值、价格与汇率证据。'
+                                : 'JSON includes only valuation, price, and FX evidence already visible or safely derived on this page.')
+                              : (language === 'zh'
+                                ? '估值证据包暂不可导出：估值不可用或仍待补证。'
+                                : 'Valuation evidence pack cannot be exported yet: valuation is unavailable or pending evidence.')}
+                          </p>
+                        </div>
+                        {portfolioValuationEvidencePack ? (
+                          <div className="flex shrink-0 flex-wrap gap-2">
+                            <TerminalButton type="button" variant="secondary" className="h-9 px-3" onClick={handleCopyValuationEvidence}>
+                              <Copy className="size-3.5" aria-hidden="true" />
+                              {language === 'zh' ? '复制估值证据包' : 'Copy valuation evidence'}
+                            </TerminalButton>
+                            <TerminalButton type="button" variant="secondary" className="h-9 px-3" onClick={handleDownloadValuationEvidence}>
+                              <Download className="size-3.5" aria-hidden="true" />
+                              {language === 'zh' ? '导出估值证据包' : 'Export valuation evidence'}
+                            </TerminalButton>
+                          </div>
+                        ) : (
+                          <TerminalChip variant="caution">{language === 'zh' ? '待补证' : 'Evidence pending'}</TerminalChip>
+                        )}
+                      </div>
+                      {valuationEvidenceFeedback ? (
+                        <div className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{valuationEvidenceFeedback}</div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </TerminalPanel>
+
+              </div>
+
+              <div data-testid="portfolio-secondary-lane" className="min-w-0 flex flex-col gap-4">
                 <TerminalPanel
                   as="section"
                   data-testid="portfolio-current-holdings-panel"
@@ -4294,8 +4487,8 @@ const PortfolioPage: React.FC = () => {
                               );
                             })}
 	                          </div>
-		                          <TerminalDenseTable className="hidden border-0 bg-transparent lg:block">
-	                            <table className="min-w-[760px] w-full text-left text-xs">
+		                          <TerminalDenseTable className="hidden max-w-full overflow-x-auto border-0 bg-transparent lg:block">
+	                            <table className="min-w-[640px] w-full max-w-full text-left text-xs">
 	                              <caption className="sr-only">
 	                                {language === 'zh' ? '持仓研究账本' : 'Holdings research ledger'}
 	                              </caption>
@@ -4391,135 +4584,8 @@ const PortfolioPage: React.FC = () => {
                 </TerminalPanel>
               </div>
 
-              <div data-testid="portfolio-secondary-lane" className="min-w-0 flex flex-col gap-4">
-                <TerminalPanel as="section" data-testid="portfolio-risk-card" className="min-w-0 flex flex-col gap-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{riskTitle}</h2>
-                      <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">
-                        {hasHoldings
-                          ? (language === 'zh' ? '先看集中度，再看币种与市场暴露。' : 'Start with concentration, then review currency and market exposure.')
-                          : (language === 'zh' ? '暂无持仓，风险画像将在持仓出现后自动生成。' : 'Risk profile appears automatically once holdings exist.')}
-                      </p>
-                    </div>
-                    <span data-testid="portfolio-concentration-label">
-                      <PillBadge
-                        variant={topPositionPercent >= 50 ? 'danger' : topPositionPercent >= 20 ? 'warning' : hasHoldings ? 'success' : 'default'}
-                        className={hasHoldings ? concentrationToneClass : 'text-[color:var(--wolfy-text-muted)]'}
-                      >
-                        {concentrationLabel}
-                      </PillBadge>
-                    </span>
-                  </div>
-                  {hasHoldings ? (
-                    <>
-                      <div data-testid="portfolio-risk-overview" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                        <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '最大持仓' : 'Largest Position'}</div>
-                          <div className="mt-2 truncate text-sm text-[color:var(--wolfy-text-primary)]">{topPosition?.label || '--'}</div>
-                          <div className="mt-1 font-mono text-xs text-[color:var(--wolfy-text-muted)]">{formatPercent(topPosition?.percent)}</div>
-                        </div>
-                        <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '主币种' : 'Primary Currency'}</div>
-                          <div className="mt-2 truncate text-sm text-[color:var(--wolfy-text-primary)]">{topCurrency?.label || '--'}</div>
-                          <div className="mt-1 font-mono text-xs text-[color:var(--wolfy-text-muted)]">{formatPercent(topCurrency?.percent)}</div>
-                        </div>
-                        <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '主市场' : 'Primary Market'}</div>
-                          <div className="mt-2 truncate text-sm text-[color:var(--wolfy-text-primary)]">{formatExposureMarketLabel(topMarket, language)}</div>
-                          <div className="mt-1 font-mono text-xs text-[color:var(--wolfy-text-muted)]">{formatPercent(topMarket?.percent)}</div>
-                        </div>
-                      </div>
-                      <div data-testid="portfolio-concentration-drilldown" className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '持仓集中度' : 'Concentration'}</div>
-                          <div className={`font-mono text-xs ${concentrationToneClass}`}>{formatPercent(topPosition?.percent)}</div>
-                        </div>
-                        <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{concentrationDescription}</p>
-                      </div>
-                      <div data-testid="portfolio-risk-hints" className="flex flex-wrap gap-1.5">
-                        {(riskHintTexts.length ? riskHintTexts : [language === 'zh' ? '暂无显著集中风险' : 'No notable concentration risk']).map((hint) => (
-                          <PillBadge key={hint} variant="default" className="text-[color:var(--wolfy-text-secondary)]">{hint}</PillBadge>
-                        ))}
-                        {filteredSafeRiskWarningLabels.map((warning) => (
-                          <PillBadge key={warning} variant="warning" className="text-[color:var(--wolfy-text-secondary)]">{warning}</PillBadge>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div data-testid="portfolio-risk-overview" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                        {emptyRiskPreviewItems.map((item) => (
-                          <div key={item.key} className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{item.label}</div>
-                            <div className="mt-2 text-sm font-medium text-[color:var(--wolfy-text-primary)]">{language === 'zh' ? '等待首笔持仓' : 'Awaiting first holding'}</div>
-                            <div className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{item.detail}</div>
-                          </div>
-                        ))}
-                      </div>
-                      <div data-testid="portfolio-concentration-drilldown" className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '风险工作区说明' : 'Risk workspace note'}</div>
-                        <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{concentrationDescription}</p>
-                      </div>
-                      <div data-testid="portfolio-risk-hints" className="flex flex-wrap gap-1.5">
-                        <PillBadge variant="default" className="text-[color:var(--wolfy-text-secondary)]">{language === 'zh' ? '首笔持仓后自动生成' : 'Generated after the first holding'}</PillBadge>
-                        {hasHistory ? <PillBadge variant="warning" className="text-[color:var(--wolfy-text-secondary)]">{noHoldingsHistoryNote}</PillBadge> : null}
-                      </div>
-                    </>
-                  )}
-                  <TerminalDisclosure
-                    title={exposureSummaryTitle}
-                    summary={exposureSummaryDisclosureSummary}
-                    data-testid="portfolio-risk-exposure-summary"
-                    className="border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]"
-                  >
-                    <div data-testid="portfolio-risk-exposure-summary-body" className="flex flex-col gap-3">
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        {exposureSummaryRows.map((item) => (
-                          <div key={item.key} className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{item.label}</div>
-                            <div className="mt-2 truncate text-sm font-medium text-[color:var(--wolfy-text-primary)]">{item.value}</div>
-                            <div className="mt-1 font-mono text-xs text-[color:var(--wolfy-text-muted)]">{item.detail}</div>
-                          </div>
-                        ))}
-                      </div>
-                      <p className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
-                        {exposureSummaryBasisNote}
-                      </p>
-                      {exposureSummaryTrustItems.length ? (
-                        <PortfolioTrustStrip
-                          title={language === 'zh' ? '数据状态' : 'Data posture'}
-                          items={exposureSummaryTrustItems}
-                          data-testid="portfolio-risk-exposure-trust-strip"
-                        />
-                      ) : null}
-                    </div>
-                  </TerminalDisclosure>
-                  <PortfolioRiskExposureReadinessPanel
-                    readiness={snapshot?.riskExposureReadiness}
-                    language={language}
-                  />
-                  <PortfolioExposureResearchContextPanel
-                    context={snapshot?.exposureResearchContext}
-                    lineageSummary={portfolioLineageSummary}
-                    language={language}
-                  />
-                  {hasHoldings ? (
-                    <PortfolioScenarioRiskPanel
-                      snapshotAsOf={snapshot?.asOf}
-                      positions={scenarioRiskPositions}
-                      onRunScenario={(payload) => portfolioApi.projectScenarioRisk(payload)}
-                    />
-                  ) : (
-                    <TerminalNotice variant="neutral">
-                      {language === 'zh'
-                        ? '压力情景入口会在持仓出现后启用，并只基于真实可见持仓做观察性估算。'
-                        : 'Scenario entry becomes available after holdings exist and only runs observational estimates on visible real positions.'}
-                    </TerminalNotice>
-                  )}
-                </TerminalPanel>
-
-                <TerminalPanel as="section" data-testid="portfolio-structure-review-panel" className="min-w-0 flex flex-col gap-4">
+              <div data-testid="portfolio-research-handoff-lane" className="min-w-0 col-span-full flex flex-col gap-4 xl:col-span-2">
+                <TerminalPanel as="section" data-testid="portfolio-structure-review-panel" className={cn('min-w-0 flex flex-col', hasHoldings ? 'gap-4' : 'gap-2')}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '组合结构审查' : 'Portfolio structure review'}</h2>
@@ -4628,75 +4694,7 @@ const PortfolioPage: React.FC = () => {
                   )}
                 </TerminalPanel>
 
-                <TerminalPanel as="section" data-testid="portfolio-valuation-panel" className="min-w-0 flex flex-col gap-4">
-                  <div>
-                    <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '估值与新鲜度' : 'Valuation freshness'}</h2>
-                    <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">
-                      {hasFreshValuationState
-                        ? (language === 'zh' ? '当前估值可直接用于观察组合表现。' : 'Current valuation is ready for portfolio observation.')
-                        : consumerDataNotice || (language === 'zh' ? '部分估值信息仍在确认，请结合下方数据说明阅读。' : 'Some valuation details are still being confirmed. Review the notes below for context.')}
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '价格快照' : 'Pricing snapshot'}</div>
-                      <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{valuationSnapshotNote}</div>
-                    </div>
-                    <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '汇率更新时间' : 'FX updated'}</div>
-                      <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{hasFxUnavailable ? fxUnavailableLabel : fxLastUpdated}</div>
-                    </div>
-                  </div>
-                  <div data-testid="portfolio-valuation-next-evidence" className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
-                    {valuationNextEvidenceCopy}
-                  </div>
-                  {valuationTrustItems.length ? (
-                    <PortfolioTrustStrip
-                      title={language === 'zh' ? '估值状态' : 'Valuation state'}
-                      items={valuationTrustItems.slice(0, 3)}
-                      data-testid="portfolio-valuation-trust-strip"
-                    />
-                  ) : null}
-                  {hasHoldings ? (
-                    <div data-testid="portfolio-valuation-evidence-pack" className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
-                            {language === 'zh' ? '估值证据包' : 'Valuation evidence pack'}
-                          </div>
-                          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
-                            {portfolioValuationEvidencePack
-                              ? (language === 'zh'
-                                ? 'JSON 仅包含当前页面已展示或可安全派生的估值、价格与汇率证据。'
-                                : 'JSON includes only valuation, price, and FX evidence already visible or safely derived on this page.')
-                              : (language === 'zh'
-                                ? '估值证据包暂不可导出：估值不可用或仍待补证。'
-                                : 'Valuation evidence pack cannot be exported yet: valuation is unavailable or pending evidence.')}
-                          </p>
-                        </div>
-                        {portfolioValuationEvidencePack ? (
-                          <div className="flex shrink-0 flex-wrap gap-2">
-                            <TerminalButton type="button" variant="secondary" className="h-9 px-3" onClick={handleCopyValuationEvidence}>
-                              <Copy className="size-3.5" aria-hidden="true" />
-                              {language === 'zh' ? '复制估值证据包' : 'Copy valuation evidence'}
-                            </TerminalButton>
-                            <TerminalButton type="button" variant="secondary" className="h-9 px-3" onClick={handleDownloadValuationEvidence}>
-                              <Download className="size-3.5" aria-hidden="true" />
-                              {language === 'zh' ? '导出估值证据包' : 'Export valuation evidence'}
-                            </TerminalButton>
-                          </div>
-                        ) : (
-                          <TerminalChip variant="caution">{language === 'zh' ? '待补证' : 'Evidence pending'}</TerminalChip>
-                        )}
-                      </div>
-                      {valuationEvidenceFeedback ? (
-                        <div className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{valuationEvidenceFeedback}</div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </TerminalPanel>
-
-                <TerminalPanel as="section" data-testid="portfolio-next-action-panel" className="min-w-0 flex flex-col gap-4">
+                <TerminalPanel as="section" data-testid="portfolio-next-action-panel" className={cn('min-w-0 flex flex-col', hasHoldings ? 'gap-4' : 'gap-2')}>
                   <div>
                     <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '下一步' : 'Next action'}</h2>
                     <p className="mt-1 text-sm text-[color:var(--wolfy-text-primary)]">{nextActionHeadline}</p>
@@ -4729,7 +4727,6 @@ const PortfolioPage: React.FC = () => {
                 </TerminalPanel>
               </div>
             </div>
-
             <div data-testid="portfolio-row-notes" className="order-4 col-span-12 min-w-0">
               <details data-testid="portfolio-data-notes" className="group rounded-[16px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm text-[color:var(--wolfy-text-secondary)] outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)] [&::-webkit-details-marker]:hidden">
@@ -5096,6 +5093,38 @@ const PortfolioPage: React.FC = () => {
                       <div className="min-w-0">
                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-text">{t('portfolio.importPreviewTitle')}</p>
                         <p className="mt-1 text-xs leading-5 text-secondary-text">{t('portfolio.importPreviewOnly')}</p>
+                        <ol
+                          data-testid="portfolio-import-workflow-steps"
+                          className="mt-2 flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-[11px] leading-5 text-[color:var(--wolfy-text-secondary)]"
+                          aria-label={language === 'zh' ? '导入步骤' : 'Import steps'}
+                        >
+                          {[
+                            { key: 'preview', label: language === 'zh' ? '预览' : 'Preview', active: Boolean(importFile) || Boolean(importPreview) || Boolean(importCommitResult) },
+                            { key: 'validation', label: language === 'zh' ? '校验' : 'Validation', active: Boolean(importPreview) || Boolean(importCommitResult) },
+                            { key: 'confirm', label: language === 'zh' ? '显式确认' : 'Explicit confirm', active: Boolean(importPreview) && !importCommitResult },
+                            { key: 'durable', label: language === 'zh' ? '持久结果' : 'Durable result', active: Boolean(importCommitResult) },
+                          ].map((step, index) => (
+                            <li
+                              key={step.key}
+                              data-import-step={step.key}
+                              data-active={step.active ? 'true' : 'false'}
+                              className={cn(
+                                'inline-flex items-center gap-1 rounded-md border px-2 py-1',
+                                step.active
+                                  ? 'border-[color:var(--wolfy-accent)] text-[color:var(--wolfy-text-primary)]'
+                                  : 'border-[color:var(--wolfy-border-subtle)] text-[color:var(--wolfy-text-muted)]',
+                              )}
+                            >
+                              <span className="font-mono text-[10px] font-bold">{index + 1}</span>
+                              {step.label}
+                            </li>
+                          ))}
+                        </ol>
+                        <p data-testid="portfolio-import-preview-vs-commit" className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+                          {language === 'zh'
+                            ? '预览 ≠ 提交：只有显式确认后才会写入真实流水。'
+                            : 'Preview ≠ commit: durable ledger writes happen only after explicit confirmation.'}
+                        </p>
                       </div>
                       <Input
                         type="file"

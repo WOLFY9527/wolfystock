@@ -1049,14 +1049,15 @@ describe('PortfolioPage FX refresh', () => {
     expect(researchStatePreview).toHaveTextContent('补持仓或导入流水');
     const productizationOrder = within(researchStatePreview).getByTestId('portfolio-productization-order');
     expect(productizationOrder).toHaveTextContent('账户上下文');
-    expect(productizationOrder).toHaveTextContent('组合观察');
-    expect(productizationOrder).toHaveTextContent('集中度 / 暴露');
+    expect(productizationOrder).toHaveTextContent('暴露摘要');
+    expect(productizationOrder).toHaveTextContent('风险集中度');
+    expect(productizationOrder).toHaveTextContent('估值新鲜度');
+    expect(productizationOrder).toHaveTextContent('导入接入');
     expect(productizationOrder).toHaveTextContent('持仓账本');
-    expect(productizationOrder).toHaveTextContent('新鲜度');
+    expect(productizationOrder).toHaveTextContent('个股研究交接');
     expect(productizationOrder).toHaveTextContent('限制');
     expect(productizationOrder).toHaveTextContent('导入预览');
     expect(productizationOrder).toHaveTextContent('显式确认');
-    expect(productizationOrder).toHaveTextContent('个股研究交接');
     expect(screen.getByTestId('portfolio-exposure-card')).toHaveTextContent('暂无持仓，保存持仓流水后生成盈亏与资产配置。');
     expect(screen.getByTestId('portfolio-risk-card')).toHaveTextContent('待生成');
     expect(screen.getByTestId('portfolio-risk-card')).toHaveTextContent('压力情景入口会在持仓出现后启用');
@@ -1119,7 +1120,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(Boolean(holdingsPanel.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
-  it('renders the mobile empty portfolio order as hero, onboarding, holdings, risk, notes, recent activity, trade station', async () => {
+  it('renders the mobile empty portfolio order as hero, onboarding, risk, holdings, notes, recent activity, trade station', async () => {
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
 
     render(<PortfolioPage />);
@@ -1134,17 +1135,21 @@ describe('PortfolioPage FX refresh', () => {
     const tradeStationSection = screen.getByRole('heading', { name: /手工记账台|Trade Station/ }).closest('section') as HTMLElement;
     const recentActivity = screen.getByTestId('portfolio-recent-activity');
 
+    const holdingsPanel = screen.getByTestId('portfolio-empty-ledger-preview');
+    const valuationPanel = screen.getByTestId('portfolio-valuation-panel');
     expect(Boolean(totalAssetsCard.compareDocumentPosition(onboardingRow) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(onboardingRow.compareDocumentPosition(startCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(startCard.compareDocumentPosition(riskCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(riskCard.compareDocumentPosition(dataNotes) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(riskCard.compareDocumentPosition(valuationPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(valuationPanel.compareDocumentPosition(holdingsPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(holdingsPanel.compareDocumentPosition(dataNotes) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(dataNotes.compareDocumentPosition(recentActivity) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(recentActivity.compareDocumentPosition(tradeStationSection) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
     expect(screen.queryByTestId('portfolio-pnl-summary')).not.toBeInTheDocument();
   });
 
-  it('renders the main RiskConsole as a two-column holdings and risk workspace on desktop', async () => {
+  it('renders the main RiskConsole as a two-column risk-then-holdings workspace on desktop', async () => {
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
@@ -1152,8 +1157,11 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-row-routing')).toHaveClass(
       'grid',
       'grid-cols-1',
-      'xl:grid-cols-[minmax(0,7fr)_minmax(340px,5fr)]',
+      'xl:grid-cols-[minmax(320px,5fr)_minmax(0,7fr)]',
     );
+    expect(screen.getByTestId('portfolio-primary-lane')).toContainElement(screen.getByTestId('portfolio-risk-card'));
+    expect(screen.getByTestId('portfolio-primary-lane')).toContainElement(screen.getByTestId('portfolio-valuation-panel'));
+    expect(screen.getByTestId('portfolio-secondary-lane')).toContainElement(screen.getByTestId('portfolio-current-holdings-panel'));
     expect(screen.getByTestId('portfolio-primary-lane')).toHaveClass(
       'min-w-0',
       'flex',
@@ -1276,20 +1284,48 @@ describe('PortfolioPage FX refresh', () => {
     const activityLane = screen.getByTestId('portfolio-activity-lane');
     const manualLane = screen.getByTestId('portfolio-manual-lane');
     expect(screen.getByTestId('portfolio-row-status')).toHaveClass('col-span-12', 'min-w-0');
-    expect(screen.getByTestId('portfolio-row-routing')).toHaveClass('order-3', 'col-span-12', 'grid', 'grid-cols-1', 'xl:grid-cols-[minmax(0,7fr)_minmax(340px,5fr)]', 'items-start');
+    expect(screen.getByTestId('portfolio-row-routing')).toHaveClass('order-3', 'col-span-12', 'grid', 'grid-cols-1', 'xl:grid-cols-[minmax(320px,5fr)_minmax(0,7fr)]', 'items-start');
     expect(workspaceLanes).toHaveClass('order-5', 'col-span-12', 'grid', 'grid-cols-1', 'xl:grid-cols-[minmax(0,7fr)_minmax(320px,5fr)]', 'items-start');
     expect(primaryLane).toHaveClass('min-w-0', 'flex', 'flex-col', 'gap-4');
     expect(secondaryLane).toHaveClass('min-w-0', 'flex', 'flex-col', 'gap-4');
     expect(activityLane).toHaveClass('min-w-0', 'flex', 'flex-col', 'gap-4');
     expect(manualLane).toHaveClass('min-w-0', 'flex', 'flex-col', 'gap-4');
-    expect(primaryLane).toContainElement(screen.getByTestId('portfolio-current-holdings-panel'));
-    expect(secondaryLane).toContainElement(screen.getByTestId('portfolio-risk-card'));
+    expect(primaryLane).toContainElement(screen.getByTestId('portfolio-risk-card'));
+    expect(primaryLane).toContainElement(screen.getByTestId('portfolio-valuation-panel'));
+    expect(secondaryLane).toContainElement(screen.getByTestId('portfolio-current-holdings-panel'));
+    expect(screen.getByTestId('portfolio-research-handoff-lane')).toContainElement(screen.getByTestId('portfolio-structure-review-panel'));
+    expect(screen.getByTestId('portfolio-research-handoff-lane')).toContainElement(screen.getByTestId('portfolio-next-action-panel'));
     expect(screen.getByTestId('portfolio-row-notes')).toContainElement(screen.getByTestId('portfolio-data-notes'));
     expect(activityLane).toContainElement(screen.getByTestId('portfolio-recent-activity'));
     expect(manualLane).toContainElement(screen.getByTestId('portfolio-trade-station-card'));
     expect(
       Boolean(screen.getByTestId('portfolio-recent-activity').compareDocumentPosition(screen.getByTestId('portfolio-trade-station-card')) & Node.DOCUMENT_POSITION_FOLLOWING),
     ).toBe(true);
+  });
+
+  it('keeps portfolio workbench composition sequence: identity → exposure/risk → valuation → holdings → research handoff', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: false }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const identity = screen.getByTestId('portfolio-account-status-strip');
+    const risk = screen.getByTestId('portfolio-risk-card');
+    const valuation = screen.getByTestId('portfolio-valuation-panel');
+    const holdings = screen.getByTestId('portfolio-current-holdings-panel');
+    const handoff = screen.getByTestId('portfolio-research-handoff-lane');
+    const structure = screen.getByTestId('portfolio-structure-review-panel');
+    const nextAction = screen.getByTestId('portfolio-next-action-panel');
+
+    expect(Boolean(identity.compareDocumentPosition(risk) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(risk.compareDocumentPosition(valuation) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(valuation.compareDocumentPosition(holdings) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(holdings.compareDocumentPosition(handoff) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(handoff).toContainElement(structure);
+    expect(handoff).toContainElement(nextAction);
+    expect(within(risk).getByTestId('portfolio-risk-exposure-summary')).toBeInTheDocument();
+    expect(valuation).toHaveTextContent(/估值与新鲜度|Valuation freshness/);
   });
 
   it('renders pnl, holding unrealized percent, exposure tabs, and risk summary for active holdings', async () => {
@@ -3768,7 +3804,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(mobileCard).toHaveTextContent('市值');
     expect(mobileCard).toHaveTextContent('手工记账');
     expect(within(mobileCard).getByTestId('portfolio-holding-mobile-trust-AAPL')).toHaveTextContent('价格快照');
-    expect(desktopTable).toHaveClass('min-w-[760px]');
+    expect(desktopTable).toHaveClass('min-w-[640px]');
     expect(within(desktopTable).getByText('持仓研究账本')).toHaveClass('sr-only');
     expect(desktopShell).toHaveClass('hidden', 'lg:block');
   });
@@ -4248,8 +4284,9 @@ describe('PortfolioPage FX refresh', () => {
     const historyPanel = screen.getByTestId('portfolio-history-full');
     expect(historyPanel).toBeInTheDocument();
     expect(screen.queryByTestId('portfolio-history-drawer')).not.toBeInTheDocument();
-    expect(primaryLane).toContainElement(holdingsPanel);
-    expect(secondaryLane).toContainElement(screen.getByTestId('portfolio-risk-card'));
+    expect(primaryLane).toContainElement(screen.getByTestId('portfolio-risk-card'));
+    expect(primaryLane).toContainElement(screen.getByTestId('portfolio-valuation-panel'));
+    expect(secondaryLane).toContainElement(holdingsPanel);
     expect(activityLane).toContainElement(historyPanel);
     expect(manualLane).toContainElement(tradeStation);
     expect(Boolean(holdingsPanel.compareDocumentPosition(historyPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
