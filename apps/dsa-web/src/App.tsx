@@ -485,9 +485,11 @@ const AppShellRoute: React.FC = () => {
 
   return (
     <Shell>
-      <Suspense fallback={<RouteLoadingFallback language={language} />}>
-        <Outlet />
-      </Suspense>
+      <AppErrorBoundary>
+        <Suspense fallback={<RouteLoadingFallback language={language} />}>
+          <Outlet />
+        </Suspense>
+      </AppErrorBoundary>
     </Shell>
   );
 };
@@ -781,9 +783,11 @@ const LocalizedShellRoute: React.FC = () => {
 
   return (
     <Shell>
-      <Suspense fallback={<RouteLoadingFallback language={language} />}>
-        <Outlet />
-      </Suspense>
+      <AppErrorBoundary>
+        <Suspense fallback={<RouteLoadingFallback language={language} />}>
+          <Outlet />
+        </Suspense>
+      </AppErrorBoundary>
     </Shell>
   );
 };

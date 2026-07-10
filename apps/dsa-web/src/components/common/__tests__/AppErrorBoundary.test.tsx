@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../../i18n/core';
@@ -36,7 +36,7 @@ describe('AppErrorBoundary', () => {
     vi.restoreAllMocks();
   });
 
-  it('shows a sanitized fallback when a route throws at render time', () => {
+  it('shows and focuses a sanitized fallback when a route throws at render time', async () => {
     const ThrowingRoute = () => {
       throw new TypeError('provider exploded stack trace token=abc');
     };
@@ -49,8 +49,11 @@ describe('AppErrorBoundary', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId('app-error-boundary')).toBeInTheDocument();
+    const alert = screen.getByTestId('app-error-boundary');
+    expect(alert).toBeInTheDocument();
+    expect(alert).toHaveAttribute('tabindex', '-1');
     expect(screen.getByRole('alert')).toHaveTextContent(translate('zh', 'app.errorBoundaryTitle'));
+    await waitFor(() => expect(alert).toHaveFocus());
     expect(screen.getByText(translate('zh', 'app.errorBoundaryBody'))).toBeInTheDocument();
     expect(document.body.textContent || '').not.toContain('TypeError');
     expect(document.body.textContent || '').not.toContain('provider exploded');

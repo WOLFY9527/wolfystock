@@ -7,6 +7,7 @@ import { ThemeProvider } from '../../theme/ThemeProvider';
 import { expectNoRawI18nKeys } from '../../../test-utils/i18nRawKeySentinel';
 import { Shell } from '../Shell';
 import { ShellRailContext } from '../ShellRailContext';
+import ResearchWorkspaceFlowPanel from '../../research/ResearchWorkspaceFlowPanel';
 import {
   CONSUMER_NAV_ARCHITECTURE,
   CONSUMER_NAV_GROUPS,
@@ -1253,6 +1254,23 @@ describe('Shell', () => {
     expect(document.querySelector('.shell-content-frame--scanner')).toBeNull();
     expect(document.querySelector('.theme-shell--market-overview')).toBeNull();
     expect(document.querySelector('.shell-content-frame--backtest')).toBeNull();
+  });
+
+  it('keeps the shell route as the only current page when a local research workflow is present', () => {
+    render(
+      <MemoryRouter initialEntries={['/zh/watchlist']}>
+        <ThemeProvider>
+          <Shell>
+            <ResearchWorkspaceFlowPanel language="zh" current="watchlist" />
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    const primaryNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
+    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('research-workspace-link-watchlist')).toHaveAttribute('aria-current', 'step');
+    expect(document.body.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
   });
 
   it('treats the system settings route as a wide workspace surface', () => {

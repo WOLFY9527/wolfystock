@@ -553,14 +553,22 @@ describe('AppContent route flows', () => {
     renderBrowserAppAt('/en/market-overview');
 
     const alert = await screen.findByRole('alert');
+    const shellMain = document.getElementById('main-content');
+    expect(screen.getByTestId('shell-skip-link')).toHaveAttribute('href', '#main-content');
+    expect(screen.getByTestId('shell-consumer-primary-nav')).toBeInTheDocument();
+    expect(shellMain).toContainElement(alert);
+    expect(alert).toHaveAttribute('tabindex', '-1');
+    await waitFor(() => expect(alert).toHaveFocus());
     expect(alert).toHaveTextContent('This page is temporarily unavailable. Refresh or try again shortly.');
     expect(alert).toHaveTextContent('A rendering error interrupted this screen. Technical details are hidden. Retry or return home to continue with other research.');
     expect(within(alert).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
     expect(within(alert).getByRole('button', { name: 'Back to home' })).toBeInTheDocument();
     expect(alert.textContent || '').not.toMatch(/provider|runtime|requestId|token|bearer|stack|trace|error:/i);
 
-    fireEvent.click(within(alert).getByRole('button', { name: 'Back to home' }));
-    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
+    routeCrashState.marketOverview = false;
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('market-overview-page')).toBeInTheDocument();
+    await waitFor(() => expect(shellMain).toHaveFocus());
   });
 
   it('does not eagerly import the preview report panel on unrelated home routes', async () => {

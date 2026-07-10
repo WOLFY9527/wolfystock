@@ -190,7 +190,7 @@ export default function ResearchWorkspaceFlowPanel({
                 <Link
                   key={step.key}
                   to={buildResearchWorkspacePath(step.key, language, routeContext)}
-                  aria-current={isCurrent ? 'page' : undefined}
+                  aria-current={isCurrent ? 'step' : undefined}
                   className={cn(
                     'inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors',
                     isCurrent

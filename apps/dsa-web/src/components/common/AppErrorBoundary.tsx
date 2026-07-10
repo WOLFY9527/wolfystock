@@ -23,12 +23,28 @@ class AppErrorBoundaryInner extends React.Component<AppErrorBoundaryInnerProps, 
     hasError: false,
   };
 
+  private fallbackRef = React.createRef<HTMLElement>();
+
   static getDerivedStateFromError(): AppErrorBoundaryState {
     return { hasError: true };
   }
 
+  componentDidCatch() {
+    this.fallbackRef.current?.focus({ preventScroll: true });
+  }
+
+  componentDidUpdate(_prevProps: AppErrorBoundaryInnerProps, prevState: AppErrorBoundaryState) {
+    if (!prevState.hasError && this.state.hasError) {
+      this.fallbackRef.current?.focus({ preventScroll: true });
+    }
+  }
+
   private handleRetry = () => {
-    this.setState({ hasError: false });
+    this.setState({ hasError: false }, () => {
+      if (!this.state.hasError) {
+        document.getElementById('main-content')?.focus({ preventScroll: true });
+      }
+    });
   };
 
   render() {
@@ -38,24 +54,27 @@ class AppErrorBoundaryInner extends React.Component<AppErrorBoundaryInnerProps, 
 
     return (
       <TerminalPageShell className="flex min-h-screen flex-1 justify-center overflow-x-hidden px-4 py-8 md:py-10">
-        <TerminalPanel
-          as="section"
+        <section
+          ref={this.fallbackRef}
           role="alert"
+          tabIndex={-1}
           data-testid="app-error-boundary"
-          className="mx-auto flex w-full max-w-2xl flex-col px-6 py-8 sm:px-10"
+          className="mx-auto w-full max-w-2xl outline-none"
         >
-          <p className="label-uppercase text-secondary-text">{this.props.eyebrow}</p>
-          <h1 className="mt-4 text-2xl font-normal tracking-[0.04em] text-foreground">{this.props.title}</h1>
-          <p className="mt-3 max-w-xl text-sm leading-7 text-secondary-text">{this.props.body}</p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <TerminalButton type="button" variant="primary" onClick={this.handleRetry}>
-              {this.props.retryLabel}
-            </TerminalButton>
-            <TerminalButton type="button" variant="secondary" onClick={this.props.onHome}>
-              {this.props.homeLabel}
-            </TerminalButton>
-          </div>
-        </TerminalPanel>
+          <TerminalPanel className="flex w-full flex-col px-6 py-8 sm:px-10">
+            <p className="label-uppercase text-secondary-text">{this.props.eyebrow}</p>
+            <h1 className="mt-4 text-2xl font-normal tracking-[0.04em] text-foreground">{this.props.title}</h1>
+            <p className="mt-3 max-w-xl text-sm leading-7 text-secondary-text">{this.props.body}</p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <TerminalButton type="button" variant="primary" onClick={this.handleRetry}>
+                {this.props.retryLabel}
+              </TerminalButton>
+              <TerminalButton type="button" variant="secondary" onClick={this.props.onHome}>
+                {this.props.homeLabel}
+              </TerminalButton>
+            </div>
+          </TerminalPanel>
+        </section>
       </TerminalPageShell>
     );
   }
