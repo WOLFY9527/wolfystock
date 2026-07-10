@@ -159,10 +159,6 @@ def _limiter_infra_client() -> TestClient:
     async def api_health():
         return {"status": "ok"}
 
-    @app.get("/health")
-    async def root_health():
-        return {"status": "ok"}
-
     @app.get("/api/v1/limiter-probe/fails")
     async def limiter_probe_fails():
         return JSONResponse(status_code=422, content={"error": "probe_validation_failed"})
@@ -1645,7 +1641,7 @@ def test_public_api_abuse_limiter_excludes_auth_login_failures_from_buckets(monk
         _reset_auth_globals()
 
 
-def test_public_api_abuse_limiter_excludes_options_docs_openapi_and_health(monkeypatch) -> None:
+def test_public_api_abuse_limiter_excludes_options_docs_openapi_and_registered_health(monkeypatch) -> None:
     _reset_auth_globals()
     _reset_public_limiter_state_if_available()
     monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
@@ -1661,10 +1657,9 @@ def test_public_api_abuse_limiter_excludes_options_docs_openapi_and_health(monke
                 client.get("/docs", headers={"X-Forwarded-For": "203.0.113.212"}),
                 client.get("/openapi.json", headers={"X-Forwarded-For": "203.0.113.212"}),
                 client.get("/api/health", headers={"X-Forwarded-For": "203.0.113.212"}),
-                client.get("/health", headers={"X-Forwarded-For": "203.0.113.212"}),
             ]
 
-        assert [response.status_code for response in responses] == [405, 200, 200, 200, 200]
+        assert [response.status_code for response in responses] == [405, 200, 200, 200]
         assert _limiter_snapshot()["bucketCount"] == 0
     finally:
         client.close()

@@ -306,6 +306,22 @@ def test_create_app_does_not_trigger_market_overview_providers_or_prewarm(monkey
     assert app is not None
 
 
+def test_root_health_inventory_keeps_only_registered_api_health_routes(tmp_path: Path) -> None:
+    app = api_app.create_app(static_dir=tmp_path / "missing-static")
+    root_paths = {
+        route.path
+        for route in app.routes
+        if hasattr(route, "path") and not route.path.startswith("/api/v1/")
+    }
+
+    assert {
+        "/api/health",
+        "/api/health/live",
+        "/api/health/ready",
+    }.issubset(root_paths)
+    assert "/health" not in root_paths
+
+
 def test_lifespan_skips_crypto_realtime_startup_when_disabled(monkeypatch, tmp_path: Path) -> None:
     queue = _QueueStub()
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)

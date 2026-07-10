@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Focused contracts for public baseline route matching."""
 
+from api.middlewares.auth import _path_exempt
+from api.middlewares.public_abuse_limiter import _EXEMPT_PREFIXES
 from api.route_access_policy import is_public_baseline_read, normalize_policy_path
 
 
@@ -34,3 +36,8 @@ def test_options_research_routes_are_not_public_baseline_reads() -> None:
     assert not is_public_baseline_read("GET", "/api/v1/options/underlyings/TEM/summary")
     assert not is_public_baseline_read("GET", "/api/v1/options/underlyings/TEM/chain")
     assert not is_public_baseline_read("POST", "/api/v1/options/decision/evaluate")
+
+
+def test_unregistered_root_health_alias_is_not_claimed_by_exemption_policy() -> None:
+    assert not _path_exempt("/health", "GET")
+    assert "/health" not in _EXEMPT_PREFIXES
