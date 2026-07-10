@@ -3188,7 +3188,8 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足|证据待补/);
     const details = expandMarketDecisionDetails();
     expect(screen.getByTestId('market-overview-regime-summary-lane')).toBeInTheDocument();
-    expect(within(details).getByTestId('market-temperature-strip')).toBeInTheDocument();
+    // Debug details are lazy-loaded; wait for Suspense settlement before class assertions.
+    expect(await within(details).findByTestId('market-temperature-strip')).toBeInTheDocument();
     expect(within(details).getByTestId('market-briefing-card')).toHaveTextContent(/主要指数走强，VIX 回落|当前关键数据不足|数据待补/);
 
     const shell = screen.getByTestId('market-overview-shell');
@@ -3233,8 +3234,10 @@ describe('MarketOverviewPage', () => {
     expect(workbench.className).not.toContain('max-w-[1800px]');
     expect(shell.className).not.toContain('max-w-5xl');
     expect(shell.className).not.toContain('max-w-6xl');
-    expect(screen.getByTestId('market-overview-category-tabs')).toHaveClass('w-full', 'min-w-0', 'backdrop-blur-md');
-    expect(screen.getByTestId('market-overview-category-tabs').className).toMatch(/bg-\[color:var\(--wolfy-surface-input\)\]|bg-white\/\[0\.02\]/);
+    // G032 paper-token closure: category tabs use solid surface input, not dark/glass blur.
+    expect(screen.getByTestId('market-overview-category-tabs')).toHaveClass('w-full', 'min-w-0');
+    expect(screen.getByTestId('market-overview-category-tabs')).not.toHaveClass('backdrop-blur-md');
+    expect(screen.getByTestId('market-overview-category-tabs').className).toMatch(/bg-\[color:var\(--wolfy-surface-input\)\]/);
     expect(screen.getByTestId('market-overview-export-summary')).toHaveTextContent('复制证据快照');
     expect(screen.getByTestId('market-overview-export-summary')).not.toHaveTextContent('摘要');
     expect(screen.getByTestId('market-overview-category-tabs')).not.toHaveClass('sticky', 'top-0', 'z-20', '-mx-4');

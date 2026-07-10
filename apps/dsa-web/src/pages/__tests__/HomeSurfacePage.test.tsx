@@ -661,7 +661,11 @@ describe('HomeSurfacePage', () => {
     expect(guestMarketPreviewStrip).toHaveClass('rounded-[10px]', 'bg-[var(--wolfy-surface-input)]');
     expect(screen.getByText('WolfyStock 是面向独立研究者与自驱投资者的股票研究工作区。你可以先查看单个标的预览，登录后再保存报告、回看历史，并继续进入组合或扫描工作台。')).toBeInTheDocument();
     expect(guestMarketPreviewStrip).toHaveTextContent('当前市场观察');
-    expect(guestMarketPreviewStrip).toHaveTextContent('公开市场观察已准备');
+    // Strip mounts in loading state; wait for public-safe briefing settlement (ready != loading).
+    await waitFor(() => {
+      expect(guestMarketPreviewStrip).toHaveTextContent('公开市场观察已准备');
+    });
+    expect(guestMarketPreviewStrip).not.toHaveTextContent('正在整理公开市场观察');
     expect(guestMarketPreviewStrip).toHaveTextContent('市场广度改善');
     expect(guestMarketPreviewStrip).toHaveTextContent('主要宽度与资金线索继续支持观察。');
     expect(guestMarketPreviewStrip).toHaveTextContent('研究观察，不构成投资建议。');

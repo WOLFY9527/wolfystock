@@ -138,7 +138,11 @@ describe('GuestHomePage', () => {
     expect(screen.getByRole('button', { name: '分析' })).toBeEnabled();
     expect(screen.getByText('WolfyStock 是面向独立研究者与自驱投资者的股票研究工作区。你可以先查看单个标的预览，登录后再保存报告、回看历史，并继续进入组合或扫描工作台。')).toBeInTheDocument();
     expect(marketPreviewStrip).toHaveTextContent('当前市场观察');
-    expect(marketPreviewStrip).toHaveTextContent('公开市场观察已准备');
+    // Strip mounts in loading state; wait for public-safe briefing settlement (ready != loading).
+    await waitFor(() => {
+      expect(marketPreviewStrip).toHaveTextContent('公开市场观察已准备');
+    });
+    expect(marketPreviewStrip).not.toHaveTextContent('正在整理公开市场观察');
     expect(marketPreviewStrip).toHaveTextContent('市场广度改善');
     expect(marketPreviewStrip).toHaveTextContent('研究观察，不构成投资建议。');
     expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/zh/register?redirect=%2Fzh');
