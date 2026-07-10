@@ -12,6 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 SCANNER_CONSUMER_DATA_QUALITY_LABELS = {"ready", "delayed", "cached", "partial", "no_evidence", "unavailable"}
 SCANNER_NO_ADVICE_LABEL = "Observation-only research context; not investment advice."
+SCANNER_PUBLIC_FAILURE_MESSAGE = "Scanner execution failed. Review readiness and retry."
+SCANNER_PUBLIC_NOTIFICATION_FAILURE_MESSAGE = "Scanner notification failed."
 _SCANNER_FORBIDDEN_CONSUMER_KEYS = {
     "fallback",
     "trustlevel",
@@ -545,6 +547,13 @@ class ScannerNotificationResult(BaseModel):
     report_path: Optional[str] = None
     sent_at: Optional[str] = None
 
+    @model_validator(mode="after")
+    def _sanitize_public_notification_failure(self) -> "ScannerNotificationResult":
+        self.report_path = None
+        if self.status == "failed" and self.message:
+            self.message = SCANNER_PUBLIC_NOTIFICATION_FAILURE_MESSAGE
+        return self
+
 
 class ScannerAiInterpretationResponse(BaseModel):
     available: bool = False
@@ -1070,6 +1079,20 @@ class ScannerRunDetailResponse(BaseModel):
     candidates: List[ScannerCandidateDiagnosticsResponse] = Field(default_factory=list)
     shortlist: List[ScannerCandidateResponse] = Field(default_factory=list)
 
+    @field_validator("failure_reason", mode="before")
+    @classmethod
+    def _sanitize_failure_reason(cls, value: Any) -> Optional[str]:
+        return SCANNER_PUBLIC_FAILURE_MESSAGE if str(value or "").strip() else None
+
+    @field_validator("diagnostics", mode="before")
+    @classmethod
+    def _sanitize_failure_diagnostics(cls, value: Any) -> Dict[str, Any]:
+        diagnostics = copy.deepcopy(value) if isinstance(value, dict) else {}
+        failure = diagnostics.get("failure")
+        if isinstance(failure, dict) and failure.get("message"):
+            failure["message"] = SCANNER_PUBLIC_FAILURE_MESSAGE
+        return diagnostics
+
 
 class ScannerResearchOverlayOriginalState(BaseModel):
     ticker: str
@@ -1198,6 +1221,11 @@ class ScannerRunHistoryItem(BaseModel):
     change_summary: ScannerWatchlistComparisonResponse = Field(default_factory=ScannerWatchlistComparisonResponse)
     review_summary: ScannerReviewSummaryResponse = Field(default_factory=ScannerReviewSummaryResponse)
 
+    @field_validator("failure_reason", mode="before")
+    @classmethod
+    def _sanitize_failure_reason(cls, value: Any) -> Optional[str]:
+        return SCANNER_PUBLIC_FAILURE_MESSAGE if str(value or "").strip() else None
+
 
 class ScannerRunHistoryResponse(BaseModel):
     total: int
@@ -1280,6 +1308,11 @@ class ScannerOperationRunSummary(BaseModel):
     shortlist_size: int = 0
     notification_status: Optional[str] = None
     failure_reason: Optional[str] = None
+
+    @field_validator("failure_reason", mode="before")
+    @classmethod
+    def _sanitize_failure_reason(cls, value: Any) -> Optional[str]:
+        return SCANNER_PUBLIC_FAILURE_MESSAGE if str(value or "").strip() else None
 
 
 class ScannerOperationalStatusResponse(BaseModel):

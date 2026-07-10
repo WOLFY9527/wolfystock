@@ -6747,7 +6747,6 @@ class MarketScannerService:
         universe_notes = _json_load(run.universe_notes_json, [])
         scoring_notes = _json_load(run.scoring_notes_json, [])
         candidates = self.repo.get_candidates_for_run(run.id)
-        profile_config = get_scanner_profile(market=run.market, profile=run.profile)
         review_bundle = self._get_run_review_bundle(run, candidates)
         shortlist = []
         for candidate in candidates:
@@ -6770,20 +6769,6 @@ class MarketScannerService:
                     last_trade_date=item.get("last_trade_date"),
                 ),
             )
-            original_ai_payload = item.get("diagnostics", {}).get("ai_interpretation") if isinstance(item.get("diagnostics"), dict) else None
-            updated_ai_payload = self.ai_service.enrich_review_commentary(
-                profile=profile_config,
-                candidate=item,
-                realized_outcome=item["realized_outcome"],
-            )
-            if isinstance(updated_ai_payload, dict):
-                item["diagnostics"]["ai_interpretation"] = updated_ai_payload
-                item["ai_interpretation"] = self.ai_service.public_payload_from_diagnostics(updated_ai_payload)
-                if updated_ai_payload != original_ai_payload:
-                    self.repo.update_candidate_diagnostics(
-                        candidate.id,
-                        diagnostics_json=json.dumps(item["diagnostics"], ensure_ascii=False),
-                    )
             shortlist.append(item)
         theme_payload, summary_payload, candidate_diagnostics = self._build_candidate_diagnostics(
             universe_selection=universe_selection,

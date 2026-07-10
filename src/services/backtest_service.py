@@ -451,17 +451,6 @@ class BacktestService:
         if not str(code or "").strip():
             return self._get_aggregate_sample_status(settings=settings)
         rows = self.repo.get_sample_rows(code=code, **self._owner_kwargs())
-        if not rows and self.repo.count_analysis_history(code=code, **self._owner_kwargs()) == 0:
-            self._ensure_market_history(
-                code=code,
-                min_age_days=settings.min_age_days,
-                eval_window_days=settings.eval_window_days,
-                sample_count=20,
-                force_refresh=False,
-                allow_provider_fallback=True,
-            )
-            self._ensure_cached_backtest_samples(code=code, settings=settings, sample_count=20)
-            rows = self.repo.get_sample_rows(code=code, **self._owner_kwargs())
         parsed_dates: List[date] = []
         latest_created_at: Optional[datetime] = None
         for row in rows:

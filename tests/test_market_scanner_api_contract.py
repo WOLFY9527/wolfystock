@@ -1038,7 +1038,36 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             )
 
         self.assertEqual(context.exception.status_code, 400)
-        self.assertIn("theme id", str(context.exception.detail).lower())
+        self.assertEqual(context.exception.detail["error"], "validation_error")
+        self.assertEqual(
+            context.exception.detail["message"],
+            "Scanner request could not be processed.",
+        )
+        self.assertNotIn("theme id", str(context.exception.detail).lower())
+
+    def test_scanner_validation_error_does_not_expose_raw_exception_text(self) -> None:
+        service = MagicMock()
+        raw_error = r"database shard omega unavailable at C:\internal\worker.py"
+        service.run_manual_scan.side_effect = ValueError(raw_error)
+        request = ScannerRunRequest(
+            market="cn",
+            profile="cn_preopen_v1",
+            shortlist_size=5,
+            universe_limit=50,
+            detail_limit=10,
+        )
+
+        with patch("api.v1.endpoints.scanner._build_scanner_ops_service", return_value=service):
+            with self.assertRaises(HTTPException) as context:
+                run_market_scan(request, db_manager=MagicMock())
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertEqual(context.exception.detail["error"], "validation_error")
+        self.assertEqual(
+            context.exception.detail["message"],
+            "Scanner request could not be processed.",
+        )
+        self.assertNotIn(raw_error, str(context.exception.detail))
 
     def test_run_market_scan_passes_theme_universe_request_to_service(self) -> None:
         service = MagicMock()
@@ -1235,13 +1264,27 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertEqual(ctx.exception.detail["error"], "not_found")
 
-    def test_get_market_scan_run_preserves_blocked_cn_scanner_context_frame(self) -> None:
+    def test_get_market_scan_run_sanitizes_failure_details_and_preserves_context_frame(self) -> None:
         service = MagicMock()
         payload = _make_run_payload()
+        raw_error = r"provider token secret-value at C:\internal\scanner_worker.py"
         payload["status"] = "failed"
         payload["shortlist"] = []
         payload["selected"] = []
-        payload["failure_reason"] = "A 股全市场快照不可用。"
+        payload["failure_reason"] = raw_error
+        payload["diagnostics"]["failure"] = {
+            "message": raw_error,
+            "updated_at": "2026-04-13T08:31:00",
+        }
+        payload["notification"] = {
+            "attempted": True,
+            "status": "failed",
+            "success": False,
+            "channels": ["feishu"],
+            "message": raw_error,
+            "report_path": "/private/tmp/scanner_watchlist.md",
+            "sent_at": "2026-04-13T08:31:00",
+        }
         payload["scannerContextFrame"] = {
             "marketReadiness": {
                 "contractVersion": "research_readiness_v1",
@@ -1284,11 +1327,18 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             response = get_market_scan_run(12, db_manager=MagicMock())
 
         self.assertEqual(response.status, "failed")
-        self.assertEqual(response.failure_reason, "A 股全市场快照不可用。")
+        self.assertEqual(
+            response.failure_reason,
+            "Scanner execution failed. Review readiness and retry.",
+        )
+        self.assertEqual(response.notification.message, "Scanner notification failed.")
+        self.assertIsNone(response.notification.report_path)
         self.assertEqual(response.scannerContextFrame["marketReadiness"]["readinessState"], "blocked")
         self.assertEqual(response.scannerContextFrame["marketReadiness"]["providerAuthority"], "unavailable")
         self.assertEqual(response.scannerContextFrame["marketReadiness"]["freshness"], "unavailable")
         self.assertTrue(response.scannerContextFrame["marketReadiness"]["noAdviceBoundary"])
+        self.assertNotIn(raw_error, json.dumps(response.model_dump(), ensure_ascii=False))
+        self.assertNotIn("/private/tmp/scanner_watchlist.md", json.dumps(response.model_dump(), ensure_ascii=False))
 
     def test_get_today_watchlist_returns_404_when_missing(self) -> None:
         service = MagicMock()

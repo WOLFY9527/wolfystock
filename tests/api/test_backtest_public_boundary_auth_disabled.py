@@ -105,7 +105,14 @@ def test_backtest_routes_require_user_boundary_when_auth_enabled(
             path: 401 for path in BACKTEST_READ_SURFACES
         }
         for response in responses.values():
-            assert response.json() == {"error": "unauthorized", "message": "Login required"}
+            assert response.json() == {
+                "error": "unauthorized",
+                "code": "unauthorized",
+                "message": "Login required",
+                "status": 401,
+                "reason": "unauthorized",
+                "consumerSafeMessage": "Login required",
+            }
     finally:
         client.close()
         DatabaseManager.reset_instance()
