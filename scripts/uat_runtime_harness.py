@@ -114,17 +114,16 @@ class DirectNoProxyHttpClient:
         )
         try:
             with self._opener.open(request, timeout=self.timeout) as response:
-                body = response.read(1024 * 1024).decode("utf-8", errors="ignore")
-                return _HttpResponse(int(response.status), body)
+                return _HttpResponse(int(response.status), response.read())
         except urllib.error.HTTPError as exc:
-            body = exc.read(65536).decode("utf-8", errors="ignore")
-            return _HttpResponse(int(exc.code), body)
+            return _HttpResponse(int(exc.code), exc.read())
 
 
 class _HttpResponse:
-    def __init__(self, status_code: int, text: str) -> None:
+    def __init__(self, status_code: int, content: bytes) -> None:
         self.status_code = int(status_code)
-        self.text = text
+        self.content = bytes(content)
+        self.text = self.content.decode("utf-8", errors="ignore")
 
     def json(self) -> dict[str, Any]:
         payload = json.loads(self.text)
@@ -351,6 +350,49 @@ def process_cwd(pid: int) -> str | None:
     return None
 
 
+def process_executable(pid: int) -> str | None:
+    if pid <= 0:
+        return None
+    if is_windows():
+        script = (
+            "$proc = Get-CimInstance Win32_Process -Filter \"ProcessId = %d\" -ErrorAction SilentlyContinue;"
+            "if ($null -ne $proc -and $proc.ExecutablePath) { [Console]::Out.Write($proc.ExecutablePath) }"
+        ) % int(pid)
+        completed = _run_windows_powershell(script)
+        if completed is None or completed.returncode != 0:
+            return None
+        return completed.stdout.strip() or None
+    proc_exe = Path("/proc") / str(pid) / "exe"
+    try:
+        if proc_exe.exists():
+            return str(proc_exe.resolve())
+    except Exception:
+        pass
+    lsof = shutil.which("lsof")
+    if lsof:
+        completed = subprocess.run(
+            [lsof, "-a", "-p", str(pid), "-d", "txt", "-Fn"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+        for line in completed.stdout.splitlines():
+            if line.startswith("n") and Path(line[1:]).is_file():
+                return line[1:]
+    ps = shutil.which("ps")
+    if not ps:
+        return None
+    completed = subprocess.run(
+        [ps, "-p", str(pid), "-o", "comm="],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=5,
+    )
+    return completed.stdout.strip() or None if completed.returncode == 0 else None
+
+
 def process_command(pid: int) -> str | None:
     if pid <= 0:
         return None
@@ -567,9 +609,7 @@ def start_runtime(
     python_bin: str | None = None,
     run_log_path: Path | None = None,
 ) -> subprocess.Popen[str]:
-    python = python_bin or str(_default_venv_python(repo_root))
-    if not Path(python).exists():
-        python = sys.executable
+    python = str(_select_runtime_python(repo_root, python_bin=python_bin))
     command = [python, str(repo_root / "main.py"), "--serve-only", "--host", host, "--port", str(port)]
     log_handle: IO[str] | int
     if run_log_path is not None:
@@ -594,6 +634,58 @@ def _default_venv_python(repo_root: Path) -> Path:
     if is_windows():
         return repo_root / ".venv" / "Scripts" / "python.exe"
     return repo_root / ".venv" / "bin" / "python"
+
+
+def _select_runtime_python(repo_root: Path, *, python_bin: str | None = None) -> Path:
+    requested = Path(python_bin) if python_bin else _default_venv_python(repo_root)
+    if requested.exists():
+        return requested
+    return Path(sys.executable)
+
+
+def build_interpreter_identity(expected_path: Path, observed_path: str | None) -> dict[str, Any]:
+    expected_requested = str(expected_path)
+    expected_resolved_path = expected_path.resolve()
+    expected_resolved = str(expected_resolved_path)
+    observed_resolved_path = Path(observed_path).resolve() if observed_path else None
+    observed_resolved = str(observed_resolved_path) if observed_resolved_path else None
+    if not observed_resolved:
+        status = "unverified"
+        equivalence_basis = None
+    else:
+        equivalence_basis = _interpreter_equivalence_basis(expected_resolved_path, observed_resolved_path)
+        status = "verified" if equivalence_basis else "mismatch"
+    return {
+        "status": status,
+        "equivalenceBasis": equivalence_basis,
+        "expectedRequestedPath": expected_requested,
+        "expectedResolvedPath": expected_resolved,
+        "observedPath": observed_path,
+        "observedResolvedPath": observed_resolved,
+    }
+
+
+def _interpreter_equivalence_basis(expected_path: Path, observed_path: Path) -> str | None:
+    if expected_path == observed_path:
+        return "exact_path"
+    try:
+        if expected_path.exists() and observed_path.exists() and expected_path.samefile(observed_path):
+            return "same_file"
+    except OSError:
+        pass
+    expected_framework = _python_framework_version_root(expected_path)
+    observed_framework = _python_framework_version_root(observed_path)
+    if expected_framework and expected_framework == observed_framework:
+        return "python_framework_version"
+    return None
+
+
+def _python_framework_version_root(path: Path) -> Path | None:
+    parts = path.parts
+    for index, part in enumerate(parts):
+        if part == "Python.framework" and index + 2 < len(parts) and parts[index + 1] == "Versions":
+            return Path(*parts[: index + 3])
+    return None
 
 
 def stop_owned_runtime(process: subprocess.Popen[str] | None) -> dict[str, Any]:
@@ -842,20 +934,52 @@ def wait_for_readiness(client: DirectNoProxyHttpClient, base_url: str, *, timeou
     return {"ok": False, "httpStatus": last_status, "error": last_error or "readiness_timeout"}
 
 
-def verify_direct_html(client: DirectNoProxyHttpClient, base_url: str, local_payload: Mapping[str, Any]) -> dict[str, Any]:
+def verify_direct_asset_identity(
+    client: DirectNoProxyHttpClient,
+    base_url: str,
+    asset_identity: Mapping[str, Any],
+) -> dict[str, Any]:
     response = client.request("GET", base_url + "/")
     body = response.text or ""
-    expected_asset = str(local_payload.get("frontendMainAssetFilename") or "")
+    expected_asset = str(asset_identity.get("mainJsAssetFilename") or "")
+    expected_index_hash = str(asset_identity.get("indexHtmlHash") or "")
     marker_ok = int(response.status_code) == 200 and all(marker in body for marker in WOLFYSTOCK_HTML_MARKERS)
-    asset_ok = bool(expected_asset and expected_asset in body)
+    asset_ref_ok = bool(expected_asset and expected_asset in body)
+    observed_index_hash = hashlib.sha256(_response_content(response)).hexdigest()
+    index_hash_ok = bool(expected_index_hash and observed_index_hash == expected_index_hash)
+    observed_asset_hashes: dict[str, str | None] = {}
+    asset_hashes_ok = True
+    for filename, expected_hash in dict(asset_identity.get("assetHashes") or {}).items():
+        asset_response = client.request("GET", f"{base_url}/assets/{filename}")
+        observed_hash = hashlib.sha256(_response_content(asset_response)).hexdigest()
+        observed_asset_hashes[str(filename)] = observed_hash
+        if int(asset_response.status_code) != 200 or not expected_hash or observed_hash != expected_hash:
+            asset_hashes_ok = False
+
+    reason_codes: list[str] = []
+    if not marker_ok or not asset_ref_ok:
+        reason_codes.append("direct_http_html_identity_mismatch")
+    if not index_hash_ok or not asset_hashes_ok:
+        reason_codes.append("served_asset_hash_mismatch")
     return {
-        "ok": marker_ok and asset_ok,
+        "ok": marker_ok and asset_ref_ok and index_hash_ok and asset_hashes_ok,
         "httpStatus": int(response.status_code),
         "wolfyStockHtml": marker_ok,
-        "expectedAssetPresent": asset_ok,
+        "expectedAssetPresent": asset_ref_ok,
         "expectedAssetFilename": expected_asset or None,
-        "reasonCodes": [] if marker_ok and asset_ok else ["direct_http_html_identity_mismatch"],
+        "expectedIndexHtmlHash": expected_index_hash or None,
+        "observedIndexHtmlHash": observed_index_hash,
+        "expectedAssetHashes": dict(asset_identity.get("assetHashes") or {}),
+        "observedAssetHashes": observed_asset_hashes,
+        "reasonCodes": reason_codes,
     }
+
+
+def _response_content(response: Any) -> bytes:
+    content = getattr(response, "content", None)
+    if isinstance(content, bytes):
+        return content
+    return str(getattr(response, "text", "") or "").encode("utf-8")
 
 
 def build_asset_identity(static_root: Path, local_payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -868,6 +992,7 @@ def build_asset_identity(static_root: Path, local_payload: Mapping[str, Any]) ->
         "mainCssAssetFilenames": _css_assets(static_root),
         "assetHashes": _asset_hashes(static_root, [main_asset, *_css_assets(static_root)]),
         "localBuildProvenance": dict(local_payload),
+        "buildIdentity": local_payload.get("frontendBuildIdentity"),
     }
 
 
@@ -1309,6 +1434,7 @@ def run_harness(
         static_root=static_root,
         backend_info=read_backend_info(repo_root),
         repo_root=repo_root,
+        require_build_identity=True,
     )
     if not local_build.ok:
         evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
@@ -1352,19 +1478,35 @@ def run_harness(
     process: subprocess.Popen[str] | None = None
     try:
         runtime_log = build_runtime_log(run_context)
-        process = start_runtime(repo_root, host=host, port=port, run_log_path=run_context.run_log_path)
+        expected_python = _select_runtime_python(repo_root)
+        process = start_runtime(
+            repo_root,
+            host=host,
+            port=port,
+            python_bin=str(expected_python),
+            run_log_path=run_context.run_log_path,
+        )
         runtime_log = build_runtime_log(run_context, process)
         client = DirectNoProxyHttpClient()
         readiness = wait_for_readiness(client, base_url, timeout_seconds=readiness_timeout_seconds)
         runtime_cwd = process_cwd(process.pid)
+        runtime_executable = process_executable(process.pid)
         runtime_command = process_command(process.pid)
+        interpreter_identity = build_interpreter_identity(expected_python, runtime_executable)
         identity_errors: list[str] = []
         if runtime_cwd and Path(runtime_cwd).resolve() != repo_root:
             identity_errors.append("runtime_cwd_mismatch")
+        elif not runtime_cwd and not is_windows():
+            identity_errors.append("runtime_cwd_unverified")
+        if interpreter_identity["status"] == "mismatch":
+            identity_errors.append("runtime_interpreter_mismatch")
+        elif interpreter_identity["status"] != "verified":
+            identity_errors.append("runtime_interpreter_unverified")
         if not readiness["ok"]:
             identity_errors.append("runtime_readiness_failed")
 
-        direct_http = verify_direct_html(client, base_url, local_build.payload) if readiness["ok"] else {
+        asset_identity = build_asset_identity(static_root, local_build.payload)
+        direct_http = verify_direct_asset_identity(client, base_url, asset_identity) if readiness["ok"] else {
             "ok": False,
             "reasonCodes": ["readiness_unavailable"],
         }
@@ -1380,11 +1522,11 @@ def run_harness(
             surface_readiness_payload=None,
             auth_headers=None,
         )
-        asset_identity = build_asset_identity(static_root, local_build.payload)
         runtime = {
             "pid": process.pid,
             "cwd": runtime_cwd,
             "command": runtime_command,
+            "interpreter": interpreter_identity,
             "listener": {"host": host, "port": int(port), "baseUrl": base_url},
             "processStartTime": process_start_time(process.pid),
             "ownedByHarness": True,
@@ -1619,6 +1761,21 @@ def run_preflight(
     expected_command = _normalize_command_line(runtime.get("command"))
     expected_asset = dict(run.get("assetIdentity") if isinstance(run.get("assetIdentity"), Mapping) else frontend)
     expected_asset_name = str(expected_asset.get("mainJsAssetFilename") or frontend.get("mainJsAssetFilename") or "")
+    expected_asset_hashes = (
+        dict(expected_asset.get("assetHashes"))
+        if isinstance(expected_asset.get("assetHashes"), Mapping)
+        else {}
+    )
+    expected_build_identity = (
+        dict(expected_asset.get("buildIdentity"))
+        if isinstance(expected_asset.get("buildIdentity"), Mapping)
+        else {}
+    )
+    expected_interpreter = (
+        dict(runtime.get("interpreter"))
+        if isinstance(runtime.get("interpreter"), Mapping)
+        else {}
+    )
 
     freshness = _classify_evidence_freshness(evidence, required_sha=expected_sha)
     checks: dict[str, dict[str, Any]] = {}
@@ -1697,13 +1854,58 @@ def run_preflight(
         observed=observed_command or None,
     )
 
-    asset_ok = bool(expected_asset.get("indexHtmlHash") or expected_asset_name)
-    checks["assetIdentity"] = _preflight_check(asset_ok, expected="non-empty", observed=expected_asset)
+    expected_interpreter_path = str(expected_interpreter.get("expectedResolvedPath") or "")
+    observed_executable = process_executable(run_pid) if run_pid > 0 else None
+    if expected_interpreter_path:
+        observed_interpreter = build_interpreter_identity(Path(expected_interpreter_path), observed_executable)
+    else:
+        observed_interpreter = {
+            "status": "unverified",
+            "expectedResolvedPath": None,
+            "observedPath": observed_executable,
+        }
+    checks["interpreterIdentity"] = _preflight_check(
+        bool(
+            expected_interpreter.get("status") == "verified"
+            and observed_interpreter.get("status") == "verified"
+        ),
+        expected=expected_interpreter or "verified_interpreter_identity",
+        observed=observed_interpreter,
+    )
 
-    direct_http = _preflight_direct_http(host=host, port=run_port, expected_asset_name=expected_asset_name)
+    expected_index_hash = str(expected_asset.get("indexHtmlHash") or "")
+    expected_main_hash = str(expected_asset_hashes.get(expected_asset_name) or "")
+    checks["assetIdentity"] = _preflight_check(
+        bool(expected_index_hash and expected_asset_name and expected_main_hash),
+        expected="index_and_main_asset_hashes",
+        observed=expected_asset,
+    )
+    checks["buildIdentity"] = _preflight_check(
+        bool(
+            expected_build_identity.get("contract") == "wolfystock_frontend_build_identity_v1"
+            and str(expected_build_identity.get("gitSha") or "") == observed_sha
+            and str(expected_build_identity.get("repositoryRoot") or "") == expected_cwd
+            and str(expected_build_identity.get("indexHtmlSha256") or "") == expected_index_hash
+            and str(expected_build_identity.get("mainJsAssetFilename") or "") == expected_asset_name
+            and str(expected_build_identity.get("mainJsAssetSha256") or "") == expected_main_hash
+        ),
+        expected={
+            "contract": "wolfystock_frontend_build_identity_v1",
+            "gitSha": observed_sha,
+            "repositoryRoot": expected_cwd,
+        },
+        observed=expected_build_identity or None,
+    )
+
+    direct_http = _preflight_direct_http(host=host, port=run_port, expected_asset=expected_asset)
     checks["directNoProxyHttp"] = _preflight_check(
         bool(direct_http.get("ok")),
-        expected={"noProxy": True, "asset": expected_asset_name or None},
+        expected={
+            "noProxy": True,
+            "asset": expected_asset_name or None,
+            "indexHtmlHash": expected_index_hash or None,
+            "assetHashes": expected_asset_hashes,
+        },
         observed=direct_http,
     )
 
@@ -1741,6 +1943,7 @@ def run_preflight(
             "startTime": start_time,
             "port": run_port,
             "assetIdentity": expected_asset,
+            "interpreterIdentity": expected_interpreter,
             "evidencePath": str(run.get("evidencePath") or evidence_path),
             "runLogPath": run_log_path,
         },
@@ -1791,25 +1994,24 @@ def _asset_hashes(static_root: Path, filenames: Sequence[str]) -> dict[str, str 
     return hashes
 
 
-def _preflight_direct_http(*, host: str, port: int, expected_asset_name: str) -> dict[str, Any]:
+def _preflight_direct_http(
+    *,
+    host: str,
+    port: int,
+    expected_asset: Mapping[str, Any],
+) -> dict[str, Any]:
     base_url = clean_base_url(f"http://{host}:{int(port)}")
     try:
-        response = DirectNoProxyHttpClient().request("GET", base_url + "/")
-        body = response.text or ""
-        marker_ok = int(response.status_code) == 200 and all(marker in body for marker in WOLFYSTOCK_HTML_MARKERS)
-        asset_ok = bool(not expected_asset_name or expected_asset_name in body)
         return {
-            "ok": marker_ok and asset_ok,
-            "httpStatus": int(response.status_code),
-            "wolfyStockHtml": marker_ok,
-            "expectedAssetPresent": asset_ok,
-            "expectedAssetFilename": expected_asset_name or None,
+            **verify_direct_asset_identity(DirectNoProxyHttpClient(), base_url, expected_asset),
+            "noProxy": True,
         }
     except Exception as exc:
         return {
             "ok": False,
             "error": type(exc).__name__,
-            "expectedAssetFilename": expected_asset_name or None,
+            "expectedAssetFilename": str(expected_asset.get("mainJsAssetFilename") or "") or None,
+            "noProxy": True,
         }
 
 

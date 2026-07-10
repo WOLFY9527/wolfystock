@@ -79,6 +79,105 @@ def test_verify_frontend_static_build_fails_closed_when_asset_is_stale(tmp_path:
     assert "frontend_build_older_than_backend_commit" in result.payload["reasonCodes"]
 
 
+def test_verify_frontend_static_build_accepts_matching_build_identity(tmp_path: Path) -> None:
+    static_root = tmp_path / "static"
+    asset_path = _write_vite_static_dist(static_root)
+    built_at = datetime(2026, 6, 16, 12, 5, tzinfo=timezone.utc)
+    _set_mtime(static_root / "index.html", built_at)
+    _set_mtime(asset_path, built_at)
+    backend = _backend_info(datetime(2026, 6, 16, 11, 47, tzinfo=timezone.utc))
+
+    identity = verifier.write_frontend_build_identity(
+        static_root=static_root,
+        backend_info=backend,
+        repo_root=tmp_path,
+    )
+    result = verifier.verify_frontend_static_build(
+        static_root=static_root,
+        backend_info=backend,
+        repo_root=tmp_path,
+        require_build_identity=True,
+    )
+
+    assert identity.ok is True
+    assert result.ok is True
+    assert result.payload["frontendBuildIdentity"]["gitSha"] == backend.git_sha
+    assert result.payload["frontendBuildIdentity"]["repositoryRoot"] == str(tmp_path.resolve())
+
+
+def test_verify_frontend_static_build_fails_closed_on_mismatched_revision_identity(tmp_path: Path) -> None:
+    static_root = tmp_path / "static"
+    asset_path = _write_vite_static_dist(static_root)
+    built_at = datetime(2026, 6, 16, 12, 5, tzinfo=timezone.utc)
+    _set_mtime(static_root / "index.html", built_at)
+    _set_mtime(asset_path, built_at)
+    stale_backend = _backend_info(datetime(2026, 6, 16, 11, 47, tzinfo=timezone.utc))
+    current_backend = BackendBuildInfo(
+        git_sha="a" * 40,
+        branch="main",
+        commit_timestamp=datetime(2026, 6, 16, 11, 47, tzinfo=timezone.utc),
+    )
+    verifier.write_frontend_build_identity(
+        static_root=static_root,
+        backend_info=stale_backend,
+        repo_root=tmp_path,
+    )
+
+    result = verifier.verify_frontend_static_build(
+        static_root=static_root,
+        backend_info=current_backend,
+        repo_root=tmp_path,
+        require_build_identity=True,
+    )
+
+    assert result.ok is False
+    assert "frontend_build_identity_git_sha_mismatch" in result.error_codes
+
+
+def test_verify_frontend_static_build_fails_closed_when_build_identity_missing(tmp_path: Path) -> None:
+    static_root = tmp_path / "static"
+    asset_path = _write_vite_static_dist(static_root)
+    built_at = datetime(2026, 6, 16, 12, 5, tzinfo=timezone.utc)
+    _set_mtime(static_root / "index.html", built_at)
+    _set_mtime(asset_path, built_at)
+
+    result = verifier.verify_frontend_static_build(
+        static_root=static_root,
+        backend_info=_backend_info(datetime(2026, 6, 16, 11, 47, tzinfo=timezone.utc)),
+        repo_root=tmp_path,
+        require_build_identity=True,
+    )
+
+    assert result.ok is False
+    assert "frontend_build_identity_missing" in result.error_codes
+
+
+def test_verify_frontend_static_build_fails_closed_on_source_asset_drift(tmp_path: Path) -> None:
+    static_root = tmp_path / "static"
+    asset_path = _write_vite_static_dist(static_root)
+    built_at = datetime(2026, 6, 16, 12, 5, tzinfo=timezone.utc)
+    _set_mtime(static_root / "index.html", built_at)
+    _set_mtime(asset_path, built_at)
+    backend = _backend_info(datetime(2026, 6, 16, 11, 47, tzinfo=timezone.utc))
+    verifier.write_frontend_build_identity(
+        static_root=static_root,
+        backend_info=backend,
+        repo_root=tmp_path,
+    )
+    asset_path.write_text("console.log('different source asset');\n", encoding="utf-8")
+    _set_mtime(asset_path, built_at)
+
+    result = verifier.verify_frontend_static_build(
+        static_root=static_root,
+        backend_info=backend,
+        repo_root=tmp_path,
+        require_build_identity=True,
+    )
+
+    assert result.ok is False
+    assert "frontend_build_identity_main_asset_hash_mismatch" in result.error_codes
+
+
 def test_verify_frontend_static_build_fails_closed_when_main_asset_is_missing(tmp_path: Path) -> None:
     static_root = tmp_path / "static"
     assets_dir = static_root / "assets"
@@ -321,6 +420,11 @@ def test_run_frontend_build_bootstraps_dependencies_when_node_modules_missing(
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(verifier.subprocess, "run", _run)
+    monkeypatch.setattr(
+        verifier,
+        "write_frontend_build_identity",
+        lambda **_kwargs: verifier.VerificationResult(ok=True, payload={}),
+    )
 
     result = verifier.run_frontend_build(tmp_path)
 
