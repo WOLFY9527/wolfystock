@@ -42,6 +42,9 @@ from src.services.uat_provider_isolation import (
     check_uat_provider_dispatch,
     require_uat_provider_dispatch_allowed,
 )
+from src.services.news_catalyst_producer_lineage import (
+    build_news_catalyst_producer_lineage_bundle_v1,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +252,11 @@ class SearchResult:
     url: str
     source: str  # 来源网站
     published_date: Optional[str] = None
+    published_at: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.published_at is None:
+            self.published_at = self.published_date
     
     def to_text(self) -> str:
         """转换为文本格式"""
@@ -267,6 +275,20 @@ class SearchResponse:
     search_time: float = 0.0  # 搜索耗时（秒）
     attempts: List[Dict[str, Any]] = field(default_factory=list)
     diagnostics: Dict[str, Any] = field(default_factory=dict)
+    producer_lineage_bundle: Dict[str, Any] = field(default_factory=dict)
+
+    def attach_producer_lineage(
+        self,
+        *,
+        capability_family: str,
+    ) -> 'SearchResponse':
+        self.producer_lineage_bundle = (
+            build_news_catalyst_producer_lineage_bundle_v1(
+                self,
+                capability_family=capability_family,
+            )
+        )
+        return self
     
     def to_context(self, max_results: int = 5) -> str:
         """将搜索结果转换为可用于 AI 分析的上下文"""
@@ -2267,6 +2289,7 @@ class SearchService:
             search_time=response.search_time,
             attempts=attempts,
             diagnostics=diagnostics,
+            producer_lineage_bundle=dict(response.producer_lineage_bundle),
         )
 
     def _get_cached(self, key: str) -> Optional['SearchResponse']:
@@ -2463,7 +2486,9 @@ class SearchService:
     ) -> SearchResponse:
         """Hard-filter results by published_date recency and normalize date strings."""
         if not response.success or not response.results:
-            return response
+            return response.attach_producer_lineage(
+                capability_family="stock_news",
+            )
 
         today = datetime.now().date()
         earliest = today - timedelta(days=max(0, int(search_days) - 1))
@@ -2493,6 +2518,7 @@ class SearchService:
                     url=item.url,
                     source=item.source,
                     published_date=published.isoformat(),
+                    published_at=item.published_at,
                 )
             )
             if len(filtered) >= max_results:
@@ -2519,7 +2545,9 @@ class SearchService:
             success=response.success,
             error_message=response.error_message,
             search_time=response.search_time,
-        )
+            attempts=list(response.attempts),
+            diagnostics=dict(response.diagnostics),
+        ).attach_producer_lineage(capability_family="stock_news")
 
     def _normalize_and_limit_response(
         self,
@@ -2529,7 +2557,9 @@ class SearchService:
     ) -> SearchResponse:
         """Normalize parseable dates without enforcing freshness filtering."""
         if not response.success or not response.results:
-            return response
+            return response.attach_producer_lineage(
+                capability_family="stock_news",
+            )
 
         normalized_results: List[SearchResult] = []
         for item in response.results[:max_results]:
@@ -2543,6 +2573,7 @@ class SearchService:
                     published_date=(
                         normalized_date.isoformat() if normalized_date is not None else item.published_date
                     ),
+                    published_at=item.published_at,
                 )
             )
 
@@ -2553,7 +2584,9 @@ class SearchService:
             success=response.success,
             error_message=response.error_message,
             search_time=response.search_time,
-        )
+            attempts=list(response.attempts),
+            diagnostics=dict(response.diagnostics),
+        ).attach_producer_lineage(capability_family="stock_news")
     
     def search_stock_news(
         self,
@@ -2702,7 +2735,7 @@ class SearchService:
                 error_message=None,
                 attempts=attempt_trace,
                 diagnostics=diagnostics,
-            )
+            ).attach_producer_lineage(capability_family="stock_news")
             self._put_cache(cache_key, filtered_empty)
             return filtered_empty
         
@@ -2720,7 +2753,7 @@ class SearchService:
             error_message=aggregate_error,
             attempts=attempt_trace,
             diagnostics=diagnostics,
-        )
+        ).attach_producer_lineage(capability_family="stock_news")
     
     def search_stock_events(
         self,
@@ -2761,7 +2794,9 @@ class SearchService:
             response = provider.search(query, max_results=5)
             
             if response.success:
-                return response
+                return response.attach_producer_lineage(
+                    capability_family="company_developments",
+                )
         
         return SearchResponse(
             query=query,
@@ -2769,6 +2804,8 @@ class SearchService:
             provider="None",
             success=False,
             error_message="事件搜索失败"
+        ).attach_producer_lineage(
+            capability_family="company_developments",
         )
     
     def search_comprehensive_intel(
