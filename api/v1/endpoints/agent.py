@@ -126,11 +126,15 @@ class AgentStatusResponse(BaseModel):
     enabled: bool
 
 class SkillInfo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     id: str
     name: str
     description: str
 
 class SkillsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     skills: List[SkillInfo]
     default_skill_id: str = ""
 
