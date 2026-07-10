@@ -121,8 +121,28 @@ function normalizeScannerCandidate(candidate: ScannerCandidate): ScannerCandidat
   };
 }
 
-function normalizeScannerCandidates(candidates?: ScannerCandidate[]): ScannerCandidate[] | undefined {
-  return Array.isArray(candidates) ? candidates.map(normalizeScannerCandidate) : candidates;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+function normalizeScannerCandidates(candidates: unknown): ScannerCandidate[] {
+  if (!Array.isArray(candidates)) return [];
+  return candidates
+    .filter((item): item is ScannerCandidate => Boolean(item) && typeof item === 'object')
+    .map((candidate) => normalizeScannerCandidate(candidate));
+}
+
+function normalizeScannerCandidateDiagnostics(value: unknown): ScannerRunDetail['candidates'] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is NonNullable<ScannerRunDetail['candidates']>[number] => (
+    Boolean(item) && typeof item === 'object'
+  ));
 }
 
 function normalizeScannerDataReadiness(value: unknown): ScannerDataReadiness | undefined {
@@ -132,9 +152,38 @@ function normalizeScannerDataReadiness(value: unknown): ScannerDataReadiness | u
   return normalized;
 }
 
+function normalizePaginationCount(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function normalizeScannerHistoryResponse(payload: unknown): ScannerRunHistoryResponse {
+  const normalized = toCamelCase<ScannerRunHistoryResponse>(
+    isRecord(payload) ? payload : {},
+  );
+  return {
+    total: normalizePaginationCount(normalized.total, 0),
+    page: normalizePaginationCount(normalized.page, 1),
+    limit: normalizePaginationCount(normalized.limit, 0),
+    // Absent/malformed list sections stay empty — never fabricate history rows or candidates.
+    items: Array.isArray(normalized.items) ? normalized.items : [],
+  };
+}
+
+function normalizeScannerThemesResponse(payload: unknown): ScannerThemesResponse {
+  const normalized = toCamelCase<ScannerThemesResponse>(
+    isRecord(payload) ? payload : {},
+  );
+  return {
+    ...normalized,
+    items: Array.isArray(normalized.items) ? normalized.items : [],
+  };
+}
+
 function normalizeScannerRunDetail(payload: Record<string, unknown>): ScannerRunDetailWithDataReadiness {
   const normalized = toCamelCase<ScannerRunDetail>(payload);
-  const normalizedDiagnostics = normalized.diagnostics as ScannerRunDetailWithDataReadiness['diagnostics'] | undefined;
+  const normalizedDiagnostics = isRecord(normalized.diagnostics)
+    ? normalized.diagnostics as ScannerRunDetailWithDataReadiness['diagnostics']
+    : undefined;
   const diagnostics = {
     ...(normalizedDiagnostics || {}),
     dataReadiness: normalizeScannerDataReadiness(normalizedDiagnostics?.dataReadiness),
@@ -142,13 +191,20 @@ function normalizeScannerRunDetail(payload: Record<string, unknown>): ScannerRun
   return {
     ...normalized,
     diagnostics,
-    shortlist: normalizeScannerCandidates(normalized.shortlist) || [],
+    universeNotes: asStringArray(normalized.universeNotes),
+    scoringNotes: asStringArray(normalized.scoringNotes),
+    rejectedSymbols: asStringArray(normalized.rejectedSymbols),
+    // Required candidate arrays: missing/null/malformed → empty, never placeholder candidates.
+    shortlist: normalizeScannerCandidates(normalized.shortlist),
     selected: normalizeScannerCandidates(normalized.selected),
+    candidates: normalizeScannerCandidateDiagnostics(normalized.candidates),
   };
 }
 
 function normalizeScannerOperationalStatus(payload: Record<string, unknown>): ScannerOperationalStatusWithDataReadiness {
-  const normalized = toCamelCase<ScannerOperationalStatusWithDataReadiness>(payload);
+  const normalized = toCamelCase<ScannerOperationalStatusWithDataReadiness>(
+    isRecord(payload) ? payload : {},
+  );
   return {
     ...normalized,
     dataReadiness: normalizeScannerDataReadiness(normalized.dataReadiness),
@@ -173,7 +229,7 @@ export const scannerApi = {
       requestData,
       { timeout: 120000 },
     );
-    return normalizeScannerRunDetail(response.data);
+    return normalizeScannerRunDetail(isRecord(response.data) ? response.data : {});
   },
 
   getThemes: async (params: { market?: string } = {}): Promise<ScannerThemesResponse> => {
@@ -183,7 +239,7 @@ export const scannerApi = {
         params: params.market ? { market: params.market } : undefined,
       },
     );
-    return toCamelCase<ScannerThemesResponse>(response.data);
+    return normalizeScannerThemesResponse(response.data);
   },
 
   createTheme: async (params: ScannerThemeGenerateRequest): Promise<ScannerThemeGenerationResponse> => {
@@ -224,14 +280,14 @@ export const scannerApi = {
         },
       },
     );
-    return toCamelCase<ScannerRunHistoryResponse>(response.data);
+    return normalizeScannerHistoryResponse(response.data);
   },
 
   getRun: async (runId: number): Promise<ScannerRunDetail> => {
     const response = await apiClient.get<Record<string, unknown>>(
       `/api/v1/scanner/runs/${encodeURIComponent(runId)}`,
     );
-    return normalizeScannerRunDetail(response.data);
+    return normalizeScannerRunDetail(isRecord(response.data) ? response.data : {});
   },
 
   getStrategySimulation: async (params: {
@@ -271,7 +327,7 @@ export const scannerApi = {
         },
       },
     );
-    return normalizeScannerRunDetail(response.data);
+    return normalizeScannerRunDetail(isRecord(response.data) ? response.data : {});
   },
 
   getRecentWatchlists: async (params: {
@@ -289,7 +345,7 @@ export const scannerApi = {
         },
       },
     );
-    return toCamelCase<ScannerRunHistoryResponse>(response.data);
+    return normalizeScannerHistoryResponse(response.data);
   },
 
   getStatus: async (params: {
@@ -305,6 +361,6 @@ export const scannerApi = {
         },
       },
     );
-    return normalizeScannerOperationalStatus(response.data);
+    return normalizeScannerOperationalStatus(isRecord(response.data) ? response.data : {});
   },
 };

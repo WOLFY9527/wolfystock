@@ -552,6 +552,59 @@ describe('stocksApi', () => {
     expect(JSON.stringify(payload.peerCorrelationSnapshot)).not.toMatch(/provider|raw|debug|trace|must-not-emit/i);
   });
 
+  it('fail-closes sparse structure-decision payloads without inventing usableBars or scores', async () => {
+    const { stocksApi, normalizeStockStructureDecisionResponse } = await import('../stocks');
+
+    get.mockResolvedValueOnce({
+      data: {
+        ticker: 'AAPL',
+        symbol: 'AAPL',
+        // intentionally omit dataQuality, explanation, researchNotes, arrays
+        structure_state: null,
+        observation_only: true,
+        decision_grade: false,
+      },
+    });
+
+    const payload = await stocksApi.getStructureDecision('AAPL');
+
+    expect(payload.dataQuality).toEqual({
+      status: null,
+      source: null,
+      period: null,
+      requestedDays: null,
+      observedBars: null,
+      usableBars: null,
+      reason: null,
+    });
+    expect(payload.dataQuality.usableBars).toBeNull();
+    expect(payload.dataQuality.usableBars).not.toBe(0);
+    expect(payload.explanation).toEqual({
+      whyThisStructure: null,
+      whatConfirmsIt: [],
+      whatInvalidatesIt: [],
+      keyLevels: [],
+    });
+    expect(payload.researchNotes).toEqual({
+      watchNext: [],
+      needsMoreEvidence: [],
+      riskFlags: [],
+    });
+    expect(payload.missingEvidence).toEqual([]);
+    expect(payload.componentScores).toEqual({});
+    expect(payload.historicalOhlcvReadiness).toBeNull();
+    expect(payload.observationOnly).toBe(true);
+    expect(payload.decisionGrade).toBe(false);
+
+    // View-model re-entry stays stable for already-sparse objects
+    const reentered = normalizeStockStructureDecisionResponse({
+      symbol: 'MSFT',
+    });
+    expect(reentered.dataQuality.usableBars).toBeNull();
+    expect(reentered.explanation.whatConfirmsIt).toEqual([]);
+    expect(() => reentered.dataQuality.usableBars).not.toThrow();
+  });
+
   it('calls the research packet endpoint and normalizes readiness fields', async () => {
     const { stocksApi } = await import('../stocks');
 

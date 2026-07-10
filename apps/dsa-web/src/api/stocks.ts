@@ -302,13 +302,14 @@ export type StockStructureDecisionMissingEvidence = {
 };
 
 export type StockStructureDecisionDataQuality = {
-  status: string;
-  source: string;
-  period: string;
-  requestedDays: number;
-  observedBars: number;
-  usableBars: number;
-  reason: string;
+  status?: string | null;
+  source?: string | null;
+  period?: string | null;
+  /** Missing stays null — never fabricate 0 bars as evidence. */
+  requestedDays?: number | null;
+  observedBars?: number | null;
+  usableBars?: number | null;
+  reason?: string | null;
 };
 
 export type StockStructureHistoricalOhlcvReadiness = {
@@ -400,7 +401,7 @@ export type StockStructureDecisionResponse = {
   riskObservations: string[];
   evidenceGaps: string[];
   dataQuality: StockStructureDecisionDataQuality;
-  historicalOhlcvReadiness: StockStructureHistoricalOhlcvReadiness;
+  historicalOhlcvReadiness?: StockStructureHistoricalOhlcvReadiness | null;
   structureComputation?: StockStructureComputationState | null;
   missingEvidence: StockStructureDecisionMissingEvidence[];
   degradedInputs: StockStructureDecisionDegradedInput[];
@@ -878,45 +879,121 @@ export function normalizePeerCorrelationSnapshot(value: unknown): StockPeerCorre
   };
 }
 
-function normalizeStockStructureDecisionResponse(payload: unknown): StockStructureDecisionResponse {
-  const normalized = toCamelCase<StockStructureDecisionResponse>(payload);
+function normalizeStockStructureDataQuality(value: unknown): StockStructureDecisionDataQuality {
+  const record = isRecord(value) ? value : {};
+  // Fail-closed: object always present so page accessors do not NPE.
+  // Numeric absence stays null — missing != 0 bars / neutral score.
   return {
-    schemaVersion: normalized.schemaVersion,
-    ticker: normalized.ticker,
-    symbol: normalized.symbol,
-    structureState: normalized.structureState,
-    confidence: normalized.confidence,
+    status: stringField(record, ['status', 'state']),
+    source: stringField(record, ['source']),
+    period: stringField(record, ['period']),
+    requestedDays: numberField(record, ['requestedDays', 'requested_days']),
+    observedBars: numberField(record, ['observedBars', 'observed_bars']),
+    usableBars: numberField(record, ['usableBars', 'usable_bars']),
+    reason: stringField(record, ['reason']),
+  };
+}
+
+function normalizeStockStructureKeyLevels(value: unknown): StockStructureDecisionKeyLevel[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is StockStructureDecisionKeyLevel => Boolean(item) && typeof item === 'object');
+}
+
+function normalizeStockStructureStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+function normalizeStockStructureMissingEvidenceList(value: unknown): StockStructureDecisionMissingEvidence[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(normalizeMissingEvidence);
+}
+
+function normalizeStockStructureDegradedInputs(value: unknown): StockStructureDecisionDegradedInput[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is StockStructureDecisionDegradedInput => Boolean(item) && typeof item === 'object')
+    .map((item) => ({
+      section: typeof item.section === 'string' ? item.section : '',
+      status: typeof item.status === 'string' ? item.status : 'unavailable',
+      reason: typeof item.reason === 'string' ? item.reason : '',
+    }));
+}
+
+function normalizeStockStructureConsumerIssues(value: unknown): StockStructureDecisionConsumerIssue[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is StockStructureDecisionConsumerIssue => Boolean(item) && typeof item === 'object')
+    .map((item) => ({
+      label: typeof item.label === 'string' ? item.label : '',
+      message: typeof item.message === 'string' ? item.message : '',
+      severity: typeof item.severity === 'string' ? item.severity : '',
+      category: typeof item.category === 'string' ? item.category : '',
+    }));
+}
+
+function normalizeStockStructureDrilldownLinks(value: unknown): StockStructureDecisionSourceContext[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is StockStructureDecisionSourceContext => Boolean(item) && typeof item === 'object')
+    .map((item) => ({
+      source: typeof item.source === 'string' ? item.source : '',
+      label: typeof item.label === 'string' ? item.label : '',
+      route: typeof item.route === 'string' ? item.route : '',
+      section: typeof item.section === 'string' ? item.section : '',
+      reason: typeof item.reason === 'string' ? item.reason : '',
+    }));
+}
+
+export function normalizeStockStructureDecisionResponse(payload: unknown): StockStructureDecisionResponse {
+  const normalized = toCamelCase<StockStructureDecisionResponse>(payload);
+  const raw = isRecord(payload) ? payload : {};
+  const explanationSource = isRecord(normalized.explanation) ? normalized.explanation : {};
+  const researchNotesSource = isRecord(normalized.researchNotes) ? normalized.researchNotes : {};
+  const componentScores = isRecord(normalized.componentScores) ? normalized.componentScores : {};
+
+  return {
+    schemaVersion: typeof normalized.schemaVersion === 'string' ? normalized.schemaVersion : '',
+    ticker: typeof normalized.ticker === 'string' ? normalized.ticker : (typeof normalized.symbol === 'string' ? normalized.symbol : ''),
+    symbol: typeof normalized.symbol === 'string' ? normalized.symbol : (typeof normalized.ticker === 'string' ? normalized.ticker : ''),
+    structureState: typeof normalized.structureState === 'string' ? normalized.structureState : '',
+    confidence: typeof normalized.confidence === 'string' ? normalized.confidence : '',
     confidenceCap: normalizeStockStructureConfidenceCap(normalized.confidenceCap),
     confidenceState: normalizeStockStructureConfidenceState(normalized.confidenceState),
-    componentScores: normalized.componentScores ?? {},
+    componentScores: componentScores as Record<string, number>,
     explanation: {
-      whyThisStructure: normalized.explanation?.whyThisStructure ?? null,
-      whatConfirmsIt: normalized.explanation?.whatConfirmsIt ?? [],
-      whatInvalidatesIt: normalized.explanation?.whatInvalidatesIt ?? [],
-      keyLevels: normalized.explanation?.keyLevels ?? [],
+      whyThisStructure: explanationSource.whyThisStructure ?? null,
+      whatConfirmsIt: normalizeStockStructureStringList(explanationSource.whatConfirmsIt),
+      whatInvalidatesIt: normalizeStockStructureStringList(explanationSource.whatInvalidatesIt),
+      keyLevels: normalizeStockStructureKeyLevels(explanationSource.keyLevels),
     },
     researchNotes: {
-      watchNext: normalized.researchNotes?.watchNext ?? [],
-      needsMoreEvidence: normalized.researchNotes?.needsMoreEvidence ?? [],
-      riskFlags: normalized.researchNotes?.riskFlags ?? [],
+      watchNext: normalizeStockStructureStringList(researchNotesSource.watchNext),
+      needsMoreEvidence: normalizeStockStructureStringList(researchNotesSource.needsMoreEvidence),
+      riskFlags: normalizeStockStructureStringList(researchNotesSource.riskFlags),
     },
-    keyLevels: normalized.keyLevels,
-    evidenceNotes: normalized.evidenceNotes,
-    riskObservations: normalized.riskObservations,
-    evidenceGaps: normalized.evidenceGaps,
-    dataQuality: normalized.dataQuality,
-    historicalOhlcvReadiness: normalized.historicalOhlcvReadiness,
+    keyLevels: normalizeStockStructureKeyLevels(normalized.keyLevels),
+    evidenceNotes: normalizeStockStructureStringList(normalized.evidenceNotes),
+    riskObservations: normalizeStockStructureStringList(normalized.riskObservations),
+    evidenceGaps: normalizeStockStructureStringList(normalized.evidenceGaps),
+    dataQuality: normalizeStockStructureDataQuality(
+      firstField(raw, ['dataQuality', 'data_quality']) ?? normalized.dataQuality,
+    ),
+    historicalOhlcvReadiness: isRecord(normalized.historicalOhlcvReadiness)
+      ? normalized.historicalOhlcvReadiness
+      : null,
     structureComputation: normalized.structureComputation ?? null,
-    missingEvidence: normalized.missingEvidence,
-    degradedInputs: normalized.degradedInputs,
+    missingEvidence: normalizeStockStructureMissingEvidenceList(normalized.missingEvidence),
+    degradedInputs: normalizeStockStructureDegradedInputs(normalized.degradedInputs),
     productReadModel: normalized.productReadModel ?? null,
     peerCorrelationSnapshot: normalizePeerCorrelationSnapshot(normalized.peerCorrelationSnapshot),
-    consumerIssues: normalized.consumerIssues,
-    noAdviceDisclosure: normalized.noAdviceDisclosure,
-    observationOnly: normalized.observationOnly,
-    decisionGrade: normalized.decisionGrade,
+    consumerIssues: normalizeStockStructureConsumerIssues(normalized.consumerIssues),
+    noAdviceDisclosure: typeof normalized.noAdviceDisclosure === 'string' ? normalized.noAdviceDisclosure : '',
+    observationOnly: true,
+    decisionGrade: false,
     sourceContext: normalized.sourceContext ?? null,
-    drilldownLinks: normalized.drilldownLinks,
+    drilldownLinks: normalizeStockStructureDrilldownLinks(normalized.drilldownLinks),
   };
 }
 
