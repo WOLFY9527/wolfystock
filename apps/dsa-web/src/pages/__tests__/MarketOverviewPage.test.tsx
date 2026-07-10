@@ -2787,6 +2787,59 @@ describe('MarketOverviewPage', () => {
     expect(strip.textContent || '').not.toMatch(/raw|debug|provider|cache|router|env|trace|credential|broker|trade|order|sourceAuthority|contractVersion/i);
   });
 
+  it('G033: collapses all-missing visual evidence into one bounded empty instead of a three-card wall', () => {
+    const emptyPanel = {
+      ...localSnapshotPayload().payload.indices,
+      items: [],
+      isUnavailable: true,
+      source: 'unavailable' as const,
+      freshness: 'unavailable' as const,
+    };
+    renderMarketOverviewWorkbenchWithProps({
+      panels: {
+        ...localSnapshotPayload().payload,
+        indices: emptyPanel,
+        cnIndices: emptyPanel,
+        crypto: emptyPanel,
+        volatility: undefined,
+        fundsFlow: undefined,
+        sectorRotation: undefined,
+        usBreadth: usBreadthUnavailablePanel(),
+        rates: emptyPanel,
+        futures: emptyPanel,
+      },
+    });
+
+    const strip = screen.getByTestId('market-overview-visual-evidence-strip');
+    expect(strip).toHaveAttribute('data-module-density', 'bounded-empty');
+    expect(screen.getByTestId('market-overview-visual-evidence-bounded-empty')).toHaveTextContent('当前没有可渲染的图形证据');
+    // Unavailable copy remains explicit without three peer unavailable cards.
+    expect(screen.getByTestId('market-overview-visual-card-core-trends-unavailable')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-visual-card-risk-pressure-unavailable')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-visual-card-flow-rotation-unavailable')).toBeInTheDocument();
+    expect(screen.queryByTestId('market-overview-visual-card-core-trends-points')).not.toBeInTheDocument();
+    expect(strip.textContent || '').not.toMatch(/buy|sell|hold|target|stop|买入|卖出|持有|目标价|止损/i);
+  });
+
+  it('G033: keeps thin visual evidence compact with available cards and a single missing compact block', () => {
+    renderMarketOverviewWorkbenchWithProps({
+      panels: {
+        ...localSnapshotPayload().payload,
+        volatility: undefined,
+        fundsFlow: undefined,
+        sectorRotation: undefined,
+        usBreadth: usBreadthUnavailablePanel(),
+      },
+    });
+
+    const strip = screen.getByTestId('market-overview-visual-evidence-strip');
+    expect(strip).toHaveAttribute('data-module-density', 'compact');
+    expect(screen.getByTestId('market-overview-visual-card-core-trends-points')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-visual-evidence-missing-compact')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-visual-card-risk-pressure-unavailable')).toHaveTextContent('风险压力图形证据缺失');
+    expect(screen.getByTestId('market-overview-visual-card-flow-rotation-unavailable')).toHaveTextContent('资金与轮动图形证据缺失');
+  });
+
   it('maps proxy indicator labels across default consumer cards and visual evidence', () => {
     renderMarketOverviewWorkbenchWithProps({
       panels: {

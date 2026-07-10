@@ -1212,19 +1212,44 @@ const MarketOverviewReadinessEmptyPanel = ({
           <TerminalChip variant="neutral" className="shrink-0">仅显示可用证据</TerminalChip>
         )}
       </div>
-      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-        {families.map((family) => (
-          <div key={family.key} className="min-w-0 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-2.5">
-            <div className="flex min-w-0 items-start justify-between gap-2">
-              <p className="min-w-0 text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)]">{family.label}</p>
-              <TerminalChip variant={MARKET_OVERVIEW_FAMILY_STATE_VARIANT[family.state]} className="shrink-0 text-[10px]">
-                {family.state}
-              </TerminalChip>
+      {allClosed ? (
+        <div
+          data-testid="market-overview-readiness-empty-compact"
+          data-module-density="bounded-empty"
+          className="mt-3 rounded-md border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-2.5"
+        >
+          <p className="text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+            全部数据族暂不可用。下列边界保持关闭，不生成图表分数或结论。
+          </p>
+          <ul className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+            {families.map((family) => (
+              <li
+                key={family.key}
+                className="inline-flex min-w-0 items-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-2 py-1 text-[11px]"
+              >
+                <span className="font-semibold text-[color:var(--wolfy-text-secondary)]">{family.label}</span>
+                <TerminalChip variant={MARKET_OVERVIEW_FAMILY_STATE_VARIANT[family.state]} className="shrink-0 text-[10px]">
+                  {family.state}
+                </TerminalChip>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4" data-module-density="compact">
+          {families.map((family) => (
+            <div key={family.key} className="min-w-0 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-2.5">
+              <div className="flex min-w-0 items-start justify-between gap-2">
+                <p className="min-w-0 text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)]">{family.label}</p>
+                <TerminalChip variant={MARKET_OVERVIEW_FAMILY_STATE_VARIANT[family.state]} className="shrink-0 text-[10px]">
+                  {family.state}
+                </TerminalChip>
+              </div>
+              <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{family.detail}</p>
             </div>
-            <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{family.detail}</p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 };

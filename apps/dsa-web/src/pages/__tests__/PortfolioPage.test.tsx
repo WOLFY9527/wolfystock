@@ -1229,6 +1229,40 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
   });
 
+  it('G033: bounds empty-portfolio density with one primary path and no repeated next-action CTAs', async () => {
+    getStructureReview.mockResolvedValueOnce(null);
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const onboardingRow = screen.getByTestId('portfolio-empty-onboarding-row');
+    expect(onboardingRow).toHaveAttribute('data-empty-density', 'bounded');
+    expect(onboardingRow).toHaveAttribute('data-module-density', 'compact');
+
+    const workflow = screen.getByTestId('portfolio-empty-workflow-column');
+    const primaryActions = within(workflow).getByTestId('portfolio-empty-actions');
+    expect(within(primaryActions).getByRole('button', { name: '添加持仓' })).toBeInTheDocument();
+    expect(within(primaryActions).getByRole('button', { name: '导入记录' })).toBeInTheDocument();
+
+    // Secondary next-action panel stays compact and does not re-offer the same empty-state buttons.
+    const nextAction = screen.getByTestId('portfolio-next-action-panel');
+    expect(nextAction).toHaveAttribute('data-module-density', 'compact');
+    expect(within(nextAction).queryByRole('button', { name: '添加持仓' })).not.toBeInTheDocument();
+    expect(within(nextAction).queryByRole('button', { name: '创建账户' })).not.toBeInTheDocument();
+
+    // Structure review collapses to a bounded empty line instead of a second giant empty card.
+    expect(screen.getByTestId('portfolio-structure-review-panel')).toHaveAttribute('data-module-density', 'bounded-empty');
+    expect(screen.getByTestId('portfolio-structure-review-bounded-empty')).toHaveTextContent('等待首笔持仓');
+
+    // Research path CTA remains available once without card-wall layout.
+    const onboardingCta = within(workflow).getByTestId('portfolio-empty-onboarding-cta');
+    expect(onboardingCta).toHaveAttribute('data-density', 'compact');
+    expect(within(onboardingCta).getByRole('link', { name: '先看市场概览' })).toBeInTheDocument();
+
+    // Later-path steps stay behind disclosure so first viewport is not a numbered-step wall.
+    expect(screen.getByTestId('portfolio-empty-supporting-disclosure')).not.toHaveAttribute('open');
+  });
+
   it('renders a compact account strip, compact empty holdings, and primary portfolio actions', async () => {
     const { container } = render(<PortfolioPage />);
 
