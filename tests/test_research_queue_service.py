@@ -11,9 +11,10 @@ from api.v1.schemas.event_radar import EVENT_RADAR_SNAPSHOT_CONTRACT_VERSION
 from api.v1.schemas.money_flow import (
     ConsumerDataQualityModel,
     HomeMoneyFlowProxyResponse,
-    MoneyFlowBiasModel,
+    MoneyFlowOffensiveDefensiveBiasModel,
     MoneyFlowItemModel,
     MoneyFlowSourceStatusModel,
+    MoneyFlowStyleBiasModel,
 )
 from api.v1.schemas.personal_summary import (
     PersonalSummaryDataQuality,
@@ -249,7 +250,7 @@ def test_research_queue_adapters_accept_safe_mappings_and_typed_models_in_order(
                     )
                 ],
                 topOutflows=[],
-                styleBias=MoneyFlowBiasModel(
+                styleBias=MoneyFlowStyleBiasModel(
                     bias="growth",
                     interpretation="成长风格相对占优，仍需复核。",
                     dataQuality=ConsumerDataQualityModel(
@@ -258,7 +259,7 @@ def test_research_queue_adapters_accept_safe_mappings_and_typed_models_in_order(
                         available=True,
                     ),
                 ),
-                offensiveDefensiveBias=MoneyFlowBiasModel(
+                offensiveDefensiveBias=MoneyFlowOffensiveDefensiveBiasModel(
                     bias="offensive",
                     interpretation="进攻风格相对活跃，保持研究观察。",
                     dataQuality=ConsumerDataQualityModel(
