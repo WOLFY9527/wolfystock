@@ -8,11 +8,21 @@ import {
 
 describe('appRouteGuards public market boundary', () => {
   it.each([
+    '/market',
     '/market-overview',
     '/zh/market-overview',
     '/en/market-overview',
     '/market/decision-cockpit',
+    '/market/liquidity-monitor',
     '/zh/market/liquidity-monitor',
+    '/en/market/liquidity-monitor',
+    '/market/rotation-radar',
+    '/zh/market/rotation-radar',
+    '/en/market/rotation-radar',
+    '/liquidity',
+    '/rotation',
+    '/zh/liquidity',
+    '/en/rotation',
     '/',
     '/guest',
     '/stocks/structure-decision',
@@ -32,7 +42,9 @@ describe('appRouteGuards public market boundary', () => {
     '/backtest',
     '/scenario-lab',
     '/research/radar',
+    '/options',
     '/options-lab',
+    '/zh/options-lab',
     '/settings',
     '/stocks/AAPL/structure-decision',
   ])('classifies %s as protected product path', (path) => {

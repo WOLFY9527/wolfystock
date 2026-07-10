@@ -89,10 +89,17 @@ describe('apiClient auth redirect handling', () => {
   });
 
   it.each([
+    '/market',
     '/market-overview',
     '/zh/market-overview',
     '/en/market-overview',
     '/market/decision-cockpit',
+    '/market/liquidity-monitor',
+    '/zh/market/liquidity-monitor',
+    '/market/rotation-radar',
+    '/en/market/rotation-radar',
+    '/liquidity',
+    '/rotation',
     '/guest',
   ])('keeps public route %s open when a secondary API returns 401', async (path) => {
     const assignSpy = vi.fn();
@@ -126,12 +133,75 @@ describe('apiClient auth redirect handling', () => {
   });
 
   it.each([
+    '/market-overview',
+    '/market/liquidity-monitor',
+    '/market/rotation-radar',
+  ])('keeps public route %s open when a secondary API returns 403', async (path) => {
+    const assignSpy = vi.fn();
+    window.history.replaceState({}, '', path);
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        ...window.location,
+        assign: assignSpy,
+      },
+    });
+
+    await expect(apiClient.get('/api/v1/market/crypto', {
+      adapter: async (config) => Promise.reject({
+        config,
+        response: {
+          config,
+          data: {
+            error: 'forbidden',
+            message: 'Forbidden',
+          },
+          headers: {},
+          status: 403,
+          statusText: 'Forbidden',
+        },
+      }),
+    })).rejects.toBeTruthy();
+
+    expect(assignSpy).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem('wolfystock.auth.session-event.v1')).toBeNull();
+  });
+
+  it.each([
+    '/market-overview',
+    '/market/liquidity-monitor',
+    '/market/rotation-radar',
+  ])('keeps public route %s open when a secondary request fails with a network error', async (path) => {
+    const assignSpy = vi.fn();
+    window.history.replaceState({}, '', path);
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        ...window.location,
+        assign: assignSpy,
+      },
+    });
+
+    await expect(apiClient.get('/api/v1/market/crypto', {
+      adapter: async () => Promise.reject({
+        code: 'ERR_NETWORK',
+        message: 'Network Error',
+      }),
+    })).rejects.toBeTruthy();
+
+    expect(assignSpy).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem('wolfystock.auth.session-event.v1')).toBeNull();
+  });
+
+  it.each([
     '/watchlist',
     '/scanner',
     '/portfolio',
     '/backtest',
     '/scenario-lab',
     '/research/radar',
+    '/options-lab',
+    '/options',
   ])('still redirects protected route %s to login on 401', async (path) => {
     const assignSpy = vi.fn();
     window.history.replaceState({}, '', path);
@@ -160,6 +230,38 @@ describe('apiClient auth redirect handling', () => {
     })).rejects.toBeTruthy();
 
     expect(assignSpy).toHaveBeenCalledWith(`/login?redirect=${encodeURIComponent(path)}`);
+    expect(window.localStorage.getItem('wolfystock.auth.session-event.v1')).toMatch(/session-invalidated/);
+  });
+
+  it('invalidates an authenticated member session on protected-route 401 without affecting public-route preservation policy', async () => {
+    const assignSpy = vi.fn();
+    window.history.replaceState({}, '', '/options-lab');
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        ...window.location,
+        assign: assignSpy,
+      },
+    });
+
+    await expect(apiClient.get('/api/v1/options-lab/snapshot', {
+      adapter: async (config) => Promise.reject({
+        config,
+        response: {
+          config,
+          data: {
+            error: 'unauthorized',
+            message: 'Login required',
+          },
+          headers: {},
+          status: 401,
+          statusText: 'Unauthorized',
+        },
+      }),
+    })).rejects.toBeTruthy();
+
+    expect(assignSpy).toHaveBeenCalledWith('/login?redirect=%2Foptions-lab');
+    expect(window.localStorage.getItem('wolfystock.auth.session-event.v1')).toMatch(/session-invalidated/);
   });
 
   it('preserves the active locale when redirecting protected API failures to login', async () => {
