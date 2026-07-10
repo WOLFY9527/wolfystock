@@ -2866,8 +2866,17 @@ describe('MarketOverviewPage', () => {
     expect(nextAction).toHaveAttribute('data-research-anatomy', 'next-research-action');
     expect(nextAction.tagName.toLowerCase()).toBe('nav');
     expect(within(nextAction).getByText('研究雷达')).toBeInTheDocument();
+    expect(within(nextAction).getByText('观察列表')).toBeInTheDocument();
     expect(within(nextAction).getByText('扫描器')).toBeInTheDocument();
     expect(nextAction.textContent || '').not.toMatch(/买入|卖出|加仓|减仓|推荐|目标价|position size/i);
+    // Journey order: handoff after primary path / drivers, not before market path evidence.
+    const primaryPath = screen.getByTestId('market-overview-first-workbench');
+    const handoff = screen.getByTestId('market-overview-quick-actions');
+    expect(screen.getByTestId('market-overview-workbench')).toHaveAttribute(
+      'data-market-journey-sequence',
+      'observation>main-path>key-metrics>drivers>data-state>next-research-handoff',
+    );
+    expect(primaryPath.compareDocumentPosition(handoff)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 
     await waitFor(() => {
       expect(screen.getByTestId('market-overview-main-grid')).toHaveAttribute('data-market-overview-composition', 'grouped-evidence');
@@ -3161,6 +3170,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByTestId('market-command-chips')).not.toBeInTheDocument();
     expect(screen.getByTestId('market-overview-quick-actions')).toHaveTextContent('决策驾驶舱');
     expect(screen.getByTestId('market-overview-quick-actions')).toHaveTextContent('研究雷达');
+    expect(screen.getByTestId('market-overview-quick-actions')).toHaveTextContent('观察列表');
     expect(screen.getByTestId('market-overview-quick-actions')).toHaveTextContent('扫描器');
     expect(screen.getByTestId('market-overview-quick-actions')).toHaveTextContent('搜索个股');
     expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足|证据待补/);
