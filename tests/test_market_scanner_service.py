@@ -2155,9 +2155,29 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertTrue(result["shortlist"][0]["ai_interpretation"]["available"])
         self.assertEqual(result["shortlist"][0]["ai_interpretation"]["opportunity_type"], "临界突破")
 
-        detail = service.get_run_detail(result["id"])
+        with (
+            patch.object(
+                service.ai_service,
+                "enrich_review_commentary",
+                wraps=service.ai_service.enrich_review_commentary,
+            ) as enrich_review_commentary,
+            patch.object(
+                service.repo,
+                "update_candidate_diagnostics",
+                wraps=service.repo.update_candidate_diagnostics,
+            ) as update_candidate_diagnostics,
+        ):
+            detail = service.get_run_detail(result["id"])
+            status = service.get_operational_status(
+                market="cn",
+                profile="cn_preopen_v1",
+            )
+
         assert detail is not None
-        self.assertIn("review_commentary", detail["shortlist"][0]["ai_interpretation"])
+        enrich_review_commentary.assert_not_called()
+        update_candidate_diagnostics.assert_not_called()
+        self.assertIsNone(detail["shortlist"][0]["ai_interpretation"]["review_commentary"])
+        self.assertEqual(status["last_run"]["id"], result["id"])
 
     def test_apply_score_caps_and_explainability_caps_fallback_candidates(self) -> None:
         service = MarketScannerService(

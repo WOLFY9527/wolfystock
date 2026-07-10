@@ -1541,13 +1541,20 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 run_rule_backtest(request, background_tasks, db_manager=MagicMock())
 
         self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(ctx.exception.detail["error"], "unsupported_execution_model")
+        self.assertEqual(ctx.exception.detail["code"], "unsupported_execution_model")
+        self.assertEqual(ctx.exception.detail["status"], 400)
+        self.assertEqual(ctx.exception.detail["reason"], "unsupported_execution_model")
+        self.assertFalse(ctx.exception.detail["retryable"])
         self.assertEqual(
-            ctx.exception.detail,
+            ctx.exception.detail["message"],
+            "Unsupported rule backtest execution model. Current supported execution model is v1.",
+        )
+        self.assertEqual(
+            ctx.exception.detail["detail"],
             {
-                "error": "unsupported_execution_model",
-                "message": "Unsupported rule backtest execution model. Current supported execution model is v1.",
-                "requested_version": "v2",
-                "supported_versions": ["v1"],
+                "requestedVersion": "v2",
+                "supportedVersions": ["v1"],
             },
         )
         service_cls.assert_not_called()
@@ -1568,8 +1575,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 400)
         self.assertEqual(ctx.exception.detail["error"], "unsupported_execution_model")
-        self.assertEqual(ctx.exception.detail["requested_version"], "quant-v9")
-        self.assertEqual(ctx.exception.detail["supported_versions"], ["v1"])
+        self.assertEqual(ctx.exception.detail["code"], "unsupported_execution_model")
+        self.assertEqual(ctx.exception.detail["status"], 400)
+        self.assertEqual(ctx.exception.detail["detail"]["requestedVersion"], "quant-v9")
+        self.assertEqual(ctx.exception.detail["detail"]["supportedVersions"], ["v1"])
         service_cls.assert_not_called()
 
     def test_run_rule_backtest_rejects_string_v2_execution_model_with_stable_error(self) -> None:
@@ -1587,7 +1596,30 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 400)
         self.assertEqual(ctx.exception.detail["error"], "unsupported_execution_model")
-        self.assertEqual(ctx.exception.detail["requested_version"], "v2")
+        self.assertEqual(ctx.exception.detail["code"], "unsupported_execution_model")
+        self.assertEqual(ctx.exception.detail["status"], 400)
+        self.assertEqual(ctx.exception.detail["detail"]["requestedVersion"], "v2")
+        service_cls.assert_not_called()
+
+    def test_run_rule_backtest_omits_unsafe_execution_model_identifier(self) -> None:
+        raw_identifier = r"/private/token-secret"
+        request = RuleBacktestRunRequest(
+            code="600519",
+            strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            execution_model={"version": raw_identifier},
+            wait_for_completion=False,
+            confirmed=True,
+        )
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService") as service_cls:
+            with self.assertRaises(HTTPException) as ctx:
+                run_rule_backtest(request, BackgroundTasks(), db_manager=MagicMock())
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(ctx.exception.detail["error"], "unsupported_execution_model")
+        self.assertEqual(ctx.exception.detail["detail"]["supportedVersions"], ["v1"])
+        self.assertNotIn("requestedVersion", ctx.exception.detail["detail"])
+        self.assertNotIn(raw_identifier, str(ctx.exception.detail))
         service_cls.assert_not_called()
 
     def test_run_rule_backtest_request_keeps_legacy_setup_backed_parsed_strategy_payload(self) -> None:
@@ -1926,6 +1958,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.sample_blocking_reasons, ["provider_missing"])
         self.assertEqual(response.historicalOhlcvReadiness["providerState"], "provider_missing")
         service.get_sample_status.assert_called_once_with(code=None)
+        service.prepare_backtest_samples.assert_not_called()
+        service.run_backtest.assert_not_called()
 
     def test_rule_backtest_run_response_gates_metrics_until_calculation_ready(self) -> None:
         service = MagicMock()
@@ -2908,7 +2942,11 @@ class BacktestApiContractTestCase(unittest.TestCase):
     def test_compare_rule_backtest_runs_returns_validation_error_for_incomplete_compare_set(self) -> None:
         request = RuleBacktestCompareRequest(run_ids=[101, 202])
         service = MagicMock()
-        service.compare_runs.side_effect = ValueError("At least two completed accessible rule backtest runs are required for comparison")
+        raw_error = (
+            "Requested runs [101, 202]; missing [987654321]; "
+            "storage path C:\\internal\\backtest.sqlite"
+        )
+        service.compare_runs.side_effect = ValueError(raw_error)
 
         with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
             with self.assertRaises(HTTPException) as ctx:
@@ -2916,6 +2954,14 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 400)
         self.assertEqual(ctx.exception.detail["error"], "validation_error")
+        self.assertEqual(ctx.exception.detail["code"], "validation_error")
+        self.assertEqual(ctx.exception.detail["status"], 400)
+        self.assertEqual(
+            ctx.exception.detail["message"],
+            "Backtest request could not be processed.",
+        )
+        self.assertNotIn(raw_error, str(ctx.exception.detail))
+        self.assertNotIn("987654321", str(ctx.exception.detail))
 
     def test_get_rule_backtest_run_returns_404_not_found_contract(self) -> None:
         service = MagicMock()
@@ -2995,6 +3041,9 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.readback_integrity["source"], "stored_status_summary")
         self.assertEqual(response.readback_integrity["integrity_level"], "stored_complete")
         service.get_run_status.assert_called_once_with(123)
+        service.run_backtest.assert_not_called()
+        service.submit_backtest.assert_not_called()
+        service.process_submitted_run.assert_not_called()
 
     def test_get_rule_backtest_support_bundle_manifest_returns_compact_contract(self) -> None:
         service = MagicMock()
@@ -3397,6 +3446,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertEqual(ctx.exception.detail["error"], "export_unavailable")
+        self.assertEqual(ctx.exception.detail["code"], "export_unavailable")
+        self.assertEqual(ctx.exception.detail["status"], 409)
+        self.assertEqual(ctx.exception.detail["reason"], "export_unavailable")
+        self.assertNotIn("Run 123", str(ctx.exception.detail))
         service.get_execution_trace_export_json.assert_called_once_with(123)
 
     def test_get_rule_backtest_robustness_evidence_json_returns_stored_payload(self) -> None:
@@ -3425,6 +3478,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertEqual(ctx.exception.detail["error"], "export_unavailable")
+        self.assertEqual(ctx.exception.detail["code"], "export_unavailable")
+        self.assertEqual(ctx.exception.detail["status"], 409)
+        self.assertEqual(ctx.exception.detail["reason"], "export_unavailable")
+        self.assertNotIn("Run 123", str(ctx.exception.detail))
         service.get_robustness_evidence_export_json.assert_called_once_with(123)
 
     def test_get_rule_backtest_regime_attribution_readiness_json_returns_stored_projection(self) -> None:
@@ -3589,6 +3646,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertEqual(ctx.exception.detail["error"], "export_unavailable")
+        self.assertEqual(ctx.exception.detail["code"], "export_unavailable")
+        self.assertEqual(ctx.exception.detail["status"], 409)
+        self.assertEqual(ctx.exception.detail["reason"], "export_unavailable")
+        self.assertNotIn("Run 123", str(ctx.exception.detail))
         service.get_execution_trace_export_csv_text.assert_called_once_with(123)
 
     def test_get_rule_backtest_support_export_index_truthfully_marks_missing_trace_exports(self) -> None:
@@ -4111,7 +4172,13 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 400)
         self.assertEqual(ctx.exception.detail["error"], "validation_error")
-        self.assertEqual(ctx.exception.detail["message"], "code is required")
+        self.assertEqual(ctx.exception.detail["code"], "validation_error")
+        self.assertEqual(ctx.exception.detail["status"], 400)
+        self.assertEqual(
+            ctx.exception.detail["message"],
+            "Backtest request could not be processed.",
+        )
+        self.assertNotIn("code is required", str(ctx.exception.detail))
 
 
 if __name__ == "__main__":

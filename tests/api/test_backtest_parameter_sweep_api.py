@@ -179,6 +179,31 @@ def test_supplied_input_parameter_sweep_missing_bars_fails_closed() -> None:
     assert lineage["barBoundary"]["providerCallsExecuted"] is False
 
 
+def test_supplied_input_parameter_sweep_omits_raw_validation_exception(monkeypatch) -> None:
+    raw_error = r"dataset token secret-value at C:\internal\parameter_sweep.py"
+
+    def _raise_raw_validation_error(self, execution_model):
+        raise ValueError(raw_error)
+
+    monkeypatch.setattr(
+        backtest.RuleBacktestService,
+        "_resolve_execution_model_request",
+        _raise_raw_validation_error,
+    )
+    client = _client()
+
+    response = client.post("/api/v1/backtest/rule/parameter-sweep", json=_payload())
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["state"] == "rejected"
+    assert data["failClosedReasonCode"] == "invalid_parameter_sweep_request"
+    assert data["failClosedDiagnostics"] == {
+        "reasonCode": "invalid_parameter_sweep_request",
+    }
+    assert raw_error not in json.dumps(data, ensure_ascii=False)
+
+
 def test_supplied_input_parameter_sweep_does_not_hydrate_or_create_stored_run_identity() -> None:
     client = _client()
 

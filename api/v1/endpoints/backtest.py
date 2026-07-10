@@ -10,7 +10,7 @@ from typing import Any, Callable, Optional, Type, TypeVar
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 
 from api.deps import CurrentUser, get_current_user, get_current_user_id, get_database_manager
-from api.v1.errors import safe_api_error
+from api.v1.errors import safe_api_error, safe_error_identifier
 from api.v1.schemas.backtest import (
     BacktestRunRequest,
     BacktestRunResponse,
@@ -64,6 +64,11 @@ from src.storage import DatabaseManager
 logger = logging.getLogger(__name__)
 router = APIRouter()
 ResponseT = TypeVar("ResponseT")
+
+BACKTEST_VALIDATION_ERROR_MESSAGE = "Backtest request could not be processed."
+UNSUPPORTED_EXECUTION_MODEL_MESSAGE = (
+    "Unsupported rule backtest execution model. Current supported execution model is v1."
+)
 
 
 def _build_backtest_service(
@@ -133,11 +138,11 @@ def _run_rule_backtest_parameter_sweep_with_supplied_bars(
             start_date=request.start_date,
             end_date=request.end_date,
         )
-    except ValueError as exc:
+    except ValueError:
         return service._parameter_sweep_fail_closed(
             "invalid_parameter_sweep_request",
             code=normalized_code,
-            diagnostics={"message": str(exc)},
+            diagnostics={"reasonCode": "invalid_parameter_sweep_request"},
         )
     if normalized_start_date is None or normalized_end_date is None:
         return service._parameter_sweep_fail_closed("fixed_start_date_end_date_required", code=normalized_code)
@@ -153,11 +158,11 @@ def _run_rule_backtest_parameter_sweep_with_supplied_bars(
             fee_bps=request.fee_bps,
             slippage_bps=request.slippage_bps,
         )
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError):
         return service._parameter_sweep_fail_closed(
             "invalid_parsed_strategy",
             code=normalized_code,
-            diagnostics={"message": str(exc)},
+            diagnostics={"reasonCode": "invalid_parsed_strategy"},
         )
     if parsed.needs_confirmation and not bool(request.confirmed):
         return service._parameter_sweep_fail_closed("strategy_confirmation_required", code=normalized_code)
@@ -179,11 +184,11 @@ def _run_rule_backtest_parameter_sweep_with_supplied_bars(
             max_combinations=int(request.max_combinations),
             overflow_policy="reject",
         )
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError):
         return service._parameter_sweep_fail_closed(
             "invalid_parameter_grid",
             code=normalized_code,
-            diagnostics={"message": str(exc)},
+            diagnostics={"reasonCode": "invalid_parameter_grid"},
         )
 
     requests = list((plan.get("parameter_grid_request_bundle") or {}).get("requests") or [])
@@ -234,12 +239,28 @@ def _run_rule_backtest_parameter_sweep_with_supplied_bars(
 
 def _validation_error(exc: ValueError) -> HTTPException:
     if isinstance(exc, RuleBacktestExecutionModelUnsupportedError):
-        return HTTPException(status_code=400, detail=exc.to_error_detail())
+        error_detail = exc.to_error_detail()
+        requested_version = safe_error_identifier(error_detail.get("requested_version"))
+        supported_versions = [
+            safe_version
+            for value in error_detail.get("supported_versions", [])
+            if (safe_version := safe_error_identifier(value)) is not None
+        ]
+        public_detail: dict[str, Any] = {"supportedVersions": supported_versions}
+        if requested_version is not None:
+            public_detail["requestedVersion"] = requested_version
+        return safe_api_error(
+            status_code=400,
+            error="unsupported_execution_model",
+            message=UNSUPPORTED_EXECUTION_MODEL_MESSAGE,
+            retryable=False,
+            detail=public_detail,
+        )
     return safe_api_error(
         status_code=400,
         error="validation_error",
-        message=str(exc) or "Backtest request could not be processed.",
-        fallback_message="Backtest request could not be processed.",
+        message=BACKTEST_VALIDATION_ERROR_MESSAGE,
+        retryable=False,
     )
 
 
@@ -248,6 +269,15 @@ def _not_found_error(message: str) -> HTTPException:
         status_code=404,
         error="not_found",
         message=message,
+    )
+
+
+def _export_unavailable_error(message: str) -> HTTPException:
+    return safe_api_error(
+        status_code=409,
+        error="export_unavailable",
+        message=message,
+        retryable=False,
     )
 
 
@@ -1179,9 +1209,8 @@ def get_rule_backtest_execution_trace_json(
             if "not found" in message.lower():
                 raise _not_found_error("规则回测记录不存在") from exc
             if "no audit rows to export" in message.lower():
-                raise HTTPException(
-                    status_code=409,
-                    detail={"error": "export_unavailable", "message": "当前回测没有可导出的 execution-trace rows"},
+                raise _export_unavailable_error(
+                    "当前回测没有可导出的 execution-trace rows"
                 ) from exc
             raise
         return _build_model(RuleBacktestExecutionTraceExportResponse, data)
@@ -1215,9 +1244,8 @@ def get_rule_backtest_robustness_evidence_json(
             if "not found" in message.lower():
                 raise _not_found_error("规则回测记录不存在") from exc
             if "no stored robustness evidence to export" in message.lower():
-                raise HTTPException(
-                    status_code=409,
-                    detail={"error": "export_unavailable", "message": "当前回测没有可导出的 robustness evidence"},
+                raise _export_unavailable_error(
+                    "当前回测没有可导出的 robustness evidence"
                 ) from exc
             raise
         return _build_model(RuleBacktestRobustnessEvidenceExportResponse, data)
@@ -1340,9 +1368,8 @@ def get_rule_backtest_execution_trace_csv(
             if "not found" in message.lower():
                 raise _not_found_error("规则回测记录不存在") from exc
             if "no audit rows to export" in message.lower():
-                raise HTTPException(
-                    status_code=409,
-                    detail={"error": "export_unavailable", "message": "当前回测没有可导出的 execution-trace rows"},
+                raise _export_unavailable_error(
+                    "当前回测没有可导出的 execution-trace rows"
                 ) from exc
             raise
         return Response(

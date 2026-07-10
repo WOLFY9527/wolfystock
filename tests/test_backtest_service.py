@@ -233,22 +233,27 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertTrue(stats["execution_readiness"]["observation_only"])
         self.assertIn("Research diagnostic only", stats["no_advice_disclosure"])
 
-    def test_sample_status_auto_prepares_deterministic_cached_ohlcv_samples(self) -> None:
+    def test_sample_status_is_passive_with_cached_ohlcv_and_does_not_prepare_samples(self) -> None:
         self._insert_cached_ohlcv_rows()
         service = BacktestService(self.db)
 
-        status = service.get_sample_status(code="CACHED")
+        with (
+            patch.object(service, "_ensure_market_history") as ensure_market_history,
+            patch.object(service, "_ensure_cached_backtest_samples") as ensure_cached_samples,
+        ):
+            status = service.get_sample_status(code="CACHED")
 
-        self.assertGreater(status["prepared_count"], 0)
-        self.assertEqual(status["sample_readiness_state"], "ready")
-        self.assertIn(status["execution_readiness"]["state"], {"executable", "degraded"})
-        self.assertTrue(status["execution_readiness"]["result_contract_available"])
+        ensure_market_history.assert_not_called()
+        ensure_cached_samples.assert_not_called()
+        self.assertEqual(status["prepared_count"], 0)
+        self.assertEqual(status["sample_readiness_state"], "no_samples")
+        self.assertFalse(status["execution_readiness"]["result_contract_available"])
         self.assertTrue(status["execution_readiness"]["observation_only"])
         self.assertEqual(status["resolved_source"], "DatabaseCache")
         self.assertFalse(status["fallback_used"])
         self.assertEqual(status["historicalOhlcvReadiness"]["overallState"], "ready")
 
-    def test_sample_status_uses_configured_local_us_parquet_cache_for_readiness(self) -> None:
+    def test_sample_status_reads_local_us_parquet_without_preparing_samples(self) -> None:
         self._allow_history_fetch()
         self._write_local_us_parquet(self._temp_dir.name, "AAPL", rows=90)
         self._write_local_us_parquet(self._temp_dir.name, "SPY", rows=90)
@@ -261,15 +266,23 @@ class BacktestServiceTestCase(unittest.TestCase):
                 "US_STOCK_PARQUET_DIR": "",
             },
             clear=False,
-        ), patch("src.services.us_history_helper.DataFetcherManager") as manager_cls:
+        ), patch("src.services.us_history_helper.DataFetcherManager") as manager_cls, patch.object(
+            service,
+            "_ensure_market_history",
+        ) as ensure_market_history, patch.object(
+            service,
+            "_ensure_cached_backtest_samples",
+        ) as ensure_cached_samples:
             status = service.get_sample_status(code="AAPL")
 
         manager_cls.assert_not_called()
-        self.assertGreater(status["prepared_count"], 0)
-        self.assertEqual(status["sample_readiness_state"], "ready")
+        ensure_market_history.assert_not_called()
+        ensure_cached_samples.assert_not_called()
+        self.assertEqual(status["prepared_count"], 0)
+        self.assertEqual(status["sample_readiness_state"], "no_samples")
         self.assertNotIn("missing_cache", status["sample_blocking_reasons"])
         self.assertNotIn("provider_missing", status["sample_blocking_reasons"])
-        self.assertEqual(status["execution_readiness"]["state"], "executable")
+        self.assertFalse(status["execution_readiness"]["result_contract_available"])
         readiness = status["historicalOhlcvReadiness"]
         self.assertEqual(readiness["providerState"], "available")
         self.assertGreater(readiness["usableBars"], 0)
@@ -786,7 +799,7 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertIn("missing_adjustments", aggregate["sample_blocking_reasons"])
         self.assertIn("missing_adjustments", aggregate["execution_readiness"]["reason_codes"])
 
-    def test_sample_status_uses_runtime_truth_for_tsla_without_local_cache(self) -> None:
+    def test_sample_status_uses_runtime_truth_without_preparing_backtest_samples(self) -> None:
         service = BacktestService(self.db)
         end_date = datetime.now().date()
         start_date = end_date - timedelta(days=89)
@@ -807,12 +820,21 @@ class BacktestServiceTestCase(unittest.TestCase):
         with patch(
             "src.services.backtest_service.fetch_daily_history_with_local_us_fallback",
             return_value=(frame, "AlpacaFetcher"),
-        ) as fetch_mock:
+        ) as fetch_mock, patch.object(
+            service,
+            "_ensure_market_history",
+        ) as ensure_market_history, patch.object(
+            service,
+            "_ensure_cached_backtest_samples",
+        ) as ensure_cached_samples:
             status = service.get_sample_status(code="TSLA")
 
         fetch_mock.assert_called_once()
-        self.assertGreater(status["prepared_count"], 0)
-        self.assertEqual(status["sample_readiness_state"], "ready")
+        ensure_market_history.assert_not_called()
+        ensure_cached_samples.assert_not_called()
+        self.assertEqual(status["prepared_count"], 0)
+        self.assertEqual(status["sample_readiness_state"], "no_samples")
+        self.assertFalse(status["execution_readiness"]["result_contract_available"])
         self.assertEqual(status["resolved_source"], "AlpacaFetcher")
         self.assertEqual(status["historicalOhlcvReadiness"]["providerState"], "available")
         self.assertEqual(status["historicalOhlcvReadiness"]["missingBars"], 0)

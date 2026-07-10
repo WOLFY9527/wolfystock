@@ -99,8 +99,8 @@ def _validation_error(exc: ValueError) -> HTTPException:
     return safe_api_error(
         status_code=400,
         error="validation_error",
-        message=str(exc) or SCANNER_VALIDATION_ERROR_MESSAGE,
-        fallback_message=SCANNER_VALIDATION_ERROR_MESSAGE,
+        message=SCANNER_VALIDATION_ERROR_MESSAGE,
+        retryable=False,
     )
 
 
