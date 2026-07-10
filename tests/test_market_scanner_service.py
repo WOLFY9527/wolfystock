@@ -9,7 +9,7 @@ import tempfile
 import threading
 import time
 import unittest
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -4052,15 +4052,18 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         seed_us_local_history(self.stock_repo)
         lifecycle_root = Path(self._cache_temp_dir.name) / "scanner-universe-lifecycle"
         source_path = Path(self._cache_temp_dir.name) / "active-us-source.json"
+        fresh_at = datetime.now(timezone.utc).replace(microsecond=0)
+        fresh_as_of = fresh_at.date().isoformat()
+        source_artifact_identity = f"operator/us-research-universe@{fresh_as_of}"
         source_path.write_text(
             json.dumps(
                 {
                     "market": "us",
                     "sourceId": "operator/us-research-universe",
                     "sourceClass": "operator_supplied_membership_json",
-                    "sourceAsOf": "2026-07-05",
-                    "retrievedAt": "2026-07-05T01:02:03+00:00",
-                    "sourceArtifactIdentity": "operator/us-research-universe@2026-07-05",
+                    "sourceAsOf": fresh_as_of,
+                    "retrievedAt": fresh_at.isoformat(),
+                    "sourceArtifactIdentity": source_artifact_identity,
                     "sourcePolicyState": "operator_supplied",
                     "symbols": ["NVDA", "AAPL"],
                 }
@@ -4072,7 +4075,9 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             store=ScannerUniverseLifecycleStore(root=lifecycle_root),
             market="us",
             minimum_coverage_threshold=2,
+            activated_at=fresh_at,
         )
+        self.assertEqual(activated["status"], "activated")
         data_manager = FakeUsScannerDataManager()
         service = MarketScannerService(
             self.db,
@@ -4106,14 +4111,114 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(lineage["universeSymbols"], ["NVDA", "AAPL"])
         self.assertEqual(lineage["universeVersion"], activated["universeVersion"])
         self.assertEqual(lineage["sourceClass"], "operator_supplied_membership_json")
-        self.assertEqual(lineage["sourceArtifactIdentity"], "operator/us-research-universe@2026-07-05")
+        self.assertEqual(lineage["sourceArtifactIdentity"], source_artifact_identity)
         readiness = detail["dataReadiness"]["scannerUniverseReadiness"]
         self.assertEqual(readiness["universeVersion"], activated["universeVersion"])
         self.assertEqual(readiness["symbols"], ["NVDA", "AAPL"])
         self.assertEqual(readiness["sourceClass"], "operator_supplied_membership_json")
         self.assertEqual(readiness["freshnessState"], "fresh")
-        self.assertEqual(readiness["asOf"], "2026-07-05")
+        self.assertEqual(readiness["asOf"], fresh_as_of)
         self.assertEqual(data_manager.realtime_quote_calls, ["NVDA", "AAPL"])
+
+    def test_default_us_scan_uses_bounded_fallback_when_lifecycle_is_unavailable(self) -> None:
+        seed_us_local_history(self.stock_repo)
+        lifecycle_root = Path(self._cache_temp_dir.name) / "missing-scanner-universe-lifecycle"
+
+        with patch.dict(
+            os.environ,
+            {
+                "SCANNER_UNIVERSE_LIFECYCLE_ROOT": str(lifecycle_root),
+                "LOCAL_US_PARQUET_DIR": "",
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "",
+                "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "",
+            },
+            clear=False,
+        ):
+            detail = MarketScannerService(
+                self.db,
+                data_manager=FakeUsScannerDataManager(),
+            ).run_scan(
+                market="us",
+                profile="us_preopen_v1",
+                shortlist_size=2,
+                universe_limit=50,
+                detail_limit=10,
+            )
+
+        lineage = detail["scannerLineage"]
+        self.assertEqual(lineage["source"], "bounded_starter_market_data_spine")
+        self.assertEqual(lineage["universeMode"], "bounded_starter_local")
+        self.assertEqual(lineage["universeSymbols"], ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"])
+        self.assertIsNone(lineage["universeVersion"])
+        readiness = detail["dataReadiness"]["scannerUniverseReadiness"]
+        self.assertIsNone(readiness["universeVersion"])
+        self.assertNotEqual(readiness["status"], "missing")
+        self.assertNotIn("source_missing", readiness["blockingReasons"])
+        self.assertNotEqual(readiness["sourceClass"], "operator_supplied_membership_json")
+        self.assertEqual(detail["dataReadiness"]["universeSource"], lineage["source"])
+
+    def test_default_us_scan_uses_bounded_fallback_when_active_lifecycle_is_stale(self) -> None:
+        seed_us_local_history(self.stock_repo)
+        lifecycle_root = Path(self._cache_temp_dir.name) / "stale-scanner-universe-lifecycle"
+        source_path = Path(self._cache_temp_dir.name) / "stale-us-source.json"
+        stale_at = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(days=5)
+        source_path.write_text(
+            json.dumps(
+                {
+                    "market": "us",
+                    "sourceId": "operator/stale-us-research-universe",
+                    "sourceClass": "operator_supplied_membership_json",
+                    "sourceAsOf": stale_at.date().isoformat(),
+                    "retrievedAt": stale_at.isoformat(),
+                    "sourceArtifactIdentity": f"operator/stale-us-research-universe@{stale_at.date().isoformat()}",
+                    "sourcePolicyState": "operator_supplied",
+                    "symbols": ["NVDA", "AAPL"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        activated = activate_scanner_universe_from_source(
+            source_path=source_path,
+            store=ScannerUniverseLifecycleStore(root=lifecycle_root),
+            market="us",
+            minimum_coverage_threshold=2,
+            activated_at=stale_at,
+        )
+        self.assertEqual(activated["status"], "activated")
+
+        with patch.dict(
+            os.environ,
+            {
+                "SCANNER_UNIVERSE_LIFECYCLE_ROOT": str(lifecycle_root),
+                "LOCAL_US_PARQUET_DIR": "",
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "",
+                "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "",
+            },
+            clear=False,
+        ):
+            detail = MarketScannerService(
+                self.db,
+                data_manager=FakeUsScannerDataManager(),
+            ).run_scan(
+                market="us",
+                profile="us_preopen_v1",
+                shortlist_size=2,
+                universe_limit=50,
+                detail_limit=10,
+            )
+
+        lineage = detail["scannerLineage"]
+        self.assertEqual(lineage["source"], "bounded_starter_market_data_spine")
+        self.assertEqual(lineage["universeMode"], "bounded_starter_local")
+        self.assertEqual(lineage["universeSymbols"], ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"])
+        self.assertIsNone(lineage["universeVersion"])
+        readiness = detail["dataReadiness"]["scannerUniverseReadiness"]
+        self.assertIsNone(readiness["universeVersion"])
+        self.assertNotEqual(readiness["status"], "stale")
+        self.assertNotEqual(readiness["sourceClass"], "operator_supplied_membership_json")
+        self.assertEqual(detail["dataReadiness"]["universeSource"], lineage["source"])
 
     def test_not_run_status_activates_bounded_us_local_parquet_universe(self) -> None:
         cache_dir = Path(self._cache_temp_dir.name) / "us-parquet-cache"

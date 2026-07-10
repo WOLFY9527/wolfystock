@@ -183,7 +183,15 @@ def test_market_specific_symbol_normalization() -> None:
 
 def test_lifecycle_import_and_readiness_do_not_open_network_sockets(tmp_path: Path) -> None:
     store = ScannerUniverseLifecycleStore(root=tmp_path / "universe")
-    source = _write_json(tmp_path / "input" / "us.json", _source_payload(market="us", symbols=["SPY", "QQQ", "AAPL"]))
+    activated_at = datetime.now(timezone.utc).replace(microsecond=0)
+    source = _write_json(
+        tmp_path / "input" / "us.json",
+        _source_payload(
+            market="us",
+            symbols=["SPY", "QQQ", "AAPL"],
+            generated_at=activated_at.isoformat(),
+        ),
+    )
 
     with patch.object(socket.socket, "connect", side_effect=AssertionError("network must not be used")):
         activate_scanner_universe_from_file(
@@ -191,20 +199,26 @@ def test_lifecycle_import_and_readiness_do_not_open_network_sockets(tmp_path: Pa
             store=store,
             market="us",
             minimum_coverage_threshold=3,
+            activated_at=activated_at,
         )
         readiness = build_scanner_universe_lifecycle_readiness(
             store=store,
             market="us",
-            now=datetime.now(timezone.utc) + timedelta(minutes=1),
+            now=activated_at + timedelta(minutes=1),
         )
 
     assert readiness["usable"] is True
 
 
 def test_import_cli_activates_local_input_without_refreshing_runtime(tmp_path: Path, capsys) -> None:
+    generated_at = datetime.now(timezone.utc).replace(microsecond=0)
     source = _write_json(
         tmp_path / "input" / "cn.json",
-        _source_payload(market="cn", symbols=["600001", "SH600001", "300123"]),
+        _source_payload(
+            market="cn",
+            symbols=["600001", "SH600001", "300123"],
+            generated_at=generated_at.isoformat(),
+        ),
     )
 
     exit_code = scanner_universe_import_main(

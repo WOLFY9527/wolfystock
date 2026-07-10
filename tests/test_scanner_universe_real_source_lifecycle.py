@@ -421,7 +421,15 @@ def test_cn_us_hk_normalization_qualification_for_supported_forms(tmp_path: Path
 
 
 def test_cli_supports_inspect_dry_run_and_explicit_activate_without_network(tmp_path: Path, capsys) -> None:
-    source = _write_json(tmp_path / "source.json", _source(symbols=["AAPL", "MSFT", "NVDA"]))
+    retrieved_at = datetime.now(timezone.utc).replace(microsecond=0)
+    source = _write_json(
+        tmp_path / "source.json",
+        _source(
+            symbols=["AAPL", "MSFT", "NVDA"],
+            source_as_of=retrieved_at.date().isoformat(),
+            retrieved_at=retrieved_at.isoformat(),
+        ),
+    )
     store_root = tmp_path / "store"
 
     with patch.object(socket.socket, "connect", side_effect=AssertionError("network must not be used")):
