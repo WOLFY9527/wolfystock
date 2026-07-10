@@ -582,88 +582,147 @@ const CrossAssetHeroRibbon: React.FC<{ anchors: MarketOverviewHeroAnchorView[] }
 
 export const MarketOverviewVisualEvidenceStrip: React.FC<{
   cards: MarketOverviewVisualEvidenceCardView[];
-}> = ({ cards }) => (
-  <section
-    data-testid="market-overview-visual-evidence-strip"
-    className="border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4"
-  >
-    <div className="mb-3 flex min-w-0 items-end justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[color:var(--wolfy-text-muted)]">核心图表证据</p>
-        <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">只展示当前已有市场证据，不扩展结论边界。</p>
+}> = ({ cards }) => {
+  const withPoints = cards.filter((card) => card.points.length > 0);
+  const withoutPoints = cards.filter((card) => card.points.length === 0);
+  const meaningfulCount = withPoints.length;
+  const density = meaningfulCount >= 3 ? 'full' : meaningfulCount >= 1 ? 'compact' : 'bounded-empty';
+
+  return (
+    <section
+      data-testid="market-overview-visual-evidence-strip"
+      data-module-density={density}
+      data-evidence-group-count={meaningfulCount}
+      className="border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4"
+    >
+      <div className="mb-3 flex min-w-0 items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[color:var(--wolfy-text-muted)]">核心图表证据</p>
+          <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">只展示当前已有市场证据，不扩展结论边界。</p>
+        </div>
+        <TerminalChip variant="neutral" className="shrink-0">
+          {density === 'bounded-empty' ? '证据待补' : density === 'compact' ? '部分可用' : '图形证据'}
+        </TerminalChip>
       </div>
-      <TerminalChip variant="neutral" className="shrink-0">
-        关键证据
-      </TerminalChip>
-    </div>
-    <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-3">
-      {cards.map((card) => (
-        <article
-          key={card.id}
-          data-testid={`market-overview-visual-card-${card.id}`}
-          className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-3"
+
+      {density === 'bounded-empty' ? (
+        <div
+          data-testid="market-overview-visual-evidence-bounded-empty"
+          className="rounded-lg border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-3"
         >
-          <p
-            data-testid={`market-overview-visual-card-eyebrow-${card.id}`}
-            className="break-words whitespace-normal text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)] md:truncate"
-          >
-            {card.eyebrow}
+          <p className="text-sm font-medium text-[color:var(--wolfy-text-secondary)]">
+            当前没有可渲染的图形证据
           </p>
-          <h3
-            data-testid={`market-overview-visual-card-title-${card.id}`}
-            className="mt-1 break-words whitespace-normal text-sm font-semibold text-[color:var(--wolfy-text-secondary)] md:truncate"
-          >
-            {card.title}
-          </h3>
-          <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{card.summary}</p>
-          {card.points.length > 0 ? (
-            <div
-              data-testid={`market-overview-visual-card-${card.id}-points`}
-              className="mt-3 grid min-w-0 grid-cols-1 gap-2"
-            >
-              {card.points.map((point) => (
-                <div
-                  key={point.key}
-                  data-testid={`market-overview-visual-point-${point.key}`}
-                  className="grid min-w-0 grid-cols-[minmax(0,1fr)_88px] items-center gap-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-2.5 py-2"
+          <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+            不补推断图形。缺失项保持观察边界，可继续使用上方市场论点与下一研究入口。
+          </p>
+          <ul className="mt-2 space-y-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+            {withoutPoints.map((card) => (
+              <li
+                key={card.id}
+                data-testid={`market-overview-visual-card-${card.id}-unavailable`}
+              >
+                <span
+                  data-testid={`market-overview-visual-card-${card.id}`}
+                  className="font-medium text-[color:var(--wolfy-text-secondary)]"
                 >
-                  <div className="min-w-0">
-                    <div className="flex min-w-0 items-center justify-between gap-3">
-                      <p className="break-words whitespace-normal text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)] md:truncate">{point.label}</p>
-                      <p className="shrink-0 font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{point.valueText}</p>
-                    </div>
-                    <div className="mt-1 flex min-w-0 items-center gap-3">
-                      <div className="min-w-0 flex-1">
-                        <MarketOverviewSparkline values={point.sparkline} tone={point.toneClass} className="h-6" />
-                      </div>
-                      <p className={cn('shrink-0 font-mono text-[10px] font-semibold', point.toneClass)}>{point.changeText}</p>
-                    </div>
-                  </div>
-                  <div className="flex h-full items-center justify-end">
-                    <div className={cn('h-9 w-1.5 rounded-full bg-current opacity-80', point.toneClass)} aria-hidden="true" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div
-              data-testid={`market-overview-visual-card-${card.id}-unavailable`}
-              className="mt-3 rounded-lg border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-3"
-            >
-              <div className="flex items-center gap-2">
-                <div className="h-6 w-16 rounded bg-[color:var(--wolfy-surface-input)]" aria-hidden="true" />
-                <div className="h-6 flex-1 rounded bg-[color:var(--wolfy-surface-input)]" aria-hidden="true" />
-              </div>
-              <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+                  <span data-testid={`market-overview-visual-card-eyebrow-${card.id}`} className="break-words whitespace-normal">{card.eyebrow}</span>
+                  {' · '}
+                  <span data-testid={`market-overview-visual-card-title-${card.id}`} className="break-words whitespace-normal">{card.title}</span>
+                </span>
+                {' — '}
                 {card.unavailableCopy || '图形证据暂缺，当前保持观察。'}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <div className={cn(
+          'grid min-w-0 gap-3',
+          withPoints.length >= 3 ? 'grid-cols-1 xl:grid-cols-3' : withPoints.length === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1',
+        )}
+        >
+          {withPoints.map((card) => (
+            <article
+              key={card.id}
+              data-testid={`market-overview-visual-card-${card.id}`}
+              className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-3"
+            >
+              <p
+                data-testid={`market-overview-visual-card-eyebrow-${card.id}`}
+                className="break-words whitespace-normal text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)] md:truncate"
+              >
+                {card.eyebrow}
               </p>
+              <h3
+                data-testid={`market-overview-visual-card-title-${card.id}`}
+                className="mt-1 break-words whitespace-normal text-sm font-semibold text-[color:var(--wolfy-text-secondary)] md:truncate"
+              >
+                {card.title}
+              </h3>
+              <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{card.summary}</p>
+              <div
+                data-testid={`market-overview-visual-card-${card.id}-points`}
+                className="mt-3 grid min-w-0 grid-cols-1 gap-2"
+              >
+                {card.points.map((point) => (
+                  <div
+                    key={point.key}
+                    data-testid={`market-overview-visual-point-${point.key}`}
+                    className="grid min-w-0 grid-cols-[minmax(0,1fr)_88px] items-center gap-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-2.5 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center justify-between gap-3">
+                        <p className="break-words whitespace-normal text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)] md:truncate">{point.label}</p>
+                        <p className="shrink-0 font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{point.valueText}</p>
+                      </div>
+                      <div className="mt-1 flex min-w-0 items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <MarketOverviewSparkline values={point.sparkline} tone={point.toneClass} className="h-6" />
+                        </div>
+                        <p className={cn('shrink-0 font-mono text-[10px] font-semibold', point.toneClass)}>{point.changeText}</p>
+                      </div>
+                    </div>
+                    <div className="flex h-full items-center justify-end">
+                      <div className={cn('h-9 w-1.5 rounded-full bg-current opacity-80', point.toneClass)} aria-hidden="true" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+          ))}
+          {withoutPoints.length > 0 ? (
+            <div
+              data-testid="market-overview-visual-evidence-missing-compact"
+              className={cn(
+                'min-w-0 rounded-xl border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-3',
+                withPoints.length >= 2 ? 'md:col-span-2 xl:col-span-1' : '',
+              )}
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">待补图形</p>
+              <ul className="mt-2 space-y-1.5 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+                {withoutPoints.map((card) => (
+                  <li key={card.id} data-testid={`market-overview-visual-card-${card.id}-unavailable`}>
+                    <span
+                      data-testid={`market-overview-visual-card-${card.id}`}
+                      className="font-medium text-[color:var(--wolfy-text-secondary)]"
+                    >
+                      <span data-testid={`market-overview-visual-card-eyebrow-${card.id}`} className="break-words whitespace-normal">{card.eyebrow}</span>
+                      {' · '}
+                      <span data-testid={`market-overview-visual-card-title-${card.id}`} className="break-words whitespace-normal">{card.title}</span>
+                    </span>
+                    {' — '}
+                    {card.unavailableCopy || '图形证据暂缺，当前保持观察。'}
+                  </li>
+                ))}
+              </ul>
             </div>
-          )}
-        </article>
-      ))}
-    </div>
-  </section>
-);
+          ) : null}
+        </div>
+      )}
+    </section>
+  );
+};
 
 const MarketDecisionSemanticsList: React.FC<{
   testId: string;
@@ -687,9 +746,20 @@ const MarketDecisionSemanticsList: React.FC<{
   </div>
 );
 
-const MarketOverviewRegimeSummaryBlock: React.FC<{ view: MarketOverviewRegimeSummaryView }> = ({ view }) => (
+const MarketOverviewRegimeSummaryBlock: React.FC<{ view: MarketOverviewRegimeSummaryView }> = ({ view }) => {
+  const lists = [
+    { testId: 'market-overview-regime-summary-drivers', label: '驱动', emptyLabel: '暂无显式驱动', items: view.drivers },
+    { testId: 'market-overview-regime-summary-blockers', label: '阻断', emptyLabel: '暂无显式阻断', items: view.blockers },
+    { testId: 'market-overview-regime-summary-contradictions', label: '反证', emptyLabel: '暂无显式反证', items: view.contradictions },
+    { testId: 'market-overview-regime-summary-next-watch', label: '下一观察', emptyLabel: '等待下一项确认信号', items: view.nextWatchItems },
+  ] as const;
+  const meaningfulLists = lists.filter((list) => list.items.length > 0);
+  const density = meaningfulLists.length >= 3 ? 'full' : meaningfulLists.length >= 1 ? 'compact' : 'bounded-empty';
+
+  return (
   <section
     data-testid="market-overview-regime-summary"
+    data-module-density={density}
     className="mt-4 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-3"
   >
     <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -711,34 +781,37 @@ const MarketOverviewRegimeSummaryBlock: React.FC<{ view: MarketOverviewRegimeSum
         </TerminalChip>
       </div>
     </div>
-    <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-2">
-      <MarketDecisionSemanticsList
-        testId="market-overview-regime-summary-drivers"
-        label="驱动"
-        emptyLabel="暂无显式驱动"
-        items={view.drivers}
-      />
-      <MarketDecisionSemanticsList
-        testId="market-overview-regime-summary-blockers"
-        label="阻断"
-        emptyLabel="暂无显式阻断"
-        items={view.blockers}
-      />
-      <MarketDecisionSemanticsList
-        testId="market-overview-regime-summary-contradictions"
-        label="反证"
-        emptyLabel="暂无显式反证"
-        items={view.contradictions}
-      />
-      <MarketDecisionSemanticsList
-        testId="market-overview-regime-summary-next-watch"
-        label="下一观察"
-        emptyLabel="等待下一项确认信号"
-        items={view.nextWatchItems}
-      />
+    {density === 'bounded-empty' ? (
+      <div className="mt-3 rounded-md border border-dashed border-[color:var(--wolfy-border-subtle)] px-3 py-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+        驱动 / 阻断 / 反证 / 下一观察暂无显式条目；保持观察，不扩展结论。
+        {/* Preserve test anchors for empty semantics lists without a 4-card wall. */}
+        <span className="sr-only">
+          {lists.map((list) => (
+            <span key={list.testId} data-testid={list.testId}>{list.emptyLabel}</span>
+          ))}
+        </span>
+      </div>
+    ) : (
+    <div className={cn('mt-4 grid min-w-0 gap-3', density === 'full' ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1 md:grid-cols-2')}>
+      {(density === 'full' ? lists : meaningfulLists).map((list) => (
+        <MarketDecisionSemanticsList
+          key={list.testId}
+          testId={list.testId}
+          label={list.label}
+          emptyLabel={list.emptyLabel}
+          items={list.items}
+        />
+      ))}
+      {density === 'compact' && meaningfulLists.length < lists.length ? (
+        <p className="md:col-span-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+          其余语义列暂无显式条目，不扩展为空卡片。
+        </p>
+      ) : null}
     </div>
+    )}
   </section>
-);
+  );
+};
 
 function directionUsabilitySummary(view: MarketOverviewDecisionSemanticsView): DirectionUsabilitySummary {
   const readiness = view.directionReadiness;

@@ -111,14 +111,62 @@ const ContextHighlightsRail: React.FC<{
   </section>
 );
 
+function isMeaningfulExecutiveGroup(group: MarketOverviewExecutiveGroupView): boolean {
+  const value = String(group.valueText || '').trim();
+  const change = String(group.changeText || '').trim();
+  if (!value || value === '待确认' || value === '—' || value === '--') {
+    return false;
+  }
+  if (change === '待确认' && group.coverage === 'fallback') {
+    // Delayed coverage with a real value still counts as useful evidence.
+    return true;
+  }
+  return true;
+}
+
 const ExecutiveSecondaryGroups: React.FC<{
   groups: MarketOverviewExecutiveGroupView[];
-}> = ({ groups }) => (
+}> = ({ groups }) => {
+  const meaningful = groups.filter(isMeaningfulExecutiveGroup);
+  const density = meaningful.length >= 3 ? 'full' : meaningful.length >= 1 ? 'compact' : 'bounded-empty';
+  const visible = density === 'full' ? groups : density === 'compact' ? meaningful : [];
+
+  if (density === 'bounded-empty') {
+    return (
+      <section
+        data-testid="market-overview-executive-secondary-groups"
+        data-module-density="bounded-empty"
+        className="rounded-lg border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-2.5"
+      >
+        <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">跨资产确认</p>
+        <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+          区域与跨资产点位暂不可用；不扩展为四格空卡片墙。
+        </p>
+        <ul className="mt-2 flex min-w-0 flex-wrap gap-2 text-[11px] text-[color:var(--wolfy-text-muted)]">
+          {groups.map((group) => (
+            <li
+              key={group.id}
+              data-testid={`market-overview-secondary-group-${group.id}`}
+              className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-2 py-1"
+            >
+              {group.label} · 待确认
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  }
+
+  return (
   <section
     data-testid="market-overview-executive-secondary-groups"
-    className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+    data-module-density={density}
+    className={cn(
+      'grid min-w-0 gap-3',
+      density === 'full' ? 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-4' : 'grid-cols-1 sm:grid-cols-2',
+    )}
   >
-    {groups.map((group) => (
+    {visible.map((group) => (
       <MarketOverviewCardFrame
         key={group.id}
         size="compact"
@@ -154,7 +202,8 @@ const ExecutiveSecondaryGroups: React.FC<{
       </MarketOverviewCardFrame>
     ))}
   </section>
-);
+  );
+};
 
 const EvidenceGroupSection: React.FC<{
   group: MarketOverviewEvidenceGroupView;

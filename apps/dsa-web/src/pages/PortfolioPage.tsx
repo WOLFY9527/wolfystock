@@ -4074,13 +4074,23 @@ const PortfolioPage: React.FC = () => {
                   {portfolioResearchStatePreview}
                 </div>
               ) : (
-                <div data-testid="portfolio-empty-onboarding-row" className="grid min-w-0 grid-cols-1 gap-3">
-                  <TerminalPanel as="section" data-testid="portfolio-empty-workflow-column" className="min-w-0 flex flex-col gap-3 border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]">
+                <div
+                  data-testid="portfolio-empty-onboarding-row"
+                  data-empty-density="bounded"
+                  data-module-density="compact"
+                  className="grid min-w-0 grid-cols-1 gap-3"
+                >
+                  <TerminalPanel
+                    as="section"
+                    data-testid="portfolio-empty-workflow-column"
+                    data-first-viewport-priority="portfolio-state"
+                    className="min-w-0 flex flex-col gap-2.5 border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]"
+                  >
                     <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '首次配置路径' : 'First-use setup path'}</h2>
-                        <p className="mt-2 text-base font-medium text-[color:var(--wolfy-text-primary)]">{onboardingTitle}</p>
-                        <p className="mt-2 max-w-[68ch] text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{onboardingBody}</p>
+                        <p className="mt-1.5 text-base font-medium text-[color:var(--wolfy-text-primary)]">{onboardingTitle}</p>
+                        <p className="mt-1.5 max-w-[68ch] text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{onboardingBody}</p>
                       </div>
                       <TerminalChip variant="neutral">{language === 'zh' ? '真实数据接入前不生成示例收益' : 'No sample performance before real data is saved'}</TerminalChip>
                     </div>
@@ -4094,31 +4104,15 @@ const PortfolioPage: React.FC = () => {
                       {compactNoHoldingText}
                     </TerminalEmptyState>
 
-                    <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
-                      {language === 'zh'
-                        ? `缺失：${!hasAccounts ? '组合账户' : !hasWritableAccounts ? '可写账户' : '首笔持仓或导入记录'}。稍后可用：持仓台账、风险摘要、近期活动。`
-                        : `Missing: ${!hasAccounts ? 'portfolio account' : !hasWritableAccounts ? 'writable account' : 'first holding or import'}. Later: holdings ledger, risk summary, recent activity.`}
-                    </p>
-
-                    <ol className="flex flex-wrap gap-x-4 gap-y-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]" aria-label={language === 'zh' ? '后续路径' : 'Later path'}>
-                      {onboardingSteps.map((step, index) => (
-                        <li key={step.key} className="inline-flex min-w-0 items-center gap-1.5">
-                          <span className="font-mono text-[10px] font-bold text-[color:var(--wolfy-text-muted)]">{index + 1}</span>
-                          <span className="font-medium text-[color:var(--wolfy-text-primary)]">{step.label}</span>
-                          <span className="text-[color:var(--wolfy-text-muted)]">· {step.detail}</span>
-                        </li>
-                      ))}
-                    </ol>
-
                     {canManagePortfolioOperations ? (
-                    <div data-testid="portfolio-empty-actions" className="flex min-w-0 flex-wrap gap-2">
-                      <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={onboardingPrimaryAction}>
-                        {onboardingPrimaryActionLabel}
-                      </TerminalButton>
-                      <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
-                        {importTradesActionLabel}
-                      </TerminalButton>
-                    </div>
+                      <div data-testid="portfolio-empty-actions" className="flex min-w-0 flex-wrap gap-2">
+                        <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={onboardingPrimaryAction}>
+                          {onboardingPrimaryActionLabel}
+                        </TerminalButton>
+                        <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
+                          {importTradesActionLabel}
+                        </TerminalButton>
+                      </div>
                     ) : null}
                     <p data-testid="portfolio-empty-help" className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
                       {portfolioEmptyHelpText}
@@ -4176,6 +4170,26 @@ const PortfolioPage: React.FC = () => {
                         : ['No account is created automatically.', 'No sample holdings are generated.', 'Holdings, cash, and external sync stay unchanged.']}
                     />
 
+                    <TerminalDisclosure
+                      data-testid="portfolio-empty-supporting-disclosure"
+                      title={language === 'zh' ? '后续路径细节' : 'Later-path detail'}
+                      summary={language === 'zh'
+                        ? `缺失：${!hasAccounts ? '组合账户' : !hasWritableAccounts ? '可写账户' : '首笔持仓或导入记录'}。展开查看三步路径。`
+                        : `Missing: ${!hasAccounts ? 'portfolio account' : !hasWritableAccounts ? 'writable account' : 'first holding or import'}. Expand for the three-step path.`}
+                      className="border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]"
+                    >
+                      <ol className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]" aria-label={language === 'zh' ? '后续路径' : 'Later path'}>
+                        {onboardingSteps.map((step, index) => (
+                          <li key={step.key} className="inline-flex min-w-0 items-center gap-1.5">
+                            <span className="font-mono text-[10px] font-bold text-[color:var(--wolfy-text-muted)]">{index + 1}</span>
+                            <span className="font-medium text-[color:var(--wolfy-text-primary)]">{step.label}</span>
+                            <span className="text-[color:var(--wolfy-text-muted)]">· {step.detail}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    </TerminalDisclosure>
+
+                    {/* Keep research state mounted for empty first-read truth; disclosure only hides secondary path steps. */}
                     {portfolioResearchStatePreview}
                   </TerminalPanel>
                 </div>
@@ -4585,11 +4599,18 @@ const PortfolioPage: React.FC = () => {
               </div>
 
               <div data-testid="portfolio-research-handoff-lane" className="min-w-0 col-span-full flex flex-col gap-4 xl:col-span-2">
-                <TerminalPanel as="section" data-testid="portfolio-structure-review-panel" className={cn('min-w-0 flex flex-col', hasHoldings ? 'gap-4' : 'gap-2')}>
+                <TerminalPanel
+                  as="section"
+                  data-testid="portfolio-structure-review-panel"
+                  data-module-density={hasHoldings || structureReview ? 'full' : 'bounded-empty'}
+                  className={cn('min-w-0 flex flex-col', hasHoldings || structureReview ? 'gap-4' : 'gap-2')}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '组合结构审查' : 'Portfolio structure review'}</h2>
-                      <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">{structureReviewIntro}</p>
+                      {hasHoldings || structureReview ? (
+                        <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">{structureReviewIntro}</p>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {structureReview ? (
@@ -4598,6 +4619,8 @@ const PortfolioPage: React.FC = () => {
                           <TerminalChip variant={structureReviewChipVariant(structureReview?.dataQuality.structureEvidenceStatus ?? structureReview?.dataQuality.status)}>{structureReviewEvidenceText}</TerminalChip>
                           <TerminalChip variant="info">{structureReviewContextLabel}</TerminalChip>
                         </>
+                      ) : !hasHoldings ? (
+                        <TerminalChip variant="neutral">{language === 'zh' ? '等待首笔持仓' : 'Awaiting first holding'}</TerminalChip>
                       ) : null}
                     </div>
                   </div>
@@ -4688,38 +4711,43 @@ const PortfolioPage: React.FC = () => {
                       {structureReviewUnavailableBody}
                     </TerminalEmptyState>
                   ) : (
-                    <TerminalEmptyState title={structureReviewEmptyTitle}>
+                    <p
+                      data-testid="portfolio-structure-review-bounded-empty"
+                      className="rounded-lg border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]"
+                    >
+                      <span className="font-medium text-[color:var(--wolfy-text-secondary)]">{structureReviewEmptyTitle}</span>
+                      {' · '}
                       {structureReviewEmptyBody}
-                    </TerminalEmptyState>
+                    </p>
                   )}
                 </TerminalPanel>
 
-                <TerminalPanel as="section" data-testid="portfolio-next-action-panel" className={cn('min-w-0 flex flex-col', hasHoldings ? 'gap-4' : 'gap-2')}>
+                <TerminalPanel
+                  as="section"
+                  data-testid="portfolio-next-action-panel"
+                  data-module-density={hasHoldings ? 'full' : 'compact'}
+                  className={cn('min-w-0 flex flex-col', hasHoldings ? 'gap-4' : 'gap-2')}
+                >
                   <div>
                     <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '下一步' : 'Next action'}</h2>
                     <p className="mt-1 text-sm text-[color:var(--wolfy-text-primary)]">{nextActionHeadline}</p>
-                    <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{nextActionBody}</p>
+                    <p className="mt-1.5 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{nextActionBody}</p>
                   </div>
-                  {canManagePortfolioOperations ? (
-                  <div className="flex flex-wrap gap-2">
-                    {!hasAccounts ? (
-                      <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={() => openManualLedger('account')}>
-                        {copy.createAccount}
-                      </TerminalButton>
-                    ) : (
+                  {/* Empty portfolio already exposes one primary connection path above; avoid repeating action buttons. */}
+                  {canManagePortfolioOperations && hasHoldings ? (
+                    <div className="flex flex-wrap gap-2">
                       <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={() => openManualLedger('trade', 'stock')}>
                         {addHoldingActionLabel}
                       </TerminalButton>
-                    )}
-                    <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('trade')}>
-                      {manualLedgerActionLabel}
-                    </TerminalButton>
-                    <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
-                      {syncDataActionLabel}
-                    </TerminalButton>
-                  </div>
+                      <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('trade')}>
+                        {manualLedgerActionLabel}
+                      </TerminalButton>
+                      <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
+                        {syncDataActionLabel}
+                      </TerminalButton>
+                    </div>
                   ) : null}
-                  <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-xs text-[color:var(--wolfy-text-muted)]">
+                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs text-[color:var(--wolfy-text-muted)]">
                     {hasHistory
                       ? (language === 'zh' ? `近期已记录 ${totalHistoryRows} 条活动，可在下方时间线继续核对。` : `${totalHistoryRows} recent records are available in the timeline below.`)
                       : (language === 'zh' ? '近期活动会在保存持仓、现金或公司行为后出现在下方。' : 'Recent activity appears below after holdings, cash, or corporate records are saved.')}

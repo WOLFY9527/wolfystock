@@ -2787,6 +2787,148 @@ describe('MarketOverviewPage', () => {
     expect(strip.textContent || '').not.toMatch(/raw|debug|provider|cache|router|env|trace|credential|broker|trade|order|sourceAuthority|contractVersion/i);
   });
 
+  it('G033: collapses all-missing visual evidence into one bounded empty instead of a three-card wall', () => {
+    const emptyPanel = {
+      ...localSnapshotPayload().payload.indices,
+      items: [],
+      isUnavailable: true,
+      source: 'unavailable' as const,
+      freshness: 'unavailable' as const,
+    };
+    renderMarketOverviewWorkbenchWithProps({
+      panels: {
+        ...localSnapshotPayload().payload,
+        indices: emptyPanel,
+        cnIndices: emptyPanel,
+        crypto: emptyPanel,
+        volatility: undefined,
+        fundsFlow: undefined,
+        sectorRotation: undefined,
+        usBreadth: usBreadthUnavailablePanel(),
+        rates: emptyPanel,
+        futures: emptyPanel,
+      },
+    });
+
+    const strip = screen.getByTestId('market-overview-visual-evidence-strip');
+    expect(strip).toHaveAttribute('data-module-density', 'bounded-empty');
+    expect(screen.getByTestId('market-overview-visual-evidence-bounded-empty')).toHaveTextContent('当前没有可渲染的图形证据');
+    // Unavailable copy remains explicit without three peer unavailable cards.
+    expect(screen.getByTestId('market-overview-visual-card-core-trends-unavailable')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-visual-card-risk-pressure-unavailable')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-visual-card-flow-rotation-unavailable')).toBeInTheDocument();
+    expect(screen.queryByTestId('market-overview-visual-card-core-trends-points')).not.toBeInTheDocument();
+    expect(strip.textContent || '').not.toMatch(/buy|sell|hold|target|stop|买入|卖出|持有|目标价|止损/i);
+  });
+
+  it('G033: keeps thin visual evidence compact with available cards and a single missing compact block', () => {
+    renderMarketOverviewWorkbenchWithProps({
+      panels: {
+        ...localSnapshotPayload().payload,
+        volatility: undefined,
+        fundsFlow: undefined,
+        sectorRotation: undefined,
+        usBreadth: usBreadthUnavailablePanel(),
+      },
+    });
+
+    const strip = screen.getByTestId('market-overview-visual-evidence-strip');
+    expect(strip).toHaveAttribute('data-module-density', 'compact');
+    expect(screen.getByTestId('market-overview-visual-card-core-trends-points')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-visual-evidence-missing-compact')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-visual-card-risk-pressure-unavailable')).toHaveTextContent('风险压力图形证据缺失');
+    expect(screen.getByTestId('market-overview-visual-card-flow-rotation-unavailable')).toHaveTextContent('资金与轮动图形证据缺失');
+  });
+
+  it('G033: executive secondary groups use full density when three or more groups have meaningful values', async () => {
+    renderMarketOverviewWorkbenchWithProps({
+      panels: {
+        ...localSnapshotPayload().payload,
+        indices: denseQuotePanel('IndexTrendsCard', [quoteItem('SPX', 'S&P 500', 5120.25, 0.42)]),
+        cnIndices: denseQuotePanel('ChinaIndicesCard', [quoteItem('CSI300', '沪深300', 3588.12, 0.44, 'sina')], 'sina'),
+        rates: denseQuotePanel('RatesCard', [quoteItem('US10Y', 'US 10Y', 4.62, -0.14)]),
+        crypto: denseQuotePanel('CryptoCard', [quoteItem('BTC', 'Bitcoin', 67000, 1.5, 'binance')], 'binance'),
+      },
+    });
+
+    const section = await screen.findByTestId('market-overview-executive-secondary-groups');
+    expect(section).toHaveAttribute('data-module-density', 'full');
+    // Overflow safety for full/compact lives on the density container and card frames.
+    expect(section).toHaveClass('min-w-0', 'grid');
+    const cnGroup = screen.getByTestId('market-overview-secondary-group-cn');
+    expect(cnGroup).toHaveAttribute('data-market-card-size', 'compact');
+    expect(cnGroup).toHaveClass('min-w-0');
+    expect(cnGroup).toHaveTextContent('3,588.12');
+    expect(screen.getByTestId('market-overview-secondary-group-us')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-secondary-group-macro')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-secondary-group-crypto')).toBeInTheDocument();
+  });
+
+  it('G033: executive secondary groups compact when only one or two groups are meaningful', async () => {
+    const emptyPanel = {
+      ...localSnapshotPayload().payload.indices,
+      items: [],
+      isUnavailable: true,
+      source: 'unavailable' as const,
+      freshness: 'unavailable' as const,
+    };
+    renderMarketOverviewWorkbenchWithProps({
+      panels: {
+        ...localSnapshotPayload().payload,
+        indices: denseQuotePanel('IndexTrendsCard', [quoteItem('SPX', 'S&P 500', 5120.25, 0.42)]),
+        cnIndices: emptyPanel,
+        rates: emptyPanel,
+        crypto: emptyPanel,
+        fxCommodities: emptyPanel,
+        macro: emptyPanel,
+      },
+    });
+
+    const section = await screen.findByTestId('market-overview-executive-secondary-groups');
+    expect(section).toHaveAttribute('data-module-density', 'compact');
+    expect(section).toHaveClass('min-w-0', 'grid');
+    expect(screen.getByTestId('market-overview-secondary-group-us')).toHaveAttribute('data-market-card-size', 'compact');
+    expect(screen.getByTestId('market-overview-secondary-group-us')).toHaveClass('min-w-0');
+    // Compact branch only surfaces meaningful groups; empty CN does not become a wall tile.
+    expect(screen.queryByTestId('market-overview-secondary-group-cn')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('market-overview-secondary-group-macro')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('market-overview-secondary-group-crypto')).not.toBeInTheDocument();
+  });
+
+  it('G033: executive secondary groups bounded-empty when no group has meaningful values', async () => {
+    const emptyPanel = {
+      ...localSnapshotPayload().payload.indices,
+      items: [],
+      isUnavailable: true,
+      source: 'unavailable' as const,
+      freshness: 'unavailable' as const,
+    };
+    renderMarketOverviewWorkbenchWithProps({
+      panels: {
+        ...localSnapshotPayload().payload,
+        indices: emptyPanel,
+        cnIndices: emptyPanel,
+        rates: emptyPanel,
+        crypto: emptyPanel,
+        fxCommodities: emptyPanel,
+        macro: emptyPanel,
+      },
+    });
+
+    const section = await screen.findByTestId('market-overview-executive-secondary-groups');
+    expect(section).toHaveAttribute('data-module-density', 'bounded-empty');
+    expect(section).toHaveTextContent('不扩展为四格空卡片墙');
+    const cnChip = screen.getByTestId('market-overview-secondary-group-cn');
+    expect(cnChip.tagName.toLowerCase()).toBe('li');
+    expect(cnChip).toHaveTextContent(/CN\/HK.*待确认/);
+    // Bounded-empty chips intentionally omit card-frame min-w-0; overflow safety is on the chip row.
+    expect(cnChip).not.toHaveClass('min-w-0');
+    expect(cnChip.parentElement).toHaveClass('min-w-0');
+    expect(screen.getByTestId('market-overview-secondary-group-us')).toHaveTextContent(/待确认/);
+    expect(screen.getByTestId('market-overview-secondary-group-macro')).toHaveTextContent(/待确认/);
+    expect(screen.getByTestId('market-overview-secondary-group-crypto')).toHaveTextContent(/待确认/);
+  });
+
   it('maps proxy indicator labels across default consumer cards and visual evidence', () => {
     renderMarketOverviewWorkbenchWithProps({
       panels: {
@@ -4580,7 +4722,17 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-card-indices')).toHaveAttribute('data-market-card-row', 'hero');
     expect(screen.getByTestId('market-overview-card-volatility')).toHaveAttribute('data-market-card-row', 'hero');
     expect(screen.getByTestId('market-overview-card-fundsFlow')).toHaveAttribute('data-market-card-row', 'hero');
-    expect(screen.getByTestId('market-overview-secondary-group-cn')).toHaveClass('min-w-0');
+    // G033 density contract: rich primary fixtures produce >=3 meaningful executive groups → full.
+    // Overflow safety is asserted on the density container; do not treat card-frame min-w-0 as
+    // required on every secondary-group-* node (bounded-empty chips intentionally omit it).
+    const executiveGroups = await screen.findByTestId('market-overview-executive-secondary-groups');
+    await waitFor(() => {
+      expect(executiveGroups).toHaveAttribute('data-module-density', 'full');
+    });
+    expect(executiveGroups).toHaveClass('min-w-0', 'grid');
+    const cnGroup = screen.getByTestId('market-overview-secondary-group-cn');
+    expect(cnGroup).toHaveAttribute('data-market-card-size', 'compact');
+    expect(cnGroup).toHaveClass('min-w-0');
     expect(screen.getByTestId('market-overview-card-crypto')).toHaveClass('min-w-0', 'w-full');
     expect(screen.queryByText('实时行情')).not.toBeInTheDocument();
   });
