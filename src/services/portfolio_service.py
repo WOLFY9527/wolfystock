@@ -57,6 +57,48 @@ PORTFOLIO_PRICE_CONFIDENCE_LIVE = 1.0
 PORTFOLIO_PRICE_CONFIDENCE_SYNC = 0.85
 PORTFOLIO_PRICE_CONFIDENCE_FALLBACK = 0.25
 PORTFOLIO_VALUATION_LINEAGE_SIDECAR_VERSION = "portfolio_valuation_lineage_sidecar_v1"
+_PHASE_F_QUERY_FAILURE_DETAIL = "comparison_query_failed"
+_PHASE_F_QUERY_FAILURE_REASON_CODES = frozenset(
+    {
+        "query_connection_failure",
+        "query_database_failure",
+        "query_execution_failure",
+        "query_permission_failure",
+        "query_timeout",
+    }
+)
+
+
+def _phase_f_query_failure_reason_code(exc: BaseException) -> str:
+    class_names = {cls.__name__.lower() for cls in exc.__class__.__mro__}
+    if any("timeout" in name for name in class_names):
+        return "query_timeout"
+    if "connectionerror" in class_names:
+        return "query_connection_failure"
+    if "permissionerror" in class_names:
+        return "query_permission_failure"
+    if class_names.intersection(
+        {
+            "dataerror",
+            "databaseerror",
+            "dbapierror",
+            "integrityerror",
+            "interfaceerror",
+            "operationalerror",
+            "statementerror",
+        }
+    ):
+        return "query_database_failure"
+    return "query_execution_failure"
+
+
+def _safe_phase_f_query_failure_reason_code(value: Any) -> Optional[str]:
+    normalized = re.sub(r"[^a-z0-9_]+", "_", str(value or "").strip().lower()).strip("_")
+    if not normalized:
+        return None
+    if normalized in _PHASE_F_QUERY_FAILURE_REASON_CODES:
+        return normalized
+    return "query_execution_failure"
 
 
 class PortfolioConflictError(Exception):
@@ -997,7 +1039,7 @@ class PortfolioService:
                     fallback_decision="served_legacy_due_to_query_failure",
                     request_context=legacy_context,
                     legacy_summary=legacy_summary,
-                    query_failure_detail=str(exc) or exc.__class__.__name__,
+                    query_failure_reason_code=_phase_f_query_failure_reason_code(exc),
                 )
             )
             return None
@@ -1339,12 +1381,16 @@ class PortfolioService:
         first_mismatch_field: Optional[str] = None,
         first_legacy_value: Any = None,
         first_pg_value: Any = None,
-        query_failure_detail: Optional[str] = None,
+        query_failure_reason_code: Optional[str] = None,
     ) -> Dict[str, Any]:
+        normalized_comparison_status = str(comparison_status or "").strip()
+        safe_query_failure_reason_code = _safe_phase_f_query_failure_reason_code(query_failure_reason_code)
+        if normalized_comparison_status == "query_failure" and safe_query_failure_reason_code is None:
+            safe_query_failure_reason_code = "query_execution_failure"
         return {
             "report_model": "phase_f_trades_list_comparison_diagnostic_v2",
             "candidate": "portfolio_trades_list",
-            "comparison_status": str(comparison_status or "").strip(),
+            "comparison_status": normalized_comparison_status,
             "comparison_attempted": bool(comparison_attempted),
             "comparison_decision": str(comparison_decision or "").strip(),
             "comparison_source": str(comparison_source or "").strip(),
@@ -1363,7 +1409,10 @@ class PortfolioService:
             "first_mismatch_field": str(first_mismatch_field or "").strip() or None,
             "first_legacy_value": first_legacy_value,
             "first_pg_value": first_pg_value,
-            "query_failure_detail": str(query_failure_detail or "").strip() or None,
+            "query_failure_detail": (
+                _PHASE_F_QUERY_FAILURE_DETAIL if safe_query_failure_reason_code is not None else None
+            ),
+            "query_failure_reason_code": safe_query_failure_reason_code,
         }
 
     def _build_phase_f_trade_list_mismatch_report(
@@ -1379,7 +1428,7 @@ class PortfolioService:
         first_mismatch_field: Optional[str] = None,
         first_legacy_value: Any = None,
         first_pg_value: Any = None,
-        query_failure_detail: Optional[str] = None,
+        query_failure_reason_code: Optional[str] = None,
     ) -> Dict[str, Any]:
         normalized_mismatch_class = str(mismatch_class or "").strip()
         comparison_status = "query_failure" if normalized_mismatch_class == "query_failure" else "mismatch"
@@ -1404,7 +1453,7 @@ class PortfolioService:
             first_mismatch_field=first_mismatch_field,
             first_legacy_value=first_legacy_value,
             first_pg_value=first_pg_value,
-            query_failure_detail=query_failure_detail,
+            query_failure_reason_code=query_failure_reason_code,
         )
 
     def _build_phase_f_trade_list_comparison_evidence_summary(
@@ -1703,7 +1752,7 @@ class PortfolioService:
                     fallback_decision="served_legacy_due_to_query_failure",
                     request_context=legacy_context,
                     legacy_summary=legacy_summary,
-                    query_failure_detail=str(exc) or exc.__class__.__name__,
+                    query_failure_reason_code=_phase_f_query_failure_reason_code(exc),
                 )
             )
             return None
@@ -1893,16 +1942,20 @@ class PortfolioService:
         request_context: Dict[str, Any],
         legacy_summary: Dict[str, Any],
         pg_summary: Optional[Dict[str, Any]] = None,
-        query_failure_detail: Optional[str] = None,
+        query_failure_reason_code: Optional[str] = None,
         first_mismatch_position: Optional[int] = None,
         first_mismatch_field: Optional[str] = None,
         first_legacy_value: Any = None,
         first_pg_value: Any = None,
     ) -> Dict[str, Any]:
+        normalized_comparison_status = str(comparison_status or "").strip()
+        safe_query_failure_reason_code = _safe_phase_f_query_failure_reason_code(query_failure_reason_code)
+        if normalized_comparison_status == "query_failure" and safe_query_failure_reason_code is None:
+            safe_query_failure_reason_code = "query_execution_failure"
         return {
             "report_model": "phase_f_cash_ledger_comparison_diagnostic_v1",
             "candidate": "portfolio_cash_ledger_list",
-            "comparison_status": str(comparison_status or "").strip(),
+            "comparison_status": normalized_comparison_status,
             "comparison_attempted": bool(comparison_attempted),
             "comparison_decision": str(comparison_decision or "").strip(),
             "comparison_source": str(comparison_source or "").strip(),
@@ -1917,7 +1970,10 @@ class PortfolioService:
             },
             "legacy_summary": dict(legacy_summary or {}),
             "pg_summary": dict(pg_summary) if isinstance(pg_summary, dict) else None,
-            "query_failure_detail": str(query_failure_detail or "").strip() or None,
+            "query_failure_detail": (
+                _PHASE_F_QUERY_FAILURE_DETAIL if safe_query_failure_reason_code is not None else None
+            ),
+            "query_failure_reason_code": safe_query_failure_reason_code,
             "first_mismatch_position": first_mismatch_position,
             "first_mismatch_field": str(first_mismatch_field or "").strip() or None,
             "first_legacy_value": first_legacy_value,
@@ -2173,7 +2229,7 @@ class PortfolioService:
                         request_context=legacy_context,
                         legacy_summary=legacy_summary,
                         pg_source_available=True,
-                        query_failure_detail=str(exc) or exc.__class__.__name__,
+                        query_failure_reason_code=_phase_f_query_failure_reason_code(exc),
                     )
                 )
                 return None
@@ -2209,7 +2265,7 @@ class PortfolioService:
                     request_context=legacy_context,
                     legacy_summary=legacy_summary,
                     pg_source_available=True,
-                    query_failure_detail=str(exc) or exc.__class__.__name__,
+                    query_failure_reason_code=_phase_f_query_failure_reason_code(exc),
                 )
             )
             return None
@@ -2419,16 +2475,20 @@ class PortfolioService:
         pg_summary: Optional[Dict[str, Any]] = None,
         pg_source_available: bool = True,
         source_unavailable_reason: Optional[str] = None,
-        query_failure_detail: Optional[str] = None,
+        query_failure_reason_code: Optional[str] = None,
         first_mismatch_position: Optional[int] = None,
         first_mismatch_field: Optional[str] = None,
         first_legacy_value: Any = None,
         first_pg_value: Any = None,
     ) -> Dict[str, Any]:
+        normalized_comparison_status = str(comparison_status or "").strip()
+        safe_query_failure_reason_code = _safe_phase_f_query_failure_reason_code(query_failure_reason_code)
+        if normalized_comparison_status == "query_failure" and safe_query_failure_reason_code is None:
+            safe_query_failure_reason_code = "query_execution_failure"
         return {
             "report_model": "phase_f_corporate_actions_comparison_diagnostic_v2",
             "candidate": "portfolio_corporate_actions",
-            "comparison_status": str(comparison_status or "").strip(),
+            "comparison_status": normalized_comparison_status,
             "comparison_attempted": bool(comparison_attempted),
             "comparison_decision": str(comparison_decision or "").strip(),
             "comparison_source": str(comparison_source or "").strip(),
@@ -2445,7 +2505,10 @@ class PortfolioService:
             "pg_summary": dict(pg_summary) if isinstance(pg_summary, dict) else None,
             "pg_source_available": bool(pg_source_available),
             "source_unavailable_reason": str(source_unavailable_reason or "").strip() or None,
-            "query_failure_detail": str(query_failure_detail or "").strip() or None,
+            "query_failure_detail": (
+                _PHASE_F_QUERY_FAILURE_DETAIL if safe_query_failure_reason_code is not None else None
+            ),
+            "query_failure_reason_code": safe_query_failure_reason_code,
             "first_mismatch_position": first_mismatch_position,
             "first_mismatch_field": str(first_mismatch_field or "").strip() or None,
             "first_legacy_value": first_legacy_value,

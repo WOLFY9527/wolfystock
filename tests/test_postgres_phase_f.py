@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -53,6 +54,7 @@ def _reset_auth_globals() -> None:
 class PostgresPhaseFStorageTestCase(unittest.TestCase):
     def setUp(self) -> None:
         PortfolioService.clear_phase_f_trade_list_comparison_reports()
+        PortfolioService.clear_phase_f_cash_ledger_comparison_reports()
         PortfolioService.clear_phase_f_corporate_actions_comparison_reports()
         _reset_auth_globals()
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -64,6 +66,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
 
     def tearDown(self) -> None:
         PortfolioService.clear_phase_f_trade_list_comparison_reports()
+        PortfolioService.clear_phase_f_cash_ledger_comparison_reports()
         PortfolioService.clear_phase_f_corporate_actions_comparison_reports()
         DatabaseManager.reset_instance()
         Config.reset_instance()
@@ -3216,10 +3219,17 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
 
         failure_report: Dict[str, Any] = {}
 
+        raw_failure = (
+            "comparison source unavailable "
+            "token=sk-proj-portfolio-diagnostic-secret "
+            "path=/Users/operator/private/portfolio.sql "
+            'raw_payload={"account":"sensitive"}'
+        )
+
         with patch.object(get_config(), "enable_phase_f_trades_list_comparison", True), patch.object(
             service.repo.db,
             "get_phase_f_trade_list_comparison_candidate",
-            side_effect=RuntimeError("comparison source unavailable"),
+            side_effect=RuntimeError(raw_failure),
         ), patch.object(
             service,
             "_emit_phase_f_trade_list_comparison_report",
@@ -3235,8 +3245,65 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertEqual(failure_report["comparison_status"], "query_failure")
         self.assertTrue(failure_report["comparison_attempted"])
         self.assertEqual(failure_report["comparison_decision"], "legacy_served_due_to_query_failure")
-        self.assertEqual(failure_report["query_failure_detail"], "comparison source unavailable")
+        self.assertEqual(failure_report["query_failure_detail"], "comparison_query_failed")
+        self.assertEqual(failure_report["query_failure_reason_code"], "query_execution_failure")
+        self.assertNotIn("sk-proj-portfolio-diagnostic-secret", json.dumps(failure_report))
+        self.assertNotIn("/Users/operator/private/portfolio.sql", json.dumps(failure_report))
+        self.assertNotIn('"account": "sensitive"', json.dumps(failure_report))
         self.assertIsNone(failure_report["pg_summary"])
+
+    def test_phase_f_cash_ledger_query_failure_is_bounded_in_process_buffer_and_logs(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="cash-compare-failure-user", username="cash-compare-failure-user")
+        service = PortfolioService(owner_id="cash-compare-failure-user")
+        account = service.create_account(
+            name="Cash Compare Failure",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        service.record_cash_ledger(
+            account_id=account["id"],
+            event_date=date(2026, 4, 16),
+            direction="in",
+            amount=100.0,
+            currency="USD",
+        )
+        raw_failure = (
+            "connection failed "
+            "authorization=Bearer portfolio-secret "
+            "path=/tmp/private/portfolio-query.sql "
+            'raw_response={"positions":[{"symbol":"AAPL"}]}'
+        )
+
+        with patch.object(get_config(), "enable_phase_f_cash_ledger_comparison", True), patch.object(
+            get_config(),
+            "phase_f_cash_ledger_comparison_account_ids",
+            [account["id"]],
+        ), patch.object(
+            service,
+            "_load_phase_f_cash_ledger_comparison_candidate",
+            side_effect=ConnectionError(raw_failure),
+        ), self.assertLogs("src.services.portfolio_service", level="WARNING") as captured_logs:
+            result = service.list_cash_ledger_events(account_id=account["id"], page=1, page_size=20)
+
+        reports = service.get_phase_f_cash_ledger_comparison_reports()
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(len(reports), 1)
+        self.assertEqual(reports[0]["query_failure_detail"], "comparison_query_failed")
+        self.assertEqual(reports[0]["query_failure_reason_code"], "query_connection_failure")
+        serialized_diagnostics = json.dumps(
+            {"reports": reports, "logs": captured_logs.output},
+            ensure_ascii=False,
+        )
+        self.assertNotIn("portfolio-secret", serialized_diagnostics)
+        self.assertNotIn("/tmp/private/portfolio-query.sql", serialized_diagnostics)
+        self.assertNotIn('"positions"', serialized_diagnostics)
+
+        second_service = PortfolioService(owner_id="cash-compare-failure-user")
+        self.assertEqual(second_service.get_phase_f_cash_ledger_comparison_reports(), reports)
+        PortfolioService.clear_phase_f_cash_ledger_comparison_reports()
+        self.assertEqual(second_service.get_phase_f_cash_ledger_comparison_reports(), [])
 
     def test_phase_f_trade_list_comparison_mode_skip_guard_is_account_scoped_and_legacy_only(self) -> None:
         db = self._db()
@@ -3537,6 +3604,12 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
 
         failure_report: Dict[str, Any] = {}
 
+        raw_failure = (
+            "comparison query exploded "
+            "password=portfolio-secret "
+            "path=/home/operator/private/corporate-actions.sql"
+        )
+
         with patch.object(get_config(), "enable_phase_f_corporate_actions_comparison", True), patch.object(
             get_config(),
             "phase_f_corporate_actions_comparison_account_ids",
@@ -3544,7 +3617,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         ), patch.object(
             service.repo.db,
             "get_phase_f_corporate_actions_comparison_candidate",
-            side_effect=RuntimeError("comparison query exploded"),
+            side_effect=TimeoutError(raw_failure),
         ), patch.object(
             service,
             "_emit_phase_f_corporate_actions_comparison_report",
@@ -3563,7 +3636,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertEqual(failure_report["mismatch_class"], "query_failure")
         self.assertEqual(failure_report["blocking_level"], "hard_blocking")
         self.assertTrue(failure_report["pg_source_available"])
-        self.assertEqual(failure_report["query_failure_detail"], "comparison query exploded")
+        self.assertEqual(failure_report["query_failure_detail"], "comparison_query_failed")
+        self.assertEqual(failure_report["query_failure_reason_code"], "query_timeout")
+        self.assertNotIn("portfolio-secret", json.dumps(failure_report))
+        self.assertNotIn("/home/operator/private/corporate-actions.sql", json.dumps(failure_report))
         self.assertIsNone(failure_report["pg_summary"])
 
     def test_phase_f_corporate_actions_comparison_mode_non_empty_match_preserves_contract(self) -> None:
@@ -3713,7 +3789,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             legacy_summary={"total": 1, "page_item_count": 1, "ordered_ids": [5]},
             pg_source_available=False,
             source_unavailable_reason="phase_f_corporate_actions_pg_source_unavailable",
-            query_failure_detail="comparison source unavailable",
+            query_failure_reason_code="unsafe-secret-reason-code",
             first_mismatch_position=0,
             first_mismatch_field="note",
             first_legacy_value="legacy-note",
@@ -3734,7 +3810,8 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertFalse(report["owner_context"]["include_all_owners"])
         self.assertFalse(report["pg_source_available"])
         self.assertEqual(report["source_unavailable_reason"], "phase_f_corporate_actions_pg_source_unavailable")
-        self.assertEqual(report["query_failure_detail"], "comparison source unavailable")
+        self.assertEqual(report["query_failure_detail"], "comparison_query_failed")
+        self.assertEqual(report["query_failure_reason_code"], "query_execution_failure")
         self.assertEqual(report["first_mismatch_position"], 0)
         self.assertEqual(report["first_mismatch_field"], "note")
         self.assertEqual(report["first_legacy_value"], "legacy-note")
@@ -3979,7 +4056,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                 fallback_decision="served_legacy_due_to_query_failure",
                 request_context={"account_id": 102, "page": 2, "page_size": 20},
                 legacy_summary={"total": 1, "page_item_count": 0, "ordered_ids": []},
-                query_failure_detail="comparison source unavailable",
+                query_failure_reason_code="query_execution_failure",
             ),
             service._build_phase_f_trade_list_comparison_report(
                 comparison_status="skipped",
@@ -4208,7 +4285,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                     fallback_decision="served_legacy_due_to_query_failure",
                     request_context={"account_id": 302, "page": 1, "page_size": 20},
                     legacy_summary={"total": 0, "page_item_count": 0, "ordered_ids": []},
-                    query_failure_detail="comparison source unavailable",
+                    query_failure_reason_code="query_execution_failure",
                 )
             )
             service._emit_phase_f_trade_list_comparison_report(
