@@ -31,7 +31,6 @@ _AUTH_FAIL_CLOSED_STATUSES = frozenset({401, 403})
 _EXEMPT_PREFIXES = (
     "/api/v1/auth/",
     "/api/health",
-    "/health",
     "/docs",
     "/redoc",
     "/openapi.json",

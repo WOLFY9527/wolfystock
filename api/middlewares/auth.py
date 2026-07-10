@@ -32,7 +32,6 @@ EXEMPT_PATHS = frozenset({
     "/api/health",
     "/api/health/live",
     "/api/health/ready",
-    "/health",
     "/docs",
     "/redoc",
     "/openapi.json",

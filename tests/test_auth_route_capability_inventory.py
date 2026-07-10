@@ -546,6 +546,19 @@ def test_route_capability_inventory_fixtures_match_canonical_generator() -> None
     assert _load_json(FRONTEND_FIXTURE) == build_frontend_inventory(REPO_ROOT)
 
 
+def test_root_docs_inventory_wording_matches_t286_auth_mode_matrix() -> None:
+    fixture = build_backend_inventory(REPO_ROOT)
+    classifications = _surface_classification_by_signature(fixture)
+
+    for signature in DOCS_AND_SCHEMA_ROUTE_CLASSIFICATIONS:
+        note = str(classifications[signature]["transitional_note"] or "").lower()
+        assert "auth is enabled" in note
+        assert "auth is disabled" in note
+        assert "non-production" in note
+        assert "production" in note
+        assert "403" in note
+
+
 def test_backend_route_capability_inventory_covers_current_dependency_guarded_routes() -> None:
     fixture = _load_json(BACKEND_FIXTURE)
     live_routes = _collect_live_routes()

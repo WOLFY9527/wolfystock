@@ -187,6 +187,7 @@ def test_admin_spa_guard_preserves_api_and_static_asset_behavior(auth_enabled_sp
 
     bare_api = client.get("/api", follow_redirects=False)
     health = client.get("/api/health", follow_redirects=False)
+    root_health = client.get("/health", follow_redirects=False)
     unknown_api = client.get("/api/does-not-exist", follow_redirects=False)
     unknown_api_v1 = client.get("/api/v1/does-not-exist", follow_redirects=False)
     scanner_status = client.get("/api/v1/scanner/status", follow_redirects=False)
@@ -199,6 +200,8 @@ def test_admin_spa_guard_preserves_api_and_static_asset_behavior(auth_enabled_sp
     assert health.status_code in {200, 503}
     assert health.headers["content-type"].startswith("application/json")
     assert "status" in health.json()
+    assert root_health.status_code == 200
+    assert root_health.text == "<html>admin-spa-shell</html>"
     assert unknown_api.status_code == 404
     assert unknown_api.headers["content-type"].startswith("application/json")
     assert "admin-spa-shell" not in unknown_api.text

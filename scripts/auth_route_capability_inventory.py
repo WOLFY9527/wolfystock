@@ -53,7 +53,7 @@ DOCS_AND_SCHEMA_SURFACES = [
         "auth_dependency_label": "admin_user",
         "capability_label": None,
         "no_go_marker": "TODO/NO-GO: root Swagger UI is not public product ingress when auth is enabled; api.app gates it to admins.",
-        "transitional_note": "Root Swagger UI is gated by api.app._require_docs_admin_user when auth is enabled; it is only public when auth is disabled.",
+        "transitional_note": "Root Swagger UI is gated by api.app._require_docs_admin_user when auth is enabled; when auth is disabled it is available only in non-production environments and fails closed with HTTP 403 in production.",
     },
     {
         "route_id": "docs.redoc",
@@ -63,7 +63,7 @@ DOCS_AND_SCHEMA_SURFACES = [
         "auth_dependency_label": "admin_user",
         "capability_label": None,
         "no_go_marker": "TODO/NO-GO: root ReDoc is not public product ingress when auth is enabled; api.app gates it to admins.",
-        "transitional_note": "Root ReDoc is gated by api.app._require_docs_admin_user when auth is enabled; it is only public when auth is disabled.",
+        "transitional_note": "Root ReDoc is gated by api.app._require_docs_admin_user when auth is enabled; when auth is disabled it is available only in non-production environments and fails closed with HTTP 403 in production.",
     },
     {
         "route_id": "docs.openapi_schema",
@@ -73,7 +73,7 @@ DOCS_AND_SCHEMA_SURFACES = [
         "auth_dependency_label": "admin_user",
         "capability_label": None,
         "no_go_marker": "TODO/NO-GO: root OpenAPI schema exposure is admin-gated when auth is enabled and must not be treated as product public ingress.",
-        "transitional_note": "Root OpenAPI schema is app-level and guarded by api.app._require_docs_admin_user when auth is enabled.",
+        "transitional_note": "Root OpenAPI schema is app-level and guarded by api.app._require_docs_admin_user when auth is enabled; when auth is disabled it is available only in non-production environments and fails closed with HTTP 403 in production.",
     },
 ]
 
