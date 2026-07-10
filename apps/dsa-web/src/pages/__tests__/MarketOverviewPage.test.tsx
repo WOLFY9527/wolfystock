@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createElement, StrictMode } from 'react';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketOverviewPage, {
   __marketOverviewPanelFactoriesForTests,
@@ -2187,7 +2187,9 @@ async function flushMarketOverviewMicrotasks(turns = 1): Promise<void> {
 async function runMarketOverviewAsyncStep(callback: () => void): Promise<void> {
   await act(async () => {
     callback();
-    await Promise.resolve();
+    for (let index = 0; index < 6; index += 1) {
+      await Promise.resolve();
+    }
   });
 }
 
@@ -2195,7 +2197,9 @@ function getMarketOverviewIntervalCallback(
   setIntervalSpy: { mock: { calls: Array<[TimerHandler, number | undefined, ...unknown[]]> } },
   delayMs: number,
 ): () => void {
-  const callback = setIntervalSpy.mock.calls.find(([, delay]) => delay === delayMs)?.[0];
+  const matchingCalls = setIntervalSpy.mock.calls.filter(([, delay]) => delay === delayMs);
+  expect(matchingCalls).toHaveLength(1);
+  const callback = matchingCalls[0]?.[0];
   expect(typeof callback).toBe('function');
   return callback as () => void;
 }
@@ -2664,11 +2668,14 @@ describe('MarketOverviewPage', () => {
     expect(surface).toHaveTextContent('volatility/risk regime');
   });
 
-  it('shows a market regime readiness loading skeleton while the registry is pending', () => {
+  it('shows a market regime readiness loading skeleton while the registry is pending', async () => {
+    vi.useFakeTimers();
     vi.mocked(marketApi.getProfessionalDataCapabilities).mockReturnValueOnce(new Promise(() => {}));
 
     render(createElement(MarketOverviewPage));
     expandMarketOverviewDataDiagnostics();
+    await drainStagedMarketPanelRequests();
+    await flushMarketOverviewMicrotasks(6);
 
     const surface = screen.getByTestId('market-regime-readiness-surface');
     expect(surface).toHaveTextContent('正在加载市场状态数据');
@@ -2819,8 +2826,13 @@ describe('MarketOverviewPage', () => {
     expect(await within(details).findByTestId('market-overview-official-macro-diagnostics')).toBeInTheDocument();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    cleanup();
+    await Promise.resolve();
     __resetMarketOverviewRequestOwnershipForTests();
+    if (vi.isFakeTimers()) {
+      vi.clearAllTimers();
+    }
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
@@ -3335,6 +3347,7 @@ describe('MarketOverviewPage', () => {
     expect(Object.keys(saved.payload || {}).length).toBeGreaterThanOrEqual(17);
     const lkgWrites = setItemSpy.mock.calls.filter(([key]) => key === MARKET_OVERVIEW_LKG_STORAGE_KEY);
     expect(lkgWrites).toHaveLength(1);
+    setItemSpy.mockRestore();
   });
 
   it('keeps local snapshot visible when backend refresh fails and keeps errors compact', async () => {
@@ -5016,7 +5029,9 @@ describe('MarketOverviewPage', () => {
     });
 
     await waitFor(() => expect(screen.getAllByText('77,001.25').length).toBeGreaterThan(0));
-    expect(screen.getAllByTestId('data-freshness-badge-live').length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(screen.getAllByTestId('data-freshness-badge-live').length).toBeGreaterThan(0);
+    });
     expect(
       screen.getAllByTestId('market-overview-quote-metadata')
         .some((node) => (node.getAttribute('title') || '').includes('2026')),
@@ -5146,8 +5161,12 @@ describe('MarketOverviewPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
     const details = expandMarketDecisionDetails();
-    await waitFor(() => expect(within(details).getByTestId('market-overview-cache-status')).toHaveTextContent(/待刷新/i));
-    expect(screen.getAllByText(/数据可能已过期/i).length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(screen.getAllByText(/数据可能已过期/i).length).toBeGreaterThan(0);
+    });
+    await waitFor(() => {
+      expect(within(details).getByTestId('market-overview-cache-status')).toHaveTextContent(/待刷新/i);
+    });
   });
 
   it('shows snapshot refresh status without clearing stale card data', async () => {
@@ -5452,6 +5471,7 @@ describe('MarketOverviewPage', () => {
       volatilityRefresh.resolve(panel('VolatilityCard', 'VIX'));
       cryptoRefresh.resolve(cryptoPanel());
     });
+    setIntervalSpy.mockRestore();
   });
 
   it('coalesces manual refresh with an in-flight polling refresh for the same panel', async () => {
@@ -5478,6 +5498,7 @@ describe('MarketOverviewPage', () => {
     await runMarketOverviewAsyncStep(() => {
       volatilityRefresh.resolve(panel('VolatilityCard', 'VIX'));
     });
+    setIntervalSpy.mockRestore();
   });
 
   it('keeps different panel refreshes independent while one manual refresh is still in flight', async () => {
@@ -5552,12 +5573,11 @@ describe('MarketOverviewPage', () => {
     await drainStagedMarketPanelRequests();
     expectMarketPanelRequestsCalledOnce(allMarketPanelRequests);
 
-    expect(setIntervalSpy).toHaveBeenCalledTimes(3);
     const fastCallback = getMarketOverviewIntervalCallback(setIntervalSpy, FAST_MARKET_POLL_INTERVAL_MS);
     const mediumCallback = getMarketOverviewIntervalCallback(setIntervalSpy, MEDIUM_MARKET_POLL_INTERVAL_MS);
     const slowCallback = getMarketOverviewIntervalCallback(setIntervalSpy, SLOW_MARKET_POLL_INTERVAL_MS);
 
-    fastCallback();
+    await runMarketOverviewAsyncStep(fastCallback);
     expect(marketApi.getCrypto).toHaveBeenCalledTimes(2);
     expect(marketOverviewApi.getIndices).toHaveBeenCalledTimes(2);
     expect(marketOverviewApi.getVolatility).toHaveBeenCalledTimes(2);
@@ -5565,14 +5585,14 @@ describe('MarketOverviewPage', () => {
     expect(marketApi.getCnIndices).toHaveBeenCalledTimes(1);
     expect(marketApi.getFutures).toHaveBeenCalledTimes(1);
 
-    mediumCallback();
+    await runMarketOverviewAsyncStep(mediumCallback);
     expect(marketApi.getCnIndices).toHaveBeenCalledTimes(2);
     expect(marketApi.getCnBreadth).toHaveBeenCalledTimes(2);
     expect(marketApi.getFutures).toHaveBeenCalledTimes(2);
     expect(marketApi.getSentiment).toHaveBeenCalledTimes(1);
     expect(marketApi.getCnFlows).toHaveBeenCalledTimes(1);
 
-    slowCallback();
+    await runMarketOverviewAsyncStep(slowCallback);
     expect(marketApi.getSentiment).toHaveBeenCalledTimes(2);
     expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(2);
     expect(marketApi.getCnFlows).toHaveBeenCalledTimes(2);
