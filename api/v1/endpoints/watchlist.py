@@ -8,7 +8,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.deps import CurrentUser, get_current_user
-from api.v1.errors import safe_api_error
+from api.v1.errors import safe_api_error, safe_exception_message
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.watchlist import (
     WatchlistDeleteResponse,
@@ -91,7 +91,7 @@ def _bad_request(exc: Exception) -> HTTPException:
     return safe_api_error(
         status_code=400,
         error="validation_error",
-        message=str(exc) or WATCHLIST_VALIDATION_ERROR_MESSAGE,
+        message=safe_exception_message(exc, fallback=WATCHLIST_VALIDATION_ERROR_MESSAGE),
         fallback_message=WATCHLIST_VALIDATION_ERROR_MESSAGE,
     )
 

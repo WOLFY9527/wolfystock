@@ -973,6 +973,12 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(duplicate_resp.status_code, 409)
         detail = duplicate_resp.json()
         self.assertEqual(detail.get("error"), "conflict")
+        self.assertEqual(detail.get("message"), "Portfolio request conflicts with current portfolio state.")
+        self.assertEqual(
+            detail.get("detail"),
+            {"reasonCode": "broker_connection_conflict"},
+        )
+        self.assertNotIn("broker_account_ref", self._json_text(duplicate_resp))
 
     def test_broker_connection_read_payload_redacts_sensitive_metadata(self) -> None:
         account_resp = self.client.post(
@@ -1554,6 +1560,45 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(second.status_code, 409)
         detail = second.json()
         self.assertEqual(detail.get("error"), "conflict")
+        self.assertEqual(detail.get("message"), "Portfolio trade conflicts with an existing record.")
+        self.assertEqual(
+            detail.get("detail"),
+            {
+                "reasonCode": "duplicate_trade_uid",
+                "tradeUid": "dup-uid-1",
+            },
+        )
+
+    def test_duplicate_secret_like_trade_uid_is_not_echoed(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Main", "broker": "Demo", "market": "cn", "base_currency": "CNY"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+        secret_like_trade_uid = "sk-proj-portfolio-secret-token"
+        payload = {
+            "account_id": account_id,
+            "symbol": "600519",
+            "trade_date": "2026-01-02",
+            "side": "buy",
+            "quantity": 10,
+            "price": 100,
+            "fee": 0,
+            "tax": 0,
+            "market": "cn",
+            "currency": "CNY",
+            "trade_uid": secret_like_trade_uid,
+        }
+        self.assertEqual(self.client.post("/api/v1/portfolio/trades", json=payload).status_code, 200)
+
+        duplicate = self.client.post("/api/v1/portfolio/trades", json=payload)
+
+        self.assertEqual(duplicate.status_code, 409)
+        detail = duplicate.json()
+        self.assertEqual(detail.get("message"), "Portfolio trade conflicts with an existing record.")
+        self.assertEqual(detail.get("detail"), {"reasonCode": "duplicate_trade_uid"})
+        self.assertNotIn(secret_like_trade_uid, self._json_text(duplicate))
 
     def test_oversell_trade_returns_409_with_business_error(self) -> None:
         create_resp = self.client.post(
@@ -1598,7 +1643,14 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(sell_resp.status_code, 409)
         detail = sell_resp.json()
         self.assertEqual(detail.get("error"), "portfolio_oversell")
-        self.assertIn("Oversell detected", detail.get("message", ""))
+        self.assertEqual(detail.get("message"), "Trade quantity exceeds the available portfolio position.")
+        self.assertEqual(
+            detail.get("detail"),
+            {
+                "reasonCode": "portfolio_oversell",
+                "symbol": "600519",
+            },
+        )
 
     def test_duplicate_full_close_sell_still_returns_conflict(self) -> None:
         create_resp = self.client.post(
@@ -1645,7 +1697,14 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(second_sell.status_code, 409)
         detail = second_sell.json()
         self.assertEqual(detail.get("error"), "conflict")
-        self.assertIn("Duplicate trade_uid", detail.get("message", ""))
+        self.assertEqual(detail.get("message"), "Portfolio trade conflicts with an existing record.")
+        self.assertEqual(
+            detail.get("detail"),
+            {
+                "reasonCode": "duplicate_trade_uid",
+                "tradeUid": "dup-full-close-sell-1",
+            },
+        )
 
     def test_event_list_endpoints_and_filters(self) -> None:
         create_resp = self.client.post(
@@ -1833,6 +1892,40 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(resp.status_code, 409)
         detail = resp.json()
         self.assertEqual(detail.get("error"), "portfolio_busy")
+
+    def test_create_trade_rejects_unrecognized_secret_like_reason_code(self) -> None:
+        leaked_reason_code = "sk-proj-portfolio-reason-code"
+        with patch(
+            "api.v1.endpoints.portfolio.PortfolioService.record_trade",
+            side_effect=PortfolioConflictError(
+                "raw repository conflict",
+                reason_code=leaked_reason_code,
+                identifier_name="tradeUid",
+                identifier_value="safe-correlation-id",
+            ),
+        ):
+            resp = self.client.post(
+                "/api/v1/portfolio/trades",
+                json={
+                    "account_id": 1,
+                    "symbol": "600519",
+                    "trade_date": "2026-01-02",
+                    "side": "buy",
+                    "quantity": 10,
+                    "price": 100,
+                    "fee": 0,
+                    "tax": 0,
+                    "market": "cn",
+                    "currency": "CNY",
+                },
+            )
+
+        self.assertEqual(resp.status_code, 409)
+        detail = resp.json()
+        self.assertEqual(detail.get("message"), "Portfolio request conflicts with current portfolio state.")
+        self.assertEqual(detail.get("detail"), {"reasonCode": "portfolio_conflict"})
+        self.assertNotIn(leaked_reason_code, self._json_text(resp))
+        self.assertNotIn("safe-correlation-id", self._json_text(resp))
 
     def test_delete_trade_busy_returns_409(self) -> None:
         with patch(
