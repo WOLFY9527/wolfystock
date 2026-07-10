@@ -480,12 +480,12 @@ def test_market_briefing_public_preview_reaches_optional_user_endpoint_when_auth
         with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
             response = client.get("/api/v1/market/market-briefing")
             write_probe = client.post("/api/v1/market/market-briefing", json={})
-            adjacent_market_read = client.get("/api/v1/market/temperature")
+            protected_market_diagnostic = client.get("/api/v1/market/data-readiness")
 
         assert response.status_code == 200
         assert response.json()["source"] == "fallback"
         assert write_probe.status_code == 401
-        assert adjacent_market_read.status_code == 401
+        assert protected_market_diagnostic.status_code == 401
         service.get_market_briefing.assert_called_once()
         assert service.get_market_briefing.call_args.kwargs["actor"]["actor_type"] == "anonymous"
     finally:
@@ -824,7 +824,8 @@ def test_public_api_abuse_limiter_safe_market_read_allowlist_is_narrow() -> None
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/stocks/AAPL/evidence")
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/stocks/AAPL/structure-decision")
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/stocks/AAPL/history")
-    assert not limiter._is_safe_read_bypass("GET", "/api/v1/market/sentiment")
+    assert limiter._is_safe_read_bypass("GET", "/api/v1/market/sentiment")
+    assert not limiter._is_safe_read_bypass("GET", "/api/v1/market/regime-decision")
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/admin/users")
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/options/underlyings/TEM/summary")
     assert DIAGNOSTIC_ROUTES_EXCLUDED_FROM_SAFE_BYPASS.isdisjoint(limiter._SAFE_READ_BYPASS_ROUTES)

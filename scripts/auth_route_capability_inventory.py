@@ -34,6 +34,7 @@ ADMIN_CAPABILITIES_PATH = Path("apps/dsa-web/src/utils/adminCapabilities.ts")
 APP_TSX_PATH = Path("apps/dsa-web/src/App.tsx")
 
 SURFACE_CLASSIFICATION_VOCABULARY = [
+    "public_market_read",
     "public_static_docs",
     "public_fixture_analysis",
     "authenticated_member",
@@ -339,6 +340,12 @@ def _surface_classification_for_route(route: dict[str, str | None]) -> tuple[str
         return "authenticated_member", None, None
     if method == "GET" and path == "/api/v1/stocks/{stock_code}/quote":
         return "unclassified", "TODO/NO-GO: stock quote route-level public policy is recorded explicitly here; do not treat it as a beta-safe authenticated member route without a separate quote auth decision.", "Inventory records the current route-level public stock quote policy without changing provider runtime or quote auth behavior."
+    if is_public_baseline_read(method, path):
+        return (
+            "public_market_read",
+            None,
+            "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route.",
+        )
     return "unclassified", "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.", None
 
 
@@ -368,7 +375,7 @@ def _build_surface_classifications(live_routes: dict[tuple[str, str], dict[str, 
         auth_label = _public_dependency_label(method, path, route["auth_dependency_label"])
         if path.startswith("/api/v1/options/") and classification == "authenticated_member":
             auth_label = "authenticated_user"
-        elif classification == "public_fixture_analysis":
+        elif classification in {"public_fixture_analysis", "public_market_read"}:
             auth_label = "public"
         entries.append(
             _surface_entry(

@@ -473,6 +473,7 @@
     }
   ],
   "surface_classification_vocabulary": [
+    "public_market_read",
     "public_static_docs",
     "public_fixture_analysis",
     "authenticated_member",
@@ -1027,21 +1028,21 @@
       "route_id": "api.v1.market.cn_breadth",
       "path": "/api/v1/market/cn-breadth",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "public_market_read",
+      "auth_dependency_label": "public",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
-      "transitional_note": null
+      "no_go_marker": null,
+      "transitional_note": "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route."
     },
     {
       "route_id": "api.v1.market.cn_flows",
       "path": "/api/v1/market/cn-flows",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "public_market_read",
+      "auth_dependency_label": "public",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
-      "transitional_note": null
+      "no_go_marker": null,
+      "transitional_note": "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route."
     },
     {
       "route_id": "api.v1.market.cn_indices",
@@ -1067,31 +1068,31 @@
       "route_id": "api.v1.market.cn_short_sentiment",
       "path": "/api/v1/market/cn-short-sentiment",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "public_market_read",
+      "auth_dependency_label": "public",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
-      "transitional_note": null
+      "no_go_marker": null,
+      "transitional_note": "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route."
     },
     {
       "route_id": "api.v1.market.crypto",
       "path": "/api/v1/market/crypto",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "public_market_read",
+      "auth_dependency_label": "public",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
-      "transitional_note": null
+      "no_go_marker": null,
+      "transitional_note": "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route."
     },
     {
       "route_id": "api.v1.market.crypto.stream",
       "path": "/api/v1/market/crypto/stream",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "public_market_read",
+      "auth_dependency_label": "public",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
-      "transitional_note": null
+      "no_go_marker": null,
+      "transitional_note": "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route."
     },
     {
       "route_id": "api.v1.market.daily_intelligence",
@@ -1137,41 +1138,41 @@
       "route_id": "api.v1.market.futures",
       "path": "/api/v1/market/futures",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "public_market_read",
+      "auth_dependency_label": "public",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
-      "transitional_note": null
+      "no_go_marker": null,
+      "transitional_note": "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route."
     },
     {
       "route_id": "api.v1.market.fx_commodities",
       "path": "/api/v1/market/fx-commodities",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "public_market_read",
+      "auth_dependency_label": "public",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
-      "transitional_note": null
+      "no_go_marker": null,
+      "transitional_note": "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route."
     },
     {
       "route_id": "api.v1.market.liquidity_monitor",
       "path": "/api/v1/market/liquidity-monitor",
       "method": "GET",
-      "surface_classification": "unclassified",
+      "surface_classification": "public_market_read",
       "auth_dependency_label": "public",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
-      "transitional_note": null
+      "no_go_marker": null,
+      "transitional_note": "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route."
     },
     {
       "route_id": "api.v1.market.market_briefing",
       "path": "/api/v1/market/market-briefing",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "public_market_read",
+      "auth_dependency_label": "public",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
-      "transitional_note": null
+      "no_go_marker": null,
+      "transitional_note": "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route."
     },
     {
       "route_id": "api.v1.market.professional_data_capabilities",
@@ -1207,11 +1208,11 @@
       "route_id": "api.v1.market.rates",
       "path": "/api/v1/market/rates",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "public_market_read",
+      "auth_dependency_label": "public",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
-      "transitional_note": null
+      "no_go_marker": null,
+      "transitional_note": "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route."
     },
     {
       "route_id": "api.v1.market.regime_decision",
@@ -1237,21 +1238,21 @@
       "route_id": "api.v1.market.regime_read_model",
       "path": "/api/v1/market/regime-read-model",
       "method": "GET",
-      "surface_classification": "unclassified",
+      "surface_classification": "public_market_read",
       "auth_dependency_label": "public",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
-      "transitional_note": null
+      "no_go_marker": null,
+      "transitional_note": "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route."
     },
     {
       "route_id": "api.v1.market.rotation_radar",
       "path": "/api/v1/market/rotation-radar",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "public_market_read",
+      "auth_dependency_label": "public",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
-      "transitional_note": null
+      "no_go_marker": null,
+      "transitional_note": "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route."
     },
     {
       "route_id": "api.v1.market.scenario_lab.baseline_snapshots.latest",
@@ -1277,41 +1278,41 @@
       "route_id": "api.v1.market.sector_rotation",
       "path": "/api/v1/market/sector-rotation",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "public_market_read",
+      "auth_dependency_label": "public",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
-      "transitional_note": null
+      "no_go_marker": null,
+      "transitional_note": "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route."
     },
     {
       "route_id": "api.v1.market.sentiment",
       "path": "/api/v1/market/sentiment",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "public_market_read",
+      "auth_dependency_label": "public",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
-      "transitional_note": null
+      "no_go_marker": null,
+      "transitional_note": "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route."
     },
     {
       "route_id": "api.v1.market.temperature",
       "path": "/api/v1/market/temperature",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "public_market_read",
+      "auth_dependency_label": "public",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
-      "transitional_note": null
+      "no_go_marker": null,
+      "transitional_note": "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route."
     },
     {
       "route_id": "api.v1.market.us_breadth",
       "path": "/api/v1/market/us-breadth",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "optional_current_user",
+      "surface_classification": "public_market_read",
+      "auth_dependency_label": "public",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.",
-      "transitional_note": null
+      "no_go_marker": null,
+      "transitional_note": "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route."
     },
     {
       "route_id": "api.v1.options.gamma",
