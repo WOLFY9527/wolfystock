@@ -25,7 +25,7 @@ from src.admin_rbac import expand_admin_capabilities
 from src.auth import (
     ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT,
     COOKIE_NAME,
-    SESSION_MAX_AGE_HOURS_DEFAULT,
+    _get_session_max_age_seconds,
     change_password,
     check_rate_limit,
     clear_rate_limit,
@@ -218,18 +218,12 @@ def _cookie_params(request: Request) -> dict:
         )
         secure = True
 
-    try:
-        max_age_hours = int(os.getenv("ADMIN_SESSION_MAX_AGE_HOURS", str(SESSION_MAX_AGE_HOURS_DEFAULT)))
-    except ValueError:
-        max_age_hours = SESSION_MAX_AGE_HOURS_DEFAULT
-    max_age = max_age_hours * 3600
-
     return {
         "httponly": True,
         "samesite": "lax",
         "secure": secure,
         "path": "/",
-        "max_age": max_age,
+        "max_age": _get_session_max_age_seconds(),
     }
 
 

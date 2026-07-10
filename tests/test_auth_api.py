@@ -10,7 +10,7 @@ import secrets
 import sys
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
@@ -200,6 +200,35 @@ class AuthApiTestCase(unittest.TestCase):
         self.assertEqual(me_response["role"], "user")
         self.assertFalse(me_response["isAdmin"])
         self.assertTrue(me_response["isAuthenticated"])
+
+    def test_cookie_max_age_uses_the_server_session_ttl_floor(self) -> None:
+        request = self._build_request()
+
+        for configured_hours in ("0", "-1"):
+            with patch.dict(os.environ, {"ADMIN_SESSION_MAX_AGE_HOURS": configured_hours}, clear=False):
+                self.assertEqual(
+                    auth_endpoint._cookie_params(request)["max_age"],
+                    auth._get_session_max_age_seconds(),
+                )
+                self.assertEqual(auth_endpoint._cookie_params(request)["max_age"], 300)
+
+    def test_server_side_expiry_invalidates_a_signed_session_without_waiting(self) -> None:
+        login_response = self._login_user(username="expiry-user", password="secret123")
+        session_cookie = self._extract_session_cookie(login_response)
+        identity = auth.get_session_identity(session_cookie)
+        self.assertIsNotNone(identity)
+        self.assertIsNotNone(identity.session_id)
+
+        DatabaseManager.get_instance().create_app_user_session(
+            session_id=identity.session_id,
+            user_id=identity.user_id,
+            expires_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+        )
+
+        response = asyncio.run(
+            auth_endpoint.auth_me(self._build_request(cookies={auth.COOKIE_NAME: session_cookie}))
+        )
+        self.assertEqual(response.status_code, 401)
 
     def test_uat_consumer_fixture_accounts_login_as_non_admin_users(self) -> None:
         from scripts.seed_uat_consumer_test_accounts import (
