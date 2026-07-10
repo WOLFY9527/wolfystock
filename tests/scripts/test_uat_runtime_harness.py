@@ -849,6 +849,16 @@ def test_run_harness_fails_closed_for_mismatched_interpreter(monkeypatch, tmp_pa
     assert "runtime_interpreter_mismatch" in evidence["identityErrors"]
 
 
+def test_interpreter_identity_accepts_same_macos_framework_version() -> None:
+    expected = Path("/opt/python/Python.framework/Versions/3.11/bin/python3.11")
+    observed = "/opt/python/Python.framework/Versions/3.11/Resources/Python.app/Contents/MacOS/Python"
+
+    identity = harness.build_interpreter_identity(expected, observed)
+
+    assert identity["status"] == "verified"
+    assert identity["equivalenceBasis"] == "python_framework_version"
+
+
 def test_direct_http_asset_identity_rejects_same_filename_with_different_bytes(tmp_path: Path) -> None:
     _write_static(tmp_path)
     identity = harness.build_asset_identity(tmp_path / "static", _local_build().payload)

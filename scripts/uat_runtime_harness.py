@@ -645,21 +645,47 @@ def _select_runtime_python(repo_root: Path, *, python_bin: str | None = None) ->
 
 def build_interpreter_identity(expected_path: Path, observed_path: str | None) -> dict[str, Any]:
     expected_requested = str(expected_path)
-    expected_resolved = str(expected_path.resolve())
-    observed_resolved = str(Path(observed_path).resolve()) if observed_path else None
+    expected_resolved_path = expected_path.resolve()
+    expected_resolved = str(expected_resolved_path)
+    observed_resolved_path = Path(observed_path).resolve() if observed_path else None
+    observed_resolved = str(observed_resolved_path) if observed_resolved_path else None
     if not observed_resolved:
         status = "unverified"
-    elif observed_resolved == expected_resolved:
-        status = "verified"
+        equivalence_basis = None
     else:
-        status = "mismatch"
+        equivalence_basis = _interpreter_equivalence_basis(expected_resolved_path, observed_resolved_path)
+        status = "verified" if equivalence_basis else "mismatch"
     return {
         "status": status,
+        "equivalenceBasis": equivalence_basis,
         "expectedRequestedPath": expected_requested,
         "expectedResolvedPath": expected_resolved,
         "observedPath": observed_path,
         "observedResolvedPath": observed_resolved,
     }
+
+
+def _interpreter_equivalence_basis(expected_path: Path, observed_path: Path) -> str | None:
+    if expected_path == observed_path:
+        return "exact_path"
+    try:
+        if expected_path.exists() and observed_path.exists() and expected_path.samefile(observed_path):
+            return "same_file"
+    except OSError:
+        pass
+    expected_framework = _python_framework_version_root(expected_path)
+    observed_framework = _python_framework_version_root(observed_path)
+    if expected_framework and expected_framework == observed_framework:
+        return "python_framework_version"
+    return None
+
+
+def _python_framework_version_root(path: Path) -> Path | None:
+    parts = path.parts
+    for index, part in enumerate(parts):
+        if part == "Python.framework" and index + 2 < len(parts) and parts[index + 1] == "Versions":
+            return Path(*parts[: index + 3])
+    return None
 
 
 def stop_owned_runtime(process: subprocess.Popen[str] | None) -> dict[str, Any]:
