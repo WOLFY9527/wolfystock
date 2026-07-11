@@ -2,7 +2,8 @@ import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures/appSmoke';
 
 const viewports = [
-  { label: 'desktop', width: 1440, height: 1000 },
+  { label: 'desktop', width: 1440, height: 900 },
+  { label: 'tablet', width: 1024, height: 768 },
   { label: 'mobile', width: 390, height: 844 },
 ] as const;
 
@@ -276,6 +277,8 @@ async function openMemberHome(page: Page) {
   await page.waitForLoadState('domcontentloaded');
   await expect(page).toHaveURL(/\/zh$/);
   await expect(page.getByTestId('home-bento-dashboard')).toHaveAttribute('data-home-surface-role', 'member');
+  await expect(page.getByTestId('home-bento-dashboard')).toHaveAttribute('data-route-identity', 'member-home');
+  await expect(page).toHaveTitle(/WolfyStock 首页研究控制台/);
   await expect(page.getByTestId('member-home-market-brief')).toBeVisible({ timeout: 15_000 });
 }
 

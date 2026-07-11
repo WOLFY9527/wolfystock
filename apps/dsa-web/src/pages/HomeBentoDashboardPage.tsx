@@ -227,7 +227,7 @@ const HOME_CHART_FALLBACK_INDICATORS = ['MA5', 'MA10', 'MA20', 'MA60', 'VWAP'];
 const HOME_CHART_FALLBACK_GRID_ROWS = ['price-top', 'price-upper', 'price-mid', 'volume'];
 const HOME_CHART_IDLE_TIMEOUT_MS = 240;
 const HOME_ANALYSIS_SOFT_TIMEOUT_MS = 30_000;
-const HOME_COMPLIANCE_ACTION_TEXT_PATTERN = /小仓试错|第二笔|建仓|加仓|减仓|买入|卖出|做多|做空|下单|券商|probe size|start light|add only|reduce into strength|trim rather than|buy recommendation|sell recommendation|trading recommendation|trade now|order now|broker/i;
+const HOME_COMPLIANCE_ACTION_TEXT_PATTERN = /小仓试错|第二笔|建仓|加仓|减仓|买入|卖出|持有|做多|做空|下单|券商|目标价|目标位|目标区间|止损|止盈|入场|仓位建议|probe size|start light|add only|reduce into strength|trim rather than|buy recommendation|sell recommendation|trading recommendation|target price|target zone|stop loss|take profit|position sizing|trade now|order now|broker|\bhold\b/i;
 
 const HOME_EVIDENCE_CITATION_DOMAIN_LABELS: Record<string, { zh: string; en: string }> = {
   priceHistory: { zh: '价格历史', en: 'Price history' },
@@ -249,6 +249,17 @@ const HOME_EVIDENCE_CITATION_STATUS_LABELS: Record<string, { zh: string; en: str
   missing: { zh: '待补', en: 'Missing' },
   blocked: { zh: '阻断', en: 'Blocked' },
   pending: { zh: '待补', en: 'Pending' },
+};
+
+const HOME_DAILY_LEDGER_SECTION_LABELS: Record<string, { zh: string; en: string }> = {
+  marketPulse: { zh: '市场脉冲', en: 'Market pulse' },
+  marketBreadth: { zh: '市场广度', en: 'Market breadth' },
+  moneyFlow: { zh: '资金流向', en: 'Money flow' },
+  liquidityRisk: { zh: '流动性风险', en: 'Liquidity risk' },
+  sectorThemeRotation: { zh: '主题轮动', en: 'Theme rotation' },
+  researchQueue: { zh: '研究队列', en: 'Research queue' },
+  marketBrief: { zh: '市场简报', en: 'Market brief' },
+  dashboardOverview: { zh: '首页概览', en: 'Dashboard overview' },
 };
 
 function sanitizeHomeConsumerActionCopy(locale: DashboardLocale, raw: string): string {
@@ -5161,10 +5172,15 @@ function buildHomeMetricView(key: string, metric: DashboardMetric | undefined, l
   };
 }
 
-function homeDailyLedgerSectionLabel(index: number, locale: DashboardLocale): string {
-  return locale === 'en'
-    ? `Evidence domain ${index + 1}`
-    : `证据域 ${index + 1}`;
+function homeDailyLedgerSectionLabel(sectionKey: string, locale: DashboardLocale): string {
+  const key = String(sectionKey || '').trim();
+  if (!key) {
+    return locale === 'en' ? 'Data coverage' : '数据覆盖';
+  }
+  const normalizedKey = key.replace(/[-_\s]+([a-zA-Z0-9])/g, (_match, char: string) => char.toUpperCase());
+  return HOME_DAILY_LEDGER_SECTION_LABELS[key]?.[locale]
+    || HOME_DAILY_LEDGER_SECTION_LABELS[normalizedKey]?.[locale]
+    || (locale === 'en' ? 'Data coverage' : '数据覆盖');
 }
 
 /**
@@ -5252,9 +5268,9 @@ function buildHomeDailyResearchView(
     },
   ].filter((item) => item.value || item.detail);
   const ledgerSections = Object.entries(overview?.dataQuality.sections || {})
-    .map(([label, status], index) => ({
+    .map(([label, status]) => ({
       key: label,
-      label: homeDailyLedgerSectionLabel(index, locale),
+      label: homeDailyLedgerSectionLabel(label, locale),
       value: homeDailyStatusLabel(status, locale),
     }))
     .slice(0, 4);
@@ -6777,6 +6793,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     ? `${buildLocalizedPath('/register', routeLocale)}?redirect=${encodeURIComponent(registrationRedirectPath)}`
     : '/register?redirect=%2F';
   const homeChartLoadingLabel = language === 'en' ? 'Loading home price chart' : '正在加载首页价格图表';
+  useEffect(() => {
+    document.title = isGuest
+      ? (locale === 'en' ? 'WolfyStock Guest Research Console' : 'WolfyStock 游客研究控制台')
+      : (locale === 'en' ? 'WolfyStock Home Research Console' : 'WolfyStock 首页研究控制台');
+  }, [isGuest, locale]);
   const recentHistoryItems = useMemo(
     () => historyItems.filter((item) => !item.isTest).slice(0, 8),
     [historyItems],
@@ -7289,6 +7310,10 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const handleAnalyze = async (tickerOverride?: string) => {
     const rawQuery = (tickerOverride ?? searchQuery).trim();
     if (!rawQuery) {
+      setStatusToast({
+        message: locale === 'en' ? 'Enter a ticker before starting analysis.' : '请输入股票代码后再开始分析',
+        tone: 'error',
+      });
       return;
     }
 
@@ -7606,6 +7631,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       ref={surfaceRef}
       data-testid="home-bento-dashboard"
       data-route-surface="ResearchConsole"
+      data-route-identity={isGuest ? 'guest-home' : 'member-home'}
       data-home-surface-role={isGuest ? 'guest' : 'member'}
       aria-live={shouldGuardA11y ? 'polite' : undefined}
       className={getSafariReadySurfaceClassName(
@@ -7617,7 +7643,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         <div className="pointer-events-none fixed right-6 top-24 z-50" data-testid="home-bento-fallback-toast">
           <div className={statusToast.tone === 'warning'
             ? 'rounded-xl border border-[color:var(--wolfy-market-warn)]/35 bg-[var(--wolfy-surface-panel)] px-4 py-3 text-sm font-semibold text-[color:var(--wolfy-market-warn)] shadow-[var(--wolfy-shadow-panel)]'
-            : 'rounded-xl border border-[color:var(--wolfy-market-down)]/35 bg-[var(--wolfy-surface-panel)] px-4 py-3 text-sm font-semibold text-[color:var(--wolfy-market-down)] shadow-[var(--wolfy-shadow-panel)]'}>
+            : 'rounded-xl border border-[color:var(--wolfy-market-down)]/35 bg-[var(--wolfy-surface-panel)] px-4 py-3 text-sm font-semibold text-[color:var(--wolfy-market-down)] shadow-[var(--wolfy-shadow-panel)]'}
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
             {statusToast.message}
           </div>
         </div>
@@ -8157,6 +8187,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'mt-3 min-w-0 px-3.5 py-3 sm:px-4')}
                   data-testid="guest-home-market-preview-strip"
                   aria-busy={guestMarketSnapshot?.state === 'loading' ? 'true' : 'false'}
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
                 >
                   <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
                     <div className="min-w-0">

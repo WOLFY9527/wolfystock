@@ -15,6 +15,11 @@ const signedInUser = {
 const homeChartLeakPattern =
   /raw|debug|provider|schema|payload|trace|internal|cache|router|env|credential|sourceauthority|source_authority/i;
 const tradingPattern = /buy|sell|order|trade|broker|买入|卖出|下单|交易|券商/i;
+const homeChartViewports = [
+  { label: 'desktop', width: 1440, height: 900 },
+  { label: 'tablet', width: 1024, height: 768 },
+  { label: 'mobile', width: 390, height: 844 },
+] as const;
 
 const homeHistoryData = [
   { date: '2026-05-27', open: 120.0, high: 121.2, low: 119.4, close: 120.8, volume: 8100000, change_percent: 0.7 },
@@ -89,6 +94,62 @@ async function installSignedInHomeRoutes(page: Page) {
         coverage: 1,
       },
       data: homeHistoryData,
+    });
+  });
+
+  await page.route('**/api/v1/stocks/ORCL/structure-decision**', async (route) => {
+    await fulfillJson(route, {
+      schema_version: 'stock_structure_decision_v1',
+      ticker: 'ORCL',
+      symbol: 'ORCL',
+      structure_state: 'range_bound',
+      confidence: 'medium',
+      component_scores: {},
+      explanation: {
+        why_this_structure: 'Oracle remains inside the current review range.',
+        what_confirms_it: [],
+        what_invalidates_it: [],
+        key_levels: [],
+      },
+      research_notes: {
+        watch_next: [],
+        needs_more_evidence: [],
+        risk_flags: [],
+      },
+      data_quality: {
+        status: 'available',
+        source: 'fixture_history',
+        period: 'daily',
+        requested_days: 90,
+        observed_bars: 60,
+        usable_bars: 60,
+        reason: 'history_available',
+      },
+      missing_evidence: [],
+      no_advice_disclosure: 'Observation-only structure context.',
+      peer_correlation_snapshot: {
+        symbol: 'ORCL',
+        peer_group: {
+          status: 'available',
+          label: 'Cloud software',
+          symbols: ['MSFT'],
+        },
+        correlation_state: 'aligned',
+        peer_evidence: [
+          {
+            symbol: 'MSFT',
+            overlap_days: 22,
+            state: 'aligned',
+            summary: 'MSFT stayed broadly aligned with ORCL across the review window.',
+          },
+        ],
+        divergence_evidence: [],
+        stale_inputs: [],
+        missing_inputs: [],
+        confidence_cap: 'medium',
+        observation_boundary: 'Observation-only peer movement context.',
+        research_next_steps: ['Refresh peer closes before extending the read.'],
+      },
     });
   });
 
@@ -234,10 +295,12 @@ async function expectMinimumHitArea(page: Page, testIds: string[], minimumHeight
 
 test.describe('Home chart browser smoke', () => {
   test('renders the Home technical chart on desktop without blank state or unsafe copy', async ({ page, consoleErrors, unhandledApiRoutes }) => {
-    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.setViewportSize({ width: 1440, height: 900 });
     await installSignedInHomeRoutes(page);
 
     await openSignedInHome(page);
+    await expect(page.getByTestId('home-bento-dashboard')).toHaveAttribute('data-route-identity', 'member-home');
+    await expect(page).toHaveTitle(/WolfyStock 首页研究控制台/);
 
     const chartSection = page.getByTestId('home-research-chart-section');
     const chartWorkspace = page.getByTestId('home-research-chart-workspace');
@@ -266,33 +329,38 @@ test.describe('Home chart browser smoke', () => {
   });
 
   test('keeps the Home technical chart visible at 390px without horizontal overflow', async ({ page, consoleErrors, unhandledApiRoutes }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
     await installSignedInHomeRoutes(page);
 
-    await openSignedInHome(page);
+    for (const viewport of homeChartViewports) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await openSignedInHome(page);
 
-    const chartSection = page.getByTestId('home-research-chart-section');
-    const chartRoot = page.getByTestId('home-linear-technical-chart');
-    const chartFrame = page.getByTestId('home-candlestick-chart-frame');
+      const chartSection = page.getByTestId('home-research-chart-section');
+      const chartRoot = page.getByTestId('home-linear-technical-chart');
+      const chartFrame = page.getByTestId('home-candlestick-chart-frame');
 
-    await expect(chartSection).toBeVisible();
-    await expect(chartRoot).toBeVisible();
-    await expect(chartFrame).toBeVisible();
-    await expect(page.getByTestId('home-candlestick-echarts-node')).toBeVisible();
-    await expect(chartRoot.getByTestId('home-chart-timeframe-controls')).toBeVisible();
-    await expect(chartRoot.getByTestId('home-chart-indicator-controls')).toBeVisible();
-    await expect(chartRoot.getByTestId('home-chart-context-price')).toContainText('价格');
-    await expect(chartRoot.getByTestId('home-chart-context-volume')).toContainText('成交量');
-    await expect(chartRoot.getByTestId('home-chart-range-hint')).toContainText('缩放');
-    await expect(page.getByTestId('home-candlestick-chart-fallback')).toHaveCount(0);
-    await expect(page.getByTestId('home-candlestick-unavailable')).toHaveCount(0);
-    await expectMinimumHitArea(page, ['home-chart-timeframe-1D', 'home-chart-timeframe-1W', 'home-chart-timeframe-1M'], 40);
-    await expectMinimumHitArea(page, ['home-chart-indicator-ma20', 'home-chart-indicator-ma60', 'home-chart-indicator-vwap'], 40);
+      await expect(page.getByTestId('home-bento-dashboard')).toHaveAttribute('data-route-identity', 'member-home');
+      await expect(chartSection).toBeVisible();
+      await expect(chartRoot).toBeVisible();
+      await expect(chartFrame).toBeVisible();
+      await expect(page.getByTestId('home-candlestick-echarts-node')).toBeVisible();
+      await expect(chartRoot.getByTestId('home-chart-timeframe-controls')).toBeVisible();
+      await expect(chartRoot.getByTestId('home-chart-indicator-controls')).toBeVisible();
+      await expect(chartRoot.getByTestId('home-chart-context-price')).toContainText('价格');
+      await expect(chartRoot.getByTestId('home-chart-context-volume')).toContainText('成交量');
+      await expect(chartRoot.getByTestId('home-chart-range-hint')).toContainText('缩放');
+      await expect(page.getByTestId('home-candlestick-chart-fallback')).toHaveCount(0);
+      await expect(page.getByTestId('home-candlestick-unavailable')).toHaveCount(0);
+      if (viewport.width === 390) {
+        await expectMinimumHitArea(page, ['home-chart-timeframe-1D', 'home-chart-timeframe-1W', 'home-chart-timeframe-1M'], 40);
+        await expectMinimumHitArea(page, ['home-chart-indicator-ma20', 'home-chart-indicator-ma60', 'home-chart-indicator-vwap'], 40);
+      }
 
-    const regionText = await chartSection.innerText();
-    expect(regionText).not.toMatch(homeChartLeakPattern);
-    expect(regionText).not.toMatch(tradingPattern);
-    await expectNoHorizontalOverflow(page);
+      const regionText = await chartSection.innerText();
+      expect(regionText).not.toMatch(homeChartLeakPattern);
+      expect(regionText).not.toMatch(tradingPattern);
+      await expectNoHorizontalOverflow(page);
+    }
     expect(consoleErrors).toEqual([]);
     expect(unhandledApiRoutes).toEqual([]);
   });
