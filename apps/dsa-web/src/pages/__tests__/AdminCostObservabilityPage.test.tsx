@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminCostObservabilityPage from '../AdminCostObservabilityPage';
 
@@ -322,6 +322,26 @@ const pricingPoliciesPayload = {
 async function openCostSecondaryDisclosure() {
   const toggle = await screen.findByRole('button', { name: '展开 L2 配额 / 成本运维细节：账本、价格、数据源 / 缓存、扫描解释' });
   fireEvent.click(toggle);
+  if (capabilityState.canReadCostObservability) {
+    await waitFor(() => {
+      expect(getLlmLedgerSummary).toHaveBeenCalled();
+      expect(getModelPricingPolicies).toHaveBeenCalled();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+}
+
+async function renderAdminCostObservabilityPage() {
+  const result = render(<AdminCostObservabilityPage />);
+  await waitFor(() => {
+    expect(getDuplicateSummary).toHaveBeenCalled();
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
+  return result;
 }
 
 describe('AdminCostObservabilityPage', () => {
@@ -337,7 +357,7 @@ describe('AdminCostObservabilityPage', () => {
   it('renders mocked duplicate-cost summary with read-only, no-external-call, and observational badges', async () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     const overviewStrip = await screen.findByTestId('admin-cost-l0-overview-strip');
     expect(within(overviewStrip).getByText('信任状态')).toBeInTheDocument();
@@ -375,7 +395,7 @@ describe('AdminCostObservabilityPage', () => {
   it('uses terminal operator primitives for the cost observability surface', async () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     const page = screen.getByTestId('admin-cost-observability-page');
     expect(await screen.findByRole('heading', { name: '成本观测' })).toBeInTheDocument();
@@ -397,7 +417,7 @@ describe('AdminCostObservabilityPage', () => {
   it('does not lock the page root to a pure-black local background slab', async () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     const page = screen.getByTestId('admin-cost-observability-page');
     expect(await screen.findByRole('heading', { name: '成本观测' })).toBeInTheDocument();
@@ -408,7 +428,7 @@ describe('AdminCostObservabilityPage', () => {
   it('keeps developer details collapsed and does not render secret-like strings in the DOM', async () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     await openCostSecondaryDisclosure();
     expect(await screen.findByText('L4 已脱敏观测响应：来源 / exactness / redaction')).toBeInTheDocument();
@@ -428,10 +448,10 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.queryByText('SHOULD_NOT_RENDER')).not.toBeInTheDocument();
   });
 
-  it('renders loading state without implying billing exactness', () => {
+  it('renders loading state without implying billing exactness', async () => {
     getDuplicateSummary.mockReturnValue(new Promise(() => {}));
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
     expect(screen.getByText('正在读取成本观测快照')).toBeInTheDocument();
     expect(screen.getAllByText('精确性待确认').length).toBeGreaterThan(0);
   });
@@ -471,7 +491,7 @@ describe('AdminCostObservabilityPage', () => {
       ],
     });
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     expect((await screen.findAllByText('计数器尚未接入或当前窗口暂无事件')).length).toBeGreaterThan(0);
     await openCostSecondaryDisclosure();
@@ -481,7 +501,7 @@ describe('AdminCostObservabilityPage', () => {
   it('renders sanitized API errors', async () => {
     getDuplicateSummary.mockRejectedValue(new Error('stack trace token=secret raw_prompt=bad'));
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(within(screen.getByRole('alert')).getByText('读取成本观测失败')).toBeInTheDocument();
@@ -491,7 +511,7 @@ describe('AdminCostObservabilityPage', () => {
   it('calls the API with safe filter query params only', async () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
     await screen.findByRole('heading', { name: '成本观测' });
 
     await openCostSecondaryDisclosure();
@@ -521,7 +541,7 @@ describe('AdminCostObservabilityPage', () => {
       reasonCode: 'within_budget',
     });
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     await openCostSecondaryDisclosure();
     expect(await screen.findByText('L2 配额 / 成本运维：只读配额估算')).toBeInTheDocument();
@@ -539,7 +559,7 @@ describe('AdminCostObservabilityPage', () => {
   it('does not render quota lifecycle write controls under the read-only diagnostic panel', async () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     const panel = await screen.findByTestId('quota-dry-run-panel');
     expect(within(panel).getAllByText('只读估算').length).toBeGreaterThan(0);
@@ -555,7 +575,7 @@ describe('AdminCostObservabilityPage', () => {
   it('renders LLM ledger totals and cost summaries for users with cost observability capability', async () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     await openCostSecondaryDisclosure();
     expect(await screen.findByTestId('llm-ledger-panel')).toBeInTheDocument();
@@ -597,7 +617,7 @@ describe('AdminCostObservabilityPage', () => {
       },
     });
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     await openCostSecondaryDisclosure();
     expect(await screen.findByText('当前窗口暂无 AI 调用账本记录')).toBeInTheDocument();
@@ -609,7 +629,7 @@ describe('AdminCostObservabilityPage', () => {
   it('renders model pricing policies for users with cost observability capability', async () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     await openCostSecondaryDisclosure();
     const panel = await screen.findByTestId('model-pricing-policy-panel');
@@ -637,7 +657,7 @@ describe('AdminCostObservabilityPage', () => {
       policies: [],
     });
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     await openCostSecondaryDisclosure();
     expect(await screen.findByText('暂无模型价格策略')).toBeInTheDocument();
@@ -647,7 +667,7 @@ describe('AdminCostObservabilityPage', () => {
     capabilityState.canReadCostObservability = false;
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     expect(await screen.findByRole('heading', { name: '成本观测' })).toBeInTheDocument();
     expect(screen.queryByTestId('llm-ledger-panel')).not.toBeInTheDocument();
@@ -658,7 +678,7 @@ describe('AdminCostObservabilityPage', () => {
     capabilityState.canReadCostObservability = false;
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     expect(await screen.findByRole('heading', { name: '成本观测' })).toBeInTheDocument();
     expect(screen.queryByTestId('model-pricing-policy-panel')).not.toBeInTheDocument();
@@ -669,7 +689,7 @@ describe('AdminCostObservabilityPage', () => {
     capabilityState.canReadCostObservability = false;
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     expect(await screen.findByRole('heading', { name: '成本观测' })).toBeInTheDocument();
     expect(screen.queryByTestId('quota-dry-run-panel')).not.toBeInTheDocument();
@@ -687,7 +707,7 @@ describe('AdminCostObservabilityPage', () => {
       estimatedUnits: 3000,
     });
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     expect(await screen.findByText('预算超限')).toBeInTheDocument();
     expect(screen.getAllByText('会阻断').length).toBeGreaterThan(0);
@@ -699,7 +719,7 @@ describe('AdminCostObservabilityPage', () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
     runQuotaDryRun.mockRejectedValueOnce({ response: { status: 403, data: { detail: { message: 'token=secret raw stack' } } } });
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     expect(await screen.findByText('读取配额诊断失败')).toBeInTheDocument();
     expect(screen.getByText('当前账号没有成本观测权限。')).toBeInTheDocument();
@@ -717,7 +737,7 @@ describe('AdminCostObservabilityPage', () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
     getLlmLedgerSummary.mockRejectedValueOnce({ response: { status: 403, data: { detail: { message: 'token=secret raw prompt' } } } });
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     await openCostSecondaryDisclosure();
     expect(await screen.findByText('读取 AI 调用账本失败')).toBeInTheDocument();
@@ -737,7 +757,7 @@ describe('AdminCostObservabilityPage', () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
     getModelPricingPolicies.mockRejectedValueOnce({ response: { status: 403, data: { detail: { message: 'token=secret raw metadata' } } } });
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     await openCostSecondaryDisclosure();
     expect(await screen.findByText('读取模型价格策略失败')).toBeInTheDocument();
@@ -748,7 +768,7 @@ describe('AdminCostObservabilityPage', () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
     getModelPricingPolicies.mockRejectedValueOnce({ response: { status: 500, data: { detail: { message: 'stack trace apiKey=secret' } } } });
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     await openCostSecondaryDisclosure();
     await waitFor(() => expect(screen.getAllByText('读取模型价格策略失败').length).toBeGreaterThan(0));
@@ -759,7 +779,7 @@ describe('AdminCostObservabilityPage', () => {
   it('keeps quota developer details collapsed by default', async () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     await openCostSecondaryDisclosure();
     expect(await screen.findByText('L4 已脱敏 Quota 估算响应：门禁 / 来源 / redaction')).toBeInTheDocument();
@@ -769,7 +789,7 @@ describe('AdminCostObservabilityPage', () => {
   it('keeps LLM ledger developer details collapsed by default', async () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     await openCostSecondaryDisclosure();
     const panel = await screen.findByTestId('llm-ledger-panel');
@@ -780,7 +800,7 @@ describe('AdminCostObservabilityPage', () => {
   it('keeps pricing policy developer details collapsed by default', async () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     await openCostSecondaryDisclosure();
     const panel = await screen.findByTestId('model-pricing-policy-panel');
@@ -793,7 +813,7 @@ describe('AdminCostObservabilityPage', () => {
     Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 390 });
     Object.defineProperty(document.documentElement, 'scrollWidth', { configurable: true, value: 390 });
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     await openCostSecondaryDisclosure();
     expect(await screen.findByTestId('llm-ledger-panel')).toBeInTheDocument();
@@ -804,7 +824,7 @@ describe('AdminCostObservabilityPage', () => {
     window.history.replaceState({}, '', '/zh/admin/cost-observability?window=7d&bucket=day&area=provider&limit=25&token=SECRET');
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
-    render(<AdminCostObservabilityPage />);
+    await renderAdminCostObservabilityPage();
 
     await screen.findByTestId('admin-cost-l0-overview-strip');
     expect(getDuplicateSummary).toHaveBeenCalledWith({ window: '7d', bucket: 'day', area: 'provider', limit: 25 });

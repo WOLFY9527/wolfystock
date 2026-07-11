@@ -67,6 +67,7 @@ const Probe = () => {
   return (
     <div>
       <span data-testid="status">{auth.loggedIn ? 'logged-in' : 'logged-out'}</span>
+      <span data-testid="loading-state">{auth.isLoading ? 'loading' : 'ready'}</span>
       <span data-testid="password-set">{auth.passwordSet ? 'set' : 'unset'}</span>
       <span data-testid="current-user">{auth.currentUser?.username ?? 'none'}</span>
       <button
@@ -81,6 +82,10 @@ const Probe = () => {
     </div>
   );
 };
+
+async function waitForAuthReady() {
+  await waitFor(() => expect(screen.getByTestId('loading-state')).toHaveTextContent('ready'));
+}
 
 describe('AuthContext', () => {
   beforeEach(() => {
@@ -113,7 +118,7 @@ describe('AuthContext', () => {
       </AuthProvider>
     );
 
-    await screen.findByTestId('status');
+    await waitForAuthReady();
     fireEvent.click(screen.getByRole('button', { name: 'trigger-login' }));
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-in'));
@@ -146,6 +151,7 @@ describe('AuthContext', () => {
       return (
         <div>
           <span data-testid="status">{auth.loggedIn ? 'logged-in' : 'logged-out'}</span>
+          <span data-testid="loading-state">{auth.isLoading ? 'loading' : 'ready'}</span>
           <span data-testid="login-result">{result}</span>
           <button
             type="button"
@@ -165,7 +171,7 @@ describe('AuthContext', () => {
       </AuthProvider>
     );
 
-    await screen.findByTestId('status');
+    await waitForAuthReady();
     fireEvent.click(screen.getByRole('button', { name: 'trigger-login' }));
 
     await waitFor(() => expect(screen.getByTestId('login-result')).toHaveTextContent('登录响应已返回，但会话状态未恢复，请重试。'));
@@ -219,7 +225,7 @@ describe('AuthContext', () => {
       </AuthProvider>
     );
 
-    await screen.findByTestId('status');
+    await waitForAuthReady();
     expect(screen.getByTestId('status')).toHaveTextContent('logged-out');
     expect(resetDashboardState).toHaveBeenCalled();
   });
@@ -248,7 +254,7 @@ describe('AuthContext', () => {
       </AuthProvider>
     );
 
-    await screen.findByTestId('status');
+    await waitForAuthReady();
     fireEvent.click(screen.getByRole('button', { name: 'trigger-login' }));
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-in'));
@@ -280,7 +286,7 @@ describe('AuthContext', () => {
       </AuthProvider>
     );
 
-    await screen.findByTestId('status');
+    await waitForAuthReady();
     fireEvent.click(screen.getByRole('button', { name: 'trigger-login' }));
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-in'));
@@ -315,7 +321,7 @@ describe('AuthContext', () => {
       </AuthProvider>
     );
 
-    await screen.findByTestId('status');
+    await waitForAuthReady();
     fireEvent.click(screen.getByRole('button', { name: 'trigger-logout' }));
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-out'));
@@ -409,9 +415,10 @@ describe('AuthContext', () => {
       </AuthProvider>
     );
 
-    await screen.findByTestId('status');
+    await waitForAuthReady();
     fireEvent.click(screen.getByRole('button', { name: 'trigger-logout' }));
 
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-out'));
     await new Promise((resolve) => window.setTimeout(resolve, 120));
     expect(hardRedirectMock).toHaveBeenCalledWith('/zh/guest');
   });
@@ -431,7 +438,7 @@ describe('AuthContext', () => {
       </AuthProvider>
     );
 
-    await screen.findByTestId('status');
+    await waitForAuthReady();
     expect(resetDashboardState).not.toHaveBeenCalled();
   });
 
@@ -462,7 +469,7 @@ describe('AuthContext', () => {
       </AuthProvider>
     );
 
-    await screen.findByTestId('status');
+    await waitForAuthReady();
     fireEvent.click(screen.getByRole('button', { name: 'trigger-logout' }));
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-out'));
