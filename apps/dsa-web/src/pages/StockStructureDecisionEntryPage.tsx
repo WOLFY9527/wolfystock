@@ -68,7 +68,7 @@ export default function StockStructureDecisionEntryPage() {
           className="flex-1"
           command={(
             <WolfyCommandBar
-              leading={<span className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Single-name research / Entry' : '个股研究 / 入口'}</span>}
+              leading={<span className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Stock Structure / Entry' : '个股结构 / 入口'}</span>}
               trailing={(
                 <div className="flex flex-wrap items-center gap-2">
                   <Link
@@ -88,8 +88,8 @@ export default function StockStructureDecisionEntryPage() {
             >
               <div className="text-xs text-[color:var(--wolfy-text-secondary)]">
                 {locale === 'en'
-                  ? 'Enter a known symbol directly, or choose one from the research workflow.'
-                  : '可直接输入已知标的，也可从研究工作流选择。'}
+                  ? 'Enter a stock symbol, or continue from Scanner, Watchlist, or Research Radar.'
+                  : '直接输入股票代码，或从 Scanner、观察列表、研究雷达继续进入。'}
               </div>
             </WolfyCommandBar>
           )}
@@ -121,12 +121,17 @@ export default function StockStructureDecisionEntryPage() {
         >
           <ConsoleBoard className="min-h-0" data-testid="stock-structure-entry-page">
             <RoughSurfaceIntro
-              eyebrow={locale === 'en' ? 'Stock Research' : '个股研究'}
-              title={locale === 'en' ? 'Open stock research by symbol' : '输入标的进入个股研究'}
+              eyebrow={locale === 'en' ? 'Stock Structure Decision' : '个股结构决策'}
+              title={locale === 'en' ? 'Enter a ticker to open the structure view' : '输入标的进入结构视图'}
               description={locale === 'en'
                 ? 'Enter a known symbol directly or continue from Market Overview, Research Radar, Watchlist, or secondary validation tools.'
                 : '直接输入已知股票代码，或从市场总览、研究雷达、观察列表与二级验证工具继续进入。'}
             />
+            <p className="px-4 pb-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)] md:px-5">
+              {locale === 'en'
+                ? 'Enter a stock symbol, or continue from Scanner, Watchlist, or Research Radar.'
+                : '直接输入股票代码，或从 Scanner、观察列表、研究雷达继续进入。'}
+            </p>
             <MetricStrip
               items={[
                 { key: 'state', label: locale === 'en' ? 'Current state' : '当前状态', value: locale === 'en' ? 'Waiting for ticker' : '等待选择标的' },
