@@ -1297,6 +1297,25 @@ describe('UserScannerPage', () => {
     expect(runScan).not.toHaveBeenCalled();
   });
 
+  it('keeps the promoted primary action explicit after configuration changes', async () => {
+    renderUserScannerPage({ initialEntry: '/zh/scanner', viewportWidth: 390 });
+
+    const runButton = await screen.findByTestId('scanner-run-button');
+    const primaryAction = screen.getByTestId('scanner-primary-action');
+    expect(screen.getByTestId('scanner-consumer-first-viewport')).toContainElement(primaryAction);
+    expect(primaryAction).toContainElement(runButton);
+    expect(runButton).toBeEnabled();
+    expect(runScan).not.toHaveBeenCalled();
+
+    fireEvent.click(within(screen.getByTestId('scanner-market-toggle')).getByRole('button', { name: '美股' }));
+    expect(runScan).not.toHaveBeenCalled();
+
+    fireEvent.click(runButton);
+    await waitFor(() => {
+      expect(runScan).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('fetches scanner run history once on the initial zh narrow route load', async () => {
     renderUserScannerPage({ initialEntry: '/zh/scanner', viewportWidth: 390 });
 
@@ -2467,11 +2486,18 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-launch-bar')).not.toHaveClass('rounded-[14px]', 'shadow-[0_20px_80px_rgba(0,0,0,0.22)]');
     expect(screen.queryByTestId('scanner-control-rail')).not.toBeInTheDocument();
     expect(screen.queryByTestId('scanner-sidebar')).not.toBeInTheDocument();
-    expect(screen.getByTestId('scanner-launch-bar')).toContainElement(screen.getByTestId('scanner-run-button'));
+    const firstViewport = screen.getByTestId('scanner-consumer-first-viewport');
+    const primaryAction = screen.getByTestId('scanner-primary-action');
+    const runButton = screen.getByTestId('scanner-run-button');
+    expect(firstViewport).toContainElement(primaryAction);
+    expect(primaryAction).toContainElement(runButton);
+    expect(primaryAction).toHaveAttribute('data-discovery-role', 'explicit-scan-action');
+    expect(screen.getByTestId('scanner-launch-bar')).not.toContainElement(runButton);
+    expect(screen.getAllByRole('button', { name: '启动扫描' })).toHaveLength(1);
     expect(screen.queryByTestId('scanner-results-stage')).not.toBeInTheDocument();
     expect(screen.queryByTestId('user-scanner-bento-hero')).not.toBeInTheDocument();
     expect(screen.getByTestId('scanner-candidate-scroll-region')).toBeInTheDocument();
-    expect(screen.getByTestId('scanner-run-button')).toHaveTextContent('启动扫描');
+    expect(runButton).toHaveTextContent('启动扫描');
     expect(screen.queryByText('TACTICAL ROUTER')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /MARKET SCANNER|市场扫描/ })).not.toBeInTheDocument();
   });

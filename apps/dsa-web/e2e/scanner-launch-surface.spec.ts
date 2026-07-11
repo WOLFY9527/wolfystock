@@ -861,6 +861,72 @@ test.describe('scanner launch surface', () => {
     expect(consoleErrors).toEqual([]);
   });
 
+  test('keeps the one explicit scanner action fully discoverable across the first-use viewport matrix', async ({ page, consoleErrors }) => {
+    const apiRequests = collectApiRequests(page);
+    await installScannerStateRoutes(page, {
+      id: 'first-use-primary-action',
+      route: '/zh/scanner',
+      viewport: { width: 1440, height: 1000 },
+      statusPayload: scannerStatusPayload({
+        quality_summary: {
+          available: false,
+          review_window_days: 5,
+          run_count: 0,
+          reviewed_run_count: 0,
+          reviewed_candidate_count: 0,
+          strong_count: 0,
+          mixed_count: 0,
+          weak_count: 0,
+        },
+        data_readiness: scannerDataReadiness({
+          state: 'ready',
+          selected_count: 0,
+          rejected_count: 0,
+          consumer_summary: '扫描器可用于观察。',
+          next_data_action: '可以按当前条件运行扫描。',
+        }),
+      }),
+      runsPayload: scannerRunsPayload(),
+      runDetailPayload: retryNoCandidateRun,
+    });
+
+    const viewports = [
+      { width: 390, height: 844 },
+      { width: 768, height: 1024 },
+      { width: 834, height: 1112 },
+      { width: 1024, height: 768 },
+      { width: 1280, height: 900 },
+      { width: 1440, height: 1000 },
+    ];
+
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      await page.goto('/zh/scanner');
+      await page.waitForLoadState('domcontentloaded');
+
+      const primaryAction = page.getByTestId('scanner-primary-action');
+      const runButton = page.getByTestId('scanner-run-button');
+      await expect(primaryAction).toBeVisible({ timeout: 15_000 });
+      await expect(runButton).toBeVisible();
+      await expect(runButton).toBeEnabled();
+      await expect(runButton).toHaveCount(1);
+
+      const actionBox = await primaryAction.boundingBox();
+      expect(actionBox).not.toBeNull();
+      expect(actionBox?.y ?? Number.POSITIVE_INFINITY).toBeGreaterThanOrEqual(0);
+      expect((actionBox?.y ?? 0) + (actionBox?.height ?? Number.POSITIVE_INFINITY)).toBeLessThanOrEqual(viewport.height);
+      await assertNoBodyOverflow(page);
+    }
+
+    expect(apiRequests.filter((request) => request.method === 'POST' && request.path === '/api/v1/scanner/run')).toHaveLength(0);
+    await page.getByTestId('scanner-market-toggle').getByRole('button', { name: '美股' }).click();
+    expect(apiRequests.filter((request) => request.method === 'POST' && request.path === '/api/v1/scanner/run')).toHaveLength(0);
+
+    await page.getByTestId('scanner-run-button').click();
+    await expect.poll(() => apiRequests.filter((request) => request.method === 'POST' && request.path === '/api/v1/scanner/run').length).toBe(1);
+    expect(consoleErrors).toEqual([]);
+  });
+
   for (const matrixCase of scannerStateMatrixCases) {
     test(`separates scanner state: ${matrixCase.id}`, async ({ page, consoleErrors }) => {
       const apiRequests = collectApiRequests(page);
