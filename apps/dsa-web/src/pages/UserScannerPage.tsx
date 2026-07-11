@@ -4208,6 +4208,36 @@ const UserScannerPage: React.FC = () => {
                       ))}
                     </div>
                   </div>
+                  <div
+                    data-testid="scanner-primary-action"
+                    data-discovery-role="explicit-scan-action"
+                    className="flex min-w-0 flex-col gap-2 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_8%,var(--wolfy-surface-input))] px-2.5 py-2 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">
+                        {language === 'en' ? 'Next research action' : '下一步研究动作'}
+                      </p>
+                      <p className="mt-0.5 text-xs leading-5 text-[color:var(--wolfy-text-primary)]">
+                        {scannerDataReadinessView?.nextDataLabel || scannerWorkflowDetail}
+                      </p>
+                    </div>
+                    <TerminalButton
+                      ref={runScannerButtonRef}
+                      type="button"
+                      onClick={handleRunScannerClick}
+                      onPointerUp={handleRunScannerPointerUp}
+                      disabled={runDisabled}
+                      aria-busy={isRunning}
+                      data-testid="scanner-run-button"
+                      className={`group h-10 w-full shrink-0 px-3 py-2 text-sm font-bold active:scale-95 disabled:pointer-events-none sm:w-auto sm:min-w-[132px] ${
+                        isRetryScanState ? 'shadow-none text-[color:var(--wolfy-text-secondary)]' : ''
+                      }`}
+                      variant={isRetryScanState ? 'secondary' : 'primary'}
+                    >
+                      <Play className={`h-4 w-4 ${isRetryScanState ? '' : 'group-hover:animate-pulse'}`} />
+                      <span>{scannerRunButtonLabel}</span>
+                    </TerminalButton>
+                  </div>
                   <div data-testid="scanner-data-trust-row" className="grid min-w-0 gap-1.5 text-xs sm:grid-cols-2 xl:grid-cols-4">
                     {scannerConsumerTrustItems.map((item) => (
                       <div key={item.label} className="min-w-0 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-rail)] px-2.5 py-2">
@@ -4480,7 +4510,7 @@ const UserScannerPage: React.FC = () => {
                     data-testid="scanner-command-bar"
                     className="border-0 bg-transparent px-3 py-3"
                   >
-                    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(112px,0.55fr)_minmax(150px,0.72fr)_minmax(106px,0.45fr)_minmax(156px,0.72fr)_minmax(118px,0.5fr)_minmax(118px,0.5fr)_auto] xl:items-end [&_[data-testid='scanner-market-toggle']_button]:h-12 [&_[data-testid='scanner-market-toggle']_button]:px-3 [&_[data-testid='scanner-market-toggle']_button]:py-2 [&_[data-testid='scanner-scope-selector']_button]:h-12 [&_[data-testid='scanner-scope-selector']_button]:px-3 [&_[data-testid='scanner-scope-selector']_button]:py-2 md:[&_[data-testid='scanner-market-toggle']_button]:h-8 md:[&_[data-testid='scanner-market-toggle']_button]:py-1 md:[&_[data-testid='scanner-scope-selector']_button]:h-8 md:[&_[data-testid='scanner-scope-selector']_button]:py-1">
+                    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(112px,0.55fr)_minmax(150px,0.72fr)_minmax(106px,0.45fr)_minmax(156px,0.72fr)_minmax(118px,0.5fr)_minmax(118px,0.5fr)] xl:items-end [&_[data-testid='scanner-market-toggle']_button]:h-12 [&_[data-testid='scanner-market-toggle']_button]:px-3 [&_[data-testid='scanner-market-toggle']_button]:py-2 [&_[data-testid='scanner-scope-selector']_button]:h-12 [&_[data-testid='scanner-scope-selector']_button]:px-3 [&_[data-testid='scanner-scope-selector']_button]:py-2 md:[&_[data-testid='scanner-market-toggle']_button]:h-8 md:[&_[data-testid='scanner-market-toggle']_button]:py-1 md:[&_[data-testid='scanner-scope-selector']_button]:h-8 md:[&_[data-testid='scanner-scope-selector']_button]:py-1">
                       <PillTagGroup compact label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} variant="market" testId="scanner-market-toggle" />
                       <PillTagGroup compact label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
                       <PillTagGroup compact label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
@@ -4500,22 +4530,6 @@ const UserScannerPage: React.FC = () => {
                         <PillTagGroup compact label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
                         <PillTagGroup compact label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
                       </div>
-                      <TerminalButton
-                        ref={runScannerButtonRef}
-                        type="button"
-                        onClick={handleRunScannerClick}
-                        onPointerUp={handleRunScannerPointerUp}
-                        disabled={runDisabled}
-                        aria-busy={isRunning}
-                        data-testid="scanner-run-button"
-                        className={`group col-span-1 h-12 w-full px-3 py-2 text-sm font-bold active:scale-95 disabled:pointer-events-none sm:col-span-2 md:h-8 md:py-1 xl:col-span-1 xl:min-w-[132px] ${
-                          isRetryScanState ? 'shadow-none text-[color:var(--wolfy-text-secondary)]' : ''
-                        }`}
-                        variant={isRetryScanState ? 'secondary' : 'primary'}
-                      >
-                        <Play className={`h-4 w-4 ${isRetryScanState ? '' : 'group-hover:animate-pulse'}`} />
-                        <span>{scannerRunButtonLabel}</span>
-                      </TerminalButton>
                     </div>
                     {scanScope !== 'default' ? (
                       <AdvancedDisclosure
