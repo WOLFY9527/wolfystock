@@ -417,7 +417,7 @@ export const MarketDataRow: React.FC<{
     <article
       data-testid="market-overview-data-row"
       data-row-layout="bounded-market-row"
-      className="grid min-h-[48px] min-w-0 grid-cols-[minmax(0,1fr)_minmax(84px,0.65fr)_64px_minmax(88px,max-content)] items-center gap-x-2 overflow-hidden border-b border-[color:var(--wolfy-border-subtle)] py-2 last:border-b-0 max-[640px]:grid-cols-[minmax(0,1fr)_minmax(82px,max-content)] max-[640px]:gap-y-0.5"
+      className="grid min-h-[48px] min-w-0 grid-cols-[minmax(0,1fr)_minmax(68px,0.48fr)_48px_minmax(74px,max-content)] items-center gap-x-1.5 overflow-hidden border-b border-[color:var(--wolfy-border-subtle)] py-2 last:border-b-0 max-[640px]:grid-cols-[minmax(0,1fr)_minmax(82px,max-content)] max-[640px]:gap-y-0.5"
     >
       <div className="col-start-1 min-w-0 max-[640px]:row-start-1">
         <div className="flex min-w-0 items-center gap-2">
@@ -441,18 +441,18 @@ export const MarketDataRow: React.FC<{
           {compactDetails ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{compactDetails}</span> : null}
         </div>
       ) : null}
-      <div data-testid="market-overview-dense-quote-sparkline" className="col-start-3 w-[64px] shrink-0 self-center max-[640px]:hidden">
+      <div data-testid="market-overview-dense-quote-sparkline" className="col-start-3 w-[48px] shrink-0 self-center max-[640px]:hidden">
         <MarketOverviewSparkline values={item.trend} tone={sparklineTone} className="h-7" />
       </div>
-      <div data-testid="market-overview-quote-value" className="col-start-4 row-start-1 min-w-[88px] text-right font-mono tabular-nums max-[640px]:col-start-2">
-        <p className={cn('truncate text-base font-semibold leading-none text-[color:var(--wolfy-text-primary)]', valueClassName)}>{formatMetricValue(item, valueDigitsBelowHundred)}</p>
-        <p className={cn('mt-1 truncate text-[11px] font-bold leading-none', tone)}>
+      <div data-testid="market-overview-quote-value" className="col-start-4 row-start-1 min-w-[74px] text-right font-mono tabular-nums max-[640px]:col-start-2">
+        <p className={cn('truncate text-sm font-semibold leading-none text-[color:var(--wolfy-text-primary)]', valueClassName)}>{formatMetricValue(item, valueDigitsBelowHundred)}</p>
+        <p className={cn('mt-1 truncate text-[10px] font-bold leading-none', tone)}>
           {formatChangeSummary(item, neutralLabel)}
         </p>
       </div>
       <div
         data-testid="market-overview-quote-change"
-        className={cn('sr-only text-right font-mono', tone)}
+        className={cn('hidden text-right font-mono', tone)}
       >
         {formatChangeSummary(item, neutralLabel)}
       </div>
@@ -485,7 +485,7 @@ export const MarketOverviewDenseQuoteItem: React.FC<{
     <article
       data-testid="market-overview-dense-quote-item"
       data-quote-item-layout="compact-grid"
-      className="grid min-h-[44px] min-w-0 grid-cols-[minmax(96px,1fr)_minmax(104px,0.9fr)_76px_minmax(82px,max-content)_minmax(92px,max-content)] items-center gap-x-2 border-b border-[color:var(--wolfy-border-subtle)] p-1.5 last:border-b-0 max-[720px]:grid-cols-[minmax(0,1fr)_76px_minmax(82px,max-content)] max-[720px]:gap-y-0.5"
+      className="grid min-h-[44px] min-w-0 grid-cols-[minmax(96px,1fr)_minmax(96px,0.8fr)_64px_minmax(72px,max-content)_minmax(54px,max-content)] items-center gap-x-1.5 border-b border-[color:var(--wolfy-border-subtle)] p-1.5 last:border-b-0 max-[720px]:grid-cols-[minmax(0,1fr)_76px_minmax(82px,max-content)] max-[720px]:gap-y-0.5"
     >
       <div className="col-start-1 min-w-0 max-[720px]:row-start-1">
         <div className="flex min-w-0 items-center gap-2">
@@ -507,16 +507,16 @@ export const MarketOverviewDenseQuoteItem: React.FC<{
         {compactDetails ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{compactDetails}</span> : null}
       </div>
 
-      <div data-testid="market-overview-dense-quote-sparkline" className="col-start-3 w-[76px] shrink-0 self-center max-[720px]:col-start-2 max-[720px]:row-span-2 max-[720px]:row-start-1">
+      <div data-testid="market-overview-dense-quote-sparkline" className="col-start-3 w-[64px] shrink-0 self-center max-[720px]:col-start-2 max-[720px]:row-span-2 max-[720px]:row-start-1">
         <MarketOverviewSparkline values={item.trend} tone={sparklineTone} className="h-7" />
       </div>
 
-      <div data-testid="market-overview-quote-value" className="col-start-4 min-w-[82px] text-right font-mono tabular-nums max-[720px]:col-start-3 max-[720px]:row-start-1">
-        <p className="truncate text-base font-semibold leading-none text-[color:var(--wolfy-text-primary)]">{formatMetricValue(item, valueDigitsBelowHundred)}</p>
+      <div data-testid="market-overview-quote-value" className="col-start-4 min-w-[72px] text-right font-mono tabular-nums max-[720px]:col-start-3 max-[720px]:row-start-1">
+        <p className="truncate text-sm font-semibold leading-none text-[color:var(--wolfy-text-primary)]">{formatMetricValue(item, valueDigitsBelowHundred)}</p>
       </div>
       <div
         data-testid="market-overview-quote-change"
-        className={cn('col-start-5 min-w-[92px] text-right font-mono text-[11px] font-bold leading-none tabular-nums max-[720px]:col-start-3 max-[720px]:row-start-2', tone)}
+        className={cn('col-start-5 min-w-0 max-w-full truncate text-right font-mono text-[10px] font-bold leading-none tabular-nums max-[720px]:col-start-3 max-[720px]:row-start-2', tone)}
       >
         {formatChangeSummary(item, neutralLabel)}
       </div>

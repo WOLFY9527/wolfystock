@@ -132,7 +132,7 @@ function evidenceSnapshotCopyLabel(
     return language === 'en' ? 'Evidence snapshot unavailable' : '证据快照暂不可用';
   }
   if (state === 'copied') {
-    return language === 'en' ? 'Evidence snapshot copied' : '证据快照已复制';
+    return language === 'en' ? 'Summary copied' : '已复制摘要';
   }
   if (state === 'failed') {
     return language === 'en' ? 'Copy failed. Try again' : '复制失败，请重试';
@@ -279,10 +279,13 @@ const DENSE_QUOTE_ROW_FIT_CLASS = [
   "[&_[data-testid='market-overview-dense-quote-grid']]:min-w-0",
   "[&_[data-testid='market-overview-dense-quote-grid']]:overflow-x-hidden",
   "[&_[data-testid='market-overview-dense-quote-item']]:overflow-hidden",
-  "[&_[data-testid='market-overview-dense-quote-item']]:grid-cols-[minmax(0,1fr)_minmax(0,0.72fr)_minmax(44px,56px)_minmax(62px,max-content)_minmax(64px,max-content)]",
+  "[&_[data-testid='market-overview-dense-quote-item']]:grid-cols-[minmax(0,1fr)_minmax(0,0.64fr)_minmax(40px,52px)_minmax(58px,max-content)_minmax(48px,max-content)]",
   "[&_[data-testid='market-overview-dense-quote-sparkline']]:w-[56px]",
-  "[&_[data-testid='market-overview-quote-value']]:min-w-[62px]",
-  "[&_[data-testid='market-overview-quote-change']]:min-w-[64px]",
+  "[&_[data-testid='market-overview-quote-value']]:min-w-[58px]",
+  "[&_[data-testid='market-overview-quote-change']]:min-w-0",
+  "[&_[data-testid='market-overview-quote-change']]:max-w-full",
+  "[&_[data-testid='market-overview-quote-change']]:truncate",
+  "[&_[data-testid='market-overview-quote-change']]:text-[10px]",
   "max-[720px]:[&_[data-testid='market-overview-dense-quote-item']]:grid-cols-[minmax(0,1fr)_minmax(44px,56px)_minmax(62px,max-content)]",
   "max-[720px]:[&_[data-testid='market-overview-dense-quote-sparkline']]:w-[56px]",
   "max-[520px]:[&_[data-testid='market-overview-dense-quote-item']]:grid-cols-[minmax(0,1fr)_minmax(62px,max-content)]",
@@ -1256,6 +1259,14 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
         : directionalSummary.confidenceLabel,
     },
     evidenceUsed: [
+      {
+        label: language === 'en' ? 'Market overview' : '市场总览',
+        meta: activeCategoryLabel,
+      },
+      {
+        label: language === 'en' ? 'Market interpretation' : '市场解读',
+        meta: regimeSynthesis?.summary || directionalSummary.currentLabel,
+      },
       {
         label: language === 'en' ? 'Market temperature' : '市场温度',
         meta: `${temperature.scores.overall.label} (${formatNumber(temperature.scores.overall.value, 0)})`,
@@ -3468,9 +3479,9 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
           showExecutiveGroups={showExecutiveGroups}
         />
       </Suspense>
-      <MarketOverviewVisualEvidenceStrip cards={visualEvidenceCards} />
       {/* After observation → path → metrics → drivers → data state */}
       <MarketOverviewResearchHandoff locale={language === 'en' ? 'en' : 'zh'} />
+      <MarketOverviewVisualEvidenceStrip cards={visualEvidenceCards} />
     </div>
   );
 };

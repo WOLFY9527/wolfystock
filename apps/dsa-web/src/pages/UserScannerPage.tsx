@@ -3756,10 +3756,11 @@ const UserScannerPage: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-1.5">
           <ActionButton
-            label={language === 'en' ? 'Open stock research' : '打开个股研究'}
+            label={language === 'en' ? 'Analyze' : '分析'}
             icon={<Play className="h-3.5 w-3.5" />}
             onClick={() => void handleAnalyzeCandidate(candidate)}
             variant="compact"
+            title={language === 'en' ? 'Open stock research' : '打开个股研究'}
           />
           <ActionButton
             label={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
@@ -4228,7 +4229,7 @@ const UserScannerPage: React.FC = () => {
                       disabled={runDisabled}
                       aria-busy={isRunning}
                       data-testid="scanner-run-button"
-                      className={`group h-10 w-full shrink-0 px-3 py-2 text-sm font-bold active:scale-95 disabled:pointer-events-none sm:w-auto sm:min-w-[132px] ${
+                      className={`group min-h-[44px] w-full shrink-0 px-3 py-2 text-sm font-bold active:scale-95 disabled:pointer-events-none sm:w-auto sm:min-w-[132px] ${
                         isRetryScanState ? 'shadow-none text-[color:var(--wolfy-text-secondary)]' : ''
                       }`}
                       variant={isRetryScanState ? 'secondary' : 'primary'}
@@ -4509,7 +4510,7 @@ const UserScannerPage: React.FC = () => {
                     data-testid="scanner-command-bar"
                     className="border-0 bg-transparent px-3 py-3"
                   >
-                    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(112px,0.55fr)_minmax(150px,0.72fr)_minmax(106px,0.45fr)_minmax(156px,0.72fr)_minmax(118px,0.5fr)_minmax(118px,0.5fr)] xl:items-end [&_[data-testid='scanner-market-toggle']_button]:h-12 [&_[data-testid='scanner-market-toggle']_button]:px-3 [&_[data-testid='scanner-market-toggle']_button]:py-2 [&_[data-testid='scanner-scope-selector']_button]:h-12 [&_[data-testid='scanner-scope-selector']_button]:px-3 [&_[data-testid='scanner-scope-selector']_button]:py-2 md:[&_[data-testid='scanner-market-toggle']_button]:h-8 md:[&_[data-testid='scanner-market-toggle']_button]:py-1 md:[&_[data-testid='scanner-scope-selector']_button]:h-8 md:[&_[data-testid='scanner-scope-selector']_button]:py-1">
+                    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(112px,0.55fr)_minmax(150px,0.72fr)_minmax(106px,0.45fr)_minmax(156px,0.72fr)_minmax(118px,0.5fr)_minmax(118px,0.5fr)] xl:items-end [&_[data-testid='scanner-market-toggle']_button]:min-h-[44px] [&_[data-testid='scanner-market-toggle']_button]:px-3 [&_[data-testid='scanner-market-toggle']_button]:py-2 [&_[data-testid='scanner-scope-selector']_button]:min-h-[44px] [&_[data-testid='scanner-scope-selector']_button]:px-3 [&_[data-testid='scanner-scope-selector']_button]:py-2 md:[&_[data-testid='scanner-market-toggle']_button]:min-h-8 md:[&_[data-testid='scanner-market-toggle']_button]:py-1 md:[&_[data-testid='scanner-scope-selector']_button]:min-h-8 md:[&_[data-testid='scanner-scope-selector']_button]:py-1">
                       <PillTagGroup compact label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} variant="market" testId="scanner-market-toggle" />
                       <PillTagGroup compact label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
                       <PillTagGroup compact label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
@@ -4793,7 +4794,7 @@ const UserScannerPage: React.FC = () => {
                             variant="compact"
                             aria-expanded={isMoreActionsOpen}
                             aria-label={language === 'en' ? 'More scanner actions' : '更多扫描操作'}
-                            className="h-12 px-3 py-2 text-sm md:h-8 md:px-2.5 md:py-1 md:text-xs"
+                            className="min-h-[44px] px-3 py-2 text-sm md:min-h-8 md:px-2.5 md:py-1 md:text-xs"
                             onClick={() => setIsMoreActionsOpen((current) => !current)}
                           >
                             <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />

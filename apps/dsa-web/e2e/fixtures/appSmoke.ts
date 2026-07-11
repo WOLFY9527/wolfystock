@@ -1176,6 +1176,17 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
       });
     }
 
+    if (method === 'GET' && path === '/api/v1/watchlist/research-overlay') {
+      return fulfillJson(route, {
+        schema_version: 'watchlist_research_overlay_v1',
+        overlay_state: 'empty',
+        research_summary: 'No saved watchlist rows yet.',
+        research_priority_queue: [],
+        observation_only: true,
+        decision_grade: false,
+      });
+    }
+
     if (method === 'GET' && path === '/api/v1/user-alerts/rules') {
       return fulfillJson(route, {
         contract_version: 'user_alert_contract_v1',

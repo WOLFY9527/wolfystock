@@ -2003,7 +2003,7 @@ describe('UserScannerPage', () => {
     const { container } = renderUserScannerPage();
 
     const band = await screen.findByTestId('scanner-conclusion-band');
-    expect(band).toHaveTextContent('扫描器尚未产出候选集');
+    await waitFor(() => expect(band).toHaveTextContent('扫描器尚未产出候选集'));
     expect(band).toHaveTextContent('可稍后重试');
     const statusStrip = screen.getByTestId('scanner-status-strip');
     expect(statusStrip).toHaveTextContent('等待可用数据');
@@ -2524,7 +2524,7 @@ describe('UserScannerPage', () => {
     expect(getActionButton(row, /详情|Detail/i)).toHaveAttribute('data-terminal-primitive', 'button');
     fireEvent.click(getActionButton(row, /更多|More/i));
     const rankedRow = getRankedRow('NVDA');
-    expect(within(rankedRow).getByRole('button', { name: /打开个股研究|Open stock research/i })).toHaveAttribute('data-terminal-primitive', 'button');
+    expect(within(rankedRow).getByRole('button', { name: /分析|Analyze/i })).toHaveAttribute('data-terminal-primitive', 'button');
     expect(within(rankedRow).getByRole('button', { name: /追踪|Track/i })).toHaveAttribute('data-terminal-primitive', 'button');
 
     fireEvent.click(moreTrigger);
@@ -2989,10 +2989,10 @@ describe('UserScannerPage', () => {
 
     const row = await screen.findByTestId('scanner-result-row-NVDA');
     expect(getActionButton(row, /详情|Detail/i)).toBeInTheDocument();
-    expect(within(row).queryByRole('button', { name: /打开个股研究|Open stock research/i })).not.toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: /分析|Analyze/i })).not.toBeInTheDocument();
     fireEvent.click(getActionButton(row, /更多|More/i));
     const rankedRow = getRankedRow('NVDA');
-    expect(within(rankedRow).getByRole('button', { name: /打开个股研究|Open stock research/i })).toBeInTheDocument();
+    expect(within(rankedRow).getByRole('button', { name: /分析|Analyze/i })).toBeInTheDocument();
     expect(within(rankedRow).getByRole('button', { name: /追踪|Track/i })).toBeInTheDocument();
     expect(screen.getByTestId('scanner-ranked-list')).toBeInTheDocument();
   });
@@ -3090,7 +3090,7 @@ describe('UserScannerPage', () => {
     const card = await screen.findByTestId('scanner-result-row-NVDA');
     fireEvent.click(getActionButton(card, /详情|Detail/i));
     const detail = await screen.findByTestId('scanner-result-detail-NVDA');
-    fireEvent.click(within(detail).getByRole('button', { name: /打开个股研究|Open stock research/i }));
+    fireEvent.click(within(detail).getByRole('button', { name: /分析|Analyze/i }));
 
     expect(await screen.findByText('Stock Research Landing')).toBeInTheDocument();
     expect(analyzeAsync).not.toHaveBeenCalled();
@@ -3219,7 +3219,7 @@ describe('UserScannerPage', () => {
 
     const detail = await screen.findByTestId('scanner-result-detail-NVDA');
     expect(within(detail).getByText(/当前信号|Why now/)).toBeInTheDocument();
-    expect(within(detail).getByRole('button', { name: /打开个股研究|Open stock research/i })).toBeInTheDocument();
+    expect(within(detail).getByRole('button', { name: /分析|Analyze/i })).toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: /复制代码|Copy symbol/i })).toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: /导出|Export/i })).toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: /回测|Backtest/i })).toBeEnabled();
@@ -4041,7 +4041,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const panel = await screen.findByTestId('scanner-research-workspace-flow');
-    expect(panel).toHaveTextContent('WULF');
+    await waitFor(() => expect(panel).toHaveTextContent('WULF'));
     expect(panel).not.toHaveTextContent(/Run #|Rank #|scannerRunId|watchlistItemId|provider|cache|runtime|debug/i);
 
     const watchlistLink = within(panel).getByTestId('research-workspace-link-watchlist');
