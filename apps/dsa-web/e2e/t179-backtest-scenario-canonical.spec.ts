@@ -268,12 +268,13 @@ test.describe('T179 Backtest and Scenario canonical workflow', () => {
       await expect(workspace).toBeVisible();
       await expect(readiness).toBeVisible();
       await expect(preview).toBeVisible();
-      await expect(preview).toContainText(/结果预览|Result preview/);
-      await expect(preview).toContainText(/收益曲线与基准|Equity vs benchmark/);
-      await expect(preview).toContainText(/回撤|Drawdown/);
-      await expect(preview).toContainText(/核心指标|Core metrics/);
-      await expect(preview).toContainText(/交易与事件账本|Trades and events/);
-      await expect(preview).toContainText(/假设、成本与限制|Assumptions, costs, and limitations/);
+      await expect(preview).toContainText(/结果工作区闸门|Result workspace gate/);
+      await expect(preview).toContainText(/暂无真实结果|No real result yet/);
+      await expect(preview).toContainText(/就绪度不是结果|Readiness is not a result/);
+      await expect(preview).toContainText(/配置|Configure/);
+      await expect(preview).toContainText(/就绪度|Readiness/);
+      await expect(preview).toContainText(/显式执行|Explicit run/);
+      await expect(preview).toContainText(/真实结果工作区|Real result workspace/);
       expect(mutationRequests).toEqual([]);
 
       const symbolInput = page.getByLabel(/标的代码|Ticker/i).first();
@@ -330,7 +331,7 @@ test.describe('T179 Backtest and Scenario canonical workflow', () => {
     await expect(compositionOrder).toContainText('核心指标');
     await expect(compositionOrder).toContainText('交易与事件账本');
     await expect(compositionOrder).toContainText('假设与成本');
-    await expect(compositionOrder).toContainText('限制');
+    await expect(compositionOrder).toContainText('Where It Breaks');
     await expect(dataQuality).toContainText(/数据质量|样本/);
     await expect(assumptions).toContainText(/执行假设|手续费|滑点|成本/);
     await expect(evidence).not.toHaveJSProperty('open', true);
@@ -359,11 +360,12 @@ test.describe('T179 Backtest and Scenario canonical workflow', () => {
     const scenarioPage = page.getByTestId('scenario-lab-page');
     await expect(scenarioPage).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('scenario-lab-setup-idle')).toContainText('尚未执行情景评估');
-    await expect(page.getByTestId('scenario-productization-order')).toContainText('显式情景设置');
+    await expect(page.getByTestId('scenario-productization-order')).toContainText('情景配置');
     await expect(page.getByTestId('scenario-productization-order')).toContainText('显式评估');
-    await expect(page.getByTestId('scenario-productization-order')).toContainText('对比');
-    await expect(page.getByTestId('scenario-productization-order')).toContainText('敏感度');
-    await expect(page.getByTestId('scenario-productization-order')).toContainText('不确定性');
+    await expect(page.getByTestId('scenario-productization-order')).toContainText('冲击影响图');
+    await expect(page.getByTestId('scenario-productization-order')).toContainText('资产敏感度');
+    await expect(page.getByTestId('scenario-productization-order')).toContainText('Watchlist 映射');
+    await expect(page.getByTestId('scenario-productization-order')).toContainText('解释路径');
     await expect(page.getByTestId('scenario-productization-order')).toContainText('限制');
     expect(scenarioPosts).toHaveLength(0);
 

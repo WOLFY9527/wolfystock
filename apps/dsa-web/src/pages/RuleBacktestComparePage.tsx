@@ -1533,7 +1533,14 @@ const RuleBacktestComparePage: React.FC = () => {
                     <Button size="sm" variant="ghost" onClick={() => void handleCopyText(runIds.join(','), '已复制当前运行 ID')}>复制运行 ID</Button>
                     <Button size="sm" variant="ghost" onClick={() => void handleCopyText(compareSummaryText, '已复制比较摘要')}>复制摘要</Button>
                   </div>
-                  {copyFeedback ? <p className="text-xs text-[color:var(--wolfy-text-muted)]">{copyFeedback}</p> : null}
+                  <p
+                    className="min-h-4 text-xs text-[color:var(--wolfy-text-muted)]"
+                    data-testid="rule-backtest-compare-copy-feedback"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {copyFeedback || ''}
+                  </p>
                   {response.unavailableRuns.length ? (
                     <Banner
                       tone="warning"
