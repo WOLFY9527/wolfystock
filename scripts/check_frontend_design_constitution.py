@@ -538,13 +538,70 @@ def is_key_route_page(path: str) -> bool:
     return path in KEY_ROUTE_PAGES
 
 
-def count_level_one_heading_markers(text: str) -> int:
-    terminal_page_heading_count = len(re.findall(r"<TerminalPageHeading\b", text))
-    if terminal_page_heading_count:
-        return terminal_page_heading_count
-    explicit_heading_count = len(re.findall(r"<h1\b", text))
-    explicit_heading_count += len(re.findall(r'aria-level\s*=\s*(?:\{1\}|"1")', text))
-    return explicit_heading_count
+def repo_text(path: str) -> str:
+    return (ROOT / path).read_text(encoding="utf-8")
+
+
+def strip_jsx_comments(text: str) -> str:
+    return re.sub(r"\{/\*.*?\*/\}", "", text, flags=re.DOTALL)
+
+
+def count_jsx_element_openings(text: str, element_name: str) -> int:
+    return len(re.findall(rf"(?<![\"'`])<{re.escape(element_name)}\b", text))
+
+
+def has_dense_page_header_heading_contract() -> bool:
+    source = repo_text("apps/dsa-web/src/components/terminal/DenseWorkbenchPrimitives.tsx")
+    return (
+        "export function DensePageHeader" in source
+        and count_jsx_element_openings(strip_jsx_comments(source), "TerminalPageHeading") == 1
+    )
+
+
+def count_dense_page_header_heading_markers(path: str, text: str) -> int:
+    if path != "apps/dsa-web/src/pages/UserScannerPage.tsx":
+        return 0
+    if not has_dense_page_header_heading_contract():
+        return 0
+    return count_jsx_element_openings(text, "DensePageHeader")
+
+
+def has_market_overview_observation_heading_contract() -> bool:
+    top_surface = repo_text("apps/dsa-web/src/components/market-overview/MarketOverviewWorkbenchTopSurface.tsx")
+    observation_head = repo_text("apps/dsa-web/src/components/research/anatomy/ObservationHead.tsx")
+    typography = repo_text("apps/dsa-web/src/components/research/anatomy/ResearchTypography.tsx")
+    return (
+        count_jsx_element_openings(strip_jsx_comments(top_surface), "ObservationHead") == 1
+        and 'data-testid="market-overview-observation-head"' in top_surface
+        and "Market State Overview" in top_surface
+        and "市场状态概览" in top_surface
+        and count_jsx_element_openings(strip_jsx_comments(observation_head), "ObservationTitle") == 1
+        and "renderTypography('h1'" in typography
+        and "'observation-title'" in typography
+    )
+
+
+def count_market_overview_observation_heading_markers(path: str, text: str) -> int:
+    if path != "apps/dsa-web/src/pages/MarketOverviewPage.tsx":
+        return 0
+    if not has_market_overview_observation_heading_contract():
+        return 0
+    return count_jsx_element_openings(text, "MarketOverviewWorkbench")
+
+
+def count_level_one_heading_markers(path: str, text: str) -> int:
+    semantic_text = strip_jsx_comments(text)
+    component_heading_count = (
+        count_jsx_element_openings(semantic_text, "TerminalPageHeading")
+        + count_dense_page_header_heading_markers(path, semantic_text)
+        + count_market_overview_observation_heading_markers(path, semantic_text)
+    )
+    if component_heading_count:
+        return component_heading_count
+    return (
+        count_jsx_element_openings(semantic_text, "h1")
+        + len(re.findall(r'aria-level\s*=\s*(?:\{1\}|"1")', semantic_text))
+    )
 
 
 def is_loud_warning_material(line: str) -> bool:
@@ -580,7 +637,7 @@ def scan_text(path: str, text: str) -> ScanResult:
     key_route_page = is_key_route_page(normalized)
 
     if key_route_page:
-        heading_count = count_level_one_heading_markers(text)
+        heading_count = count_level_one_heading_markers(normalized, text)
         if heading_count == 0:
             findings.append(Finding(
                 rule="route-semantic-page-heading",

@@ -1281,7 +1281,6 @@ const MarketRegimeReadModelSurface = ({
 };
 
 const MarketOverviewPage = () => {
-  const { language } = useI18n();
   const { isAdminMode, canReadProviders } = useProductSurface();
   const [initialLocalSnapshot] = useState(() => buildInitialPanelsFromLocalSnapshot());
   const [panels, setPanels] = useState<PanelState>(initialLocalSnapshot.panels);
@@ -1688,18 +1687,7 @@ const MarketOverviewPage = () => {
         className="flex min-h-0 flex-1 flex-col gap-4 md:gap-6"
       >
         <MarketOverviewWorkbench
-          heading={(
-            <>
-              <div
-                data-testid="market-overview-page-heading"
-                data-market-overview-heading="absorbed-by-observation-head"
-                data-design-constitution-marker="<TerminalPageHeading"
-                className="sr-only"
-              >
-                {language === 'en' ? 'Market State Overview' : '市场状态概览'}
-              </div>
-            </>
-          )}
+          heading={null}
           panels={panels}
           loading={loading}
           localSnapshotSavedAt={localSnapshotSavedAt}

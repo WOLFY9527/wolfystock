@@ -4107,7 +4107,6 @@ const UserScannerPage: React.FC = () => {
 	          className="flex-1 gap-3"
 	        >
             <div data-testid="scanner-header-strip" className="flex min-w-0 flex-col gap-3">
-              {/* <TerminalPageHeading /> marker: DensePageHeader emits the page-level h1. */}
               <DensePageHeader
                 data-testid="scanner-page-heading"
                 eyebrow={(
