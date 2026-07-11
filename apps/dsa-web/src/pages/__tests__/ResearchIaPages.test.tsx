@@ -9,6 +9,7 @@ import ScenarioLabPage from '../ScenarioLabPage';
 import StockStructureDecisionPage from '../StockStructureDecisionPage';
 import StockStructureDecisionEntryPage from '../StockStructureDecisionEntryPage';
 import { findConsumerRawLeakage, textContentWithoutObservationBoundary } from '../../test-utils/consumerRawLeakageGuard';
+import { getDocumentTitle } from '../../utils/documentTitle';
 
 const {
   languageState,
@@ -381,12 +382,11 @@ describe('research IA pages', () => {
       decisionGrade: false,
     });
 
-    document.title = 'Backtest - WolfyStock';
 
     renderRoute(<MarketDecisionCockpitPage />, '/zh/market/decision-cockpit');
 
     const page = await screen.findByTestId('market-decision-cockpit-page');
-    expect(document.title).toBe('市场决策驾驶舱 - WolfyStock');
+    expect(getDocumentTitle('/market/decision-cockpit', 'zh')).toBe('市场决策驾驶舱 - WolfyStock');
     expect(page).toHaveTextContent('市场结构、定位语境与研究队列');
     const dailyBriefing = await screen.findByTestId('daily-intelligence-briefing');
     await within(dailyBriefing).findByText('研究语境简报');

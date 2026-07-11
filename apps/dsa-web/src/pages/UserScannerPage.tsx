@@ -2647,10 +2647,6 @@ const UserScannerPage: React.FC = () => {
   const scannerRunInFlightRef = useRef(false);
 
   useEffect(() => {
-    document.title = t('scanner.documentTitle');
-  }, [t]);
-
-  useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const handleResize = () => setViewportWidth(window.innerWidth);
     handleResize();

@@ -6935,10 +6935,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   };
 
   useEffect(() => {
-    document.title = copy.documentTitle;
-  }, [copy.documentTitle]);
-
-  useEffect(() => {
     if (!isGuest) {
       setGuestMarketBriefing(null);
       setGuestMarketBriefingLoading(false);

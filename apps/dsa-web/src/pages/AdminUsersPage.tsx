@@ -1187,10 +1187,6 @@ const AdminUsersPage: React.FC = () => {
     revoke_sessions: freshSecurityActionState(),
   });
 
-  useEffect(() => {
-    document.title = language === 'en' ? 'User Governance - WolfyStock' : '用户治理 - WolfyStock';
-  }, [language]);
-
   const loadUsers = useCallback(() => {
     if (!canReadUsers) return;
     setUsersState((state) => ({ ...state, loading: true, error: null }));

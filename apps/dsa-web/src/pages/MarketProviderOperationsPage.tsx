@@ -4232,10 +4232,6 @@ const MarketProviderOperationsPage: React.FC = () => {
   const [professionalCapabilityError, setProfessionalCapabilityError] = useState<ParsedApiError | null>(null);
 
   useEffect(() => {
-    document.title = language === 'en' ? 'Provider Ops - WolfyStock' : '数据源运维 - WolfyStock';
-  }, [language]);
-
-  useEffect(() => {
     let cancelled = false;
     marketProviderOperationsApi.getOperations()
       .then((payload) => {

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminUsersPage from '../AdminUsersPage';
+import { getDocumentTitle } from '../../utils/documentTitle';
 
 const {
   disableAdminUser,
@@ -306,7 +307,7 @@ describe('AdminUsersPage', () => {
     expect(within(overviewStrip).getByText('证据参考')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('最近更新')).toBeInTheDocument();
     expect(screen.getByText('用户支持与治理')).toBeInTheDocument();
-    expect(document.title).toBe('用户治理 - WolfyStock');
+    expect(getDocumentTitle('/admin/users', 'zh')).toBe('用户治理 - WolfyStock');
     expect(document.body).not.toHaveTextContent('WolfyStock 用户治理终端');
     expect(screen.getAllByRole('heading', { name: '用户目录' }).length).toBeGreaterThan(0);
     expect((await screen.findAllByText('Alice')).length).toBeGreaterThan(0);

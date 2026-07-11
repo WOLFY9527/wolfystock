@@ -720,10 +720,6 @@ const PersonalSettingsPage: React.FC = () => {
   const loginPath = buildLoginPath('/settings');
   const registrationPath = buildRegistrationPath('/settings');
 
-  useEffect(() => {
-    document.title = language === 'en' ? 'Account Center - WolfyStock' : '账户中心 - WolfyStock';
-  }, [language]);
-
   const handlePortfolioDisplayCurrencyChange = (currency: PortfolioDisplayCurrency) => {
     const saved = savePortfolioDisplayCurrency(currency);
     setPortfolioDisplayCurrency(saved);

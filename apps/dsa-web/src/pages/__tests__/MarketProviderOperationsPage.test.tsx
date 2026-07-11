@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketProviderOperationsPage from '../MarketProviderOperationsPage';
 import { resolveProductSetupSurface } from '../../utils/productSetupSurface';
+import { getDocumentTitle } from '../../utils/documentTitle';
 
 const { getOperations } = vi.hoisted(() => ({
   getOperations: vi.fn(),
@@ -1274,7 +1275,7 @@ describe('MarketProviderOperationsPage', () => {
 
     render(<MarketProviderOperationsPage />);
 
-    expect(document.title).toBe('数据源运维 - WolfyStock');
+    expect(getDocumentTitle('/admin/market-providers', 'zh')).toBe('数据源运维 - WolfyStock');
     expect(screen.getByText('数据源维护路线图')).toBeInTheDocument();
     expect(screen.getByText('正在读取数据源维护快照')).toBeInTheDocument();
   });

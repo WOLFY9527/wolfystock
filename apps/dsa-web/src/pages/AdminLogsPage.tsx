@@ -1648,10 +1648,6 @@ const AdminLogsPage: React.FC = () => {
   }, [cleanupPreview, loadSessions, loadStorageSummary, locale, storageSummary]);
 
   useEffect(() => {
-    document.title = t('adminLogs.documentTitle');
-  }, [t]);
-
-  useEffect(() => {
     setPageOffset(0);
   }, [activeTab, searchQuery, sinceFilter, statusFilter]);
 

@@ -1,5 +1,4 @@
 import type React from 'react';
-import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TerminalButton, TerminalPageShell, TerminalPanel } from '../components/terminal/TerminalPrimitives';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -9,10 +8,6 @@ const NotFoundPage: React.FC = () => {
   const { language, t } = useI18n();
   const navigate = useNavigate();
   const homePath = buildLocalizedPath('/', language);
-
-  useEffect(() => {
-    document.title = t('notFound.documentTitle');
-  }, [t]);
 
   return (
     <TerminalPageShell className="flex min-h-0 flex-1 justify-center overflow-x-hidden py-8 md:py-10">

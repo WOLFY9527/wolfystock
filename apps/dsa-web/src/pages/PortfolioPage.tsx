@@ -1748,10 +1748,6 @@ const PortfolioPage: React.FC = () => {
   const copy = getPortfolioCopy(t, language);
   const riskFallbackMessage = copy.riskFallback;
 
-  useEffect(() => {
-    document.title = copy.documentTitle;
-  }, [copy.documentTitle]);
-
   const [accounts, setAccounts] = useState<PortfolioAccountItem[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<AccountOption>('all');
   const [selectedTradeAccount, setSelectedTradeAccount] = useState<AccountOption>('all');
