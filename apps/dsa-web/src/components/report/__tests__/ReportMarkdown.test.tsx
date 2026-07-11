@@ -111,6 +111,8 @@ describe('ReportMarkdown', () => {
         oneSentence: '只读证据显示仍处观察状态。',
         operationAdvice: '仅观察',
         score: 68,
+        snapshotTime: '2026-03-28 09:35:00 EDT',
+        reportGeneratedAt: '2026-03-28 21:35:00 CST',
       },
       decisionPanel: {
         confidence: '中等',
@@ -151,8 +153,81 @@ describe('ReportMarkdown', () => {
     expect(executiveSummary).toHaveTextContent('结论');
     expect(executiveSummary).toHaveTextContent('置信度');
     expect(executiveSummary).toHaveTextContent('关键风险');
+    expect(executiveSummary).toHaveTextContent('观察时间');
+    expect(executiveSummary).toHaveTextContent('2026-03-28 09:35:00 EDT');
+    expect(executiveSummary).toHaveTextContent('报告生成时间');
+    expect(executiveSummary).toHaveTextContent('2026-03-28 21:35:00 CST');
     expect(evidenceDetails).not.toHaveAttribute('open');
     expect(readingSurface.firstElementChild).toBe(executiveSummary);
+  });
+
+  it('supports copy, markdown download, and print/PDF export for visible research evidence', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview-report');
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const appendChild = vi.spyOn(document.body, 'appendChild');
+    const print = vi.fn();
+    const printWindow = {
+      document: {
+        open: vi.fn(),
+        write: vi.fn(),
+        getElementById: vi.fn(() => ({ textContent: '' })),
+        close: vi.fn(),
+      },
+      focus: vi.fn(),
+      opener: null as Window | null,
+      print,
+    };
+    const windowOpen = vi.spyOn(window, 'open').mockReturnValue(printWindow as unknown as Window);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <ReportMarkdown
+        recordId={10}
+        stockName="NVIDIA"
+        stockCode="NVDA"
+        onClose={() => undefined}
+        standardReport={{
+          summaryPanel: {
+            snapshotTime: '2026-03-28 09:35:00 EDT',
+            reportGeneratedAt: '2026-03-28 21:35:00 CST',
+          },
+        }}
+        initialContent="## Research Evidence\nAI 洞察仅供参考，不构成投资建议。"
+      />,
+    );
+
+    expect(await screen.findByTestId('report-export-controls')).toHaveTextContent('导出内容保留当前研究证据，不新增投资建议。');
+    fireEvent.click(screen.getByRole('button', { name: '复制报告' }));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('## Research Evidence'));
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('报告已复制。');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '下载 Markdown' }));
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    const appendedLink = appendChild.mock.calls.at(-1)?.[0] as HTMLAnchorElement;
+    expect(appendedLink.download).toBe('WolfyStock_NVIDIA_NVDA_20260328.md');
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('Markdown 下载已开始。');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '打印 / PDF' }));
+    expect(windowOpen).toHaveBeenCalled();
+    expect(printWindow.document.write).toHaveBeenCalledWith(expect.stringContaining('wolfystock-preview-print-report'));
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('打印 / PDF 流程已打开。');
+    });
+
+    createObjectURL.mockRestore();
+    revokeObjectURL.mockRestore();
+    appendChild.mockRestore();
+    windowOpen.mockRestore();
   });
 
   it('keeps executive summary and coverage audit synchronous without mounting technical details before disclosure opens', async () => {
