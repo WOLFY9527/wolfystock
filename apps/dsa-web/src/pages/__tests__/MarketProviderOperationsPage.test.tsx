@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketProviderOperationsPage from '../MarketProviderOperationsPage';
 import { resolveProductSetupSurface } from '../../utils/productSetupSurface';
@@ -1254,6 +1254,23 @@ const providerActivationVerifierPayload = {
   },
 };
 
+async function renderMarketProviderOperationsPage() {
+  const result = render(<MarketProviderOperationsPage />);
+  await waitFor(() => {
+    expect(getOperations).toHaveBeenCalled();
+    expect(getOperationsMatrix).toHaveBeenCalled();
+    expect(getHistoricalOhlcvCachePreflight).toHaveBeenCalled();
+    expect(getProviderActivationVerifier).toHaveBeenCalled();
+    expect(getDataReadiness).toHaveBeenCalled();
+    expect(getDataSourceGapRegistry).toHaveBeenCalled();
+    expect(getProfessionalDataCapabilitiesAdmin).toHaveBeenCalled();
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
+  return result;
+}
+
 describe('MarketProviderOperationsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1273,7 +1290,7 @@ describe('MarketProviderOperationsPage', () => {
   it('renders the loading state before the read-only operations payload resolves', async () => {
     getOperations.mockReturnValue(new Promise(() => {}));
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     expect(getDocumentTitle('/admin/market-providers', 'zh')).toBe('数据源运维 - WolfyStock');
     expect(screen.getByText('数据源维护路线图')).toBeInTheDocument();
@@ -1283,7 +1300,7 @@ describe('MarketProviderOperationsPage', () => {
   it('lets the shared shell own the page background instead of locking a local pure-black slab', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     const pageRoot = screen.getByTestId('market-provider-operations-page');
     expect(await screen.findByRole('heading', { name: '数据源维护路线图' })).toBeInTheDocument();
@@ -1294,7 +1311,7 @@ describe('MarketProviderOperationsPage', () => {
   it('renders provider activation verifier results with blocked surfaces and safe next actions only', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     const panel = await screen.findByTestId('provider-activation-verifier-panel');
     expect(panel).toHaveTextContent('Provider activation verifier');
@@ -1318,7 +1335,7 @@ describe('MarketProviderOperationsPage', () => {
   it('keeps wide admin matrices in bounded focusable scroll regions without page-level overflow masking', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     const pageRoot = await screen.findByTestId('market-provider-operations-page');
     expect(pageRoot).toHaveClass('min-w-0');
@@ -1345,7 +1362,7 @@ describe('MarketProviderOperationsPage', () => {
   it('renders Chinese-first operator hierarchy and keeps diagnostics available without exposing raw secrets or backend credential names', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     const overviewStrip = await screen.findByTestId('market-provider-l0-overview-strip');
     expect(screen.getByTestId('market-provider-section-ops-status')).toHaveClass(
@@ -1591,7 +1608,7 @@ describe('MarketProviderOperationsPage', () => {
   it('renders historicalOhlcvCachePreflight for representative CN and US symbols without enabling seed by default', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     const panel = await screen.findByTestId('historical-ohlcv-cache-preflight-panel');
     const checklist = screen.getByTestId('historical-ohlcv-activation-checklist');
@@ -1645,7 +1662,7 @@ describe('MarketProviderOperationsPage', () => {
   it('renders the backend data source gap registry as a fail-closed professional data map', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     const panel = await screen.findByTestId('data-source-gap-registry-panel');
     expect(panel).toHaveTextContent('专业数据地图');
@@ -1783,7 +1800,7 @@ describe('MarketProviderOperationsPage', () => {
     });
     getOperations.mockResolvedValue(populatedPayload);
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     const controls = await screen.findByTestId('data-acquisition-action-pack-controls');
     expect(controls).toHaveTextContent('导出接入行动包');
@@ -1878,7 +1895,7 @@ describe('MarketProviderOperationsPage', () => {
       ],
     });
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     await screen.findByTestId('data-source-gap-registry-panel');
     const row = screen.getByTestId('data-source-gap-registry-row-unknown_new_family');
@@ -1944,7 +1961,7 @@ describe('MarketProviderOperationsPage', () => {
     getOperations.mockResolvedValue(populatedPayload);
     getDataSourceGapRegistry.mockRejectedValue(new Error('registry unavailable'));
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     const panel = await screen.findByTestId('data-source-gap-registry-panel');
     expect(panel).toHaveTextContent('专业数据地图待补证');
@@ -1964,7 +1981,7 @@ describe('MarketProviderOperationsPage', () => {
   it('renders a provider setup checklist with grouped affected surfaces, safe badges, and curated guidance only', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     expect(await screen.findByText('数据源配置清单')).toBeInTheDocument();
     const checklist = screen.getByTestId('market-provider-setup-checklist');
@@ -2052,7 +2069,7 @@ describe('MarketProviderOperationsPage', () => {
   it('renders a provider-free consumer evidence impact matrix with affected routes and next diagnostics', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     const matrix = await screen.findByTestId('market-provider-consumer-evidence-matrix');
     expect(matrix).toHaveTextContent('消费者证据影响矩阵');
@@ -2089,7 +2106,7 @@ describe('MarketProviderOperationsPage', () => {
   it('keeps non-scoring setup copy conservative and leaves score eligibility to existing source gates', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     const checklist = await screen.findByTestId('market-provider-setup-checklist');
     const sourceGapDisclosure = screen.getByTestId('market-provider-source-gap-disclosure');
@@ -2160,7 +2177,7 @@ describe('MarketProviderOperationsPage', () => {
       },
     });
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     const checklist = await screen.findByTestId('market-provider-setup-checklist');
     const watchlistGroup = screen.getByTestId('market-provider-setup-surface-watchlist');
@@ -2177,7 +2194,7 @@ describe('MarketProviderOperationsPage', () => {
   it('keeps product labels available without introducing trading-action wording', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     const checklist = await screen.findByTestId('market-provider-setup-checklist');
     expect(checklist).toHaveTextContent('Portfolio');
@@ -2195,7 +2212,7 @@ describe('MarketProviderOperationsPage', () => {
     getOperations.mockResolvedValue(populatedPayload);
 
     try {
-      render(<MarketProviderOperationsPage />);
+      await renderMarketProviderOperationsPage();
 
       expect(await screen.findByText('数据源配置清单')).toBeInTheDocument();
       const focus = screen.getByTestId('market-provider-setup-surface-focus');
@@ -2235,7 +2252,7 @@ describe('MarketProviderOperationsPage', () => {
     getOperations.mockResolvedValue(populatedPayload);
 
     try {
-      render(<MarketProviderOperationsPage />);
+      await renderMarketProviderOperationsPage();
 
       expect(await screen.findByText('数据源配置清单')).toBeInTheDocument();
       expect(screen.queryByTestId('market-provider-setup-surface-focus')).not.toBeInTheDocument();
@@ -2265,7 +2282,7 @@ describe('MarketProviderOperationsPage', () => {
     getOperations.mockResolvedValue(populatedPayload);
     getDataReadiness.mockResolvedValue(readinessPayload);
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     expect(await screen.findByText('本地行情就绪诊断')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('代表符号'), { target: { value: 'msft, qqq, nvda' } });
@@ -2288,7 +2305,7 @@ describe('MarketProviderOperationsPage', () => {
       limitations: [],
     } as typeof populatedPayload);
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     expect(await screen.findByText('暂无数据源运维条目')).toBeInTheDocument();
     expect(screen.getAllByText('待统计').length).toBeGreaterThan(0);
@@ -2315,7 +2332,7 @@ describe('MarketProviderOperationsPage', () => {
       },
     });
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     expect(await screen.findByText('数据源优先级路线图')).toBeInTheDocument();
     expect(screen.getByText('暂无数据源矩阵行')).toBeInTheDocument();
@@ -2325,7 +2342,7 @@ describe('MarketProviderOperationsPage', () => {
     getOperations.mockResolvedValue(populatedPayload);
     getOperationsMatrix.mockRejectedValue(new Error('forbidden'));
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     expect(await screen.findByRole('heading', { name: '数据源维护路线图' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(0));
@@ -2341,7 +2358,7 @@ describe('MarketProviderOperationsPage', () => {
       limitations: ['cache_metadata_unavailable:indices'],
     });
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     expect(await screen.findByText('暂无数据源运维条目')).toBeInTheDocument();
     expect(screen.getByText('暂无缓存状态')).toBeInTheDocument();
@@ -2353,7 +2370,7 @@ describe('MarketProviderOperationsPage', () => {
   it('renders API errors with the existing alert pattern', async () => {
     getOperations.mockRejectedValue(new Error('admin required'));
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(within(screen.getByRole('alert')).getByText('读取市场数据源运维失败')).toBeInTheDocument();
@@ -2376,7 +2393,7 @@ describe('MarketProviderOperationsPage', () => {
       },
     });
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     await screen.findByTestId('market-provider-l0-overview-strip');
     const adminLogHrefs = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href^="/zh/admin/logs"]'))
@@ -2395,7 +2412,7 @@ describe('MarketProviderOperationsPage', () => {
   it('wraps visible code-like provider detail values instead of letting them overflow the side rail', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     expect(await screen.findByText('诊断默认收起')).toBeInTheDocument();
     expect(screen.queryByTestId('market-provider-detail-endpoint')).not.toBeInTheDocument();
@@ -2419,7 +2436,7 @@ describe('MarketProviderOperationsPage', () => {
       ],
     });
 
-    render(<MarketProviderOperationsPage />);
+    await renderMarketProviderOperationsPage();
 
     await screen.findByText('诊断默认收起');
     fireEvent.click(screen.getAllByRole('button', { name: '查看诊断' })[0]);

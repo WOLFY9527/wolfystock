@@ -1,5 +1,5 @@
 import type React from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ScenarioLabPage from '../ScenarioLabPage';
@@ -47,7 +47,10 @@ function renderRoute(ui: React.ReactElement, path = '/zh/scenario-lab') {
 async function evaluateScenarioFromIdle(expectedCalls = 0) {
   const setup = await screen.findByTestId('scenario-lab-setup-idle');
   expect(runScenarioLabMock).toHaveBeenCalledTimes(expectedCalls);
-  fireEvent.click(within(setup).getByRole('button', { name: '评估情景' }));
+  await act(async () => {
+    fireEvent.click(within(setup).getByRole('button', { name: '评估情景' }));
+    await Promise.resolve();
+  });
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

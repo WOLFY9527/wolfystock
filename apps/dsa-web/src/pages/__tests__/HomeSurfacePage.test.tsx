@@ -4702,6 +4702,7 @@ describe('HomeSurfacePage', () => {
   it('does not expose task progress internals on the home surface', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
+    await flushPendingUiWork();
 
     act(() => {
       useStockPoolStore.getState().syncTaskCreated({
@@ -4773,6 +4774,7 @@ describe('HomeSurfacePage', () => {
         },
       });
     });
+    await flushPendingUiWork();
 
     expect(screen.queryByTestId('home-bento-task-progress-card')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-progress-summary')).not.toBeInTheDocument();

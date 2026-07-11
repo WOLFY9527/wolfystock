@@ -581,26 +581,33 @@ export default function ScenarioLabPage() {
     setScenarioResult(null);
   }, [initialPreset]);
 
-  const loadContext = useCallback(async () => {
+  const loadContext = useCallback(async (options?: { isActive?: () => boolean }) => {
+    const isActive = options?.isActive ?? (() => true);
     setContextLoading(true);
     setError(null);
     try {
       const cockpitPayload = await marketDecisionCockpitApi.getDecisionCockpit();
-      setCockpit(cockpitPayload);
+      if (isActive()) setCockpit(cockpitPayload);
     } catch (err) {
-      setError(getParsedApiError(err) || createParsedApiError({
-        title: locale === 'en' ? 'Scenario context pending' : '情景上下文待更新',
-        message: locale === 'en'
-          ? 'Please retry after the market context service responds again.'
-          : '请在市场上下文服务恢复后重试。',
-      }));
+      if (isActive()) {
+        setError(getParsedApiError(err) || createParsedApiError({
+          title: locale === 'en' ? 'Scenario context pending' : '情景上下文待更新',
+          message: locale === 'en'
+            ? 'Please retry after the market context service responds again.'
+            : '请在市场上下文服务恢复后重试。',
+        }));
+      }
     } finally {
-      setContextLoading(false);
+      if (isActive()) setContextLoading(false);
     }
   }, [locale]);
 
   useEffect(() => {
-    void loadContext();
+    let active = true;
+    void loadContext({ isActive: () => active });
+    return () => {
+      active = false;
+    };
   }, [loadContext]);
 
   const runScenarioEvaluation = useCallback(async (preset: ScenarioPreset) => {

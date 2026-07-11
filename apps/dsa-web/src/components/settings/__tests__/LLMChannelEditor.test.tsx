@@ -98,7 +98,7 @@ describe('LLMChannelEditor', () => {
   });
 
   it('clears runtime model references when a deleted channel was the only source', async () => {
-    const onSaveItems = vi.fn();
+    const onSaveItems = vi.fn().mockResolvedValue(undefined);
     renderEditor(
       <LLMChannelEditor
         items={[
@@ -132,6 +132,7 @@ describe('LLMChannelEditor', () => {
       ]),
       translate('zh', 'settings.llmEditor.saveRuntimeSuccess'),
     );
+    expect(await screen.findByText(translate('zh', 'settings.llmEditor.saveRuntimeSuccess'))).toBeInTheDocument();
   });
 
   it('persists extra headers and shows connectivity feedback', async () => {
