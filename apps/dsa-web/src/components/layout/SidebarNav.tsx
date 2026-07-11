@@ -41,6 +41,7 @@ import { isAdminMissionControlPrototypeEnabled } from '../../utils/adminCapabili
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../../utils/localeRouting';
 import { validateStockCode } from '../../utils/validation';
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
+import { Button } from '../common/Button';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { useThemeStyle } from '../theme/themeState';
 import {
@@ -666,11 +667,13 @@ function useSidebarNavView({
         className="relative"
         data-testid={`shell-nav-group-${groupKey}`}
       >
-        <button
+        <Button
           ref={(node) => {
             navGroupButtonRefs.current[groupKey] = node;
           }}
           type="button"
+          variant="ghost"
+          size="sm"
           className={cn(
             'shell-header-link text-sm font-medium transition-colors',
             (isOpen || groupActive) ? 'is-active font-bold' : '',
@@ -688,7 +691,7 @@ function useSidebarNavView({
             <span>{groupLabel}</span>
             <ChevronDown className={cn('size-3.5 transition-transform', isOpen ? 'rotate-180' : '')} />
           </span>
-        </button>
+        </Button>
         {isOpen ? (
           <div
             id={menuId}
