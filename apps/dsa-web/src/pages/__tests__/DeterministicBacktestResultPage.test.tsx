@@ -592,7 +592,22 @@ describe('DeterministicBacktestResultPage', () => {
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');
     const pageShell = screen.getByTestId('deterministic-backtest-result-page');
     expect(pageShell).toHaveAttribute('data-density', 'dense');
-    expect(pageShell).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-5');
+    expect(pageShell).toHaveClass(
+      'consumer-page-shell',
+      'w-full',
+      'max-w-[var(--wolfy-consumer-shell-max,1880px)]',
+      'mx-auto',
+      'px-4',
+      'py-5',
+      'md:py-6',
+      'xl:px-8',
+      'flex',
+      'flex-col',
+      'gap-5',
+    );
+    expect(pageShell.parentElement).toHaveAttribute('data-workspace-width', 'near-full');
+    expect(pageShell.parentElement).toHaveClass('consumer-workspace-scope', 'workspace-width-near-full', '[--wolfy-consumer-shell-max:1880px]');
+    expect(pageShell).not.toHaveClass('max-w-[1600px]', 'max-w-none', 'mx-0', 'px-0', 'xl:px-0');
     expect(pageShell).not.toHaveClass('theme-page-transition', 'backtest-v1-page', 'workspace-page--backtest');
     expect(pageShell.querySelector('.workspace-page--backtest')).toBeNull();
     expect(pageShell.closest('main')).not.toHaveClass('py-4');
