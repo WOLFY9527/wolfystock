@@ -53,20 +53,32 @@ function resolvePreviewPort(): number {
 
 const previewPort = resolvePreviewPort();
 const reuseExistingServer = process.env.DSA_WEB_PLAYWRIGHT_REUSE === '1' && !process.env.CI;
+const baseURL = process.env.DSA_WEB_PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${previewPort}`;
+const outputDir = process.env.PLAYWRIGHT_OUTPUT_DIR || 'test-results';
+const usesExternalServer = process.env.DSA_WEB_PLAYWRIGHT_EXTERNAL_SERVER === '1';
+const reporter = process.env.PLAYWRIGHT_HTML_REPORT
+  ? ([
+      ['list'],
+      ['html', { outputFolder: process.env.PLAYWRIGHT_HTML_REPORT, open: 'never' }],
+    ] as const)
+  : 'list';
 
 export default defineConfig({
   testDir: './e2e',
+  outputDir,
   fullyParallel: false,
   retries: process.env.CI ? 2 : 0,
-  reporter: 'list',
-  webServer: {
-    command: `npm run build && npm run preview -- --host 127.0.0.1 --port ${previewPort}`,
-    port: previewPort,
-    reuseExistingServer,
-    timeout: 180_000,
-  },
+  reporter,
+  ...(usesExternalServer ? {} : {
+    webServer: {
+      command: `npm run build && npm run preview -- --host 127.0.0.1 --port ${previewPort}`,
+      port: previewPort,
+      reuseExistingServer,
+      timeout: 180_000,
+    },
+  }),
   use: {
-    baseURL: `http://127.0.0.1:${previewPort}`,
+    baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -75,6 +87,10 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'], channel: 'chromium' },
+    },
+    {
+      name: 'chromium-mobile',
+      use: { ...devices['Pixel 5'], channel: 'chromium' },
     },
   ],
 });
