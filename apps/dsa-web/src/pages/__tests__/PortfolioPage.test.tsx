@@ -2618,6 +2618,42 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-risk-card')).toHaveTextContent('汇率数据暂不可用');
   });
 
+  it('keeps unavailable exposure explicit instead of displaying a fabricated zero value', async () => {
+    const snapshot = makeSnapshot({ includePosition: true, fxStale: true });
+    snapshot.analytics.exposure.byCurrency = [
+      {
+        key: 'USD',
+        label: 'USD',
+        marketValue: null as unknown as number,
+        displayValue: null as unknown as number,
+        displayCurrency: 'USD',
+        percent: 100,
+        fxStatus: 'unavailable' as const,
+        nativeValue: null,
+        nativeCurrency: 'USD',
+        currency: 'USD',
+        holdingCount: 1,
+      },
+    ];
+    snapshot.analytics.risk = {
+      ...snapshot.analytics.risk,
+      largestCurrency: snapshot.analytics.exposure.byCurrency[0],
+      fxUnavailable: true,
+    };
+    getSnapshot.mockResolvedValue(snapshot);
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+    openPortfolioDataNotes();
+    fireEvent.click(within(screen.getByTestId('portfolio-exposure-card')).getByRole('button', { name: '币种' }));
+
+    const exposure = screen.getByTestId('portfolio-exposure-card');
+    expect(exposure).toHaveTextContent('折算暂不可用');
+    expect(exposure).not.toHaveTextContent('USD 0.00');
+    expect(exposure).not.toHaveTextContent('CNY 0.00');
+  });
+
   it('renders missing market category cleanly without raw unknown text', async () => {
     const snapshot = makeSnapshot({ includePosition: true, fxStale: false });
     snapshot.analytics.exposure.byMarket = [

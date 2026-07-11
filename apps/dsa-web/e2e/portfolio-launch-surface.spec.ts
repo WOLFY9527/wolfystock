@@ -148,10 +148,11 @@ test.describe('portfolio launch surface', () => {
       await expect(workspaceLanes).toBeVisible({ timeout: 15_000 });
       await expect(researchState).toBeVisible({ timeout: 15_000 });
       await expect(productizationOrder).toContainText('账户上下文');
-      await expect(productizationOrder).toContainText('组合观察');
-      await expect(productizationOrder).toContainText('集中度 / 暴露');
+      await expect(productizationOrder).toContainText('暴露摘要');
+      await expect(productizationOrder).toContainText('风险集中度');
       await expect(productizationOrder).toContainText('持仓账本');
-      await expect(productizationOrder).toContainText('新鲜度');
+      await expect(productizationOrder).toContainText('估值新鲜度');
+      await expect(productizationOrder).toContainText('导入接入');
       await expect(productizationOrder).toContainText('限制');
       await expect(productizationOrder).toContainText('导入预览');
       await expect(productizationOrder).toContainText('显式确认');
@@ -230,10 +231,10 @@ test.describe('portfolio launch surface', () => {
         expect(activityBox).not.toBeNull();
         expect(manualLaneBox).not.toBeNull();
 
-        expect((primaryBox?.width ?? 0) / Math.max(1, secondaryBox?.width ?? 0)).toBeGreaterThan(1.35);
+        expect((secondaryBox?.width ?? 0) / Math.max(1, primaryBox?.width ?? 0)).toBeGreaterThan(1.35);
         expect((activityBox?.width ?? 0) / Math.max(1, manualLaneBox?.width ?? 0)).toBeGreaterThan(1.35);
-        expect(Math.abs((primaryBox?.x ?? 0) - (activityBox?.x ?? 0))).toBeLessThanOrEqual(12);
-        expect(Math.abs((secondaryBox?.x ?? 0) - (manualLaneBox?.x ?? 0))).toBeLessThanOrEqual(12);
+        expect(primaryBox?.x ?? Infinity).toBeLessThan(secondaryBox?.x ?? 0);
+        expect(activityBox?.x ?? Infinity).toBeLessThan(manualLaneBox?.x ?? 0);
         expect(Math.abs((primaryBox?.y ?? 0) - (secondaryBox?.y ?? 0))).toBeLessThanOrEqual(20);
         expect((manualLaneBox?.y ?? 0) - (secondaryBox?.y ?? 0)).toBeGreaterThan(40);
       } else {
@@ -244,8 +245,8 @@ test.describe('portfolio launch surface', () => {
         const wideElements = await classifyWideVisibleElements(page);
         const actualEscapes = wideElements.filter((entry) => entry?.classification === 'ACTUAL_LAYOUT_ESCAPE');
 
-        expect(holdingsBox?.y ?? Infinity).toBeLessThan(riskBox?.y ?? 0);
-        expect(riskBox?.y ?? Infinity).toBeLessThan(activityPanelBox?.y ?? 0);
+        expect(riskBox?.y ?? Infinity).toBeLessThan(holdingsBox?.y ?? 0);
+        expect(holdingsBox?.y ?? Infinity).toBeLessThan(activityPanelBox?.y ?? 0);
         expect(activityPanelBox?.y ?? Infinity).toBeLessThan(manualBox?.y ?? 0);
         expect(actualEscapes).toEqual([]);
       }
