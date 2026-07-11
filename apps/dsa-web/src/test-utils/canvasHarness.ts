@@ -165,7 +165,6 @@ export function installCanvasHarness(): void {
     value: function getContext(
       this: HTMLCanvasElement,
       contextId: string,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       _options?: unknown,
     ) {
       if (contextId === '2d') {

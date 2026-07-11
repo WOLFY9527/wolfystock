@@ -3,10 +3,9 @@ import { resolve } from 'node:path';
 import { createElement, StrictMode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import MarketOverviewPage, {
-  __marketOverviewPanelFactoriesForTests,
-  __resetMarketOverviewRequestOwnershipForTests,
-} from '../MarketOverviewPage';
+import MarketOverviewPage from '../MarketOverviewPage';
+import { marketOverviewPanelFactoriesForTests } from '../marketOverviewPanelFactories';
+import { resetMarketOverviewRequestOwnershipForTests } from '../marketOverviewRequestOwnership';
 import { MarketOverviewWorkbench } from '../../components/market-overview/MarketOverviewWorkbench';
 import { MARKET_OVERVIEW_TAB_CONFIG } from '../MarketOverviewTabConfig';
 import { marketOverviewApi } from '../../api/marketOverview';
@@ -2506,7 +2505,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it('error and unavailable panel factories do not invent client-now or epoch evidence timestamps', () => {
-    const factories = __marketOverviewPanelFactoriesForTests;
+    const factories = marketOverviewPanelFactoriesForTests;
     const before = Date.now();
 
     const unavailable = factories.createUnavailableTemperature();
@@ -2971,7 +2970,7 @@ describe('MarketOverviewPage', () => {
   afterEach(async () => {
     cleanup();
     await Promise.resolve();
-    __resetMarketOverviewRequestOwnershipForTests();
+    resetMarketOverviewRequestOwnershipForTests();
     if (vi.isFakeTimers()) {
       vi.clearAllTimers();
     }

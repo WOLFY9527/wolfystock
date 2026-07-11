@@ -138,6 +138,46 @@ def test_allows_single_terminal_page_heading_on_key_route_page():
     assert not any(item.rule == "route-semantic-page-heading" for item in result.findings)
 
 
+def test_ignores_inert_terminal_page_heading_marker_strings():
+    guard = load_guard_module()
+    inert_attribute = 'data-design-constitution-' + 'marker="' + '<' + 'TerminalPageHeading">'
+    inert_comment = "{/* " + "<" + "TerminalPageHeading /> marker */}"
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/BacktestPage.tsx",
+        "\n".join([
+            f"<main {inert_attribute}>",
+            inert_comment,
+            "missing real heading",
+            "</main>",
+        ]),
+    )
+
+    assert any(item.rule == "route-semantic-page-heading" for item in result.findings)
+
+
+def test_allows_market_overview_observation_head_heading_contract():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/MarketOverviewPage.tsx",
+        "<MarketOverviewWorkbench heading={null} />",
+    )
+
+    assert not any(item.rule == "route-semantic-page-heading" for item in result.findings)
+
+
+def test_allows_user_scanner_dense_page_header_heading_contract():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/UserScannerPage.tsx",
+        '<DensePageHeader data-testid="scanner-page-heading" title="发现 / 扫描器" />',
+    )
+
+    assert not any(item.rule == "route-semantic-page-heading" for item in result.findings)
+
+
 def test_flags_market_overview_retired_local_chip_and_panel_symbols():
     guard = load_guard_module()
 
