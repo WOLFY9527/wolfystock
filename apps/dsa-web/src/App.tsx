@@ -3,6 +3,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AppErrorBoundary } from './components/common/AppErrorBoundary';
 import { BrandedLoadingScreen } from './components/common/BrandedLoadingScreen';
+import { AccessGatePage } from './components/access/AccessGatePage';
 import { ConsumerProtectedFrame } from './components/layout/ConsumerWorkspaceShell';
 import { Shell } from './components/layout/Shell';
 import { PreviewShell } from './components/layout/PreviewShell';
@@ -24,9 +25,6 @@ import { DocumentTitleLifecycle } from './utils/DocumentTitleLifecycle';
 const APP_BOOT_SPLASH_MIN_MS = 320;
 const APP_BOOT_SPLASH_FADE_MS = 180;
 
-const AccessGatePage = lazy(() => import('./components/access/AccessGatePage').then((module) => ({
-  default: module.AccessGatePage,
-})));
 const HomeSurfacePage = lazy(() => import('./pages/HomeSurfacePage'));
 const GuestHomePage = lazy(() => import('./pages/GuestHomePage'));
 const ScannerSurfacePage = lazy(() => import('./pages/ScannerSurfacePage'));
