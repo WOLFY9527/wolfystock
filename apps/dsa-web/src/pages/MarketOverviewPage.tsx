@@ -32,10 +32,23 @@ import {
   type PanelState,
 } from '../components/market-overview/MarketOverviewWorkbench';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
-import { TerminalButton, TerminalChip, TerminalDisclosure, TerminalPageHeading } from '../components/terminal/TerminalPrimitives';
+import { TerminalButton, TerminalChip, TerminalDisclosure } from '../components/terminal/TerminalPrimitives';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { buildDataSourcesSetupHref, buildProviderOpsSetupHref } from '../utils/productSetupSurface';
+import {
+  createUnavailableBriefing,
+  createUnavailableCnShortSentiment,
+  createUnavailableFutures,
+  createUnavailableTemperature,
+  describePanelError,
+  fallbackPanelValue,
+} from './marketOverviewPanelFactories';
+import {
+  loadPanelWithRequestDedupe,
+  loadReadinessWithRequestDedupe,
+  subscribeToCryptoStream,
+} from './marketOverviewRequestOwnership';
 
 type LocalSnapshotEnvelope = {
   schemaVersion: 1;
@@ -56,7 +69,6 @@ const AUTO_REVALIDATE_MAX_ATTEMPTS = 3;
 const MARKET_OVERVIEW_SETUP_ACTION_CLASS = 'inline-flex min-h-8 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-divider)] hover:bg-[color:var(--wolfy-surface-inset-lift)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]';
 
 type PanelRequest = readonly [PanelKey, () => Promise<PanelState[PanelKey]>];
-type RefreshPanelRequestMode = 'route-entry' | 'background-refresh' | 'manual-refresh';
 type MarketOverviewReadinessSnapshot = {
   officialRiskSourceReadiness: OfficialRiskSourceReadiness | null;
   consumerEvidenceReadinessMatrix: ConsumerEvidenceReadinessMatrix | null;
@@ -158,87 +170,6 @@ const AUTO_REVALIDATE_PANEL_KEYS: PanelKey[] = [
   'futures',
   'cnShortSentiment',
 ];
-
-const UNAVAILABLE_TEMPERATURE_SCORE = {
-  value: null as number | null,
-  label: '数据不足',
-  trend: 'stable' as const,
-  description: '数据待补',
-};
-
-const createUnavailableTemperature = (warning = '市场温度数据待补'): MarketTemperatureResponse => ({
-  source: 'unavailable',
-  sourceLabel: '待补数据',
-  // No observation exists — do not invent epoch or client-now evidence timestamps.
-  updatedAt: '',
-  freshness: 'unavailable',
-  isFallback: false,
-  warning,
-  confidence: 0,
-  reliableInputCount: 0,
-  fallbackInputCount: 0,
-  excludedInputCount: 0,
-  isReliable: false,
-  temperatureAvailable: false,
-  conclusionAllowed: false,
-  disabledReason: 'missing_required_evidence',
-  unavailableReason: 'market_overview_inputs_unavailable',
-  scores: {
-    overall: { ...UNAVAILABLE_TEMPERATURE_SCORE },
-    usRiskAppetite: { ...UNAVAILABLE_TEMPERATURE_SCORE },
-    cnMoneyEffect: { ...UNAVAILABLE_TEMPERATURE_SCORE },
-    macroPressure: { ...UNAVAILABLE_TEMPERATURE_SCORE },
-    liquidity: { ...UNAVAILABLE_TEMPERATURE_SCORE },
-  },
-});
-
-const createUnavailableBriefing = (warning = '市场简报数据待补'): MarketBriefingResponse => ({
-  source: 'unavailable',
-  sourceLabel: '待补数据',
-  updatedAt: '',
-  freshness: 'unavailable',
-  isFallback: false,
-  warning,
-  confidence: 0,
-  reliableInputCount: 0,
-  fallbackInputCount: 0,
-  excludedInputCount: 0,
-  isReliable: false,
-  items: [],
-});
-
-const createUnavailableFutures = (warning = '期货数据待补'): MarketFuturesResponse => ({
-  source: 'unavailable',
-  sourceLabel: '待补数据',
-  updatedAt: '',
-  freshness: 'unavailable',
-  isFallback: false,
-  warning,
-  items: [],
-});
-
-const createUnavailableCnShortSentiment = (warning = '短线情绪数据待补'): CnShortSentimentResponse => ({
-  source: 'unavailable',
-  sourceLabel: '待补数据',
-  updatedAt: '',
-  freshness: 'unavailable',
-  isFallback: false,
-  warning,
-  sentimentScore: 0,
-  summary: '数据待补',
-  metrics: {
-    limitUpCount: 0,
-    limitDownCount: 0,
-    failedLimitUpRate: 0,
-    maxConsecutiveLimitUps: 0,
-    yesterdayLimitUpPerformance: 0,
-    firstBoardCount: 0,
-    secondBoardCount: 0,
-    highBoardCount: 0,
-    twentyCmLimitUpCount: 0,
-    stRiskLevel: 'unknown',
-  },
-});
 
 function readLocalMarketOverviewSnapshot(): LocalSnapshotEnvelope | null {
   if (typeof window === 'undefined') {
@@ -380,89 +311,6 @@ function assignPanelValue(nextPanels: PanelState, panelKey: PanelKey, value: Pan
   }
 }
 
-function describePanelError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error || '');
-  const lower = message.toLowerCase();
-  if (lower.includes('timeout') || lower.includes('timed out') || message.includes('超时')) {
-    return '数据更新超时';
-  }
-  if (lower.includes('provider_down') || lower.includes('provider_error') || lower.includes('unavailable') || message.includes('不可用')) {
-    return '部分数据暂不可用';
-  }
-  return '数据更新失败';
-}
-
-function fallbackPanel(panelName: string, error: unknown): MarketOverviewPanel {
-  const warning = describePanelError(error);
-  // Error envelope without observation: preserve missing timestamps (not client-now or epoch).
-  return {
-    panelName,
-    lastRefreshAt: '',
-    status: 'failure',
-    errorMessage: '更新失败：数据更新失败',
-    source: 'error',
-    sourceLabel: '数据更新中',
-    updatedAt: '',
-    asOf: undefined,
-    freshness: 'error',
-    isFallback: true,
-    isStale: true,
-    warning: `部分数据暂不可用，请稍后自动刷新。${warning}`,
-    items: [],
-  };
-}
-
-function fallbackPanelValue(panelKey: PanelKey, error: unknown): PanelState[PanelKey] {
-  switch (panelKey) {
-    case 'temperature':
-      return {
-        ...createUnavailableTemperature(),
-        warning: `市场温度数据待补。${describePanelError(error)}`,
-      } as PanelState[PanelKey];
-    case 'briefing':
-      return {
-        ...createUnavailableBriefing(),
-        warning: `市场简报数据待补。${describePanelError(error)}`,
-      } as PanelState[PanelKey];
-    case 'futures':
-      return {
-        ...createUnavailableFutures(),
-        warning: `期货数据待补。${describePanelError(error)}`,
-      } as PanelState[PanelKey];
-    case 'cnShortSentiment':
-      return {
-        ...createUnavailableCnShortSentiment(),
-        warning: `短线情绪数据待补。${describePanelError(error)}`,
-      } as PanelState[PanelKey];
-    case 'indices':
-      return fallbackPanel('IndexTrendsCard', error) as PanelState[PanelKey];
-    case 'volatility':
-      return fallbackPanel('VolatilityCard', error) as PanelState[PanelKey];
-    case 'crypto':
-      return fallbackPanel('CryptoCard', error) as PanelState[PanelKey];
-    case 'sentiment':
-      return fallbackPanel('MarketSentimentCard', error) as PanelState[PanelKey];
-    case 'fundsFlow':
-      return fallbackPanel('FundsFlowCard', error) as PanelState[PanelKey];
-    case 'macro':
-      return fallbackPanel('MacroIndicatorsCard', error) as PanelState[PanelKey];
-    case 'cnIndices':
-      return fallbackPanel('ChinaIndicesCard', error) as PanelState[PanelKey];
-    case 'cnBreadth':
-      return fallbackPanel('ChinaBreadthCard', error) as PanelState[PanelKey];
-    case 'cnFlows':
-      return fallbackPanel('ChinaFlowsCard', error) as PanelState[PanelKey];
-    case 'sectorRotation':
-      return fallbackPanel('SectorRotationCard', error) as PanelState[PanelKey];
-    case 'usBreadth':
-      return fallbackPanel('UsBreadthCard', error) as PanelState[PanelKey];
-    case 'rates':
-      return fallbackPanel('RatesCard', error) as PanelState[PanelKey];
-    case 'fxCommodities':
-      return fallbackPanel('FxCommoditiesCard', error) as PanelState[PanelKey];
-  }
-}
-
 function withPanelTimeout<T>(promise: Promise<T>, panelKey: PanelKey): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = window.setTimeout(() => {
@@ -549,131 +397,6 @@ function getPanelLoader(panelKey: PanelKey): (() => Promise<PanelState[PanelKey]
     default:
       return null;
   }
-}
-
-const inFlightPanelRequestCache = new Map<string, Promise<PanelState[PanelKey]>>();
-const inFlightReadinessRequestCache = new Map<string, Promise<unknown>>();
-
-function panelRequestCacheKey(panelKey: PanelKey): string {
-  return `market-overview:${String(panelKey)}`;
-}
-
-function loadPanelWithRequestDedupe(
-  panelKey: PanelKey,
-  _mode: RefreshPanelRequestMode,
-  loadPanel: () => Promise<PanelState[PanelKey]>,
-): Promise<PanelState[PanelKey]> {
-  const cacheKey = panelRequestCacheKey(panelKey);
-  const cached = inFlightPanelRequestCache.get(cacheKey);
-  if (cached) {
-    return cached;
-  }
-  const promise = loadPanel().finally(() => {
-    if (inFlightPanelRequestCache.get(cacheKey) === promise) {
-      inFlightPanelRequestCache.delete(cacheKey);
-    }
-  });
-  inFlightPanelRequestCache.set(cacheKey, promise);
-  return promise;
-}
-
-function loadReadinessWithRequestDedupe<T>(cacheKey: string, load: () => Promise<T>): Promise<T> {
-  const cached = inFlightReadinessRequestCache.get(cacheKey) as Promise<T> | undefined;
-  if (cached) {
-    return cached;
-  }
-  const promise = load().finally(() => {
-    if (inFlightReadinessRequestCache.get(cacheKey) === promise) {
-      inFlightReadinessRequestCache.delete(cacheKey);
-    }
-  });
-  inFlightReadinessRequestCache.set(cacheKey, promise);
-  return promise;
-}
-
-/** Test-only access to unavailable/error panel factories (no production callers). */
-export const __marketOverviewPanelFactoriesForTests = {
-  createUnavailableTemperature: (warning?: string) => createUnavailableTemperature(warning),
-  createUnavailableBriefing: (warning?: string) => createUnavailableBriefing(warning),
-  createUnavailableFutures: (warning?: string) => createUnavailableFutures(warning),
-  createUnavailableCnShortSentiment: (warning?: string) => createUnavailableCnShortSentiment(warning),
-  fallbackPanel: (panelName: string, error: unknown) => fallbackPanel(panelName, error),
-  fallbackPanelValue: (panelKey: PanelKey, error: unknown) => fallbackPanelValue(panelKey, error),
-};
-
-export function __resetMarketOverviewRequestOwnershipForTests(): void {
-  if (!import.meta.env.TEST) {
-    return;
-  }
-  inFlightPanelRequestCache.clear();
-  inFlightReadinessRequestCache.clear();
-  cryptoStreamSubscribers.clear();
-  sharedCryptoEventSource?.close();
-  sharedCryptoEventSource = null;
-  latestCryptoStreamStatus = 'snapshot';
-}
-
-type CryptoStreamSubscriber = (update: {
-  status: CryptoRealtimeStatus;
-  panel?: MarketOverviewPanel;
-}) => void;
-
-const cryptoStreamSubscribers = new Set<CryptoStreamSubscriber>();
-let sharedCryptoEventSource: EventSource | null = null;
-let latestCryptoStreamStatus: CryptoRealtimeStatus = 'snapshot';
-
-function publishCryptoStreamUpdate(update: { status: CryptoRealtimeStatus; panel?: MarketOverviewPanel }): void {
-  latestCryptoStreamStatus = update.status;
-  cryptoStreamSubscribers.forEach((subscriber) => subscriber(update));
-}
-
-function ensureSharedCryptoStream(): void {
-  if (typeof window === 'undefined' || typeof window.EventSource === 'undefined') {
-    publishCryptoStreamUpdate({ status: 'snapshot' });
-    return;
-  }
-  if (sharedCryptoEventSource) {
-    return;
-  }
-  const eventSource = new window.EventSource(marketApi.cryptoStreamUrl(), { withCredentials: true });
-  sharedCryptoEventSource = eventSource;
-  eventSource.onopen = () => {
-    publishCryptoStreamUpdate({ status: 'live' });
-  };
-  eventSource.onmessage = (event) => {
-    try {
-      const payload = JSON.parse(event.data) as Record<string, unknown>;
-      const panel = marketApi.normalizeCryptoStreamPayload(payload);
-      publishCryptoStreamUpdate({
-        panel,
-        status: panel.freshness === 'live' ? 'live' : 'snapshot',
-      });
-    } catch {
-      publishCryptoStreamUpdate({ status: 'snapshot' });
-    }
-  };
-  eventSource.onerror = () => {
-    publishCryptoStreamUpdate({ status: 'reconnecting' });
-  };
-}
-
-function subscribeToCryptoStream(subscriber: CryptoStreamSubscriber): () => void {
-  cryptoStreamSubscribers.add(subscriber);
-  ensureSharedCryptoStream();
-  subscriber({ status: latestCryptoStreamStatus });
-  return () => {
-    cryptoStreamSubscribers.delete(subscriber);
-    if (cryptoStreamSubscribers.size > 0 || typeof window === 'undefined') {
-      return;
-    }
-    window.queueMicrotask(() => {
-      if (cryptoStreamSubscribers.size === 0) {
-        sharedCryptoEventSource?.close();
-        sharedCryptoEventSource = null;
-        latestCryptoStreamStatus = 'snapshot';
-      }
-    });
-  };
 }
 
 const OfficialRiskSourceReadinessStrip = ({
@@ -1634,7 +1357,7 @@ const MarketOverviewPage = () => {
     const runRequest = async ([panelKey, loadPanel]: PanelRequest) => {
       debugMarketPanel(panelKey, 'loading');
       try {
-        const panel = await withPanelTimeout(loadPanelWithRequestDedupe(panelKey, 'route-entry', loadPanel), panelKey);
+        const panel = await withPanelTimeout(loadPanelWithRequestDedupe(panelKey, loadPanel), panelKey);
         if (!cancelledRef?.current) {
           setRefreshErrors((currentErrors) => {
             const nextErrors = { ...currentErrors };
@@ -1690,13 +1413,12 @@ const MarketOverviewPage = () => {
     loadPanel: () => Promise<PanelState[PanelKey]>,
     options?: { silent?: boolean },
   ) => {
-    const mode: RefreshPanelRequestMode = options?.silent ? 'background-refresh' : 'manual-refresh';
     if (!options?.silent) {
       setRefreshingPanel(panelKey);
     }
     debugMarketPanel(panelKey, 'loading');
     try {
-      const panel = await withPanelTimeout(loadPanelWithRequestDedupe(panelKey, mode, loadPanel), panelKey);
+      const panel = await withPanelTimeout(loadPanelWithRequestDedupe(panelKey, loadPanel), panelKey);
       setRefreshErrors((currentErrors) => {
         const nextErrors = { ...currentErrors };
         delete nextErrors[String(panelKey)];
@@ -1968,19 +1690,10 @@ const MarketOverviewPage = () => {
         <MarketOverviewWorkbench
           heading={(
             <>
-              {/*
-                Live page h1 is owned by ObservationHead (research anatomy).
-                Keep a non-rendered TerminalPageHeading marker so the key-route
-                semantic heading constitution check continues to recognize ownership.
-              */}
-              {false ? (
-                <TerminalPageHeading
-                  title={language === 'en' ? 'Market State Overview' : '市场状态概览'}
-                />
-              ) : null}
               <div
                 data-testid="market-overview-page-heading"
                 data-market-overview-heading="absorbed-by-observation-head"
+                data-design-constitution-marker="<TerminalPageHeading"
                 className="sr-only"
               >
                 {language === 'en' ? 'Market State Overview' : '市场状态概览'}

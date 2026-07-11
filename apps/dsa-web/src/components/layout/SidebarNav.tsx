@@ -4,7 +4,7 @@
  * Validate), not a generic More bucket. Archive, language, and logout
  * controls remain on the shared paper shell tokens.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Archive,
   Activity,
@@ -351,7 +351,7 @@ function useSidebarNavView({
     onNavigate?.();
   };
 
-  const closeNavGroupMenu = (options?: { returnFocus?: boolean; group?: ConsumerNavGroupKey | null }) => {
+  const closeNavGroupMenu = useCallback((options?: { returnFocus?: boolean; group?: ConsumerNavGroupKey | null }) => {
     const groupToFocus = options?.group ?? openNavGroup;
     navGroupFocusIndexRef.current = null;
     setOpenNavGroup(null);
@@ -360,7 +360,7 @@ function useSidebarNavView({
         navGroupButtonRefs.current[groupToFocus]?.focus();
       }, 0);
     }
-  };
+  }, [openNavGroup]);
 
   const openNavGroupMenu = (groupKey: ConsumerNavGroupKey, focusIndex: number | null = null) => {
     if (focusIndex !== null) {
@@ -498,7 +498,7 @@ function useSidebarNavView({
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [openNavGroup]);
+  }, [closeNavGroupMenu, openNavGroup]);
 
   useEffect(() => {
     if (!openNavGroup || !navGroupFocusIndexRef.current || navGroupFocusIndexRef.current.group !== openNavGroup) {

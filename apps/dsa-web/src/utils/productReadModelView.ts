@@ -38,7 +38,7 @@ export function productReadStateLabel(state: string | null | undefined, language
 export function productReadModelIsBlocking(model?: ProductReadModel | null): boolean {
   if (!model) return false;
   const state = normalizeProductReadState(model?.state);
-  if (Boolean(model?.blockingChildren?.length)) return true;
+  if (model?.blockingChildren?.length) return true;
   if (
     state === 'blocked'
     || state === 'unavailable'

@@ -495,12 +495,14 @@ export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
   const renderMode: CoreMarketRenderMode = hasCompleteOhlc(visiblePoints) ? 'candlestick' : 'line';
   const hasChart = visiblePoints.length >= 1;
   const hasVolume = showVolume && visiblePoints.some((point) => (point.volume ?? 0) > 0);
-  const enabledOverlays = renderMode === 'candlestick'
-    ? [
-        usablePoints.some((point) => finiteNumber(point.ma5) != null) ? 'MA5' : null,
-        usablePoints.some((point) => finiteNumber(point.ma20) != null) ? 'MA20' : null,
-      ].filter((item): item is string => Boolean(item))
-    : [];
+  const enabledOverlays = useMemo(() => (
+    renderMode === 'candlestick'
+      ? [
+          usablePoints.some((point) => finiteNumber(point.ma5) != null) ? 'MA5' : null,
+          usablePoints.some((point) => finiteNumber(point.ma20) != null) ? 'MA20' : null,
+        ].filter((item): item is string => Boolean(item))
+      : []
+  ), [renderMode, usablePoints]);
   const latestPoint = visiblePoints.at(-1);
   const hoveredPoint = hoveredIndex == null ? null : visiblePoints[hoveredIndex] ?? null;
   const accessibleSemantics = useMemo(() => buildCoreMarketChartAccessibleSemantics({
