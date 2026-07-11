@@ -282,6 +282,7 @@ async function collectLayoutMetrics(page: Page) {
     };
     const nodes = Array.from(document.querySelectorAll<HTMLElement>('a,button,input,select,textarea,summary,[tabindex]'))
       .filter((element) => isFocusable(element) && isVisible(element))
+      .filter((element) => element.getAttribute('data-testid') !== 'shell-skip-link')
       .slice(0, 140);
     const focusClips: string[] = [];
 

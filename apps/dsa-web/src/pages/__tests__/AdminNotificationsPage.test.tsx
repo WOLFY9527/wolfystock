@@ -11,6 +11,7 @@ const {
   listNotifications,
   acknowledgeNotification,
   uiLanguageState,
+  capabilityState,
 } = vi.hoisted(() => ({
   listChannels: vi.fn(),
   createChannel: vi.fn(),
@@ -20,6 +21,7 @@ const {
   listNotifications: vi.fn(),
   acknowledgeNotification: vi.fn(),
   uiLanguageState: { current: 'en' as 'zh' | 'en' },
+  capabilityState: { canReadNotifications: true },
 }));
 
 vi.mock('../../api/adminNotifications', () => ({
@@ -39,6 +41,10 @@ vi.mock('../../contexts/UiLanguageContext', () => ({
     language: uiLanguageState.current,
     t: (key: string) => key,
   }),
+}));
+
+vi.mock('../../hooks/useProductSurface', () => ({
+  useProductSurface: () => capabilityState,
 }));
 
 const channels = [
@@ -103,6 +109,7 @@ const notifications = [
 describe('AdminNotificationsPage', () => {
   beforeEach(() => {
     uiLanguageState.current = 'en';
+    capabilityState.canReadNotifications = true;
     vi.clearAllMocks();
     listChannels.mockResolvedValue({ items: channels, availableSystemChannels: ['discord', 'email'] });
     listNotifications.mockResolvedValue({ total: 1, limit: 100, offset: 0, items: notifications });
@@ -112,6 +119,18 @@ describe('AdminNotificationsPage', () => {
     testChannel.mockResolvedValue({ success: true, dryRun: false, channel: channels[1] });
     acknowledgeNotification.mockResolvedValue({ ...notifications[0], acknowledgedAt: '2026-05-02T08:30:00Z' });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
+  });
+
+  it('fails closed without notifications capability and does not fetch notification data', () => {
+    capabilityState.canReadNotifications = false;
+
+    render(<AdminNotificationsPage />);
+
+    expect(screen.getByTestId('admin-notifications-capability-denied')).toBeInTheDocument();
+    expect(listChannels).not.toHaveBeenCalled();
+    expect(listNotifications).not.toHaveBeenCalled();
+    expect(createChannel).not.toHaveBeenCalled();
+    expect(testChannel).not.toHaveBeenCalled();
   });
 
   it('renders notification rule coverage summary in chinese', async () => {
@@ -342,8 +361,9 @@ describe('AdminNotificationsPage', () => {
     expect(screen.queryByText(/providerPayload/)).not.toBeInTheDocument();
 
     fireEvent.click(within(disclosure).getByRole('button', { name: /展开/ }));
-    expect(disclosure).toHaveTextContent('internal_delivery_failure');
-    expect(disclosure).toHaveTextContent('providerPayload');
+    expect(disclosure).not.toHaveTextContent('internal_delivery_failure');
+    expect(disclosure).not.toHaveTextContent('providerPayload');
+    expect(disclosure).not.toHaveTextContent(/payload|token|secret|trace|stack/i);
   });
 
   it('sanitizes persisted channel diagnostics in the rule list', async () => {

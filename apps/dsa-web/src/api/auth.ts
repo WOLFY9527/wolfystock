@@ -105,13 +105,21 @@ export const authApi = {
       discordWebhook?: string | null;
     },
   ): Promise<UserNotificationPreferences> {
-    const body = {
+    const body: {
+      enabled: boolean;
+      email: string | null;
+      emailEnabled: boolean;
+      discordEnabled: boolean;
+      discordWebhook?: string | null;
+    } = {
       enabled: payload.enabled ?? payload.emailEnabled ?? false,
       email: payload.email ?? null,
       emailEnabled: payload.emailEnabled ?? payload.enabled ?? false,
       discordEnabled: payload.discordEnabled ?? false,
-      discordWebhook: payload.discordWebhook ?? null,
     };
+    if (payload.discordWebhook !== undefined) {
+      body.discordWebhook = payload.discordWebhook;
+    }
     const { data } = await apiClient.put<UserNotificationPreferences>('/api/v1/auth/preferences/notifications', body);
     return data;
   },

@@ -408,6 +408,7 @@ function SignedInNotificationSettingsPanel({
     emailEnabled,
     discordEnabled,
     discordWebhook,
+    savedDiscordWebhookConfigured,
     loading,
     saving,
     error,
@@ -512,9 +513,10 @@ function SignedInNotificationSettingsPanel({
               className={cn('mt-2', SETTINGS_TEXT_INPUT_CLASS)}
               value={discordWebhook}
               onChange={(event) => dispatchNotificationAction({ type: 'discord-webhook-changed', value: event.target.value })}
-              placeholder="https://discord.com/api/webhooks/..."
+              placeholder={savedDiscordWebhookConfigured ? 'Saved webhook remains hidden; enter a new URL to replace it.' : 'Enter webhook URL'}
               disabled={loading || saving}
               aria-label={t('settings.personalNotificationDiscordLabel')}
+              autoComplete="off"
             />
           </label>
         </div>

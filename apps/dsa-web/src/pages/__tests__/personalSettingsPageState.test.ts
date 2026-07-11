@@ -13,7 +13,7 @@ const basePreferences: UserNotificationPreferences = {
   email: 'alice@example.com',
   emailEnabled: true,
   discordEnabled: true,
-  discordWebhook: 'https://discord.com/api/webhooks/123/token',
+  discordWebhook: 'https://hooks.example.invalid/configured',
   deliveryAvailable: true,
   emailDeliveryAvailable: true,
   discordDeliveryAvailable: true,
@@ -41,7 +41,8 @@ describe('personalSettingsPageState', () => {
       email: 'alice@example.com',
       emailEnabled: true,
       discordEnabled: true,
-      discordWebhook: 'https://discord.com/api/webhooks/123/token',
+      discordWebhook: '',
+      savedDiscordWebhookConfigured: true,
       loading: false,
       saving: false,
       error: null,
@@ -58,7 +59,7 @@ describe('personalSettingsPageState', () => {
         prefs: {
           ...basePreferences,
           email: 'old@example.com',
-          discordWebhook: 'https://discord.com/api/webhooks/old/token',
+          discordWebhook: 'https://hooks.example.invalid/old',
         },
       },
     );
@@ -73,7 +74,8 @@ describe('personalSettingsPageState', () => {
       email: 'alice@example.com',
       emailEnabled: true,
       discordEnabled: true,
-      discordWebhook: 'https://discord.com/api/webhooks/123/token',
+      discordWebhook: '',
+      savedDiscordWebhookConfigured: true,
       loading: false,
       saving: false,
       error: null,
@@ -82,7 +84,7 @@ describe('personalSettingsPageState', () => {
     });
   });
 
-  it('builds the update payload from trimmed local draft values', () => {
+  it('preserves an existing Discord webhook when the draft is unchanged', () => {
     const state = notificationPreferencesReducer(
       createInitialNotificationPreferencesState(),
       {
@@ -90,7 +92,7 @@ describe('personalSettingsPageState', () => {
         prefs: {
           ...basePreferences,
           email: ' alice@example.com ',
-          discordWebhook: ' https://discord.com/api/webhooks/123/token ',
+          discordWebhook: 'https://hooks.example.invalid/configured',
         },
       },
     );
@@ -99,7 +101,27 @@ describe('personalSettingsPageState', () => {
       emailEnabled: true,
       email: 'alice@example.com',
       discordEnabled: true,
-      discordWebhook: 'https://discord.com/api/webhooks/123/token',
+    });
+  });
+
+  it('builds the update payload with a trimmed replacement Discord webhook', () => {
+    const loadedState = notificationPreferencesReducer(
+      createInitialNotificationPreferencesState(),
+      {
+        type: 'load-succeeded',
+        prefs: basePreferences,
+      },
+    );
+    const state = notificationPreferencesReducer(loadedState, {
+      type: 'discord-webhook-changed',
+      value: ' https://hooks.example.invalid/replacement ',
+    });
+
+    expect(toNotificationPreferenceUpdatePayload(state)).toEqual({
+      emailEnabled: true,
+      email: 'alice@example.com',
+      discordEnabled: true,
+      discordWebhook: 'https://hooks.example.invalid/replacement',
     });
   });
 
@@ -119,7 +141,8 @@ describe('personalSettingsPageState', () => {
 
     expect(state).toMatchObject({
       email: 'alice@example.com',
-      discordWebhook: 'https://discord.com/api/webhooks/123/token',
+      discordWebhook: '',
+      savedDiscordWebhookConfigured: true,
       loading: false,
       saving: false,
       error: baseError,

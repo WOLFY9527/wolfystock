@@ -3,14 +3,19 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminMissionControlPage from '../AdminMissionControlPage';
 
-const { getSnapshot } = vi.hoisted(() => ({
+const { getSnapshot, capabilityState } = vi.hoisted(() => ({
   getSnapshot: vi.fn(),
+  capabilityState: { canReadOpsLogs: true },
 }));
 
 vi.mock('../../api/adminMissionControl', () => ({
   adminMissionControlApi: {
     getSnapshot,
   },
+}));
+
+vi.mock('../../hooks/useProductSurface', () => ({
+  useProductSurface: () => capabilityState,
 }));
 
 const domains = [
@@ -96,7 +101,17 @@ function renderPage() {
 describe('AdminMissionControlPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    capabilityState.canReadOpsLogs = true;
     getSnapshot.mockResolvedValue(payload);
+  });
+
+  it('fails closed without ops log capability and does not fetch mission control data', () => {
+    capabilityState.canReadOpsLogs = false;
+
+    renderPage();
+
+    expect(screen.getByTestId('admin-mission-capability-denied')).toBeInTheDocument();
+    expect(getSnapshot).not.toHaveBeenCalled();
   });
 
   it('renders the mission control readiness overview for all required domains', async () => {

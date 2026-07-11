@@ -1,6 +1,6 @@
 import type React from 'react';
-import { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
 import { SettingsAlert } from '../components/settings/SettingsAlert';
@@ -16,7 +16,6 @@ function resetCopy(language: ResetLanguage, key: string, vars?: Record<string, s
 }
 
 const ResetPasswordPage: React.FC = () => {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const routeLanguage = parseLocaleFromPathname(window.location.pathname);
   const language: ResetLanguage = routeLanguage === 'en' ? 'en' : 'zh';
@@ -34,9 +33,13 @@ const ResetPasswordPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const submitInFlightRef = useRef(false);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (submitInFlightRef.current) {
+      return;
+    }
     const trimmed = identifier.trim();
     setError(null);
     setSuccess(null);
@@ -46,14 +49,17 @@ const ResetPasswordPage: React.FC = () => {
       return;
     }
 
+    submitInFlightRef.current = true;
     setSubmitting(true);
     try {
       const response = await authApi.requestPasswordReset({ identifier: trimmed });
       setSuccess(response.message || resetCopy(language, 'successBody'));
     } catch (requestError: unknown) {
       setError(getParsedApiError(requestError).message || resetCopy(language, 'validationRequired'));
+    } finally {
+      submitInFlightRef.current = false;
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
   return (
@@ -116,17 +122,6 @@ const ResetPasswordPage: React.FC = () => {
               </Link>
             </div>
           </form>
-
-          <div className="auth-panel__foot">
-            <button
-              type="button"
-              className="btn-ghost w-full justify-center"
-              onClick={() => navigate(loginPathWithRedirect, { replace: true })}
-              disabled={submitting}
-            >
-              {resetCopy(language, 'backToLogin')}
-            </button>
-          </div>
         </section>
       </div>
     </main>

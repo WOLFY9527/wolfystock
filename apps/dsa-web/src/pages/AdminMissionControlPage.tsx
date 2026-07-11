@@ -26,6 +26,7 @@ import {
   TerminalPageShell,
   TerminalPanel,
 } from '../components/terminal/TerminalPrimitives';
+import { useProductSurface } from '../hooks/useProductSurface';
 import { cn } from '../utils/cn';
 import { formatDateTime, formatNumber } from '../utils/format';
 
@@ -202,9 +203,13 @@ const DomainQueueItem: React.FC<{ domain: MissionControlDomainSlice; rank: numbe
 );
 
 const AdminMissionControlPage: React.FC = () => {
+  const { canReadOpsLogs } = useProductSurface();
   const [state, setState] = useState<LoadState>({ loading: true, error: null, data: null });
 
   useEffect(() => {
+    if (!canReadOpsLogs) {
+      return;
+    }
     let active = true;
     adminMissionControlApi.getSnapshot()
       .then((data) => {
@@ -228,7 +233,7 @@ const AdminMissionControlPage: React.FC = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [canReadOpsLogs]);
 
   const data = state.data;
   const prototypeDisabled = data?.prototypeGate?.enabled === false;
@@ -358,6 +363,21 @@ const AdminMissionControlPage: React.FC = () => {
     : surfaceMode === 'error' || surfaceMode === 'unavailable'
       ? '改用系统设置与既有运维面，不要在本页执行控制。'
       : '补齐真实操作员证据与人工审批；不要从本页执行运行时控制。';
+
+  if (!canReadOpsLogs) {
+    return (
+      <div
+        data-testid="admin-mission-control-page"
+        className="min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto no-scrollbar text-[color:var(--wolfy-text-primary)]"
+      >
+        <TerminalPageShell className="space-y-3 py-3 md:space-y-4 md:py-4">
+          <TerminalNotice data-testid="admin-mission-capability-denied" variant="danger">
+            Mission Control is fail-closed because this account is missing the ops log capability.
+          </TerminalNotice>
+        </TerminalPageShell>
+      </div>
+    );
+  }
 
   return (
     <div

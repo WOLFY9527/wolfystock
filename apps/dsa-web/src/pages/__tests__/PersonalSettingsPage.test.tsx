@@ -224,7 +224,7 @@ describe('PersonalSettingsPage', () => {
       email: 'admin@example.com',
       emailEnabled: true,
       discordEnabled: true,
-      discordWebhook: 'https://discord.com/api/webhooks/123/token',
+      discordWebhook: 'https://hooks.example.invalid/configured',
       deliveryAvailable: true,
       emailDeliveryAvailable: true,
       discordDeliveryAvailable: true,
@@ -267,7 +267,12 @@ describe('PersonalSettingsPage', () => {
     expect(screen.queryByRole('link', { name: zh('adminNav.logs') })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /管理工具/ })).not.toBeInTheDocument();
     expect(screen.getByDisplayValue('admin@example.com')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('https://discord.com/api/webhooks/123/token')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('https://hooks.example.invalid/configured')).not.toBeInTheDocument();
+    expect(document.body.textContent || '').not.toContain('https://hooks.example.invalid/configured');
+    expect(screen.getByLabelText(zh('settings.personalNotificationDiscordLabel'))).toHaveAttribute(
+      'placeholder',
+      'Saved webhook remains hidden; enter a new URL to replace it.',
+    );
     expect(saveButton).toBeInTheDocument();
     expect(saveButton).toHaveAttribute('data-terminal-primitive', 'button');
     expect(within(screen.getByTestId('personal-settings-boundary-disclosure')).getByRole('button')).toHaveAttribute('aria-expanded', 'false');

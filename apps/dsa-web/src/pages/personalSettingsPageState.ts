@@ -6,6 +6,7 @@ export type NotificationPreferencesState = {
   emailEnabled: boolean;
   discordEnabled: boolean;
   discordWebhook: string;
+  savedDiscordWebhookConfigured: boolean;
   loading: boolean;
   saving: boolean;
   error: ParsedApiError | null;
@@ -30,6 +31,7 @@ const EMPTY_NOTIFICATION_PREFERENCES_STATE: NotificationPreferencesState = {
   emailEnabled: false,
   discordEnabled: false,
   discordWebhook: '',
+  savedDiscordWebhookConfigured: false,
   loading: false,
   saving: false,
   error: null,
@@ -44,7 +46,8 @@ function normalizeNotificationPreferences(
     email: prefs.email || '',
     emailEnabled: Boolean(prefs.emailEnabled),
     discordEnabled: Boolean(prefs.discordEnabled),
-    discordWebhook: prefs.discordWebhook || '',
+    discordWebhook: '',
+    savedDiscordWebhookConfigured: Boolean(prefs.discordWebhook),
   };
 }
 
@@ -134,10 +137,11 @@ export function notificationPreferencesReducer(
 }
 
 export function toNotificationPreferenceUpdatePayload(state: NotificationPreferencesState) {
+  const trimmedDiscordWebhook = state.discordWebhook.trim();
   return {
     emailEnabled: state.emailEnabled,
     email: state.email.trim() || null,
     discordEnabled: state.discordEnabled,
-    discordWebhook: state.discordWebhook.trim() || null,
+    ...(trimmedDiscordWebhook ? { discordWebhook: trimmedDiscordWebhook } : {}),
   };
 }

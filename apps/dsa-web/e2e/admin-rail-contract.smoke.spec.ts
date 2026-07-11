@@ -276,6 +276,168 @@ function marketDataReadinessPayload() {
   };
 }
 
+function providerActivationVerifierPayload() {
+  return {
+    generated_at: timestamp,
+    status: 'ready',
+    readiness_state: 'ready',
+    supported_statuses: ['ready'],
+    summary: {
+      total_count: 1,
+      ready_count: 1,
+      blocked_count: 0,
+      warning_count: 0,
+      unknown_count: 0,
+      blocked_product_surfaces: [],
+    },
+    capabilities: [
+      {
+        capability_id: 'admin_rail_contract',
+        label: 'Admin rail contract fixture',
+        status: 'ready',
+        readiness_state: 'ready',
+        source_label: 'Playwright fixture',
+        freshness: 'same_day',
+        reason: 'Read-only admin rail fixture is ready.',
+        affected_surfaces: ['Market Overview'],
+        product_affected_surfaces: ['Market Overview'],
+      },
+    ],
+    metadata: {
+      source: 'playwright_admin_rail_contract',
+      read_only: true,
+      external_provider_calls: false,
+      cache_mutation: false,
+      secret_values_included: false,
+      raw_provider_payloads_included: false,
+    },
+  };
+}
+
+function historicalOhlcvCachePreflightPayload() {
+  return {
+    generated_at: timestamp,
+    diagnostic_only: true,
+    runtime_enabled: true,
+    dependency_available: true,
+    required_bars: 60,
+    require_adjusted: true,
+    markets: [
+      {
+        market: 'US',
+        runtime_enabled: true,
+        dependency_available: true,
+        symbols: [
+          {
+            market: 'US',
+            symbol: 'ORCL',
+            runtime_state: 'ready',
+            cache_state: 'ready',
+            dependency_state: 'ready',
+            dependency_available: true,
+            cached_bars: 80,
+            latest_bar_date: '2026-06-05',
+            freshness_state: 'fresh',
+            adjustment_state: 'adjusted',
+            data_state: 'ready',
+            seed_state: 'not_required',
+            next_action: { state: 'ready', summary: 'Read-only fixture ready.' },
+          },
+        ],
+      },
+    ],
+    limitations: ['playwright_admin_rail_contract_fixture'],
+    metadata: {
+      source: 'playwright_admin_rail_contract',
+      read_only: true,
+      external_provider_calls: false,
+      cache_mutation: false,
+      secret_values_included: false,
+      raw_provider_payloads_included: false,
+    },
+  };
+}
+
+function dataSourceGapRegistryPayload() {
+  return {
+    generated_at: timestamp,
+    diagnostic_only: true,
+    summary: {
+      total_families: 1,
+      ready_families: 1,
+      blocked_families: 0,
+      warning_families: 0,
+      unknown_families: 0,
+    },
+    groups: [
+      {
+        group_id: 'admin_rail_contract',
+        title: 'Admin rail contract fixture',
+        families: [
+          {
+            family_key: 'admin_rail_contract',
+            label: 'Admin rail contract fixture',
+            status: 'ready',
+            authority_state: 'ready',
+            freshness_state: 'ready',
+            impact_state: 'ready',
+            data_hydration_allowed: false,
+            score_trading_authority_allowed: false,
+            external_license_required: false,
+            protected_review_required: false,
+            affected_surfaces: ['Market Overview'],
+            missing_evidence: [],
+            action_plan: [],
+          },
+        ],
+      },
+    ],
+    metadata: {
+      source: 'playwright_admin_rail_contract',
+      read_only: true,
+      external_provider_calls: false,
+      cache_mutation: false,
+      secret_values_included: false,
+      raw_provider_payloads_included: false,
+    },
+  };
+}
+
+function professionalDataCapabilitiesPayload() {
+  return {
+    generated_at: timestamp,
+    diagnostic_only: true,
+    summary: {
+      total_count: 1,
+      ready_count: 1,
+      blocked_count: 0,
+      warning_count: 0,
+      unknown_count: 0,
+    },
+    capabilities: [
+      {
+        capability_id: 'admin_rail_contract',
+        category: 'market',
+        label: 'Admin rail contract fixture',
+        status: 'ready',
+        readiness_state: 'ready',
+        source_label: 'Playwright fixture',
+        freshness: 'same_day',
+        reason: 'Read-only admin rail fixture is ready.',
+        affected_surfaces: ['Market Overview'],
+      },
+    ],
+    metadata: {
+      source: 'playwright_admin_rail_contract',
+      read_only: true,
+      external_provider_calls: false,
+      cache_mutation: false,
+      secret_values_included: false,
+      raw_provider_payloads_included: false,
+    },
+  };
+}
+
 async function installAdminRailMocks(page: Page) {
   await installAdminAuthHarness(page);
 
@@ -294,8 +456,12 @@ async function installAdminRailMocks(page: Page) {
     return fulfillJson(route, businessEventsPayload());
   });
   await page.route('**/api/v1/admin/providers/operations-matrix', (route) => fulfillJson(route, providerOperationsMatrixPayload()));
+  await page.route('**/api/v1/admin/provider-activation-verifier', (route) => fulfillJson(route, providerActivationVerifierPayload()));
+  await page.route('**/api/v1/admin/historical-ohlcv/cache-preflight**', (route) => fulfillJson(route, historicalOhlcvCachePreflightPayload()));
   await page.route('**/api/v1/admin/market-providers/operations**', (route) => fulfillJson(route, marketProviderOperationsPayload()));
   await page.route('**/api/v1/market/data-readiness**', (route) => fulfillJson(route, marketDataReadinessPayload()));
+  await page.route('**/api/v1/market/data-source-gap-registry', (route) => fulfillJson(route, dataSourceGapRegistryPayload()));
+  await page.route('**/api/v1/market/professional-data-capabilities/admin', (route) => fulfillJson(route, professionalDataCapabilitiesPayload()));
 }
 
 async function expectAdminRailContract(page: Page, viewportWidth: number) {

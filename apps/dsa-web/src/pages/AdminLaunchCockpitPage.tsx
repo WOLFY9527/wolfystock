@@ -21,6 +21,7 @@ import {
   TerminalPageShell,
   TerminalPanel,
 } from '../components/terminal/TerminalPrimitives';
+import { useProductSurface } from '../hooks/useProductSurface';
 import { cn } from '../utils/cn';
 
 const TEXT_PRIMARY = 'text-[color:var(--wolfy-text-primary)]';
@@ -381,6 +382,7 @@ function MaintenanceQueue({ items }: { items: AdminOpsCockpitMaintenanceQueueIte
 }
 
 const AdminLaunchCockpitPage: React.FC = () => {
+  const { canReadOpsLogs } = useProductSurface();
   const [snapshot, setSnapshot] = useState<AdminOpsStatusResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -390,6 +392,9 @@ const AdminLaunchCockpitPage: React.FC = () => {
   const [refreshingMarket, setRefreshingMarket] = useState<ScannerMarket | null>(null);
 
   useEffect(() => {
+    if (!canReadOpsLogs) {
+      return;
+    }
     let cancelled = false;
     adminOpsStatusApi.getStatus()
       .then((payload) => {
@@ -412,9 +417,12 @@ const AdminLaunchCockpitPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canReadOpsLogs]);
 
   useEffect(() => {
+    if (!canReadOpsLogs) {
+      return;
+    }
     let cancelled = false;
     Promise.all(SCANNER_MARKETS.map(async (market) => {
       const payload = await adminOpsStatusApi.getScannerUniverseReadiness(market);
@@ -436,9 +444,10 @@ const AdminLaunchCockpitPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canReadOpsLogs]);
 
   const requestScannerRefresh = (market: ScannerMarket) => {
+    if (!canReadOpsLogs) return;
     setRefreshingMarket(market);
     adminOpsStatusApi.requestScannerUniverseRefresh(market)
       .then((payload) => {
@@ -477,6 +486,24 @@ const AdminLaunchCockpitPage: React.FC = () => {
     [cockpit?.recommendedMaintenanceQueue],
   );
   const publicLaunchBlocked = Boolean(cockpit?.publicLaunchNoGo ?? true);
+
+  if (!canReadOpsLogs) {
+    return (
+      <TerminalPageShell
+        data-testid="admin-launch-cockpit-page"
+        className="min-h-0 flex-1 overflow-x-hidden py-5 text-[color:var(--wolfy-text-primary)] md:py-6"
+      >
+        <TerminalPageHeading
+          eyebrow="Admin/Ops private beta"
+          title="Private Beta Launch Cockpit"
+          action={<TerminalChip variant="danger">Missing ops capability</TerminalChip>}
+        />
+        <TerminalNotice data-testid="admin-launch-cockpit-capability-denied" variant="danger">
+          Launch cockpit is fail-closed because this account is missing the ops log capability.
+        </TerminalNotice>
+      </TerminalPageShell>
+    );
+  }
 
   return (
     <TerminalPageShell

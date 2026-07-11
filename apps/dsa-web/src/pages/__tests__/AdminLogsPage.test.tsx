@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../i18n/core';
 import AdminLogsPage from '../AdminLogsPage';
 
-const { listBusinessEvents, getBusinessEventDetail, listSessions, getSessionDetail, getStorageSummary, cleanupLogs, listDataMissingDrilldown, listOperatorIssueRollup, getIncidentTimeline } = vi.hoisted(() => ({
+const { listBusinessEvents, getBusinessEventDetail, listSessions, getSessionDetail, getStorageSummary, cleanupLogs, listDataMissingDrilldown, listOperatorIssueRollup, getIncidentTimeline, capabilityState } = vi.hoisted(() => ({
   listBusinessEvents: vi.fn(),
   getBusinessEventDetail: vi.fn(),
   listSessions: vi.fn(),
@@ -13,6 +13,7 @@ const { listBusinessEvents, getBusinessEventDetail, listSessions, getSessionDeta
   listDataMissingDrilldown: vi.fn(),
   listOperatorIssueRollup: vi.fn(),
   getIncidentTimeline: vi.fn(),
+  capabilityState: { canReadOpsLogs: true },
 }));
 
 vi.mock('../../api/adminLogs', () => ({
@@ -36,6 +37,10 @@ vi.mock('../../contexts/UiLanguageContext', () => ({
     language: mockLanguage,
     t: (key: string, params?: Record<string, string | number | undefined>) => translate(mockLanguage, key, params),
   }),
+}));
+
+vi.mock('../../hooks/useProductSurface', () => ({
+  useProductSurface: () => capabilityState,
 }));
 
 vi.mock('../../components/common/ApiErrorAlert', () => ({
@@ -558,6 +563,7 @@ async function expandStorageDisclosure() {
 describe('AdminLogsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    capabilityState.canReadOpsLogs = true;
     Object.assign(navigator, {
       clipboard: {
         writeText: vi.fn().mockResolvedValue(undefined),
@@ -676,6 +682,20 @@ describe('AdminLogsPage', () => {
     });
     getIncidentTimeline.mockResolvedValue(incidentTimelinePayload);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
+  });
+
+  it('fails closed without ops log capability and does not fetch admin log data', () => {
+    capabilityState.canReadOpsLogs = false;
+
+    render(<AdminLogsPage />);
+
+    expect(screen.getByTestId('admin-logs-capability-denied')).toBeInTheDocument();
+    expect(listBusinessEvents).not.toHaveBeenCalled();
+    expect(listSessions).not.toHaveBeenCalled();
+    expect(getStorageSummary).not.toHaveBeenCalled();
+    expect(listDataMissingDrilldown).not.toHaveBeenCalled();
+    expect(listOperatorIssueRollup).not.toHaveBeenCalled();
+    expect(cleanupLogs).not.toHaveBeenCalled();
   });
 
   it('defaults to business events and does not show raw step names as the main list', async () => {
