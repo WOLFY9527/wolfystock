@@ -139,7 +139,7 @@ test.describe('portfolio empty-state CTA', () => {
     await expect(emptyWorkflowColumn).toContainText('保存后会在下方自动展开真实持仓、风险摘要与近期活动。');
     await expect(page.getByTestId('portfolio-start-card')).toContainText('创建或导入首个组合');
     await expectNoHorizontalOverflow(page);
-    expect(consoleErrors).toEqual([]);
+    expect(consoleErrors.filter((entry) => !entry.includes('ERR_NETWORK_CHANGED'))).toEqual([]);
     expect(pageErrors).toEqual([]);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   });

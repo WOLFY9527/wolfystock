@@ -2857,8 +2857,18 @@ const PortfolioPage: React.FC = () => {
   };
   const renderExposureValue = (row: PortfolioExposureItem) => {
     const currency = row.displayCurrency || snapshotCurrency;
-    const display = formatAnalyticsMoney(row.displayValue ?? row.marketValue ?? 0, currency);
-    const native = row.nativeCurrency && row.nativeCurrency !== displayCurrency && row.nativeValue != null
+    const displaySource = Number.isFinite(row.displayValue)
+      ? row.displayValue
+      : Number.isFinite(row.marketValue)
+        ? row.marketValue
+        : null;
+    const display = displaySource == null
+      ? (row.fxStatus === 'unavailable' ? fxUnavailableLabel : '--')
+      : formatAnalyticsMoney(displaySource, currency);
+    const native = row.nativeCurrency
+      && row.nativeCurrency !== displayCurrency
+      && row.nativeValue != null
+      && Number.isFinite(row.nativeValue)
       ? formatMoney(row.nativeValue, row.nativeCurrency)
       : null;
     return { display, native };
@@ -4091,28 +4101,6 @@ const PortfolioPage: React.FC = () => {
                       <TerminalChip variant="neutral">{language === 'zh' ? '真实数据接入前不生成示例收益' : 'No sample performance before real data is saved'}</TerminalChip>
                     </div>
 
-                    <TerminalEmptyState
-                      data-testid="portfolio-start-card"
-                      title={language === 'zh' ? '创建或导入首个组合' : 'Create or import the first portfolio'}
-                      action={hasHistory ? <TerminalChip variant="caution" className="shrink-0">{noHoldingsHistoryNote}</TerminalChip> : undefined}
-                      className="min-h-[72px]"
-                    >
-                      {compactNoHoldingText}
-                    </TerminalEmptyState>
-
-                    {canManagePortfolioOperations ? (
-                      <div data-testid="portfolio-empty-actions" className="flex min-w-0 flex-wrap gap-2">
-                        <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={onboardingPrimaryAction}>
-                          {onboardingPrimaryActionLabel}
-                        </TerminalButton>
-                        <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
-                          {importTradesActionLabel}
-                        </TerminalButton>
-                      </div>
-                    ) : null}
-                    <p data-testid="portfolio-empty-help" className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
-                      {portfolioEmptyHelpText}
-                    </p>
                     {!hasWritableAccounts ? (
                       <TerminalNotice variant="caution">
                         {hasActiveAccounts
@@ -4165,6 +4153,29 @@ const PortfolioPage: React.FC = () => {
                         ? ['不会自动创建账户。', '不会生成示例持仓。', '不会改写持仓、现金或外部同步状态。']
                         : ['No account is created automatically.', 'No sample holdings are generated.', 'Holdings, cash, and external sync stay unchanged.']}
                     />
+
+                    <TerminalEmptyState
+                      data-testid="portfolio-start-card"
+                      title={language === 'zh' ? '创建或导入首个组合' : 'Create or import the first portfolio'}
+                      action={hasHistory ? <TerminalChip variant="caution" className="shrink-0">{noHoldingsHistoryNote}</TerminalChip> : undefined}
+                      className="min-h-[72px]"
+                    >
+                      {compactNoHoldingText}
+                    </TerminalEmptyState>
+
+                    {canManagePortfolioOperations ? (
+                      <div data-testid="portfolio-empty-actions" className="flex min-w-0 flex-wrap gap-2">
+                        <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={onboardingPrimaryAction}>
+                          {onboardingPrimaryActionLabel}
+                        </TerminalButton>
+                        <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
+                          {importTradesActionLabel}
+                        </TerminalButton>
+                      </div>
+                    ) : null}
+                    <p data-testid="portfolio-empty-help" className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                      {portfolioEmptyHelpText}
+                    </p>
 
                     <TerminalDisclosure
                       data-testid="portfolio-empty-supporting-disclosure"
