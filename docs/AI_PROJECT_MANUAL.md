@@ -2,320 +2,444 @@
 
 > GENERATED FILE. DO NOT EDIT DIRECTLY.
 >
-> Edit `scripts/build_ai_project_manual.py` or the tiny canonical source files, then run `python scripts/build_ai_project_manual.py`.
-> Check freshness with `python scripts/build_ai_project_manual.py --check`.
+> Edit `scripts/build_ai_project_manual.py` or its tiny canonical sources, then run:
+>
+> ```bash
+> python scripts/build_ai_project_manual.py
+> python scripts/build_ai_project_manual.py --check
+> ```
 
-Status: generated comprehensive project handbook after the DOCS-006 hard Markdown collapse.
-Audience: future AI models, Codex workers, review agents, maintainers, and humans assigning AI work.
-Authority: operational handbook and source map; `AGENTS.md` remains the repository AI-collaboration rule source.
-Do not use as: launch approval, protected-domain authorization, stale audit authority, trading advice, or replacement for current source/test inspection.
+Status: generated cross-domain project handbook
+Audience: Codex workers, reviewers, maintainers, and humans assigning AI work
+Authority: operational handbook and source map; `AGENTS.md` remains the repository AI hard-rule source
+Do not use as: launch approval, protected-domain authorization, stale audit authority, trading advice, or a replacement for current code/test inspection
 
-## Table Of Contents
+---
 
-- [Project Identity And Product Purpose](#project-identity-and-product-purpose)
-- [Architecture Overview](#architecture-overview)
-- [Frontend Surfaces](#frontend-surfaces)
-- [Backend API And Service Structure](#backend-api-and-service-structure)
-- [Data Providers And Data Reality Boundaries](#data-providers-and-data-reality-boundaries)
-- [Market, Options, Macro, Liquidity, Backtest, Scenario, And Portfolio Domains](#market-options-macro-liquidity-backtest-scenario-and-portfolio-domains)
-- [Professional Analytics Roadmap And Readiness](#professional-analytics-roadmap-and-readiness)
-- [Production Readiness Documentation Authority](#production-readiness-documentation-authority)
-- [Protected Domains And Safety Rules](#protected-domains-and-safety-rules)
-- [No-Advice Policy](#no-advice-policy)
-- [Validation Matrix](#validation-matrix)
-- [Codex Workflow And Landing Changes](#codex-workflow-and-landing-changes)
-- [Current Canonical File Map](#current-canonical-file-map)
-- [Compressed Project History](#compressed-project-history)
-- [AI Onboarding Checklist](#ai-onboarding-checklist)
-- [Source Map](#source-map)
-- [JSON Manifest](#json-manifest)
+## Task reading matrix
 
-## Project Identity And Product Purpose
+Read only the sections required by the task unless the work is cross-domain.
 
-WolfyStock is a professional financial research terminal for market operators, discretionary research, and portfolio workflows across US, CN, and HK markets. It combines market context, scanner discovery, watchlists, rule backtesting, portfolio tracking, provider diagnostics, admin observability, and AI-assisted research in a Python/FastAPI plus React/TypeScript codebase.
-
-The product solves the problem of fragmented research evidence: market regime, quote/history readiness, portfolio exposure, scenario shocks, options context, and backtest evidence are easy to confuse when they come from different providers and freshness levels. WolfyStock's durable direction is to show the evidence, source authority, lineage, and readiness boundary before any research conclusion.
-
-It is not a broker, order-entry surface, retail trading game, or unconstrained LLM wrapper. All user-visible research must stay analytical and no-advice.
-
-Source provenance: [`README.md`](../README.md), [`AGENTS.md`](../AGENTS.md).
-
-## Architecture Overview
-
-Main runtime entrypoints are `main.py` for analysis/local automation, `server.py` and `api/app.py` for the FastAPI app, `api/v1/router.py` for API grouping, `src/services/` for business services, `src/repositories/` for persistence boundaries, `src/schemas/` for DTO/schema contracts, `data_provider/` for provider adapters and fallback normalization, `bot/` for notification integrations, `apps/dsa-web/` for the web terminal, `apps/dsa-desktop/` for the Electron wrapper, `scripts/` for local and CI utilities, and `.github/workflows/` for CI/release automation.
-
-Maintain bounded contexts. Consumers should call public facades, API clients, schemas, DTOs, validators, and documented commands. Do not reach into private engines, repositories, provider clients, cache keys, ledger internals, or mutation code from another domain just to make a local task easier.
-
-Shared contracts, schema changes, root config, CI, dependency files, auth, provider runtime, broker/accounting, DB migrations, and frontend route-entry behavior are high-risk and require explicit task scope.
-
-Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md).
-
-## Frontend Surfaces
-
-| Surface | Purpose | Primary ownership | Readiness boundary |
-| --- | --- | --- | --- |
-| Market Overview | Regime, breadth, official risk, and macro first read | `api/v1/endpoints/market_overview.py`, `src/services/market_overview_service.py`, `apps/dsa-web/src/pages/MarketOverviewPage.tsx` | Partial until official risk, quote authority, and target-environment evidence are proven. |
-| Scanner | Candidate discovery and watchlist handoff | `api/v1/endpoints/scanner.py`, `src/services/market_scanner_service.py`, `apps/dsa-web/src/pages/UserScannerPage.tsx` | Partial; quote, history, universe, freshness, turnover, and packet readiness must fail closed. |
-| Watchlist | Saved symbols and row-level research queue | `api/v1/endpoints/watchlist.py`, `src/services/watchlist_service.py`, `src/services/watchlist_research_overlay_service.py`, `apps/dsa-web/src/pages/WatchlistPage.tsx` | Partial; row packets may lack quote freshness, catalyst age, or scanner lineage and must say so. |
-| Stock Detail | Symbol research packet and structure decision | `api/v1/endpoints/stocks.py`, `src/services/stock_service.py`, `src/services/stock_structure_decision_service.py` | Partial; no invented quote, fundamental, event, SEC, peer, or catalyst evidence. |
-| Liquidity Monitor | Capital pressure and stress context | `api/v1/endpoints/liquidity_monitor.py`, `src/services/liquidity_monitor_service.py`, `apps/dsa-web/src/pages/LiquidityMonitorPage.tsx` | Partial; macro, flow, and proxy rows remain capped unless official source authority exists. |
-| Rotation Radar | ETF/index family rotation context | `api/v1/endpoints/market.py`, rotation services, `apps/dsa-web/src/pages/MarketRotationRadarPage.tsx` | Partial; quote coverage, membership, and official source authority gate headline claims. |
-| Options Lab | Read-only options research console | `api/v1/endpoints/options.py`, `src/services/options_lab_service.py`, `apps/dsa-web/src/pages/OptionsLabPage.tsx` | Observation-only unless entitlement, redisplay, chain, Greeks, IV, OI, volume, and methodology proof exist. |
-| Scenario Lab | Bounded shock comparison | `api/v1/endpoints/market.py`, `src/services/market_scenario_lab_engine.py`, `apps/dsa-web/src/pages/ScenarioLabPage.tsx` | Partial; sample, request-supplied, fallback, or static baselines are observation-only. |
-| Backtest | Deterministic rule backtest and stored readback | `api/v1/endpoints/backtest.py`, `src/core/rule_backtest_engine.py`, `src/services/backtest_service.py`, `apps/dsa-web/src/pages/BacktestPage.tsx` | Research-useful v1 semantics; no optimizer, winner, allocation, or fake performance semantics. |
-| Portfolio | Accounts, holdings, cash, FX, ledger, risk, and attribution | `api/v1/endpoints/portfolio.py`, `src/services/portfolio_service.py`, `apps/dsa-web/src/pages/PortfolioPage.tsx` | Accounting authority is protected; price/FX lineage and broker/order implications must stay explicit. |
-| Admin/Ops | Operator observability and protected diagnostics | `api/v1/endpoints/admin/*`, `src/services/admin_*`, `apps/dsa-web/src/pages/Admin*` | Manual-review-gated; never leak raw provider, credential, security, or internal payload details. |
-
-Frontend work should preserve the operator-terminal posture: dense but legible, route-first, evidence-first, and calm. Prefer tables, rows, rails, drawers, strips, and explicit disclosure states over generic card sprawl. Each route should make the primary research task visible in the first viewport and should keep raw provider, cache, schema, debug, credential, and fallback internals out of consumer copy.
-
-Source provenance: [`README.md`](../README.md), [`AGENTS.md`](../AGENTS.md).
-
-## Backend API And Service Structure
-
-Backend/API work should keep API routers thin, services authoritative for business semantics, repositories responsible for persistence, schemas/DTOs explicit, and provider adapters isolated behind provider-runtime boundaries. FastAPI endpoints should not embed scanner ranking math, portfolio accounting, provider fallback ordering, auth policy, or report rendering internals.
-
-Core API families include auth, analysis, history, stocks, scanner, watchlist, market overview, market/scenario, liquidity, rotation, options, portfolio, backtest, quant, system, usage, admin, and diagnostics. Additive fields are preferred over breaking response contracts; deleted or renamed fields require client compatibility review.
-
-For Python changes, prefer `./scripts/ci_gate.sh`. At minimum run `python -m py_compile <changed_python_files>` and the closest deterministic tests. Protected semantic changes need focused regression evidence.
-
-Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md).
-
-## Data Providers And Data Reality Boundaries
-
-Provider runtime owns provider order, fallback, retry/circuit behavior, timeout posture, freshness labels, source authority, display rights, optional enrichment budgets, sanitized diagnostics, and cache/local-first behavior. Do not reorder providers, deepen live fallback, add broad optional fanout, or expose raw provider payloads without explicit scope.
-
-Fallback, cached, proxy, repaired, inferred, fixture, synthetic, dry-run, parser-only, request-supplied, and observation-only data must remain visibly not-live and not-decision-grade. Missing data stays missing; do not fabricate quote, fundamental, event, IV, Greek, bid/ask, OI, volume, FX, benchmark, or source-freshness fields.
-
-| Data family | Readiness | Operational boundary |
+| Task family | Required sections | Additional canonical source |
 | --- | --- | --- |
-| Official risk and volatility | Partial | VIX/volatility, rates, Fed liquidity, credit stress, and official macro rows must be source-authorized before score-grade claims. |
-| Authorized quote spine | Partial | US/CN/HK quote and daily OHLCV snapshots need durable lineage, freshness, and redisplay/display authority. |
-| Index/ETF membership | Partial | Rotation and market claims need official membership and weighting proof, not proxy-only membership. |
-| Scanner universe/history | Partial | Universe, local history, quote freshness, turnover, and evidence packets must gate scanner summaries. |
-| Fundamentals/filings/events | Partial | Ratios, filings, catalysts, events, and peers are fragmented; missing values remain missing. |
-| Options chains/Greeks | Blocked or observation-only | No production-grade claims without provider entitlement, redisplay rights, methodology proof, and chain/Greek completeness. |
-| Scenario baselines | Partial | Durable baseline snapshots and target-environment evidence are required before scenario state can be authoritative. |
-| Backtest lineage | Partial but research-useful | Adjusted basis, calendar, point-in-time universe, reproducibility, and stored-result authority gate professional claims. |
-| Factor research lineage | Diagnostic-only | No PIT universe or long-short factor-return contract yet; do not promote factor helpers as ranking truth. |
-| Portfolio price/FX lineage | Partial | Valuation is only as credible as quote, FX, timestamp, source, and account/ledger provenance. |
+| Bounded frontend repair | Project Identity, Frontend Surfaces, Protected Domains, Validation Matrix, Codex Workflow | relevant `DESIGN.md` section |
+| Frontend page/product migration | Project Identity, Frontend Surfaces, Data Reality, Protected Domains, Validation Matrix, Codex Workflow | full relevant page contract in `DESIGN.md` and visual reference |
+| Backend service/API | Architecture, Backend API, relevant domain, Protected Domains, Validation Matrix | current schemas, service tests, API tests |
+| Provider/data-truth work | Data Providers, relevant domain, Readiness Roadmap, Protected Domains, Validation Matrix | provider/runtime source and canonical gate |
+| Historical market-data work | Data Providers, relevant domain, Protected Domains, Validation Matrix | `docs/contracts/historical_market_data_foundation.md` and relevant runbook |
+| Dependency/runtime/CI | Architecture, Protected Domains, Validation Matrix, Codex Workflow | package/lockfile or canonical gate scripts |
+| Auth/Admin/Security | Architecture, Frontend Surfaces, Production Readiness, Protected Domains, Validation Matrix | current auth/RBAC/security tests |
+| Portfolio/Backtest | relevant domain, Data Reality, Protected Domains, Validation Matrix | accounting/backtest contracts and focused tests |
+| Deployment/readiness | Production Readiness, Protected Domains, Validation Matrix, Canonical File Map | target-environment sanitized evidence |
+| Documentation governance | Canonical File Map, Source Map, Codex Workflow | `AGENTS.md`, `DOCS_INDEX.md`, generator and asset checks |
 
-Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md).
+Read the full manual for cross-domain architecture, production-readiness, milestone integration, or documentation-generation changes.
 
-## Market, Options, Macro, Liquidity, Backtest, Scenario, And Portfolio Domains
+---
 
-Market Overview, Liquidity, and Rotation depend on official risk, macro, ETF/index quote coverage, and membership authority. They may show bounded context, but they must not convert proxy breadth or quote-derived approximations into score-grade institutional claims.
+## Project identity and product purpose
 
-Options Lab is a read-only experiment console. It is not an execution surface, strategy-ranking engine, or order workflow. Fixture/dry-run providers and disabled live stubs must fail closed until entitlement, redisplay rights, chain completeness, Greeks/IV/OI/volume methodology, and display authority are proven.
+WolfyStock is a professional financial research workbench for market context, candidate discovery, stock research, watchlists, deterministic validation, portfolio exposure, provider diagnostics, admin observability, and AI-assisted research across US, CN, and HK markets.
 
-Scenario Lab compares bounded shocks. Request-supplied, fallback, static, sample, or stale baselines are observation-only and must not imply execution readiness.
+The durable product hierarchy is:
 
-Backtest owns deterministic rule evaluation, stored result readback, exports, compare workflows, and research-useful v1 semantics. Do not change fills, costs, metrics, benchmark semantics, parameter/winner meaning, local-only universe execution, or stored-result authority without explicit versioning and focused tests.
+```text
+结论
+→ 证据
+→ 数据质量
+→ 风险边界
+→ 下一步研究动作
+```
 
-Portfolio owns accounts, holdings, cash, transactions, P&L, FX/native currency, cost basis, broker sync/import overlays, ledger mutations, and read projections. UI work must not recalculate accounting authority or imply broker order execution.
+Core user journey:
 
-Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md).
+```text
+看市场
+→ 找候选
+→ 看个股
+→ 加入持续观察
+→ 用扫描 / 回测 / 情景分析做验证
+→ 检视真实持仓暴露
+```
 
-## Professional Analytics Roadmap And Readiness
+WolfyStock is not a broker, order-entry surface, retail trading game, buy/sell signal engine, investment-advice application, or unconstrained LLM wrapper.
 
-The professional roadmap is not a promise that a family is live. It is an ordered readiness map:
+Every user-visible conclusion must preserve evidence, source authority, lineage, freshness, readiness, and no-advice boundaries.
 
-1. Official VIX/volatility and macro/rates/Fed-liquidity source authority.
-2. Authorized US/CN/HK quote spine with lineage, freshness, and display rights.
-3. US index/ETF quote coverage and official membership/weight proofs.
-4. Scanner universe, history, turnover, and quote-readiness gates.
-5. Watchlist row packet and single-stock research packet completeness.
-6. Portfolio price and FX lineage.
-7. Options provider entitlement, redisplay rights, and methodology proof.
-8. Scenario durable baseline snapshots and target-environment evidence.
-9. Backtest dataset lineage, adjusted basis, calendar, PIT universe, and reproducibility gates.
-10. Factor research lineage with PIT membership and return contracts.
+Source: `README.md`, `AGENTS.md`, `DESIGN.md`.
 
-Each step must expose blocked, partial, missing, unauthorized, stale, or observation-only states rather than hiding them behind positive copy.
+---
 
-Source provenance: [`README.md`](../README.md), [`AGENTS.md`](../AGENTS.md).
+## Architecture overview
 
-## Production Readiness Documentation Authority
+Primary entrypoints and boundaries:
 
-Canonical owner: this generated manual, produced by `scripts/build_ai_project_manual.py`. After DOCS-006, the historical `docs/audits/deployment-readiness-checklist.md`, `docs/DEPLOY.md`, and `docs/DEPLOY_EN.md` are deprecated and must not be recreated as compatibility shims. Production-readiness tests should validate this section and the runtime preflight contract, not stale audit paths.
-
-Current public multi-user production posture remains **NO-GO** unless every repository-owned gate below has accepted sanitized target-environment evidence and manual release review. The manual is documentation authority, not launch approval.
-
-| Production concern | Repository-owned authority | Required evidence boundary |
-| --- | --- | --- |
-| Production environment marker | `APP_ENV=production` must be explicit in the sanitized production config contract. | Use `python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>`; do not attach raw `.env` values. |
-| Authentication enablement | `ADMIN_AUTH_ENABLED=true` is required for public deployment; missing or false is local/dev only. | Auth-disabled public ingress is **NO-GO** and does not change runtime defaults. |
-| Fail-closed production posture | Missing required launch config, unsupported MFA scope, public SearXNG discovery, or unsafe CORS posture must fail closed. | Readiness output may include flag names, states, and bounded labels, not secret values or raw service URLs. |
-| CORS and CSRF allowlist | `CORS_ALLOW_ALL=false`, explicit `CORS_ORIGINS`, and explicit `CSRF_TRUSTED_ORIGINS` are required for public topology review. | Evidence must prove intended HTTPS origin behavior without echoing raw credential-bearing origins. |
-| Secret and config handling | Provider keys, cookies, sessions, DSNs, broker credentials, webhook URLs, raw provider payloads, stack traces, and raw `.env` values stay out of docs, logs, DOM, and release evidence. | Use presence states, redacted summaries, and sanitized validator output only. |
-| Docs/OpenAPI production exposure | Root docs/OpenAPI exposure must fail closed when production mode has public ingress but auth is disabled. | T286 behavior is read-only here; documentation must keep auth-disabled production exposure as **NO-GO**. |
-| Database and persistence readiness | Repository-owned DB readiness is bounded to local/storage checks, backup/PITR opt-in flags, restore/PITR evidence tooling, and owner-isolation smoke where implemented. | Do not claim Kubernetes, managed database, cloud secret-manager, or external backup infrastructure ownership. |
-| Runtime startup verification | `scripts/uat_runtime_harness.py` is the canonical local runtime verifier for clean tree, expected SHA, build, no-proxy localhost checks, asset identity, and evidence-bound stop. | UAT harness evidence is local runtime proof, not production launch approval. |
-| Health and readiness checks | Health/readiness coverage is limited to repository scripts, API/system endpoints, admin diagnostics, and release-summary validators that exist in this tree. | Missing target-environment evidence remains blocked, partial, or **NO-GO** rather than inferred. |
-| Rollback and operational validation | Rollback proof requires last-good commit/image, DB restore decision point where applicable, health checks, owner-isolation smoke, and sanitized operator evidence references. | No release, rollback, or live-enforcement approval is implied by docs alone. |
-
-Public deployment env flag matrix:
-
-| Flag / feature | Current behavior | Classification | Required target-env evidence before public launch |
-| --- | --- | --- | --- |
-| `APP_ENV` | Enables production-mode security semantics only when explicitly set to `production`; missing or non-production values are local/dev only. | **GATED** | Sanitized config contract and target-environment evidence must show explicit production review without raw `.env` values. |
-| `VITE_API_URL` | Frontend uses same-origin API by default; explicit value only overrides API base for split-domain/static deployments. | **GATED** | Browser/ingress evidence must show the built frontend reaches the intended HTTPS API origin, CORS/CSRF origins match, and backend `:8000` is not directly public. |
-| `PUBLIC_API_ABUSE_LIMIT_*` | Process-local abuse limiter knobs are clamped and sanitized in diagnostics. | **SAFE** | Include sanitized limiter snapshot evidence and keep it labeled process-local; it is not quota, billing, auth, or distributed rate-limit enforcement. |
-| `CRYPTO_REALTIME_ENABLED` | Realtime crypto background behavior must be explicitly reviewed for outbound access and degraded behavior. | **AMBIGUOUS** | Target-environment evidence must show whether outbound Binance/WebSocket access is allowed, how failures degrade, and whether realtime is intentionally disabled. |
-| `SEARXNG_PUBLIC_INSTANCES_ENABLED` | Public-instance discovery is unsuitable for public launch unless separately accepted or disabled in favor of vetted self-hosted endpoints. | **NO-GO** | Public launch must use vetted self-hosted SearXNG endpoints, explicitly disable public discovery, or attach accepted operator risk evidence. |
-
-Classification rule: **SAFE** still requires target-environment evidence; **GATED** requires explicit config plus accepted evidence; **AMBIGUOUS** requires an operator decision; **NO-GO** applies whenever required target-environment evidence is missing, raw secrets would be needed to prove the claim, or a flag is used to imply provider, quota, auth/RBAC, database, broker, or notification live-enforcement approval.
-
-Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md), [`docs/DOCS_INDEX.md`](DOCS_INDEX.md).
-
-## Protected Domains And Safety Rules
-
-Stop before editing these domains unless the prompt explicitly authorizes the scope and validation path:
-
-- provider adapters, provider order, fallback, freshness, cache semantics, live-call behavior, credentials, and source authority;
-- scanner scoring, selection, thresholds, ranking, sorting, score contribution, and live/fallback labels;
-- backtest fills, costs, metrics, benchmarks, parameter/winner semantics, universe execution, and stored readback;
-- portfolio accounting, cash, holdings, transactions, P&L, FX/native currency, cost basis, broker sync/import, and ledger semantics;
-- auth/RBAC/security, sessions, cookies, CSRF/CORS, password/token handling, MFA, and admin protection;
-- DB migrations, root config, package/lock files, CI, dependency updates, env templates, and external network behavior;
-- broker/order execution, trading CTAs, target prices, position sizing, and personalized financial advice.
-
-Do not introduce fake data, fallback payloads, placeholder readiness, hidden compatibility layers, raw provider leakage, or one-off Markdown reports as a way to satisfy a task.
-
-Source provenance: [`AGENTS.md`](../AGENTS.md).
-
-## No-Advice Policy
-
-WolfyStock may provide research context, evidence, readiness state, scenario comparison, risk disclosure, and operational diagnostics. It must not provide direct instructions to buy, sell, hold, short, add, reduce, execute, route, or size positions for a user.
-
-Avoid user-facing copy that implies investment recommendation, guaranteed outcome, target price, execution readiness, risk-free action, or personalized suitability. Safer patterns are observation-only labels, evidence boundaries, uncertainty, data-source/freshness/lineage, and explicit no-advice wording. The Chinese no-advice anchor `数据不足，暂不形成结论。` is intentionally retained where product copy needs a compact blocked-state sentence.
-
-No-advice review should classify grep hits. Tests, negative assertions, source-code identifiers, and policy docs may contain forbidden words as guardrails; visible UI and generated reports need stricter review.
-
-Source provenance: [`AGENTS.md`](../AGENTS.md).
-
-## Validation Matrix
-
-Use the smallest validation set that proves the touched behavior:
-
-- Docs/manual/generator: `python -m py_compile scripts/build_ai_project_manual.py`, `python scripts/build_ai_project_manual.py`, `python scripts/build_ai_project_manual.py --check`, `python -m pytest -q tests/scripts/test_build_ai_project_manual.py`, `python scripts/check_ai_assets.py`, `git diff --check`, `bash scripts/release_secret_scan.sh --base-ref origin/main`, inventory counts, and link sanity.
-- Backend Python: `./scripts/ci_gate.sh` when feasible; otherwise `python -m py_compile <changed_python_files>` plus closest deterministic pytest.
-- API/schema/auth/provider/protected contracts: backend focused tests, compatibility review, redaction/leakage checks, and wider gates when shared contracts are touched.
-- Web frontend: from `apps/dsa-web`, run dependency install only when needed, then `npm run lint`, `npm run build`, and concrete Vitest paths. Use browser/screenshot smoke when layout or visible UX changes.
-- Local UAT runtime harness: `python scripts/uat_runtime_harness.py --expected-sha "$(git rev-parse HEAD)"`, then use `python scripts/uat_runtime_harness.py --preflight --expected-sha "$(git rev-parse HEAD)" --evidence-path <run-evidence> --json` for read-only WorkBuddy qualification and `--stop-from-evidence --evidence-path <run-evidence> --json` for task-owned cleanup.
-
-> Shell note: commands using `./scripts/*.sh` and `$(git rev-parse HEAD)` are
-> POSIX-shell (bash/sh) syntax. On Windows run them from Git Bash, WSL, or any
-> shell providing a POSIX `sh` (e.g. `bash scripts/ci_gate.sh`). PowerShell uses
-> the same `$(...)` subexpression syntax, so the UAT `--expected-sha "$(git rev-parse HEAD)"`
-> invocations also work unchanged in PowerShell.
-- Desktop: build web first, then desktop build where platform allows.
-- Workflow/scripts/Docker: run the closest local deterministic script or syntax check and report unexecuted remote/infra gaps.
-
-Never claim tests passed unless the command actually ran in this workspace and succeeded.
-
-Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md).
-
-## Codex Workflow And Landing Changes
-
-Start with read-only discovery. Confirm `pwd`, branch, and `git status`; read the current prompt, `AGENTS.md`, `README.md`, this manual, and the smallest code/docs context required. Respect task mode and workspace. In a `WORKTREE-WORKER` task, stay inside the specified worktree and branch.
-
-Do not push unless explicitly authorized. Do not commit unless the task asks for a commit or the current instruction grants auto-commit. Do not rebase, merge, delete branches/worktrees, or rewrite history unless the task explicitly requires it. If a task requires fetch/rebase before final report, run `git fetch origin`, rebase onto `origin/main`, rerun focused validation, and only then commit/report.
-
-Before final delivery: inspect `git diff`, run `git diff --check`, run required tests/checks, confirm no unexpected files or secrets, and report exact commands and results. Final reports should include status, changed files, validation, risk, final base commit, commit hash when created, final `git status`, and rollback command.
-
-Source provenance: [`AGENTS.md`](../AGENTS.md), [`docs/DOCS_INDEX.md`](DOCS_INDEX.md).
-
-## Current Canonical File Map
-
-After DOCS-006, the repository intentionally avoids a large Markdown corpus. The canonical reading path should be:
-
-1. `README.md` for the human product entrypoint and run commands.
-2. `AGENTS.md` for current AI-agent rules and hard safety boundaries.
-3. `docs/AI_PROJECT_MANUAL.md` for the comprehensive project handbook.
-
-Retained Markdown categories:
-
-| File or lane | Why retained |
+| Area | Ownership |
 | --- | --- |
-| `README.md` | Short human entrypoint and run-command starter. |
-| `AGENTS.md` | Repository AI-collaboration source of truth and protected-domain hard rules. |
-| `CLAUDE.md` | Required symlink to `AGENTS.md` for Claude compatibility; retained because `scripts/check_ai_assets.py` enforces it. |
-| `docs/AI_PROJECT_MANUAL.md` | Generated comprehensive handbook for AI workers and maintainers. |
-| `docs/DOCS_INDEX.md` | Tiny pointer to canonical docs; no archive lane or broad index. |
-| `docs/CHANGELOG.md` | Short compatibility file retained because release tooling still reads this path. |
-| `.github/*.md` | GitHub Copilot/instruction/issue/PR workflow assets. |
-| `.claude/skills/*.md` | Required repository skill assets checked by AI governance tooling. |
+| Analysis and local automation | `main.py` |
+| FastAPI runtime | `server.py`, `api/app.py`, `api/v1/router.py` |
+| Business services | `src/services/` |
+| Persistence | `src/repositories/` |
+| Schemas and DTOs | `src/schemas/` |
+| Provider adapters/runtime | `data_provider/` and owned provider services |
+| Notifications | `bot/` |
+| Web terminal | `apps/dsa-web/` |
+| Desktop wrapper | `apps/dsa-desktop/` |
+| Scripts and CI | `scripts/`, `.github/workflows/`, `docker/` |
 
-`docs/AI_PROJECT_MANUAL_SOURCES.json` is not Markdown; it records deterministic source hashes, generator metadata, discovery counts, and section provenance. `docs/DOCS_INDEX.md` should stay tiny and only point to canonical files. Archive and product-recovery Markdown lanes are no longer retained as active project knowledge.
+Keep bounded contexts intact. Consumers should use public facades, API clients, schemas, DTOs, validators, and documented commands.
 
-Source provenance: [`README.md`](../README.md), [`AGENTS.md`](../AGENTS.md), [`docs/DOCS_INDEX.md`](DOCS_INDEX.md).
+Do not reach into private engines, repositories, provider clients, cache keys, ledger internals, auth internals, or mutation code merely to simplify a local task.
 
-## Compressed Project History
+Shared contracts, schema, dependency files, root config, CI, auth, provider runtime, portfolio accounting, database migration, and frontend route-entry behavior are high-risk and require explicit ownership and validation.
 
-WolfyStock began as a scheduled stock-analysis and notification project, then accumulated web, desktop, provider, backtest, portfolio, admin, and AI-assisted research surfaces. Later work shifted the architecture toward bounded contexts, provider/source readiness, route-level research workbenches, and protected semantics around scanner, portfolio, backtest, auth/RBAC, broker/accounting, and provider runtime.
+---
 
-Product-recovery and DATA-series work established the durable lesson that visible research value depends on real source authority: official risk/macro, authorized quote spine, scanner/watchlist packets, portfolio price/FX lineage, options entitlement, scenario baselines, and backtest dataset lineage must be explicit. Old audits, acceptance reports, launch checklists, design notes, and progress logs were useful for their moment, but their durable content now lives in this manual.
+## Frontend surfaces
 
-DOCS-006 hard-collapsed the Markdown corpus: keep a short README, a short AGENTS rule entrypoint, this generated manual, the manifest, and required governance/workflow mirrors. Do not recreate old index/archive lanes for routine tasks.
-
-Source provenance: [`README.md`](../README.md), [`docs/DOCS_INDEX.md`](DOCS_INDEX.md).
-
-## AI Onboarding Checklist
-
-For a new task:
-
-1. Confirm CWD, branch, and `git status --short --branch`.
-2. Read the user's task contract and protected/forbidden scope.
-3. Read `AGENTS.md`, `README.md`, and this manual.
-4. Run read-only discovery with `rg`, `rg --files`, source files, tests, and scripts. Do not edit during discovery.
-5. Classify the task as docs, backend, frontend, API/schema, provider, auth, portfolio, backtest, workflow, or review.
-6. If the task touches a protected domain, stop unless explicit scope and validation are present.
-7. Make the smallest relevant change; avoid new docs, indexes, archive lanes, or parallel implementations.
-8. Run the focused validation that proves the touched area.
-9. Inspect diff/status, secret scan when required, and link/Markdown sanity for docs work.
-10. If the prompt requires rebase, fetch/rebase and rerun focused validation before final report or commit.
-
-For docs tasks, the default answer is to update this manual/generator and delete stale Markdown after durable knowledge is absorbed.
-
-Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md), [`docs/DOCS_INDEX.md`](DOCS_INDEX.md).
-
-## Source Map
-
-This map is generated from the hard-collapse source set. The manual contains absorbed durable knowledge from retired docs, but only these canonical files remain source-tracked.
-
-| Manual section | Tracked sources | Update trigger | Validation |
+| Surface | Product purpose | Primary authority | Readiness boundary |
 | --- | --- | --- | --- |
-| Project Identity And Product Purpose | `README.md`<br>`AGENTS.md` | Product positioning, target audience, or no-advice posture changes. | Docs-only validation plus no-advice grep when user-visible wording changes. |
-| Architecture Overview | `AGENTS.md`<br>`README.md` | Runtime entrypoints, module ownership, public contracts, or high-risk boundary rules change. | Run the focused gate for the touched module plus `python scripts/check_ai_assets.py` for AI-governance edits. |
-| Frontend Surfaces | `README.md`<br>`AGENTS.md` | Route map, page ownership, consumer copy, route IA, or visual system changes. | Frontend tests/lint/build plus browser or screenshot evidence when UI source changes. |
-| Backend API And Service Structure | `AGENTS.md`<br>`README.md` | API families, service boundaries, schema contracts, report payloads, or validation routing changes. | Backend gate or closest pytest/py_compile evidence; wider gates for protected/shared contracts. |
-| Data Providers And Data Reality Boundaries | `AGENTS.md`<br>`README.md` | Provider routing, source authority, data readiness, freshness, lineage, or professional-roadmap changes. | Provider/cache/freshness tests, no-live-call proof when relevant, and raw-provider leakage scans. |
-| Market, Options, Macro, Liquidity, Backtest, Scenario, And Portfolio Domains | `AGENTS.md`<br>`README.md` | Any domain readiness, public copy, protected math/accounting, options authority, or macro/liquidity source change. | Domain-focused tests plus no-advice and leakage checks; never use unrelated green tests as proof. |
-| Professional Analytics Roadmap And Readiness | `README.md`<br>`AGENTS.md` | Professional data roadmap, readiness labels, or evidence-harness expectations change. | Docs/generator validation for handbook changes; domain validation for implementation changes. |
-| Production Readiness Documentation Authority | `AGENTS.md`<br>`README.md`<br>`docs/DOCS_INDEX.md` | Production readiness docs authority, public deployment env flag classifications, or launch evidence policy changes. | Production config readiness tests, manual generator freshness, AI asset check, and link/stale-path scans. |
-| Protected Domains And Safety Rules | `AGENTS.md` | Any protected boundary or safety policy changes. | Focused tests for the exact protected semantic plus diff/status/secret/no-advice checks before reporting completion. |
-| No-Advice Policy | `AGENTS.md` | User-facing research copy, generated reports, product policy, options/backtest/portfolio wording, or no-advice guards change. | Focused grep/classification plus relevant page/report tests. |
-| Validation Matrix | `AGENTS.md`<br>`README.md` | Validation commands, CI gates, protected test expectations, or docs/generator workflow changes. | Run the validation relevant to this manual/generator when edited. |
-| Codex Workflow And Landing Changes | `AGENTS.md`<br>`docs/DOCS_INDEX.md` | Task modes, git policy, final-report requirements, or AI workflow rules change. | Docs/generator check and `python scripts/check_ai_assets.py` when governance assets change. |
-| Current Canonical File Map | `README.md`<br>`AGENTS.md`<br>`docs/DOCS_INDEX.md` | Canonical docs set, retained Markdown policy, or AI asset governance changes. | Inventory before/after counts, link sanity, generator `--check`, and `python scripts/check_ai_assets.py`. |
-| Compressed Project History | `README.md`<br>`docs/DOCS_INDEX.md` | Major project direction, docs-retention policy, or historical context changes. | Docs-only validation and inventory count check. |
-| AI Onboarding Checklist | `AGENTS.md`<br>`README.md`<br>`docs/DOCS_INDEX.md` | Onboarding order, docs model, or task execution policy changes. | Generator check plus AI asset check. |
+| Home | Bounded first read and research starting point | existing home read paths and `HomePage` family | Guest/auth, quote, market, and chart states remain honest. |
+| Market Overview | Regime, breadth, official risk, macro first read | market-overview endpoint/service and consumer page | Partial until official risk, quote authority, and target-environment evidence are proven. |
+| Scanner | Candidate discovery and watchlist handoff | scanner endpoint/service and `UserScannerPage` | Universe, history, quote, freshness, turnover, and packet readiness fail closed. |
+| Research Radar | Research-priority queue and explanation | existing research/radar owners | Candidate is observation priority, not recommendation. |
+| Watchlist | Recurring research-task ledger | watchlist endpoint/services and page | Row packets may be partial; owner and symbol identity remain authoritative. |
+| Stock Research / Structure | Symbol packet, chart, evidence, structure observation | stock endpoints/services and stock pages | No invented quote, history, fundamentals, event, filing, peer, or catalyst evidence. |
+| Liquidity / Rotation | Market pressure, flow, and rotation context | owned market/liquidity services and pages | Proxy/delayed rows remain capped unless official authority exists. |
+| Options Lab | Read-only options research console | options endpoint/service and page | Observation-only until entitlement, redisplay, chain, Greeks, IV, OI, volume, and methodology are proven. |
+| Scenario Lab | Bounded shock comparison | scenario engine and page | Request-supplied, fallback, sample, static, proxy, or stale baseline is observation-only. |
+| Backtest / Compare | Deterministic rule validation and stored readback | backtest endpoint/engine/service and pages | No optimizer, winner, allocation, or fake performance semantics. |
+| Portfolio | Accounts, holdings, cash, FX, ledger, risk, attribution | portfolio endpoint/service and page | Accounting authority is protected; quote/FX lineage and owner isolation remain explicit. |
+| Settings | User-owned configuration | auth/settings API and pages | Saved secrets do not enter DOM; unchanged secret fields are omitted. |
+| Admin/Ops | Role-gated diagnostics and controls | admin endpoints/services and pages | Capability gates fail closed; raw secrets/provider payloads stay redacted. |
+| Report Preview | Bounded research report and export | report/render owners and preview page | Observation time, generated time, provenance, unavailable, and no-advice remain distinct. |
 
-## JSON Manifest
+Frontend posture: dense but legible, route-first, evidence-first, calm, and consumer-safe. Prefer tables, rows, rails, drawers, disclosures, and dominant analytical surfaces over generic card sprawl.
 
-The machine-readable manifest is generated at `docs/AI_PROJECT_MANUAL_SOURCES.json`. It records source paths, source hashes, generator metadata, section provenance, and Markdown discovery statistics.
+See `DESIGN.md` for information architecture, visual system, page contracts, responsive behavior, and browser-validation expectations.
 
-Current discovery summary:
+---
 
-- Markdown discovered after pruned directory rules, excluding this generated manual: 19
-- Candidate Markdown after hard-collapse policy: 3
-- Curated sources included in this manual: 3
+## Backend API and service structure
 
-Exclusion policy:
+- API routers remain thin.
+- Services own domain semantics.
+- Repositories own persistence boundaries.
+- Schemas/DTOs remain explicit.
+- Provider adapters remain behind provider/runtime boundaries.
+- Public projections redact provider, security, credential, and admin internals.
 
-- Keep the manual source set intentionally tiny: AGENTS.md, README.md, and docs/DOCS_INDEX.md.
-- Do not rediscover archive lanes, task reports, stale audits, old plans, or one-off acceptance snapshots as manual sources.
-- Keep .github and .claude Markdown files as governance/workflow mirrors when required by scripts/check_ai_assets.py, but do not treat them as handbook sources.
-- Keep issue and PR templates as GitHub workflow assets, not project handbook chapters.
-- Exclude generated outputs, local evidence, fixture READMEs, language duplicates, broad legacy guides, and dependency/build/cache folders.
-- When durable knowledge is needed, merge it into this deterministic generator/manual instead of adding another index or archive file.
+FastAPI endpoints must not embed scanner ranking math, portfolio accounting, provider fallback order, auth policy, or report-rendering internals.
+
+Prefer additive response changes. Deleted or renamed fields require client compatibility review and versioning where appropriate.
+
+For Python changes, prefer the canonical gate. At minimum run syntax/compile checks and closest deterministic tests; protected semantic changes require focused and canonical evidence.
+
+---
+
+## Data providers and data-reality boundaries
+
+Provider runtime owns:
+
+- provider order and fallback;
+- retry, circuit, timeout, and quota posture;
+- cache and freshness;
+- source authority and display rights;
+- optional enrichment budgets;
+- sanitized diagnostics;
+- local-first and fail-closed behavior.
+
+Do not reorder providers, deepen live fallback, add uncontrolled fanout, activate providers from passive UI, or expose raw provider payloads without explicit scope.
+
+```text
+fallback != live
+cached != fresh
+proxy != official
+request supplied != authoritative
+fixture != production
+synthetic != observed
+missing != zero
+rejected != neutral
+```
+
+| Data family | Current posture | Operational boundary |
+| --- | --- | --- |
+| Official risk and volatility | Partial | VIX/rates/Fed-liquidity/credit rows require source authority before score-grade claims. |
+| Quote spine | Partial | US/CN/HK quote snapshots require lineage, freshness, redisplay/display authority. |
+| Index/ETF membership | Partial | Rotation claims require official membership/weight proof. |
+| Scanner universe/history | Partial | Universe, local history, quote, turnover, freshness, and packet readiness gate candidate claims. |
+| Fundamentals/filings/events | Partial | Missing ratios, filings, catalysts, events, and peers remain missing. |
+| Options | Blocked or observation-only | No production-grade claim without entitlement, redisplay, chain, Greek/IV/OI/volume and methodology proof. |
+| Scenario baseline | Partial | Durable baseline snapshots and target-environment evidence gate authority. |
+| Backtest lineage | Research-useful but partial | Adjustment, calendar, PIT universe, reproducibility, and stored-result authority gate professional claims. |
+| Factor research | Diagnostic-only | No PIT membership/long-short return contract; helpers are not ranking truth. |
+| Portfolio quote/FX | Partial | Valuation credibility depends on source, timestamp, quote, FX, account, and ledger provenance. |
+| Historical market data | Foundation available, integration incremental | Canonical bars, quality, persistence, coverage, freshness, and provenance must be preserved per the historical contract. |
+
+---
+
+## Domain boundaries
+
+### Market, liquidity, and rotation
+
+May present bounded context but must not promote proxy breadth, partial quotes, or delayed rows into official score-grade claims.
+
+### Scanner
+
+Candidate is a research-priority signal, not advice. Universe, quote, history, freshness, turnover, and packet readiness remain backend-owned and fail closed.
+
+### Watchlist and Stock Research
+
+Watchlist is a research ledger. Stock pages explain identity, evidence, limitations, and next checks. Missing data remains missing and consumer withholding is respected.
+
+### Options
+
+Read-only research. No order flow, strategy ranking, or execution posture. Fixture, dry-run, disabled, or unauthorized provider state remains observation-only.
+
+### Scenario
+
+Compares bounded shocks. Static, request-supplied, sample, fallback, proxy, or stale baseline cannot support authoritative allocation or action claims.
+
+### Backtest
+
+Owns deterministic rule execution, stored readback, export, and comparison. Do not change fills, costs, metrics, benchmark, calendar, universe, result ownership, or winner semantics without explicit scope and tests.
+
+### Portfolio
+
+Owns accounts, cash, holdings, transactions, P&L, FX/native currency, cost basis, broker sync/import overlays, owner isolation, ledger mutation, and read projections. UI does not recalculate accounting authority or imply broker execution.
+
+### Historical market data
+
+Canonical foundation:
+
+```text
+provider observation
+→ normalization
+→ canonical bar
+→ quality outcome
+→ repository
+→ foundation reads
+→ product seam
+```
+
+See `docs/contracts/historical_market_data_foundation.md`.
+
+---
+
+## Professional analytics roadmap and readiness
+
+The roadmap is an ordered readiness map, not a promise that each family is live:
+
+1. official volatility and macro/rates/Fed-liquidity authority;
+2. authorized US/CN/HK quote spine;
+3. index/ETF quotes and official membership/weights;
+4. Scanner universe/history/turnover/quote readiness;
+5. Watchlist and single-stock evidence-packet completeness;
+6. Portfolio quote and FX lineage;
+7. Options entitlement, redisplay, and methodology;
+8. durable Scenario baseline snapshots;
+9. Backtest dataset lineage, adjustment, calendar, PIT universe, reproducibility;
+10. factor research PIT membership and return contracts.
+
+Every step must expose blocked, partial, missing, unauthorized, stale, delayed, proxy, degraded, or observation-only states rather than hiding them behind success copy.
+
+---
+
+## Production-readiness documentation authority
+
+Canonical documentation owner: this generated manual and its generator.
+
+Historical broad deployment/checklist Markdown paths must not be recreated as compatibility shims unless the current repository explicitly restores them as canonical sources.
+
+Public multi-user production posture remains **NO-GO** until every required repository-owned gate has accepted sanitized target-environment evidence and manual release review.
+
+| Concern | Repository-owned authority | Evidence boundary |
+| --- | --- | --- |
+| Production marker | explicit production config contract | Sanitized state; no raw `.env`. |
+| Authentication | production requires enabled auth | Auth-disabled public ingress is NO-GO. |
+| Fail-closed posture | startup/readiness validation | Missing launch config, unsafe CORS/CSRF, or unsupported scope fails closed. |
+| CORS/CSRF | explicit origins and production posture | Prove intended HTTPS behavior without exposing secrets. |
+| Secret/config handling | redaction and config validators | Presence/state only; no token, cookie, DSN, webhook, raw provider payload, or stack trace. |
+| Docs/OpenAPI exposure | production runtime contract | Public exposure with disabled auth is NO-GO. |
+| Persistence | repository-owned DB readiness and restore evidence | Do not claim external infrastructure ownership. |
+| Runtime verification | canonical local runtime/UAT harness | Local evidence is not launch approval. |
+| Health/readiness | existing endpoints and validators | Missing target evidence remains blocked/partial. |
+| Rollback | last-good artifact, DB decision, health and isolation smoke | Documentation alone does not approve release or rollback. |
+
+---
+
+## Protected domains and safety rules
+
+`AGENTS.md` is authoritative. High-level protected domains include:
+
+- provider order, fallback, cache, activation, authority, quota, credentials, external network;
+- Scanner universe, scoring, ranking, threshold, candidate generation;
+- Backtest fills, costs, metrics, benchmark, universe, execution, stored-result semantics;
+- Portfolio accounting, owner isolation, FX, cost basis, broker sync/import, ledger;
+- auth/RBAC/security/session/cookie/CSRF/CORS/MFA/admin;
+- schema, migrations, root config, dependencies, lockfiles, CI, release;
+- broker/order execution and advice language.
+
+Passive page load must not activate providers, execute Scanner/Backtest, mutate Portfolio/Watchlist/Auth/account state, or deliver external notifications.
+
+Never use destructive Git or cleanup commands as automated recovery.
+
+---
+
+## No-advice policy
+
+Consumer language must remain analytical and research-oriented.
+
+Do not generate or imply:
+
+```text
+buy / sell / hold
+target price
+stop loss
+add / reduce position
+allocation or cash-weight advice
+order execution
+```
+
+Permitted bounded language includes current observation, evidence strength, risk sensitivity, invalidation conditions, freshness, limitations, and next research checks.
+
+No-advice is a semantic contract, not merely a disclaimer.
+
+---
+
+## Validation matrix
+
+Use Validation Economy:
+
+```text
+focused reproduction
+→ owned tests
+→ impacted shared validation
+→ typecheck / design / diff
+→ broad validation when a shared boundary changed
+```
+
+| Change | Minimum evidence | Broad gate trigger |
+| --- | --- | --- |
+| Python bounded repair | closest tests, compile/syntax, diff | shared service/schema/runtime behavior |
+| Provider/truth | focused provider/runtime tests, redaction, fail-closed | canonical backend gate |
+| Frontend page | owned tests, direct route, refresh/history, target viewport, console/pageerror, read-only boundary | shared primitive/state mapper or milestone |
+| App/router/auth | focused auth/route tests, browser journey, typecheck/build | full frontend suite |
+| Dependency/lockfile | audit before/after, reachability, npm ci, full tests, lint/typecheck/design/build | always |
+| Runtime/smoke harness | success/failure, args, artifacts, cleanup, port/process ownership, platform compatibility | full relevant runtime gate |
+| Backtest/Portfolio | deterministic focused contract tests | canonical domain/backend gate when semantics change |
+| Docs generator | generated output, `--check`, AI asset check, links/diff | documentation governance task |
+
+Baseline-red failures must be classified as product regression, test debt/race, environment, orchestration, or unrelated baseline. Do not repair unrelated failures inside a bounded task.
+
+---
+
+## Codex workflow and landing changes
+
+Default task lifecycle:
+
+```text
+inspect
+→ classify
+→ execute
+→ validate
+→ report
+→ centralized integration gate when authorized
+```
+
+Task workers:
+
+- use the assigned worktree and ownership;
+- do not create nested worktrees;
+- do not use subagents unless explicitly authorized;
+- do not push unless explicitly authorized;
+- normally produce one local task commit;
+- report HEAD, origin/main, ahead/behind, tree, changed files, validation, blocker, and verdict.
+
+Central landing gate should:
+
+1. fetch and verify remote main;
+2. rebase the task;
+3. require exactly the authorized commit shape;
+4. verify subject and changed-file ownership;
+5. run focused and required broad validation;
+6. run lint/typecheck/design/build/diff as applicable;
+7. merge without destructive rollback;
+8. push only when authorized;
+9. verify local main equals origin/main.
+
+A failed gate stops the landing. Do not hard-land around required red validation.
+
+Milestone browser/UAT should run after substantial independent workstreams converge, not after every tiny task and not only at the very end.
+
+---
+
+## Current canonical file map
+
+| File | Role |
+| --- | --- |
+| `README.md` | short human entrypoint and run commands |
+| `AGENTS.md` | AI hard rules, truth invariants, protected domains, workflow and delivery gates |
+| `DESIGN.md` | consumer frontend product/design/page contract |
+| `docs/DOCS_INDEX.md` | tiny canonical document router |
+| `docs/AI_PROJECT_MANUAL.md` | generated cross-domain handbook |
+| `docs/AI_PROJECT_MANUAL_SOURCES.json` | machine-readable source manifest |
+| `docs/contracts/historical_market_data_foundation.md` | historical market-data living contract |
+| `docs/runbooks/historical_ohlcv_seed_runbook.md` | local OHLCV seed operator procedure |
+| `docs/design/reference/wolfystock-impeccable-polish-final.html` | visual and interaction reference only |
+| `scripts/build_ai_project_manual.py` | manual generator authority |
+| `scripts/check_ai_assets.py` | AI governance asset validation |
+
+Do not recreate broad archive, audits index, per-task report folders, copied terminal logs, or deprecated documentation shims.
+
+---
+
+## AI onboarding checklist
+
+1. Read the current task and `AGENTS.md`.
+2. Confirm repository, worktree, branch, `origin/main`, and `git status`.
+3. Read `README.md` and task-routed manual sections.
+4. For frontend work, read relevant `DESIGN.md` sections and inspect real route/component ownership.
+5. Identify protected domains, write ownership, read-only scope, and validation.
+6. Inspect the smallest relevant source and tests.
+7. Preserve truth, freshness, provenance, fail-closed, mutation, and no-advice boundaries.
+8. Execute and validate in one continuous run.
+9. Inspect exact diff/status and secret/private-path exposure.
+10. Report evidence, changed files, risks, Git state, and a precise verdict.
+
+---
+
+## Source map
+
+This generated handbook should be reproducible from a small canonical set rather than copied from broad historical reports.
+
+Recommended generator inputs:
+
+```text
+README.md
+AGENTS.md
+DESIGN.md
+docs/DOCS_INDEX.md
+docs/contracts/historical_market_data_foundation.md
+docs/runbooks/historical_ohlcv_seed_runbook.md
+selected repository-owned readiness metadata in scripts/build_ai_project_manual.py
+```
+
+The source manifest should record path, role, existence, digest, and generation time without embedding secrets or local absolute paths.
+
+---
+
+## JSON manifest
+
+`docs/AI_PROJECT_MANUAL_SOURCES.json` is machine-readable generation evidence.
+
+It should include:
+
+- generator version;
+- generated file path;
+- canonical source paths;
+- source role/classification;
+- content digest;
+- missing/deprecated-path state where relevant.
+
+It must not include raw environment values, credentials, private URLs, personal paths, provider payloads, or target-environment secrets.

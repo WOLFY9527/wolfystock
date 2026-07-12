@@ -1,50 +1,66 @@
-# WolfyStock Design System & Frontend Contract
+# WolfyStock Design System & Consumer Frontend Contract
 
-Version: 1.1
-Status: Canonical Consumer Frontend Design Contract
+Version: 1.2
+Status: Canonical consumer frontend contract
+Owner: Consumer Frontend
 Audience: Codex, frontend engineers, product engineers, reviewers
 Visual reference: `docs/design/reference/wolfystock-impeccable-polish-final.html`
 
 ---
 
-## 0. How to Use This Document
+## 0. How to use this document
 
-`DESIGN.md` is the canonical design and implementation contract for the WolfyStock consumer frontend.
+This document defines the durable product, information-architecture, visual, interaction, responsive, accessibility, and page-composition contract for WolfyStock consumer frontend work.
 
-It defines:
+It is not:
 
-- product positioning and user journey;
-- information architecture;
-- visual language and design tokens;
-- layout, density, typography, tables, charts, motion, accessibility, and responsive behavior;
-- page responsibilities;
-- consumer-facing data-state language;
-- frontend architecture boundaries;
-- migration constraints for replacing the current consumer UI.
+- an authorization to modify protected backend semantics;
+- a replacement for current code and tests;
+- a source of runtime market data;
+- a standalone HTML implementation plan;
+- a requirement to rebuild every route in one task.
 
-The HTML prototype is a **visual and interaction reference**, not production code and not a source of runtime truth.
+### 0.1 Precedence
 
-When implementing or reviewing frontend work, use this precedence:
+Use this order when implementing or reviewing frontend work:
 
-1. repository safety and engineering rules in `AGENTS.md`;
-2. production behavior and protected domain contracts in the existing application;
-3. this `DESIGN.md`;
-4. the visual composition, proportions, density, and interaction intent of `docs/design/reference/wolfystock-impeccable-polish-final.html`;
-5. task-specific acceptance criteria.
+1. current task scope and explicit acceptance criteria;
+2. repository safety, truth, protected-domain, and delivery rules in `AGENTS.md`;
+3. validated production behavior, contracts, code, and tests;
+4. this `DESIGN.md`;
+5. the visual composition and interaction intent of the HTML reference.
 
-Where the prototype conflicts with real routes, auth, RBAC, localization, API contracts, Product Read Model semantics, data freshness, no-advice rules, or production data behavior, **the real WolfyStock contract wins**.
+Task criteria may authorize a protected-domain change only when ownership and validation are explicit. They may not silently weaken security, data truth, fail-closed, source authority, or no-advice contracts.
 
-Codex must not copy the prototype as a standalone HTML application.
+Where the visual reference conflicts with real routes, localization, auth/RBAC, Product Read Model authority, API ownership, freshness, accessibility, or production data behavior, the real WolfyStock contract wins.
 
-The production implementation must remain inside the existing WolfyStock frontend stack and reuse the current router, authentication, authorization, API clients, data contracts, tests, and domain ownership.
+### 0.2 Normative status labels
+
+Sections use these meanings:
+
+| Label | Meaning |
+| --- | --- |
+| `CURRENT_INVARIANT` | Must remain true in the current product. |
+| `MIGRATION_TARGET` | Direction for pages being migrated; not authorization for unrelated rewrites. |
+| `VISUAL_REFERENCE` | Visual relationship or composition guidance, not runtime truth. |
+| `CONDITIONAL` | Applies only when the route or capability exists and owns the relevant workflow. |
+| `DEFERRED` | A future direction that must not be presented as implemented. |
+
+### 0.3 Task-routed reading
+
+Do not read every page contract for a bounded task.
+
+- Shell/navigation: sections 1–8, 10, 13–15.
+- Consumer page composition: sections 1–6, 9–12, the relevant page contract, and section 15.
+- Shared components: sections 3, 5–12, 14–15.
+- Data-state work: sections 2–3, 8, 12, 15.
+- Migration cleanup: sections 3, 13–15.
 
 ---
 
-# 1. Canonical Product Direction
+# 1. Product direction — `CURRENT_INVARIANT`
 
-WolfyStock is an **Eastern paper research terminal**:
-
-> A high-density financial research workbench for advanced retail investors and research-oriented users, using restrained paper-like visual language, professional data structure, and explainable research workflows to help users move from market context to evidence-backed observation.
+WolfyStock is a high-density financial research workbench with a restrained Eastern paper visual language.
 
 The core journey is:
 
@@ -54,17 +70,26 @@ The core journey is:
 → 看个股
 → 加入持续观察
 → 用扫描 / 回测 / 情景分析做验证
+→ 检视真实持仓暴露
 ```
+
+The product optimizes for:
+
+- organizing evidence;
+- understanding market context;
+- prioritizing research;
+- validating hypotheses;
+- tracking uncertainty, freshness, provenance, and risk boundaries.
 
 WolfyStock is not:
 
-- a brokerage trading terminal;
+- a broker or order-entry terminal;
 - a buy/sell signal service;
-- an investment-advice app;
+- an investment-advice product;
 - a generic SaaS dashboard;
-- an admin diagnostics wall;
+- an admin diagnostic wall on consumer routes;
 - a marketing landing page;
-- a black neon exchange interface;
+- a black-neon exchange interface;
 - a collection of AI-generated cards.
 
 It should feel like:
@@ -72,92 +97,70 @@ It should feel like:
 - an interactive research morning note;
 - a dense analyst workbench;
 - a calm financial research terminal;
-- a product where each conclusion can be traced back to evidence;
-- a product where data limitations are honest but do not dominate the experience.
+- a product where conclusions trace back to evidence;
+- a product where data limitations are honest but do not dominate the page.
 
 ---
 
-# 2. Product Positioning
+# 2. Non-negotiable product rules — `CURRENT_INVARIANT`
 
-## 2.1 Target users
+## 2.1 Conclusion first
 
-Primary users:
-
-- advanced retail investors;
-- research-oriented traders;
-- long-horizon investors who track symbols, sectors, factors, and hypotheses;
-- users who understand charts and market structure but do not want backend implementation details.
-
-Users need to answer quickly:
-
-- What is the current market environment?
-- Which candidates deserve further research?
-- Why did a candidate enter the research queue?
-- How strong is the evidence?
-- What is stale, delayed, partial, or unavailable?
-- What risk or evidence gap matters most?
-- What should I inspect next?
-
-## 2.2 Product goal
-
-WolfyStock does not optimize for “recommendation delivery”.
-
-It optimizes for:
-
-> organizing evidence, understanding context, prioritizing research, and validating hypotheses.
-
-Core principles:
-
-1. Understand market context before interpreting individual stocks.
-2. A candidate is not a recommendation; it is a research-priority signal based on available evidence.
-3. A stock page must explain why the symbol matters and where confidence is limited.
-4. Watchlist is a research task ledger, not a bookmark list.
-5. Scanner, Backtest, and Scenario Lab are validation tools.
-6. Conclusions must return to evidence, freshness, risk, and next observation steps.
-7. Honest data limitations must not turn the consumer experience into a diagnostics interface.
-
----
-
-# 3. Non-Negotiable Product Rules
-
-## 3.1 Conclusion first
-
-Core consumer pages should follow this order:
+Core consumer pages should answer in this order:
 
 ```text
 1. 当前状态 / 当前观察
 2. 为什么
 3. 数据是否足够可靠
-4. 下一步检查什么
-5. 详细证据与限制
+4. 什么可能推翻当前观察
+5. 下一步检查什么
+6. 详细证据与限制
 ```
 
 Do not lead with:
 
 - raw tables;
 - backend health;
-- provider state;
-- contract version;
+- provider internals;
+- contract versions;
 - missing-field walls;
 - technical diagnostics;
-- long disclaimers.
+- repeated disclaimers.
 
-## 3.2 Evidence before confidence theater
+## 2.2 Evidence before confidence theater
 
-Confidence, score, radar shape, and state labels are meaningful only when grounded in real product data.
+Do not invent or cosmetically complete:
 
-Do not:
+- scores;
+- confidence;
+- candidates;
+- factors;
+- timestamps;
+- chart series;
+- conclusions;
+- availability;
+- freshness;
+- provenance.
 
-- invent a score for visual completeness;
-- render fake candidates;
-- fabricate timestamps;
-- mark stale data as current;
-- substitute sample fixtures into production runtime;
-- display static prototype values as live product data.
+A visually complete page is invalid if its evidence is fabricated or overstated.
 
-## 3.3 No-advice boundary
+## 2.3 Truth semantics
 
-Consumer UI must not use action language that reads as investment advice.
+```text
+unavailable != zero
+missing != zero
+missing != neutral
+stale != fresh
+delayed != live
+proxy != official
+unknown != available
+client receipt time != evidence asOf
+render time != observation time
+consumer eligible != score eligible
+research evidence != trading advice
+```
+
+## 2.4 No-advice boundary
 
 Forbidden consumer wording includes:
 
@@ -175,7 +178,7 @@ Forbidden consumer wording includes:
 建议降低仓位
 ```
 
-Preferred research-language patterns:
+Preferred patterns:
 
 ```text
 当前观察
@@ -194,11 +197,9 @@ A compact page-level statement may appear once:
 
 Do not repeat the same disclaimer in every card.
 
-## 3.4 Consumer vs. Admin boundary
+## 2.5 Consumer and Admin boundary
 
-Consumer surfaces must not expose raw internal diagnostics.
-
-Examples of forbidden consumer language:
+Consumer surfaces must not expose raw internal language such as:
 
 ```text
 provider_missing
@@ -209,14 +210,13 @@ providerCallsEnabled
 contractVersion
 failClosed
 readiness_blocked
-internal enum names
 cache internals
 raw lineage JSON
 schema versions
 provider routing decisions
 ```
 
-Map these to bounded consumer language such as:
+Map internal states to bounded consumer language, for example:
 
 ```text
 实时
@@ -232,82 +232,70 @@ Map these to bounded consumer language such as:
 数据待补
 ```
 
-Admin and operator surfaces may retain deeper diagnostics when authorized.
+Authorized Admin/operator surfaces may expose deeper diagnostics, but must still redact secrets and unsafe payloads.
 
-## 3.5 Show / compact / hide rule
+## 2.6 Show / compact / hide
 
 For optional evidence modules:
 
 ```text
-3+ meaningful real fields → show full module
+3+ meaningful real fields → full module
 1–2 meaningful real fields → compact summary
-0 meaningful real fields → hide or collapse to a bounded empty state
+0 meaningful real fields → hide or bounded empty state
 ```
 
-Do not render:
-
-- giant empty tables;
-- dozens of “待补” cells;
-- placeholder dashboards;
-- fake numbers to preserve layout symmetry.
+Do not render giant empty tables, repeated “待补” cells, placeholder dashboards, or fake values for symmetry.
 
 ---
 
-# 4. Production Frontend Architecture Contract
+# 3. Frontend architecture contract — `CURRENT_INVARIANT`
 
-## 4.1 Keep the current application stack
+## 3.1 Keep the existing stack
 
-The visual prototype uses native HTML/CSS/JavaScript. That is a reference implementation only.
+Production frontend remains inside the current React/Vite application and existing ownership boundaries.
 
-The production WolfyStock frontend must continue using the existing repository application stack, including the current React/Vite architecture and existing frontend ownership boundaries.
+Do not create:
 
-Do not replace the production app with:
+- standalone replacement HTML pages;
+- a second router;
+- a second auth system;
+- a second state mapper;
+- a second chart framework;
+- a competing UI framework;
+- a parallel data authority;
+- local hardcoded runtime market arrays.
 
-- standalone `.html` pages;
-- prototype `history.pushState` routing;
-- local hardcoded stock arrays;
-- a parallel frontend app;
-- a new framework;
-- a new router;
-- a new auth system.
+The HTML reference is a visual north star, not production code.
 
-Do not add a new charting, state-management, animation, or UI framework merely because the prototype uses a visual effect that can already be implemented with existing project capabilities.
+## 3.2 Preserve validated contracts
 
-## 4.2 Preserve validated production contracts
+Frontend changes must preserve:
 
-A frontend redesign must preserve:
-
-- canonical routes and localized routes;
-- deep-link behavior;
-- browser back/forward behavior;
-- refresh behavior;
-- session restoration;
-- logout semantics;
-- auth gates;
-- RBAC;
+- canonical and localized routes;
+- deep links, refresh, and browser history;
+- session restoration and logout semantics;
+- auth gates and RBAC;
 - admin-only visibility;
-- safe redirect handling;
-- current API ownership;
+- safe redirects;
+- API ownership;
 - Product Read Model authority;
-- consumer presentation boundary;
-- Near-Live coverage and freshness semantics;
+- freshness and provenance semantics;
 - Watchlist symbol identity;
-- Portfolio preview/confirm semantics;
-- Backtest readiness vs. execution distinction;
+- Portfolio accounting and preview/confirm boundaries;
+- Backtest readiness versus execution/result distinction;
 - fail-closed behavior;
-- UAT no-live-provider isolation.
+- UAT provider isolation;
+- no-advice semantics.
 
-Visual migration must not weaken or bypass these contracts.
+## 3.3 Render pipeline
 
-## 4.3 Required render pipeline
-
-Production consumer pages should follow:
+Preferred flow:
 
 ```text
 API DTO
-→ domain/read-model interpretation
-→ Consumer View Model
-→ consumer components
+→ domain / read-model interpretation
+→ existing consumer presentation mapping
+→ consumer component
 → page composition
 ```
 
@@ -315,81 +303,34 @@ Avoid:
 
 ```text
 API DTO
-→ page directly reads raw enums and backend flags
+→ each page independently interprets backend enums and readiness
 ```
 
-Pages must not independently reinterpret readiness.
+Extend existing presentation ownership instead of creating page-local parallel mappings.
 
-The Product Read Model remains authoritative where already integrated.
+## 3.4 Passive-load boundary
 
-## 4.4 Consumer View Model principle
+Passive load must not trigger:
 
-A consumer-facing view model should provide bounded presentation data such as:
-
-```ts
-type ConsumerDataState = {
-  label:
-    | '实时'
-    | '延迟'
-    | '部分延迟'
-    | '历史数据可用'
-    | '历史样本不足'
-    | '数据源降级'
-    | '暂无数据'
-    | '代理数据'
-  tone: 'positive' | 'neutral' | 'warning' | 'danger' | 'muted'
-  asOf?: string
-  detail?: string
-}
+```text
+provider activation
+scanner execution
+backtest execution
+portfolio mutation
+watchlist mutation
+auth/account mutation
+external notification delivery
 ```
 
-This is an example shape, not a requirement to create a duplicate domain model if the repository already has an equivalent consumer boundary.
-
-Prefer extending existing presentation ownership over adding parallel mappings.
-
-## 4.5 Prototype data is not production data
-
-All prices, symbols, candidate counts, metrics, scores, timestamps, chart paths, and conclusions inside the HTML prototype are illustrative.
-
-They must never be copied as:
-
-- production defaults;
-- runtime fallback values;
-- sample-only states displayed as current;
-- hidden fixture data in user-facing routes.
-
-The prototype defines **composition and visual hierarchy**, not factual content.
+One user action should cause at most one intended state transition.
 
 ---
 
-# 5. Information Architecture
+# 4. Information architecture — `CURRENT_INVARIANT` / `MIGRATION_TARGET`
 
-## 5.1 Primary consumer journey
+## 4.1 Primary hierarchy
 
-The product journey remains:
-
-```text
-看市场
-→ 找候选
-→ 看个股
-→ 加入持续观察
-→ 用扫描 / 回测 / 情景分析做验证
-→ 检视真实持仓暴露
-```
-
-The top navigation must express that journey through a coherent hierarchy, but it must **not** mechanically copy the reference prototype's literal labels or flatten every route into a first-level item.
-
-Navigation hierarchy is determined by:
-
-1. user task and mental model;
-2. frequency and continuity of use;
-3. whether the surface owns an independent workflow;
-4. whether several routes form one coherent task domain;
-5. route discoverability;
-6. role and authorization boundary;
-7. responsive constraints.
-
-The current recommended production hierarchy is:
+Recommended consumer hierarchy:
 
 ```text
 首页
@@ -398,7 +339,7 @@ The current recommended production hierarchy is:
   市场总览
   流动性监测
   板块轮动
-  其他真实存在且属于市场环境判断的模块
+  other real market-context surfaces
 
 研究 ▾
   研究雷达
@@ -410,27 +351,18 @@ The current recommended production hierarchy is:
 验证 ▾
   回测
   情景实验室
-  其他真实存在且属于研究假设验证的工具
+  other real hypothesis-validation tools
 
 持仓
 ```
 
-Admin/operator entry points should remain role-gated and visually separated, preferably through the authorized account/admin entry or the dedicated admin shell rather than ordinary consumer task groups.
+Admin/operator entry points remain role-gated and visually separated.
 
-This hierarchy is the canonical default for the currently known product domains. Before changing placement, audit the real production route inventory and classify each surface. A documented, evidence-based change is allowed when the product workflow materially evolves.
+This hierarchy is a default, not permission to move routes without auditing the real route inventory and workflow ownership.
 
-Do not:
+## 4.2 Route classification
 
-- copy the prototype navigation literally without checking production ownership;
-- create first-level groups with no discoverable child destinations;
-- hide meaningful product routes merely to reduce navigation density;
-- place routes according to backend package names or implementation ownership;
-- expose admin/operator surfaces to unauthorized consumer roles;
-- create menu entries for nonexistent routes.
-
-## 5.2 Navigation classification
-
-Classify production surfaces before changing the shell:
+Classify surfaces before shell changes:
 
 ```text
 PRIMARY_WORKSPACE
@@ -442,175 +374,75 @@ ACCOUNT_UTILITY
 LEGACY_OR_DUPLICATE_ENTRY
 ```
 
-Interpretation:
-
-- `PRIMARY_WORKSPACE`: high-frequency, persistent workspace with an independent task loop; may remain a first-level destination.
-- `PRIMARY_TASK_DOMAIN`: first-level parent that groups multiple coherent child surfaces.
-- `SECONDARY_DOMAIN_TOOL`: route that belongs under a primary task domain.
-- `CONTEXTUAL_RESEARCH_ENTRY`: reachable from the relevant workflow and not necessarily duplicated in global navigation.
-- `ROLE_GATED_ADMIN_SURFACE`: permission-gated operational surface, separated from ordinary consumer navigation.
-- `ACCOUNT_UTILITY`: locale, theme, account, session, and related utilities.
-- `LEGACY_OR_DUPLICATE_ENTRY`: historical or redundant entry that must be justified before remaining visible.
-
-A grouped first-level item is valid only when its children share a clear user task. Group labels must describe user intent, not implementation structure.
-
-Every meaningful production surface must have at least one discoverable path:
+Every meaningful production surface needs at least one discoverable path:
 
 ```text
 global navigation
-or
-grouped navigation
-or
-clear contextual handoff
+or grouped navigation
+or clear contextual handoff
 ```
 
-No canonical consumer route should become an accidental orphan after shell changes.
+No canonical route may become an accidental orphan.
 
-## 5.3 Route behavior
+## 4.3 Route behavior
 
-Every production page must:
+Every production route must preserve:
 
-- keep current canonical route identity;
-- preserve locale prefixes;
-- support direct address-bar navigation;
-- survive refresh;
-- support back/forward history;
-- preserve auth state correctly;
-- preserve query parameters where contractually meaningful;
-- use safe redirects only.
+- canonical identity and locale prefix;
+- direct address navigation;
+- refresh;
+- browser back/forward;
+- auth/session state;
+- meaningful query parameters;
+- safe redirect behavior;
+- route-aware document title where owned.
 
-Grouped navigation must additionally:
-
-- expose child destinations on pointer and keyboard interaction according to the component contract;
-- allow Escape to close an open menu;
-- maintain visible focus;
-- mark the active child;
-- also communicate active state on the parent group;
-- preserve discoverability at tablet and mobile widths;
-- never require hover as the only way to reach a child route.
-
-## 5.4 Functional placement guidance
-
-Default placement for the currently known product surfaces:
-
-### Market domain
-
-```text
-市场
-├─ 市场总览
-├─ 流动性监测
-└─ 板块轮动
-```
-
-These surfaces answer the common question:
-
-> 当前市场环境是什么？
-
-Additional market-environment routes may join this domain only when their primary responsibility is market context, regime, liquidity, breadth, rotation, macro, or related environmental evidence.
-
-### Research domain
-
-```text
-研究
-├─ 研究雷达
-├─ 个股研究
-└─ 扫描器
-```
-
-Scanner belongs here by default because its primary product role is candidate discovery and research prioritization. Scanner ranking, scoring, candidate selection, and execution semantics remain protected backend/runtime contracts; navigation placement does not change them.
-
-### Continuous research workspace
-
-```text
-观察列表
-```
-
-Watchlist remains a first-level workspace by default because it is a research-task ledger and recurring review surface, not a bookmark utility.
-
-### Validation domain
-
-```text
-验证
-├─ 回测
-└─ 情景实验室
-```
-
-These tools evaluate hypotheses or sensitivity. Readiness must remain distinct from execution or durable result state.
-
-### Portfolio workspace
-
-```text
-持仓
-```
-
-Portfolio may remain first-level because it owns an independent accounting and exposure-review workflow. Navigation changes must not alter accounting truth, ledger semantics, cost basis, P&L, FX, or owner isolation.
-
-## 5.5 Admin and specialized surfaces
-
-Admin surfaces:
-
-- remain visually and navigationally separated from consumer research surfaces;
-- remain permission-gated;
-- may use deeper diagnostic vocabulary;
-- must not appear merely because a user can guess the route;
-- should use the existing role-aware account/admin entry or dedicated admin shell.
-
-Existing specialized surfaces such as Decision Cockpit may remain available through current product routes and contextual navigation. Do not force every specialized route into the global top navigation.
+Grouped navigation must support keyboard interaction, Escape, visible focus, active child state, active parent state, and non-hover access on tablet/mobile.
 
 ---
 
-# 6. Visual Direction
+# 5. Visual direction — `MIGRATION_TARGET` / `VISUAL_REFERENCE`
 
-## 6.1 One-line creative direction
+## 5.1 Creative direction
 
-> WolfyStock is a breathing Eastern financial research paper: soft, restrained, dense, and analytical, using artful but readable data visualization to clarify market structure.
-
-## 6.2 Mood
+> A breathing Eastern financial research paper: restrained, dense, analytical, and readable.
 
 Visual keywords:
 
-- Eastern philosophy;
 - paper research;
 - restrained technology;
 - professional finance;
-- high information density;
 - calm evidence;
 - analytical memo;
-- subtle craftsmanship.
+- subtle craftsmanship;
+- high information density.
 
 Avoid:
 
 - blue-purple fintech gradients;
-- black neon exchange styling;
-- heavy glow effects;
+- black-neon exchange styling;
+- heavy glow;
 - excessive glassmorphism;
 - card walls;
-- AI illustration;
 - emoji icon rows;
 - icon-per-card decoration;
-- marketing hero layouts;
-- generic admin-dashboard styling;
-- decorative metrics without research purpose.
+- marketing heroes;
+- generic admin-dashboard composition;
+- decorative metrics without analytical purpose.
 
----
+## 5.2 Canonical token relationships
 
-# 7. Design Tokens
-
-The following values are the canonical starting point for the new consumer theme.
-
-Implementation may adapt token names to the repository's existing token system, but the visual relationships should remain consistent.
+Token names may adapt to the existing theme system; semantic relationships should remain stable.
 
 ```css
 :root {
   --paper: #F5F0EB;
   --paper-deep: #E9DFD3;
-
   --surface: #FBF8F3;
   --surface-soft: rgba(255, 255, 255, .56);
 
   --ink: #25221D;
   --ink-soft: #3D3831;
-
   --muted: #746B60;
   --muted-2: #9B9184;
 
@@ -623,12 +455,10 @@ Implementation may adapt token names to the repository's existing token system, 
 
   --gold: #D4A574;
   --gold-wash: #EFE0C9;
-
   --blue: #6F8FA1;
 
   --danger: #A75E55;
   --danger-wash: #F0DCD8;
-
   --ok: #5D8663;
   --warn: #AA7A3D;
 
@@ -637,146 +467,43 @@ Implementation may adapt token names to the repository's existing token system, 
 
   --radius: 18px;
   --radius-sm: 12px;
-
   --ease: cubic-bezier(.16, 1, .3, 1);
 }
 ```
 
-## 7.1 Color roles
+Gold is a rare accent for annotations, secondary analytical emphasis, or bounded caution. It is not a large-area background.
 
-- `paper`: application background;
-- `surface`: main research panel;
-- `sage`: brand action, selected state, primary structural accent;
-- `sage-deep`: active navigation and important text;
-- `gold`: rare emphasis;
-- `blue`: secondary/third analytical dimension;
-- `danger`: risk and negative state;
-- `ok`: positive/available state;
-- `warn`: caution and ambiguous state;
-- `muted`: explanatory text;
-- `line`: paper-like separation.
+Do not reuse one color for unrelated meanings. Brand selection, price direction, availability, delay, warning, and unavailable states need distinct semantics.
 
-## 7.2 Gold rule
-
-Gold `#D4A574` is the unique accent color.
-
-Use sparingly for:
-
-- Fig / Plate annotations;
-- key badges;
-- secondary chart curve;
-- important caution or research highlight;
-- limited secondary emphasis.
-
-Do not use gold as a large-area background.
-
-## 7.3 Semantic color separation
-
-Do not reuse one color for unrelated semantics.
-
-Keep distinct visual meanings for:
-
-- brand/selection;
-- price up;
-- price down;
-- data available;
-- stale/delayed;
-- warning;
-- unavailable.
-
-A selected tab and a positive market move should not look semantically identical.
-
----
-
-# 8. Typography
-
-## 8.1 Font roles
+## 5.3 Typography
 
 ```css
 :root {
   --font-display:
-    "Noto Serif SC",
-    "Songti SC",
-    "STSong",
-    "Iowan Old Style",
-    Georgia,
-    serif;
+    "Noto Serif SC", "Songti SC", "STSong",
+    "Iowan Old Style", Georgia, serif;
 
   --font-body:
-    "Inter",
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    system-ui,
-    sans-serif;
+    "Inter", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", system-ui, sans-serif;
 
   --font-mono:
-    "SFMono-Regular",
-    "JetBrains Mono",
-    ui-monospace,
-    Menlo,
-    monospace;
+    "SFMono-Regular", "JetBrains Mono",
+    ui-monospace, Menlo, monospace;
 }
 ```
 
-Do not bundle font files into the repository merely to reproduce the prototype unless separately approved.
+- Display: page titles, research observations, memo headlines, major section headings.
+- Body: navigation, controls, forms, descriptions, table labels.
+- Mono/tabular: symbols, prices, percentages, dates, times, metrics, Fig/Plate labels.
 
-Use system/fallback fonts gracefully.
-
-## 8.2 Display type
-
-Use for:
-
-- page titles;
-- research conclusions;
-- Analyst Memo headlines;
-- major section headings.
-
-Tone:
-
-- stable;
-- editorial;
-- research-report-like;
-- not advertising-heavy.
-
-## 8.3 Body type
-
-Use for:
-
-- navigation;
-- forms;
-- buttons;
-- tables;
-- descriptions;
-- body copy.
-
-## 8.4 Mono type and numeric alignment
-
-Use for:
-
-- stock symbols;
-- prices;
-- percentages;
-- dates;
-- time;
-- metrics;
-- Fig/Plate annotations.
-
-Financial numbers should use:
-
-```css
-font-variant-numeric: tabular-nums lining-nums;
-```
-
-Avoid exaggerated negative tracking that harms multi-digit number readability.
+Financial numbers should use tabular lining numerals. Do not bundle font files solely to copy the prototype without separate approval.
 
 ---
 
-# 9. Layout System
+# 6. Layout and surface hierarchy — `MIGRATION_TARGET`
 
-## 9.1 Desktop workbench
-
-Canonical wide layout:
+## 6.1 Desktop workbench
 
 ```css
 .shell {
@@ -787,13 +514,9 @@ Canonical wide layout:
 }
 ```
 
-WolfyStock is a professional analysis platform. Desktop layouts should use available horizontal space.
+Use available horizontal space. Do not default to a narrow SaaS content column.
 
-Do not default to a narrow SaaS content column.
-
-## 9.2 Grid
-
-Use a 12-column grid:
+A 12-column grid is the canonical mental model:
 
 ```css
 .grid-12 {
@@ -803,241 +526,124 @@ Use a 12-column grid:
 }
 ```
 
-Common spans:
+Common composition:
 
-```text
-span-3  parameter panel / narrow sidebar
-span-4  side summary / metric group
-span-5  research queue / medium sidebar
-span-7  main work area
-span-8  large chart
-span-9  results table
-span-12 full-width ledger / table
-```
-
-## 9.3 Density
-
-Preferred desktop patterns:
-
-- chart + analytical summary side by side;
-- configuration sidebar + results table;
-- main trend panel + metric panel;
+- chart + analytical summary;
+- parameters + results table;
 - queue + explanation panel;
-- chart + table visible in one working view;
-- compact ledgers and rows.
+- main trend + compact evidence rail;
+- full-width ledger where comparison is primary.
 
-Avoid:
+## 6.2 Density
 
-- oversized hero blocks;
-- excessive vertical whitespace;
-- generic card grids with no analytical hierarchy;
-- one-column desktop pages;
-- large empty panels;
-- repeated decorative containers.
+- Panel padding: approximately 13–16px.
+- Major gap: approximately 8–10px.
+- Local row gap: approximately 6–8px.
+- Prefer dividers and rows before nested cards.
+- Use internal table/ledger scrolling where appropriate.
+- Keep first viewport focused on identity, observation, primary surface, evidence quality, and next action.
 
-## 9.4 Spacing
+Avoid oversized heroes, excessive whitespace, equal-weight card grids, giant empty panels, and repeated containers.
 
-Guidance:
-
-- page outer spacing: restrained;
-- panel padding: roughly 13–16px;
-- major grid gap: 8–10px;
-- local row gap: 6–8px;
-- use dividers before adding more nested cards.
-
----
-
-# 10. Surface Hierarchy
-
-Use four levels of visual hierarchy:
+## 6.3 Four-level hierarchy
 
 ```text
 paper background
-→ main panel
-→ bounded secondary card / row / table
-→ content and numeric data
+→ primary work panel
+→ bounded row/card/table/disclosure
+→ content and numeric evidence
 ```
 
-## 10.1 Panel
+### Panel
 
-Primary work-area container.
+Use for primary charts, research memo, scanner/backtest results, scenario maps, and major tables.
 
-Reference:
+### Card
 
-```css
-.panel {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: rgba(251, 248, 243, .76);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-}
-```
+Use only when the block owns meaningful research content. Do not create a card for one label, one icon, or one empty state.
 
-Use for:
+### Analyst Memo / Brief
 
-- main charts;
-- Analyst Memo;
-- research queue;
-- scanner results;
-- backtest results;
-- scenario impact map;
-- large tables.
-
-## 10.2 Card
-
-Secondary information block.
-
-Reference:
-
-```css
-.card {
-  padding: 13px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, .5);
-}
-```
-
-Cards must carry specific research content.
-
-Do not create a card merely to wrap:
-
-- one label;
-- one empty status;
-- one decorative icon;
-- navigation shortcuts that belong in the top nav.
-
-## 10.3 Brief / Analyst Memo
-
-The highest-priority conclusion block:
+Preferred hierarchy:
 
 ```text
 当前观察
-→ 简要解释
+→ 为什么
+→ 证据可靠性
+→ 什么可能推翻它
 → 下一步检查
 ```
 
-Reference:
+### Research strip
 
-```css
-.brief {
-  display: grid;
-  gap: 9px;
-  padding: 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(107, 143, 113, .2);
-  background: linear-gradient(
-    180deg,
-    rgba(220, 231, 220, .55),
-    rgba(255, 255, 255, .36)
-  );
-}
-```
-
-This block must not fabricate a strong conclusion when PRM/readiness forbids one.
-
-## 10.4 Research Strip
-
-Use for compact research queues.
-
-Structure:
+Use for compact queues:
 
 ```text
 symbol + reason
-score / evidence strength
-data state
-contextual action
+→ evidence strength
+→ data state
+→ contextual research action
 ```
 
-Useful on:
-
-- Home research order;
-- Research Radar queue;
-- Watchlist task summary.
-
-Do not use it as a replacement for tables where comparison is the primary task.
+Use a table instead when comparison is the primary task.
 
 ---
 
-# 11. Navigation and Global Shell
+# 7. Global shell and search — `CURRENT_INVARIANT` / `MIGRATION_TARGET`
 
-## 11.1 Top navigation
+## 7.1 Top navigation
 
-Requirements:
+The shell should be:
 
-- sticky;
-- paper-like translucent background;
-- current route highlighted;
-- locale-aware links;
+- sticky where appropriate;
+- route-aware;
+- locale-aware;
 - keyboard accessible;
-- primary research journey legible through first-level workspaces and task domains;
-- grouped domains expose complete and discoverable child destinations;
-- standalone first-level workspaces are reserved for high-frequency or independent task loops;
-- role-aware Admin entry remains separated from ordinary consumer task groups;
-- account menu retained;
-- language switch retained where currently supported;
-- theme setting retained where currently supported;
-- no route contract regression;
-- no accidental route orphaning.
+- role-aware;
+- compact and research-oriented;
+- complete without exposing every route as a first-level item.
 
-The shell may use grouped navigation such as `市场`, `研究`, and `验证` when route inventory and user workflow support those domains.
+Retain account, session, language, and theme behavior where currently supported.
 
-Do not require all consumer pages to be first-level links. Do not hide child routes behind a parent label that has no usable menu, drawer, popover, or equivalent discoverable interaction.
+Do not hide meaningful routes behind a non-interactive label or hover-only path.
 
-## 11.2 Global search
-
-Search is a core product interaction.
+## 7.2 Global symbol search
 
 Expected flow:
 
 ```text
 input
-→ debounced existing symbol-resolution owner
-→ exact/fuzzy results
-→ canonical symbol identity
-→ market context
+→ existing debounced symbol-resolution owner
+→ exact / fuzzy result
+→ canonical symbol and market identity
 → existing canonical stock route
 ```
 
-Do not implement production search with the prototype's local `stocks[]` array.
-
-Requirements:
+Requirements where search is supported:
 
 - `⌘K` / `Ctrl+K`;
-- visible label or accessible name;
-- keyboard navigation;
-- escape closes result panel;
-- explicit no-results state;
-- loading state;
-- correct canonical symbol and market handoff;
-- no provider live probe merely because the search box opened.
-
-## 11.3 Grouped menus and overflow menus
-
-Requirements:
-
-- open and close predictably;
+- accessible name;
+- keyboard result navigation;
 - Escape closes;
-- outside click closes where the interaction model uses a popover;
-- `aria-expanded` on the controlling element;
-- keyboard navigation between parent and child items;
-- role-aware items;
-- active child state;
-- active parent-group state when a child route is open;
-- no hover-only access path;
-- mobile and tablet equivalent that preserves all meaningful destinations;
-- deterministic ordering based on research workflow, not alphabetical backend naming.
+- loading and no-results state;
+- correct symbol/market handoff;
+- no provider live probe merely because search opened.
 
-Use an overflow or `更多` menu only for genuinely secondary or low-frequency surfaces. Do not use it as a dumping ground for major workflows merely to keep the header visually sparse.
+Never use the prototype's local stock array as production search data.
+
+## 7.3 Menus
+
+Grouped and overflow menus require predictable open/close, `aria-expanded`, visible focus, Escape, outside-click behavior where applicable, active state, role filtering, and responsive equivalent.
+
+Use `更多` only for genuinely secondary surfaces, not as a dumping ground for major workflows.
 
 ---
 
-# 12. Data State Presentation
+# 8. Data-state presentation — `CURRENT_INVARIANT`
 
-## 12.1 Consumer vocabulary
+## 8.1 Consumer vocabulary
 
-Preferred bounded state labels:
+Preferred labels:
 
 ```text
 实时
@@ -1055,11 +661,9 @@ Preferred bounded state labels:
 无候选
 ```
 
-## 12.2 Data state source of truth
+## 8.2 State authority
 
-Consumer badges must be derived from real readiness/freshness/provenance ownership.
-
-Never hardcode:
+Bad:
 
 ```tsx
 <Badge>实时</Badge>
@@ -1067,1205 +671,798 @@ Never hardcode:
 
 without real state support.
 
-The intended flow is:
+Required flow:
 
 ```text
-backend PRM / Near-Live coverage / domain readiness
-→ consumer presentation mapping
-→ DataStateBadge / FreshnessStamp
+backend/domain readiness and provenance
+→ existing consumer mapping
+→ state badge / freshness stamp / bounded disclosure
 ```
 
-## 12.3 Freshness
+## 8.3 Freshness and time
 
-Where materially relevant, show:
+Where materially relevant show:
 
 - state;
-- as-of time/date;
+- observation/as-of time;
 - delayed/stale context;
-- per-family freshness when aggregate timestamps would mislead.
+- family-specific freshness when aggregate time would mislead.
 
-Do not use a single newest timestamp to make older critical evidence appear current.
+Generated time, render time, client receipt time, and evidence observation time must remain distinct.
 
-Do not use a single oldest timestamp to imply every evidence family is equally old.
+## 8.4 Data trust disclosure
 
-Prefer bounded per-family freshness or an explicit aggregate window where needed.
+Detailed provenance and limitations should be reachable but not dominate the first viewport.
+
+Use compact disclosure, drawer, expandable detail, or bounded ledger depending on task density.
 
 ---
 
-# 13. Tables and Ledgers
+# 9. Tables, actions, and charts — `MIGRATION_TARGET` / `CURRENT_INVARIANT`
 
-Tables are a core part of the WolfyStock professional identity.
+## 9.1 Tables and ledgers
 
-Use tables for:
-
-- Watchlist ledger;
-- Scanner results;
-- Radar queue ledger where comparison matters;
-- Backtest trades;
-- evidence ledger;
-- peer/comparable analysis.
+Use tables when users need comparison, sorting, scanning, or repeated structured evidence.
 
 Requirements:
 
-- clear headers;
-- `<caption>` or accessible equivalent;
-- compact row height;
+- semantic table structure;
+- accessible headers;
 - tabular numeric alignment;
-- light hover state;
-- sticky header where long tables benefit;
-- horizontal scrolling on small screens;
-- keyboard-accessible row actions;
-- no card-per-row conversion on desktop.
+- clear units and currency;
+- bounded horizontal scrolling;
+- no body-level overflow;
+- honest empty/loading/error rows;
+- row actions remain contextual and accessible.
 
-For dense tables, prioritize:
+On mobile, preserve analytical priority; do not convert every table into unrelated cards when a contained scroll or priority-column view is clearer.
+
+## 9.2 Actions
+
+Actions must communicate intent and state:
+
+- primary action is singular and visually clear;
+- passive research actions remain distinct from mutation;
+- destructive actions require appropriate confirmation;
+- loading/disabled state prevents duplicate transitions;
+- focus returns appropriately after drawer/dialog closure;
+- copy/export reports success or failure accessibly.
+
+Consumer actions must not use trading-advice language.
+
+## 9.3 Charts
+
+Every chart needs:
+
+- real data ownership;
+- explicit metric and unit;
+- time range;
+- honest missing/stale state;
+- readable legend or direct annotation;
+- accessible summary;
+- responsive containment.
+
+Do not fabricate a series, interpolate rejected gaps, or draw a static decorative financial path.
+
+### Stock chart
+
+Preserve canonical symbol, market, interval, adjustment, freshness, and provenance. Missing history remains missing.
+
+### Market chart
+
+Distinguish official, proxy, delayed, and partial evidence. Do not let proxy breadth or unofficial rows support an institutional-grade headline.
+
+### Backtest chart
+
+Result charts render only from a real executed/stored result. Readiness, no-result, result, compare, and drawdown states remain distinct.
+
+## 9.4 Signature visualization
+
+A radar or signature visual may summarize real multidimensional evidence when:
+
+- dimensions have stable meaning;
+- values derive from authoritative existing data;
+- missing dimensions remain missing;
+- a textual or tabular explanation exists;
+- it does not become a hidden recommendation score.
+
+---
+
+# 10. Motion and accessibility — `CURRENT_INVARIANT`
+
+## 10.1 Motion
+
+Motion should clarify hierarchy and state, not decorate.
+
+- respect `prefers-reduced-motion`;
+- avoid long entrance sequences;
+- do not animate core numbers in a way that delays reading;
+- keep loading indicators bounded;
+- preserve focus and interaction during transitions.
+
+## 10.2 Accessibility
+
+Required:
+
+- one meaningful page `h1`;
+- logical heading order;
+- keyboard access to all core workflows;
+- visible focus;
+- accessible names and states;
+- semantic controls instead of clickable divs;
+- `aria-live` or status semantics for async feedback where appropriate;
+- Escape behavior for dialogs, drawers, menus, and overlays;
+- focus restoration after modal surface closure;
+- non-color state communication;
+- readable contrast;
+- table accessibility;
+- no hover-only route or evidence access.
+
+---
+
+# 11. Responsive composition — `MIGRATION_TARGET`
+
+Target qualification viewports:
+
+```text
+1440x1000
+1024x900
+768x900
+390x844
+```
+
+## 11.1 Wide desktop
+
+- use horizontal analytical composition;
+- keep primary chart/table and supporting evidence visible together where useful;
+- avoid narrow center columns;
+- preserve high density without reducing readability.
+
+## 11.2 Tablet
+
+- preserve task priority rather than merely stacking DOM order;
+- keep grouped navigation discoverable;
+- ensure controls and tables remain usable;
+- avoid body overflow.
+
+## 11.3 Mobile
+
+Preferred research sequence:
 
 ```text
 identity
-state
-change
-reason
-freshness
-next research step
-action
-```
-
-over dozens of low-value columns.
-
----
-
-# 14. Buttons and Actions
-
-Buttons should use concrete research verbs.
-
-Preferred labels:
-
-```text
-看证据
-看证据账本
-加入观察
-加入雷达
-运行扫描
-重试扫描
-运行回测
-重算冲击路径
-市场总览
-研究雷达
-```
-
-Avoid generic or marketing labels:
-
-```text
-了解更多
-立即开始
-智能分析
-一键洞察
-AI 洞察
-```
-
-Every interactive control must support:
-
-- default;
-- hover;
-- active/pressed where relevant;
-- `focus-visible`;
-- disabled;
-- loading where asynchronous.
-
-A button that triggers a write must not look identical to a passive drill-down action.
-
----
-
-# 15. Charts and Visualization
-
-## 15.1 General rules
-
-Charts are primary financial research surfaces, not decoration.
-
-Requirements:
-
-- real data only;
-- no static prototype curve in production;
-- clear axis/time context where needed;
-- tooltips or hover inspection for detailed financial series;
-- empty/stale/loading/error states;
-- range controls;
-- bounded data status;
-- accessible label/description.
-
-Avoid:
-
-- 3D charts;
-- neon gradients;
-- decorative geometry with no analytical meaning;
-- chart animation that obscures data comparison.
-
-Reuse existing chart ownership and dependencies where possible.
-
-Do not add a new chart library solely to reproduce a prototype drawing effect.
-
-## 15.2 Stock chart
-
-Stock research chart should support the real data available to the product:
-
-- OHLC/candlestick where supported;
-- volume;
-- relevant moving averages;
-- range selection;
-- hover/crosshair inspection;
-- freshness/as-of context;
-- honest unavailable or partial state.
-
-## 15.3 Market chart
-
-Market Overview should prioritize:
-
-- primary index/proxy trend;
-- clearly labeled proxy use;
-- range control;
-- key risk/macro metrics;
-- market-driver context.
-
-## 15.4 Backtest chart
-
-Backtest should separate:
-
-- equity curve;
-- benchmark comparison;
-- drawdown;
-- metrics;
-- sample/trade ledger.
-
-Readiness is not a result.
-
-Do not display example performance when a real backtest has not run.
-
----
-
-# 16. Signature Visualization
-
-The WolfyStock signature visual device is:
-
-> a hand-drawn-feeling dashed concentric-grid multi-dimensional research radar using sage, gold, and soft blue.
-
-Use selectively on:
-
-- Research Radar;
-- Scenario Lab;
-- occasional high-value Home summary.
-
-Color roles:
-
-- sage: main structure / trend / quality;
-- gold: valuation / odds / secondary signal;
-- blue: risk / volatility / third analytical dimension.
-
-The reference prototype uses an SVG roughness filter such as:
-
-```svg
-<filter id="rough">
-  <feTurbulence
-    type="fractalNoise"
-    baseFrequency=".018"
-    numOctaves="2"
-    seed="8"
-  />
-  <feDisplacementMap in="SourceGraphic" scale="1.25" />
-</filter>
-```
-
-Rules:
-
-- this is a brand memory device, not a universal chart;
-- underlying dimensions must be real and explained;
-- factor bars should remain available where precise comparison is more useful than radar shape;
-- do not render a radar with invented factors or scores.
-
----
-
-# 17. Motion
-
-Motion is restrained and functional.
-
-Allowed:
-
-- short page/section entry;
-- small menu transition;
-- search-result transition;
-- candidate selection feedback;
-- scanner state transition;
-- subtle chart line reveal where it does not impair reading.
-
-Rules:
-
-- prefer `transform` and `opacity`;
-- keep motion short;
-- no bouncing;
-- no particles;
-- no scrolling spectacle;
-- no motion that delays data access;
-- cancel or clean up long-running animation when route changes;
-- support reduced motion.
-
-Required reduced-motion behavior:
-
-```css
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: .001ms !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
-    transition: none !important;
-  }
-}
-```
-
----
-
-# 18. Accessibility
-
-New consumer UI must include:
-
-- skip link;
-- semantic landmarks;
-- accessible navigation label;
-- `aria-current="page"` for current route;
-- labeled search;
-- `aria-live` only for meaningful async updates;
-- table captions or equivalent accessible naming;
-- keyboard operation;
-- Escape behavior for overlays/menus;
-- `focus-visible`;
-- no state communicated by color alone;
-- SVG charts with `role="img"` and useful label/description;
-- reduced-motion support;
-- sufficient contrast for text and state labels.
-
-Keyboard requirements for search:
-
-```text
-⌘K / Ctrl+K → focus search
-Arrow keys   → move through results where implemented
-Enter        → open selected result
-Escape       → close results / release focus state
-```
-
----
-
-# 19. Responsive Behavior
-
-## 19.1 Wide desktop: 1440–1920+
-
-Primary target.
-
-Requirements:
-
-- full-width research workbench;
-- multi-column density;
-- charts and tables may coexist;
-- side-by-side conclusion + chart;
-- 12-column layout;
-- no narrow center column.
-
-## 19.2 Tablet
-
-Requirements:
-
-- chart and sidebar stack when needed;
-- six-column metrics may become three columns;
-- navigation may scroll horizontally;
-- table remains table, with horizontal scroll;
-- important action remains visible.
-
-## 19.3 Mobile
-
-Do not simply stack the desktop page into 30 screens.
-
-Mobile priority:
-
-```text
-compact top bar
-→ search
-→ headline / current observation
-→ one primary chart or primary task
-→ horizontally scrollable key metrics where useful
-→ compact next checks
-→ accordion evidence
-→ table horizontal scroll
+→ current observation
+→ primary analytical surface
+→ evidence quality / freshness
+→ next checks
+→ expandable detail
 ```
 
 Requirements:
 
-- single-column primary flow;
-- preserve all critical actions;
-- avoid squashing charts;
-- avoid converting dense comparative tables into dozens of large cards;
-- prioritize research sequence over visual parity with desktop.
+- safe touch targets;
+- contained table scrolling;
+- readable charts;
+- no clipped controls;
+- no page-level horizontal escape;
+- critical actions remain reachable;
+- disclosures and menus remain keyboard/screen-reader usable.
 
 ---
 
-# 20. Content Voice
+# 12. Content voice and common states — `CURRENT_INVARIANT`
 
-WolfyStock should sound like a calm professional research assistant.
+## 12.1 Voice
 
-Tone:
+Consumer copy should be:
 
-- clear;
-- restrained;
-- specific;
+- analytical;
+- bounded;
+- calm;
+- direct;
 - evidence-aware;
-- conclusion first;
-- risk-aware;
-- never sensational.
+- honest about uncertainty.
 
-Good patterns:
+Avoid marketing superlatives, internal diagnostics, repeated legal walls, filler copy, and implied promises.
 
-```text
-市场允许继续研究强势股，但不支持无条件追高。
-趋势仍在，但追价条件不足。
-候选不是推荐，是当前证据密度较高的研究对象。
-下一步：观察开盘后是否守住近 20 日均线区域。
-当前数据支持继续观察，不支持直接行动。
-风险偏好回升，但趋势确认仍需要成交量配合。
-```
+## 12.2 Loading
 
-Avoid:
+- show what is loading;
+- preserve stable shell and known context;
+- avoid fake completed content;
+- local panel loading should not block the entire application.
+
+## 12.3 Empty
+
+Answer:
 
 ```text
-马上买入
-暴涨机会
-十倍潜力
-稳赚
-错过就没了
-AI 神器
-智能洞察
-一站式平台
+what is empty?
+why, if known?
+what can the user do next?
 ```
 
-Avoid raw English backend copy in Chinese consumer pages.
+Do not show fake rows or candidates.
+
+## 12.4 Partial / stale
+
+Readable evidence may remain visible when allowed, with explicit state, as-of, scope, and bounded implication.
+
+## 12.5 Error
+
+Use actionable consumer language, not raw API or stack information. Do not promise preserved data unless that is factually true.
+
+## 12.6 Blocked
+
+Explain the user-level blocker without leaking provider, auth, cache, schema, or admin internals. Preserve fail-closed behavior.
 
 ---
 
-# 21. Required Page Contracts
+# 13. Page contracts — `CONDITIONAL` / `CURRENT_INVARIANT`
 
-The sections below define product responsibility and composition intent. They do not require exact pixel matching to the prototype.
-
-## 21.1 Home
-
-Purpose:
-
-> 今天先看什么？
-
-Home is a daily research entry point, not a feature directory.
-
-Primary composition:
+Each page contract uses one structure:
 
 ```text
-Morning Decision Note
-Research Queue
-Watch Changes
-Index Path
-Data Ledger
+Purpose
+First viewport
+Primary surface
+Evidence and states
+Workflow continuity
+Read/mutation boundary
+Responsive priority
+Validation focus
 ```
 
-Must provide:
+## 13.1 Home
 
-- one market observation sentence;
-- key market indicators;
-- research order / queue;
-- meaningful watchlist changes;
-- data state;
-- contextual entry points to Market, Radar, and Stock research.
+**Purpose**
 
-Do not show:
+Provide a bounded first read and a useful research starting point.
 
-- giant empty state because no symbol is selected;
-- feature-directory cards;
-- diagnostic walls;
-- fake candidates;
-- repeated disclaimers.
+**First viewport**
 
-When no real research candidates exist:
+- route identity;
+- current market observation or honest inability to conclude;
+- prioritized research queue or true empty state;
+- freshness/completeness summary;
+- next research path.
 
-- show an honest empty queue;
-- explain the current blocking reason in consumer language;
-- provide the next meaningful research action;
-- do not populate the prototype's AAPL/NVDA/MSFT examples.
+**Primary surface**
 
-## 21.2 Market Overview
+Market context plus research order, not a feature directory.
 
-Purpose:
+**Evidence and states**
 
-> 当前市场水温如何？哪些力量在推动？
+- use real index/market paths where available;
+- preserve guest/auth boundaries;
+- no fake ticker, metric, or chart;
+- unavailable evidence must not become zero.
 
-Primary composition:
+**Workflow continuity**
 
-```text
-market observation / regime brief
-main index or proxy path
-key metrics
-market drivers
-bounded data state
-```
+Handoffs to Market, Research, Watchlist, or Stock routes remain canonical and locale-aware.
 
-Key dimensions may include, where real data exists:
+**Validation focus**
 
-- SPY / QQQ or actual supported market proxies;
-- VIX;
-- DXY;
-- US10Y;
-- breadth;
-- sector rotation;
-- risk appetite.
+Guest and authenticated states, route title/identity, responsive smoke, overflow, data-state language, passive-load behavior.
 
-Do not:
+## 13.2 Market Overview
 
-- turn the page into a provider diagnostics wall;
-- render 17 unavailable data cards;
-- fabricate a regime when critical evidence blocks a strong conclusion.
+**Purpose**
 
-## 21.3 Research Radar
+Answer: “What is the current market environment?”
 
-Purpose:
+**First viewport**
 
-> 哪些标的值得进入研究，为什么？
+- bounded observation;
+- primary market trend surface;
+- strongest supporting drivers;
+- data quality and as-of;
+- next inspection path.
 
-Primary composition:
+**Primary surface**
 
-```text
-candidate queue
-selected candidate detail
-factor contribution
-risk / limitation
-next research check
-queue ledger
-signature radar or precise factor bars
-```
+A chart/table/workbench combination, not equal-weight cards.
 
-Each real candidate should expose bounded consumer information such as:
+**Evidence and states**
 
-- symbol and name;
-- market identity;
+- official, proxy, delayed, partial, and unavailable rows remain distinguishable;
+- partial payload preserves useful evidence;
+- diagnostics remain secondary.
+
+**Read boundary**
+
+Page load does not activate providers or trigger Scanner.
+
+**Validation focus**
+
+Partial data, dense quote overflow, responsive composition, heading hierarchy, consumer-safe error state.
+
+## 13.3 Research Radar
+
+**Purpose**
+
+Prioritize real research candidates and explain why they deserve inspection.
+
+**First viewport**
+
+- queue identity and scope;
 - candidate reason;
-- data state;
-- evidence strength;
-- key limitation;
-- next research check;
-- drill-down to canonical stock route;
-- add-to-watchlist where supported.
+- evidence strength and limitations;
+- freshness;
+- next research action.
 
-If there are zero candidates:
+**Primary surface**
 
-- show zero candidates;
-- do not fabricate a visual queue;
-- explain whether the blocker is universe membership, market data, candidate generation, or another bounded consumer state;
-- provide a safe next step.
+Research queue plus explanation/evidence composition.
 
-## 21.4 Stock Research
+**Evidence and states**
 
-Purpose:
+- no fake candidates;
+- no recommendation semantics;
+- factor visualization only when real factors exist;
+- empty queue is a valid state.
 
-> 这只股票现在为什么值得看，风险在哪里？
+**Validation focus**
 
-This is a core product surface.
+Candidate identity, explanation, empty/partial states, stock handoff, no-advice copy.
 
-Primary composition:
+## 13.4 Stock Research and Stock Structure
 
-```text
-identity + price state
-main price path
-Analyst Memo
-key metrics
-evidence summary
-risk trigger / invalidation evidence
-next research check
-Evidence Ledger
-```
+**Purpose**
 
-Must preserve:
+Explain why a canonical symbol matters, what evidence exists, and where confidence is limited.
 
-- canonical symbol and market identity;
-- quote freshness;
-- OHLCV data state;
-- PRM authority;
-- strong-conclusion withholding when required;
-- confidence limitations;
-- evidence gaps;
-- bounded provenance.
+**First viewport**
 
-Suggested first-screen layout:
-
-```text
-7 columns: main chart
-5 columns: Analyst Memo + key metrics
-```
-
-Detailed evidence belongs below or behind deliberate disclosure.
-
-Do not show:
-
-- raw backend field names;
-- large missing-field walls;
-- fake live quote;
-- investment action language;
-- internal observed classification when consumer display must be withheld.
-
-## 21.5 Watchlist
-
-Purpose:
-
-> 我关注的标的今天有什么变化？
-
-Watchlist is a research-task ledger.
-
-Primary composition:
-
-```text
-needs-review summary
-important changes
-full watchlist ledger
-research handoff
-```
-
-Ledger columns should prioritize:
-
-- symbol / identity;
-- latest available price;
-- change;
-- research/structure state;
-- evidence quality;
-- latest trigger;
-- next check;
-- action.
-
-Preserve:
-
-- owner isolation;
 - canonical symbol/market identity;
-- honest freshness;
-- no passive refresh side effects;
-- real research handoff context.
+- quote/data state;
+- bounded observation;
+- primary price/structure surface;
+- evidence reliability;
+- next checks.
 
-Empty watchlist:
+**Primary surface**
 
-- remain on the canonical Watchlist route;
-- preserve locale;
-- show a useful empty-state path;
-- do not redirect to Home merely because the list is empty.
+Price/structure research workspace with memo and evidence ledger.
 
-## 21.6 Scanner
+**Evidence and states**
 
-Purpose:
+- Stock Structure identity must remain distinct from generic stock research;
+- loading, completed, insufficient evidence, and unavailable remain separate;
+- chart gaps and missing fundamentals/events remain honest;
+- completed-page test identity must not appear in loading state.
 
-> 按我的条件，现在有哪些标的浮出来？
+**Workflow continuity**
 
-Primary composition:
+Watchlist, report, comparison, and validation handoffs use existing routes and permissions.
 
-```text
-3-column setup panel
-9-column results work area
-```
+**Validation focus**
 
-Controls may include, where supported:
+Direct deep link, refresh, loading/completed separation, consumer withholding, no-advice, responsive chart/evidence layout.
 
-- market;
-- strategy template;
-- data completeness rule;
-- Top N;
-- run action.
+## 13.5 Watchlist
 
-Results should include:
+**Purpose**
 
-- symbol identity;
-- rank/score where genuinely produced;
-- inclusion reason;
-- risk limitation;
-- data state;
-- next step;
-- add to Radar/Watchlist where supported.
+Act as a recurring research-task ledger, not a bookmark list.
 
-Required UI states:
+**First viewport**
+
+- list identity;
+- meaningful row/queue or true empty state;
+- freshness and evidence gaps;
+- primary handoff to research or discovery.
+
+**Primary surface**
+
+Compact research ledger with contextual row actions.
+
+**Evidence and states**
+
+- empty route remains on the canonical Watchlist page;
+- no fake saved rows;
+- owner isolation and symbol identity are preserved;
+- research overlay may be partial without forging readiness.
+
+**Mutation boundary**
+
+Passive load does not add/remove symbols or run Scanner. Explicit mutation uses existing owner and one transition.
+
+**Validation focus**
+
+Empty state, row identity, owner isolation, overlay failure, stock handoff, mobile action reachability.
+
+## 13.6 Scanner
+
+**Purpose**
+
+Run an explicit candidate-discovery workflow and explain readiness or blockers.
+
+**First viewport**
+
+- scanner identity and scope;
+- configuration/readiness;
+- visible primary action;
+- data limitations;
+- result or honest idle/blocked state.
+
+**Primary surface**
+
+Input controls plus candidate results table/workbench.
+
+**Evidence and states**
 
 ```text
 idle
 loading
-empty
 blocked
+empty
 error
 ready
 ```
 
-Do not:
+- only real candidates render;
+- candidate ranking/scoring remains backend-owned;
+- missing universe/history/quote evidence fails closed.
 
-- auto-run on page read;
-- use fake results;
-- hide universe/data blockers behind a generic “server error”;
-- expose raw lifecycle diagnostics to consumer UI.
+**Mutation boundary**
 
-Membership readiness, market-data readiness, and candidate-generation readiness must remain distinct.
+Passive load does not execute or refresh Scanner. One explicit action starts one intended run.
 
-## 21.7 Backtest
+**Validation focus**
 
-Purpose:
+Primary action visibility, blocked/readiness states, no duplicate execution, candidate Analyze handoff, responsive controls/results.
 
-> 这个研究假设过去是否站得住？
+## 13.7 Backtest and Compare
 
-Primary composition:
+**Purpose**
 
-```text
-configuration
-readiness
-real result workspace after execution
-equity curve
-drawdown
-key metrics
-benchmark comparison
-trade ledger
-Where It Breaks
-```
+Validate a research rule with deterministic execution and inspect where it breaks.
 
-Readiness and result are separate states.
+**First viewport**
 
-Before execution:
+- readiness separate from result;
+- run identity and assumptions;
+- result only when execution/stored evidence exists;
+- limitations and next validation path.
 
-- show readiness honestly;
-- do not show prototype example performance as a real result.
+**Primary surface**
 
-After a real run:
+Configuration or result workbench with equity/benchmark/drawdown and ledger where real data exists.
 
-- show actual metrics and actual charts;
-- show assumptions and limitations;
-- show sample/coverage context;
-- show failure environments where available.
+**Evidence and states**
 
-Never imply future return.
+- no result before real execution;
+- history selection must not trigger compare prematurely;
+- compare API runs only in the compare workflow;
+- no optimizer, winner, return promise, or allocation advice.
 
-## 21.8 Scenario Lab
+**Mutation boundary**
 
-Purpose:
+Passive result/readback pages do not execute a run.
 
-> 如果某个冲击发生，我关注的资产可能怎样变化？
+**Validation focus**
 
-Primary composition:
+Deterministic result, no-result gate, stored readback, compare lifecycle, copy/export, scenario order, back/forward.
 
-```text
-scenario configuration
-impact map
-asset sensitivity
-Watchlist mapping
-explanation path
-data limitations
-```
+## 13.8 Scenario Lab
 
-Supported scenario controls may include:
+**Purpose**
 
-- preset scenario;
-- shock magnitude;
-- time horizon;
-- selected symbol or Watchlist scope.
+Compare bounded shocks and inspect sensitivity.
 
-Actions should use research language such as:
+**First viewport**
 
-```text
-重算冲击路径
-重新评估敏感度
-```
+- explicit scenario and baseline state;
+- bounded parameters;
+- primary impact surface;
+- evidence limitations;
+- next checks.
 
-Do not display:
+**Evidence and states**
 
-```text
-现金权重 +5%
-建议上调仓位
-需降仓
-```
+- request-supplied, static, fallback, sample, proxy, or stale baselines remain observation-only;
+- no allocation, position, or action recommendation;
+- missing baseline blocks authoritative claims.
 
-unless the product's legal/product scope explicitly changes.
+**Mutation boundary**
 
-Use:
+Passive load does not run or persist a scenario.
 
-```text
-流动性缓冲敏感度较高
-高波动暴露需重点复核
-成长资产对该情景更敏感
-```
+**Validation focus**
 
-## 21.9 Portfolio
+Baseline classification, parameter bounds, impact explanation, no-advice, responsive impact map/table.
 
-The visual prototype does not fully cover Portfolio, but WolfyStock production includes it.
+## 13.9 Options Lab
 
-Purpose:
+**Purpose**
 
-> 我的组合暴露在哪些市场、主题和数据风险上？
+Provide a read-only options research console where entitlement and evidence allow.
 
-Primary composition should follow the same visual system:
+**Evidence and states**
 
-```text
-portfolio identity / accounts
-exposure summary
-risk concentration
-valuation freshness
-import onboarding
-holdings ledger
-```
+- chain, Greeks, IV, OI, volume, methodology, entitlement, and redisplay rights remain explicit;
+- fixture/dry-run/disabled providers fail closed;
+- no order workflow or strategy ranking.
 
-Preserve:
+**Validation focus**
 
-- no fake account;
-- no fake holdings;
-- no fake P&L;
-- preview before commit;
-- explicit confirmation;
-- duplicate/idempotency semantics;
-- broker readiness honesty;
-- unavailable valuation state.
+Observation-only copy, entitlement/readiness, missing fields, no execution mutation, table accessibility.
 
-Portfolio must visually belong to the same research product without changing accounting semantics.
+## 13.10 Portfolio
 
-## 21.10 Admin
+**Purpose**
 
-Admin surfaces are outside the core consumer visual flow.
+Inspect real accounts, cash, holdings, exposure, risk, and attribution without changing accounting authority.
 
-They may reuse tokens and shell primitives, but:
+**First viewport**
 
-- diagnostics may remain denser;
-- raw provider/runtime language may remain where necessary;
-- RBAC must remain strict;
-- consumer navigation must not expose unauthorized admin entries;
-- admin redesign must not be conflated with consumer page migration.
+- honest account/portfolio identity;
+- real valuation/exposure or explicit unavailable state;
+- freshness and missing valuation evidence;
+- next research/accounting action.
+
+**Primary surface**
+
+Accounting/exposure ledger and analytical summary.
+
+**Evidence and states**
+
+- unavailable exposure is not `0.00`;
+- native currency, FX, quote and as-of lineage remain clear;
+- empty/onboarding state contains no fake holdings;
+- preview precedes committed mutation where the existing workflow requires it.
+
+**Mutation boundary**
+
+Passive load does not import, sync, add transactions, or change holdings.
+
+**Validation focus**
+
+Owner isolation, unavailable valuation, native currency, preview/confirm, empty mobile ordering, no broker-order implication.
+
+## 13.11 Report Preview and Export
+
+**Purpose**
+
+Present a bounded research report with honest observation/generated times and safe export.
+
+**Evidence and states**
+
+- observation time remains distinct from generation time;
+- provenance, unavailable evidence, and no-advice remain visible;
+- Markdown download and print/PDF use existing report ownership;
+- close/Escape restores focus to the opener.
+
+**Validation focus**
+
+Loading/error/completed separation, copy, download, print, drawer focus, safe Markdown rendering.
+
+## 13.12 Settings and Admin
+
+**Settings purpose**
+
+Manage user-owned configuration without exposing saved secrets.
+
+- saved webhook/token values do not enter the DOM;
+- replacement draft is distinct from saved configuration;
+- unchanged secret fields are omitted, not sent as empty clear operations;
+- reset redirects are sanitized;
+- submit guards prevent duplicate mutation.
+
+**Admin purpose**
+
+Expose role-gated operational diagnostics and controls.
+
+- capability gates fail closed;
+- unauthorized entries remain hidden and blocked;
+- diagnostics are sanitized;
+- raw secrets and provider payloads never render;
+- consumer navigation remains separate.
+
+**Validation focus**
+
+Auth/RBAC, focus, redaction, payload omission, role gates, deep-link denial, no consumer leakage.
 
 ---
 
-# 22. Loading, Empty, Partial, Error, and Blocked States
+# 14. Component and migration guidance — `MIGRATION_TARGET`
 
-Every async product surface must deliberately support the states relevant to its domain.
+## 14.1 Shared ownership
 
-## 22.1 Loading
+Prefer existing shared components and mappings.
 
-Use:
-
-- skeletons for structured content;
-- spinner only for short bounded actions;
-- button-level progress for explicit actions.
-
-Do not block the entire application shell for a local panel load.
-
-## 22.2 Empty
-
-An empty state must answer:
-
-```text
-what is empty?
-why is it empty, if known?
-what can the user do next?
-```
-
-Example:
-
-```text
-当前没有研究候选。
-标的池已准备，但当前条件下没有候选通过研究门槛。
-可以调整筛选条件，或查看观察列表中的已有研究对象。
-```
-
-Do not show fake candidate cards.
-
-## 22.3 Partial / stale
-
-Readable stale data may remain visible when allowed, but must show:
-
-- state;
-- as-of;
-- scope of staleness;
-- bounded implication.
-
-Do not visually treat stale as current.
-
-## 22.4 Error
-
-Consumer error copy should be actionable and bounded.
-
-Avoid:
-
-```text
-API failed
-backend error
-null response
-500 Internal Server Error
-```
-
-Prefer:
-
-```text
-当前数据暂时无法读取。
-可以稍后重试，已有历史数据不会被替换。
-```
-
-when that statement is factually supported.
-
-## 22.5 Blocked
-
-Blocked product capabilities should explain the user-level blocker without leaking internals.
-
-Example:
-
-```text
-当前标的池尚未准备完成，因此暂时无法运行扫描。
-```
-
-Admin drill-through may expose detailed lifecycle reasons.
-
----
-
-# 23. Component Architecture Guidance
-
-Prefer a shared design system inside the existing frontend source tree.
-
-A possible organization is:
-
-```text
-components/
-  wolfy/
-    shell/
-      ConsumerShell
-      TopNavigation
-      GlobalStockSearch
-      MoreMenu
-      AccountMenu
-
-    layout/
-      Workspace
-      PageHeader
-      ResearchGrid
-      SplitWorkbench
-      SectionRule
-
-    data/
-      DataStateBadge
-      FreshnessStamp
-      MetricTile
-      EvidenceSummary
-      DataTrustDisclosure
-
-    research/
-      AnalystMemo
-      ResearchStrip
-      CandidateCard
-      FactorBars
-      SignatureRadar
-      ResearchQueue
-
-    charts/
-      PriceChart
-      MarketTrendChart
-      MiniSparkline
-      DrawdownChart
-
-    states/
-      LoadingState
-      EmptyState
-      PartialDataState
-      ErrorState
-      AccessGate
-```
-
-This is guidance, not a requirement to duplicate existing components.
-
-Before creating a component:
+Before creating a new component:
 
 1. inspect existing ownership;
-2. reuse or adapt existing stable components;
-3. avoid parallel design systems;
-4. avoid duplicate consumer-state mappings.
+2. determine whether an existing primitive can be adapted;
+3. avoid duplicate data-state mappings;
+4. avoid page-local compatibility layers;
+5. keep API/domain interpretation outside pure presentation components.
 
----
-
-# 24. Migration Rules for Replacing the Current Consumer UI
-
-The migration should replace **presentation and composition**, not validated domain contracts.
-
-Before changing global navigation:
+Possible component families are illustrative, not a required parallel design system:
 
 ```text
-inventory real consumer routes
-→ trace current entry points
-→ classify functional ownership
-→ classify first-level vs grouped vs contextual placement
-→ verify role visibility
-→ implement shell hierarchy
-→ validate direct/deep links, active state, keyboard, responsive discovery
+shell
+layout
+data state
+research memo/queue
+charts
+loading/empty/error/access states
 ```
 
-Do not begin a navigation migration by copying prototype labels or by reorganizing routes from memory.
+## 14.2 Migration rules
 
-Recommended order:
-
-```text
-1. Design tokens + Consumer Shell
-2. Shared consumer state and layout primitives
-3. Market Overview
-4. Stock Research
-5. Home
-6. Research Radar
-7. Watchlist
-8. Scanner
-9. Backtest
-10. Scenario Lab
-11. Portfolio
-12. Legacy consumer UI cleanup
-13. Focused consumer UAT
-```
-
-Do not perform a big-bang rewrite of every route in one task.
+Replace presentation and composition, not validated domain contracts.
 
 For each migrated route:
 
 ```text
-existing route contract
-+ existing API ownership
-+ existing auth/session behavior
-+ existing PRM/freshness semantics
-→ new Consumer View Model where needed
-→ new design-system components
-→ new page composition
+existing route and auth contract
++ existing API/read-model authority
++ existing freshness and state semantics
+→ consumer presentation mapping
+→ shared components
+→ page composition
+→ focused route/browser validation
+→ obsolete page-owned UI removal
 ```
 
 Do not:
 
-- create a second router;
-- duplicate page state logic;
-- delete old components before the new route is qualified;
-- change protected backend domains merely to make the new layout easier;
-- weaken tests because the UI structure changed;
-- use the HTML prototype's data as fallback.
+- perform a big-bang rewrite;
+- copy prototype routes or data;
+- delete old UI before replacement parity is proven;
+- preserve obsolete composition behind compatibility CSS;
+- weaken functional tests solely because markup changed;
+- change protected backend semantics to simplify layout;
+- add `manualChunks` or architecture workarounds to hide import-authority problems.
 
----
+Delete replaced page-owned wrappers, duplicate cards, dead styling, compatibility code, and tests that protect only retired visual structure after functional parity is proven.
 
-# 25. Reference Prototype Interpretation Rules
+## 14.3 Prototype interpretation
 
-Use `docs/design/reference/wolfystock-impeccable-polish-final.html` as a reference for:
+Use the HTML reference for:
 
-- color relationships;
-- paper texture;
-- workbench density;
-- panel proportions;
-- page rhythm;
-- Analyst Memo treatment;
+- paper color relationships;
+- density and proportions;
+- memo/brief treatment;
 - research strips;
-- table density;
-- top navigation;
-- search interaction intent;
-- radar visual identity;
+- table rhythm;
+- search/menu interaction intent;
 - motion restraint;
-- focus states;
-- loading/empty/error visual language;
-- accessibility cues.
+- state and focus language.
 
-Do **not** copy from the prototype:
+Do not copy:
 
-- `.html` route names;
-- `pathToPage`;
-- `history.pushState` router;
-- local `stocks` arrays;
-- static prices;
-- static candidate scores;
-- static market conclusions;
-- static timestamps;
-- static SVG financial time-series paths;
-- example backtest results;
-- example scenario allocation suggestions;
-- mock statuses.
-
-The prototype is the visual north star, not runtime truth.
+- prototype router/history code;
+- local arrays;
+- static prices, scores, timestamps, chart paths, conclusions, backtest results, scenario suggestions, or mock statuses.
 
 ---
 
-# 26. Anti-AI and Anti-Dashboard Checklist
+# 15. Validation and Definition of Done — `CURRENT_INVARIANT`
 
-Before a page is considered visually complete, check:
+Use Validation Economy:
 
-- [ ] no blue-purple fintech gradient;
-- [ ] no cheap glow halo;
-- [ ] no emoji icon row;
-- [ ] no icon on every card;
-- [ ] no “Feature One / Feature Two” filler;
-- [ ] no generic KPI-card wall;
-- [ ] no marketing hero;
-- [ ] no admin-dashboard feel on consumer routes;
-- [ ] no feature-directory cards replacing navigation;
-- [ ] no all-modules-in-one-page composition;
-- [ ] no fake metric;
-- [ ] no fake candidate;
-- [ ] no exaggerated return promise;
-- [ ] no backend/debug/mock vocabulary;
-- [ ] no duplicated disclaimer wall;
-- [ ] no oversized empty placeholders;
-- [ ] no decorative chart without real analytical meaning.
+```text
+focused reproduction
+→ owned unit tests
+→ owned browser journey
+→ impacted shared validation
+→ typecheck / design / diff
+→ broad validation only for shared boundary or milestone changes
+```
 
-If any answer is yes, fix it before completion.
+A route is complete only when applicable checks pass.
 
----
+## 15.1 Product
 
-# 27. Definition of Done — Shared
+- one clear research question;
+- bounded current observation or honest inability to conclude;
+- evidence, reliability, limitations, and next checks in the right hierarchy;
+- no advice language;
+- no fake runtime data;
+- no raw consumer diagnostic leakage.
 
-A migrated consumer route is not complete until all applicable checks pass.
+## 15.2 Architecture
 
-## Product
+- canonical/localized route preserved;
+- direct deep link, refresh, back/forward work;
+- auth/RBAC/session preserved;
+- Product Read Model/readiness authority preserved;
+- no page-local competing authority;
+- no uncontrolled provider or mutation side effect;
+- route remains discoverable;
+- unauthorized admin surfaces remain hidden and blocked.
 
-- [ ] page answers one clear research question;
-- [ ] first screen provides the bounded current observation or honest inability to conclude;
-- [ ] evidence and limitations are visible in the right hierarchy;
-- [ ] next research step is clear;
-- [ ] no advice language;
-- [ ] no fake runtime data.
+## 15.3 Data trust
 
-## Architecture
+- state labels derive from real state;
+- observation/as-of is honest;
+- stale/delayed/proxy remain explicit;
+- missing and unavailable fail closed;
+- partial evidence remains readable where allowed;
+- rejected evidence does not become zero or neutral.
 
-- [ ] existing route preserved;
-- [ ] localized route preserved;
-- [ ] direct deep link works;
-- [ ] refresh works;
-- [ ] back/forward works;
-- [ ] auth state preserved;
-- [ ] RBAC preserved;
-- [ ] PRM/readiness authority preserved;
-- [ ] no new page-local readiness interpretation;
-- [ ] no uncontrolled provider call introduced;
-- [ ] every meaningful consumer route has a discoverable global, grouped, or contextual entry;
-- [ ] grouped first-level parents expose their real child routes;
-- [ ] active child and active parent-group state remain correct;
-- [ ] unauthorized admin/operator entries remain hidden and blocked.
+## 15.4 Visual and interaction
 
-## Data trust
+- canonical token relationships;
+- high density but readable;
+- desktop uses horizontal space;
+- table used when comparison is primary;
+- chart has real analytical meaning;
+- primary action is clear;
+- keyboard and visible focus;
+- loading, empty, partial, error, blocked, and disabled states;
+- Escape and focus restoration where applicable;
+- reduced motion respected.
 
-- [ ] status badges derive from real state;
-- [ ] freshness/as-of is honest;
-- [ ] stale does not look current;
-- [ ] missing data fails closed;
-- [ ] partial data remains readable where allowed;
-- [ ] no raw internal diagnostic leaks.
+## 15.5 Responsive
 
-## Visual
+Qualify:
 
-- [ ] uses canonical tokens;
-- [ ] high density but readable;
-- [ ] no card sprawl;
-- [ ] desktop uses horizontal space;
-- [ ] table used where comparison is primary;
-- [ ] chart has real data and meaningful context;
-- [ ] Analyst Memo / brief hierarchy is clear;
-- [ ] gold accent remains sparse.
+```text
+1440x1000
+1024x900
+768x900
+390x844
+```
 
-## Interaction
+Check:
 
-- [ ] keyboard usable;
-- [ ] focus visible;
-- [ ] loading state;
-- [ ] empty state;
-- [ ] error state;
-- [ ] disabled state;
-- [ ] Escape behavior where applicable;
-- [ ] grouped navigation is not hover-only;
-- [ ] grouped menus preserve child-route discoverability on desktop, tablet, and mobile;
-- [ ] reduced motion respected.
+- no body horizontal overflow;
+- contained tables and charts;
+- first-viewport analytical priority;
+- accessible touch/keyboard targets;
+- critical actions remain reachable;
+- menus preserve route discovery.
 
-## Responsive
+## 15.6 Runtime and console
 
-- [ ] wide desktop qualified;
-- [ ] tablet composition qualified;
-- [ ] mobile research sequence qualified;
-- [ ] tables remain usable;
-- [ ] charts remain readable;
-- [ ] critical actions remain accessible.
+- no unexpected pageerror;
+- no production-attributable `console.error`;
+- failed requests are classified;
+- passive-load read-only boundary is proven;
+- one user action does not duplicate mutation;
+- copy/export/status feedback is accessible.
+
+## 15.7 Baseline red
+
+When broad validation is already red:
+
+- capture the exact current and task-branch result;
+- classify product regression, test debt, environment, or unrelated baseline;
+- prove baseline equivalence where applicable;
+- do not repair unrelated failures inside a bounded task;
+- do not claim readiness when a required canonical gate remains red.
 
 ---
 
-# 28. Definition of Done — Page-Specific Minimums
+# 16. Anti-dashboard review
 
-## Home
+Before completion verify:
 
-- [ ] market observation;
-- [ ] research queue or honest empty state;
-- [ ] watchlist changes or honest empty state;
-- [ ] index path where data exists;
-- [ ] data ledger;
-- [ ] no feature-directory layout.
-
-## Market Overview
-
-- [ ] market observation;
-- [ ] primary trend chart;
-- [ ] key metrics;
-- [ ] drivers;
-- [ ] data state;
-- [ ] no false strong conclusion.
-
-## Research Radar
-
-- [ ] real queue or zero-state;
-- [ ] candidate reason;
-- [ ] evidence strength;
-- [ ] limitation;
-- [ ] next check;
-- [ ] factor visualization where real factors exist.
-
-## Stock Research
-
-- [ ] canonical symbol identity;
-- [ ] quote state;
-- [ ] main chart;
-- [ ] Analyst Memo;
-- [ ] confidence/evidence limitations;
-- [ ] evidence ledger;
-- [ ] consumer withholding respected.
-
-## Watchlist
-
-- [ ] canonical route remains on empty state;
-- [ ] research-task ledger;
-- [ ] freshness honesty;
-- [ ] handoff to stock research;
-- [ ] owner isolation preserved.
-
-## Scanner
-
-- [ ] input controls;
-- [ ] readiness/blocked state;
-- [ ] idle/loading/empty/error/ready;
-- [ ] real candidate results only;
-- [ ] no page-read refresh side effect.
-
-## Backtest
-
-- [ ] readiness shown separately from result;
-- [ ] no result until real execution exists;
-- [ ] equity/benchmark/drawdown where real result exists;
-- [ ] assumptions and failure conditions;
-- [ ] no return promise.
-
-## Scenario Lab
-
-- [ ] explicit scenario;
-- [ ] bounded parameters;
-- [ ] impact explanation;
-- [ ] data limitations;
-- [ ] no allocation advice language.
-
-## Portfolio
-
-- [ ] honest empty/onboarding state;
-- [ ] preview before commit;
-- [ ] no fake valuation/P&L;
-- [ ] freshness and missing valuation evidence visible;
-- [ ] accounting semantics unchanged.
+- no generic KPI-card wall;
+- no marketing hero;
+- no feature-directory layout replacing workflows;
+- no all-modules-on-one-page composition;
+- no decorative chart;
+- no fake metric or candidate;
+- no backend/debug/mock vocabulary;
+- no repeated disclaimer wall;
+- no giant empty placeholders;
+- no glow-heavy fintech styling;
+- no icon or emoji decoration without function.
 
 ---
 
-# 29. Final Design Principle
+# 17. Final design principle
 
-If a design choice makes the interface prettier but reduces research efficiency, do not make it.
+If a design choice makes the interface prettier but reduces research efficiency, evidence clarity, accessibility, or truthfulness, do not make it.
 
-WolfyStock's aesthetic quality comes from:
+WolfyStock quality comes from:
 
 ```text
 清晰的研究顺序
@@ -2276,8 +1473,6 @@ WolfyStock's aesthetic quality comes from:
 每个结论背后都有证据
 ```
 
-The final product test is:
+The practical test is:
 
-> 用户打开页面后，应在约 10 秒内知道：当前市场怎样、先研究什么、为什么、风险和数据限制在哪里、下一步该检查什么。
-
-That is the standard for every consumer-facing WolfyStock page.
+> Within roughly ten seconds, a user should understand the current bounded observation, why it matters, how reliable the evidence is, what risk or data gap matters, and what to inspect next.
