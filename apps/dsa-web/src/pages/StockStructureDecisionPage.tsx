@@ -4221,8 +4221,8 @@ export default function StockStructureDecisionPage() {
       ? 'Check the code or return to a research entrypoint.'
       : '请检查代码是否正确，或返回研究入口重新选择。')
     : (locale === 'en'
-      ? 'Assembles known stock fact summaries.'
-      : '汇总可用个股事实。');
+      ? 'Assembles bounded stock structure evidence without turning it into advice.'
+      : '汇总有边界的个股结构证据，不生成行动建议。');
   const railContent = data && hasResearchPacket ? (
     <ConsoleContextRail className="flex flex-col gap-3 p-3">
       {safeWatchNext.length ? (
@@ -4270,19 +4270,24 @@ export default function StockStructureDecisionPage() {
           )}
           rail={railContent}
         >
-          <ConsoleBoard className="min-h-0" data-testid="stock-structure-decision-page">
+          <ConsoleBoard className="min-h-0" data-testid={!data && loading ? 'stock-structure-decision-loading' : 'stock-structure-decision-page'}>
             <RoughSurfaceIntro
               eyebrow={locale === 'en' ? 'Stock research' : '个股研究'}
               title={introTitle}
               description={introDescription}
             />
+            {!symbolNotFound && titleSymbol ? (
+              <p className="px-4 pb-3 text-xs font-semibold text-[color:var(--wolfy-text-secondary)] md:px-5">
+                {locale === 'en' ? `${titleSymbol} structure workspace` : `${titleSymbol} 结构工作区`}
+              </p>
+            ) : null}
             {error ? (
               <div className="p-4 md:p-5">
                 <ApiErrorAlert error={error} actionLabel={locale === 'en' ? 'Retry' : '重试'} onAction={() => void load()} />
               </div>
             ) : null}
             {loading && !data ? (
-              <div className="p-4 md:p-5">
+              <div className="p-4 md:p-5" data-testid="stock-structure-decision-loading">
                 <TerminalEmptyState title={locale === 'en' ? 'Loading stock research' : '正在整理个股研究'}>
                   {locale === 'en' ? 'Loading stock research.' : '正在载入个股研究。'}
                 </TerminalEmptyState>
