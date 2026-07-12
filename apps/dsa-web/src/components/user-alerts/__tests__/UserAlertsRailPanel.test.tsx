@@ -116,8 +116,11 @@ describe('UserAlertsRailPanel', () => {
       note: '跌破后只做观察',
     }));
 
-    expect(within(disclosure).getByText('低于 123.45')).toBeInTheDocument();
-    expect(within(disclosure).getByText('跌破后只做观察')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(disclosure).getByText('低于 123.45')).toBeInTheDocument();
+      expect(within(disclosure).getByText('跌破后只做观察')).toBeInTheDocument();
+      expect(within(disclosure).queryByTestId('user-alert-form')).not.toBeInTheDocument();
+    });
   });
 
   it('shows an inline safe error for invalid threshold and does not call API', async () => {
