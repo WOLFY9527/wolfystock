@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy, useRef, useState } from 'react';
 import { WorkspacePageHeader } from '../components/common/WorkspacePageHeader';
 import { TerminalPageShell } from '../components/terminal/TerminalPrimitives';
 import { previewReport } from '../dev/reportPreviewFixture';
@@ -17,6 +17,9 @@ const PreviewFullReportDrawerPage: React.FC = () => {
   const { t } = useI18n();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [language, setLanguage] = useState<ReportLanguage>('zh');
+  const chineseTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const englishTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
   const normalizedPreviewReport = normalizeFrontendReportContract(previewReport);
 
   const content = language === 'en'
@@ -44,20 +47,24 @@ const PreviewFullReportDrawerPage: React.FC = () => {
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button
+            ref={chineseTriggerRef}
             type="button"
             className="home-surface-button rounded-lg px-4 py-2 text-sm"
             onClick={() => {
               setLanguage('zh');
+              lastTriggerRef.current = chineseTriggerRef.current;
               setDrawerOpen(true);
             }}
           >
             {t('previewFullReport.openChinese')}
           </button>
           <button
+            ref={englishTriggerRef}
             type="button"
             className="home-surface-button rounded-lg px-4 py-2 text-sm"
             onClick={() => {
               setLanguage('en');
+              lastTriggerRef.current = englishTriggerRef.current;
               setDrawerOpen(true);
             }}
           >
@@ -90,7 +97,12 @@ const PreviewFullReportDrawerPage: React.FC = () => {
             recordId={-1}
             stockName={stockName}
             stockCode="NVDA"
-            onClose={() => setDrawerOpen(false)}
+            onClose={() => {
+              setDrawerOpen(false);
+              window.requestAnimationFrame(() => {
+                lastTriggerRef.current?.focus({ preventScroll: true });
+              });
+            }}
             reportLanguage={language}
             standardReport={normalizedPreviewReport.details?.standardReport}
             initialContent={content}

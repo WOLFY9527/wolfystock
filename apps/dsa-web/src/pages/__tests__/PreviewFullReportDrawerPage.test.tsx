@@ -1,15 +1,10 @@
 import { fireEvent, render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
-import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { translate } from '../../i18n/core';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { getDocumentTitle } from '../../utils/documentTitle';
 import PreviewFullReportDrawerPage from '../PreviewFullReportDrawerPage';
-
-vi.mock('../../components/common/Drawer', () => ({
-  Drawer: ({ children }: { children: ReactNode }) => <div data-testid="drawer-shell">{children}</div>,
-}));
 
 const openTechnicalDetails = async (label: string) => {
   const technicalDetails = await screen.findByTestId('report-technical-evidence-details');
@@ -71,9 +66,19 @@ describe('PreviewFullReportDrawerPage', () => {
       expect(screen.getByText('一、结论摘要')).toBeInTheDocument();
     });
     expect(screen.getByRole('columnheader', { name: '字段' })).toBeInTheDocument();
+    expect(screen.getByTestId('report-observation-time-strip')).toHaveTextContent('观察时间');
+    expect(screen.getByTestId('report-observation-time-strip')).toHaveTextContent('2026-03-28 09:35:00 EDT');
+    expect(screen.getByTestId('report-observation-time-strip')).toHaveTextContent('报告生成时间');
+    expect(screen.getByTestId('report-observation-time-strip')).toHaveTextContent('2026-03-28 21:35:00 CST');
+    expect(screen.getByTestId('report-export-controls')).toHaveTextContent('导出内容保留当前研究证据，不新增投资建议。');
+    expect(screen.getByRole('button', { name: '复制报告' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '下载 Markdown' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '打印 / PDF' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '关闭' }));
-    await waitForElementToBeRemoved(() => screen.queryByTestId('full-report-document-shell'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('full-report-document-shell')).not.toBeInTheDocument();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'previewFullReport.openEnglish') }));
 
@@ -84,6 +89,34 @@ describe('PreviewFullReportDrawerPage', () => {
     });
     expect(screen.getByRole('columnheader', { name: 'Field' })).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: 'Intraday snapshot' })).toBeInTheDocument();
+    expect(screen.getByTestId('report-observation-time-strip')).toHaveTextContent('Observation time');
+    expect(screen.getByTestId('report-observation-time-strip')).toHaveTextContent('2026-03-28 09:35:00 EDT');
+    expect(screen.getByTestId('report-observation-time-strip')).toHaveTextContent('Report generated');
+    expect(screen.getByTestId('report-observation-time-strip')).toHaveTextContent('2026-03-28 21:35:00 CST');
+    expect(screen.getByTestId('report-export-controls')).toHaveTextContent('Exports preserve the visible research evidence and do not add advice.');
+  });
+
+  it('closes with Escape through the shared drawer and returns focus to the trigger', async () => {
+    render(
+      <MemoryRouter initialEntries={['/__preview/full-report']}>
+        <UiLanguageProvider>
+          <PreviewFullReportDrawerPage />
+        </UiLanguageProvider>
+      </MemoryRouter>,
+    );
+
+    const chineseTrigger = screen.getByRole('button', { name: translate('zh', 'previewFullReport.openChinese') });
+    fireEvent.click(chineseTrigger);
+
+    expect(await screen.findByTestId('full-report-document-shell')).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('full-report-document-shell')).not.toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(chineseTrigger).toHaveFocus();
+    });
   });
 
   it('renders localized English shell copy on /en preview routes', () => {

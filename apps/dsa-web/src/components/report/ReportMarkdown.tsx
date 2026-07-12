@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useEffect, useReducer } from 'react';
+import { Suspense, lazy, useEffect, useReducer, useState } from 'react';
 import { historyApi } from '../../api/history';
 import { Drawer } from '../common/Drawer';
 import { SupportPanel } from '../common/SupportSurface';
@@ -23,6 +23,8 @@ interface ReportMarkdownProps {
   standardReport?: StandardReport;
   initialContent?: string;
 }
+
+type ReportExportState = 'idle' | 'copied' | 'copyFailed' | 'downloaded' | 'printReady';
 
 interface ReportMarkdownState {
   fetchedContent: string;
@@ -123,6 +125,48 @@ const getCoverageBoundaryText = (totalMissingFields: number, language: ReportLan
     ? 'No obvious coverage gaps were detected.'
     : '数据覆盖未发现明显缺口。';
 };
+
+const getObservationTime = (standardReport?: StandardReport): string =>
+  String(
+    standardReport?.summaryPanel?.snapshotTime
+    || standardReport?.summaryPanel?.marketTime
+    || '',
+  ).trim();
+
+const getReportGeneratedTime = (standardReport?: StandardReport): string =>
+  String(standardReport?.summaryPanel?.reportGeneratedAt || '').trim();
+
+const getReportExportStatusText = (state: ReportExportState, language: ReportLanguage): string => {
+  if (state === 'copied') {
+    return language === 'en' ? 'Report copied.' : '报告已复制。';
+  }
+  if (state === 'copyFailed') {
+    return language === 'en' ? 'Copy unavailable.' : '复制暂不可用。';
+  }
+  if (state === 'downloaded') {
+    return language === 'en' ? 'Markdown download started.' : 'Markdown 下载已开始。';
+  }
+  if (state === 'printReady') {
+    return language === 'en' ? 'Print/PDF flow opened.' : '打印 / PDF 流程已打开。';
+  }
+  return '';
+};
+
+const buildReportExportFileName = (stockCode: string, stockName: string, generatedAt: string): string => {
+  const safeName = `${stockName || stockCode || 'Report'}`
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    || 'Report';
+  const safeTicker = (stockCode || 'preview').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '') || 'preview';
+  const safeDate = generatedAt.replace(/\D/g, '').slice(0, 8) || 'latest';
+  return `WolfyStock_${safeName}_${safeTicker}_${safeDate}.md`;
+};
+
+const escapeHtmlText = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 
 const consumerMarkdownStateCellLabel = (value: string, language: ReportLanguage): string | null => {
   const normalized = value.trim().toLowerCase();
@@ -341,6 +385,154 @@ const ReportMarkdownHeaderPanel: React.FC<{
   />
 );
 
+const ReportMarkdownMetadataStrip: React.FC<{
+  captionClassName: string;
+  generatedAt: string;
+  normalizedLanguage: ReportLanguage;
+  observationTime: string;
+}> = ({ captionClassName, generatedAt, normalizedLanguage, observationTime }) => {
+  if (!observationTime && !generatedAt) {
+    return null;
+  }
+
+  const rows = [
+    {
+      label: normalizedLanguage === 'en' ? 'Observation time' : '观察时间',
+      value: observationTime || (normalizedLanguage === 'en' ? 'Unavailable' : '暂不可用'),
+    },
+    {
+      label: normalizedLanguage === 'en' ? 'Report generated' : '报告生成时间',
+      value: generatedAt || (normalizedLanguage === 'en' ? 'Unavailable' : '暂不可用'),
+    },
+  ];
+
+  return (
+    <div
+      className="grid min-w-0 gap-2 rounded-[1rem] border border-[var(--theme-panel-subtle-border)] bg-base/35 p-3 text-xs text-secondary-text sm:grid-cols-2"
+      data-testid="report-observation-time-strip"
+    >
+      {rows.map((row) => (
+        <div key={row.label} className="min-w-0">
+          <p className={captionClassName}>{row.label}</p>
+          <p className="mt-1 break-words leading-5 text-foreground/80">{row.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const ReportMarkdownExportControls: React.FC<{
+  content: string;
+  fileName: string;
+  normalizedLanguage: ReportLanguage;
+  stockCode: string;
+  stockName: string;
+}> = ({ content, fileName, normalizedLanguage, stockCode, stockName }) => {
+  const [exportState, setExportState] = useState<ReportExportState>('idle');
+  const hasContent = Boolean(content.trim());
+  const statusText = getReportExportStatusText(exportState, normalizedLanguage);
+  const buttonClassName = 'home-surface-button inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg px-4 py-2 text-sm text-secondary-text hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50';
+
+  const handleCopy = async () => {
+    if (!hasContent || !navigator.clipboard?.writeText) {
+      setExportState('copyFailed');
+      return;
+    }
+
+    const error = await navigator.clipboard.writeText(content)
+      .then(() => null)
+      .catch((copyError) => copyError);
+    setExportState(error ? 'copyFailed' : 'copied');
+  };
+
+  const handleDownload = () => {
+    if (!hasContent) {
+      return;
+    }
+
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setExportState('downloaded');
+  };
+
+  const handlePrint = () => {
+    if (!hasContent) {
+      return;
+    }
+
+    const printWindow = window.open('', '_blank', 'width=960,height=1200');
+    if (!printWindow) {
+      window.print();
+      setExportState('printReady');
+      return;
+    }
+
+    printWindow.opener = null;
+    printWindow.document.open();
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <title>${escapeHtmlText(stockName || stockCode)} - WolfyStock</title>
+          <style>
+            body { margin: 0; background: #fff; color: #111827; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+            main { max-width: 820px; margin: 0 auto; padding: 40px 34px; }
+            pre { white-space: pre-wrap; word-break: break-word; font-family: inherit; line-height: 1.58; font-size: 13px; }
+            @media print { main { padding: 0; } }
+          </style>
+        </head>
+        <body><main><pre id="wolfystock-preview-print-report"></pre></main></body>
+      </html>
+    `);
+    const reportNode = printWindow.document.getElementById('wolfystock-preview-print-report');
+    if (reportNode) {
+      reportNode.textContent = content;
+    }
+    printWindow.document.close();
+    printWindow.focus();
+    window.setTimeout(() => printWindow.print(), 80);
+    setExportState('printReady');
+  };
+
+  return (
+    <div
+      className="flex min-w-0 flex-col gap-2 rounded-[1rem] border border-[var(--theme-panel-subtle-border)] bg-base/35 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
+      data-testid="report-export-controls"
+    >
+      <p className="text-xs leading-5 text-muted-text">
+        {normalizedLanguage === 'en'
+          ? 'Exports preserve the visible research evidence and do not add advice.'
+          : '导出内容保留当前研究证据，不新增投资建议。'}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={buttonClassName} disabled={!hasContent} onClick={() => { void handleCopy(); }}>
+          {exportState === 'copied'
+            ? (normalizedLanguage === 'en' ? 'Copied' : '已复制')
+            : (normalizedLanguage === 'en' ? 'Copy report' : '复制报告')}
+        </button>
+        <button type="button" className={buttonClassName} disabled={!hasContent} onClick={handleDownload}>
+          {normalizedLanguage === 'en' ? 'Download Markdown' : '下载 Markdown'}
+        </button>
+        <button type="button" className={buttonClassName} disabled={!hasContent} onClick={handlePrint}>
+          {normalizedLanguage === 'en' ? 'Print / PDF' : '打印 / PDF'}
+        </button>
+      </div>
+      {statusText ? (
+        <p className="text-xs leading-5 text-secondary-text" role="status">
+          {statusText}
+        </p>
+      ) : null}
+    </div>
+  );
+};
+
 const ReportMarkdownStatusPanel: React.FC<{
   error: string | null;
   handleClose: () => void;
@@ -402,11 +594,16 @@ type ReportMarkdownLoadedContentProps = {
     firstLine: string;
     keyRisk: string;
     observation: string;
+    observationTime: string;
   };
   headingClassName: string;
   localizedMarkdownContent: string;
   normalizedLanguage: ReportLanguage;
+  reportGeneratedAt: string;
+  reportMarkdownFileName: string;
   state: ReportMarkdownState;
+  stockCode: string;
+  stockName: string;
   text: ReturnType<typeof getReportText>;
 };
 
@@ -474,7 +671,11 @@ const ReportMarkdownLoadedContent: React.FC<ReportMarkdownLoadedContentProps> = 
   headingClassName,
   localizedMarkdownContent,
   normalizedLanguage,
+  reportGeneratedAt,
+  reportMarkdownFileName,
   state,
+  stockCode,
+  stockName,
   text,
 }) => (
   <div className="space-y-5" data-testid="full-report-reading-surface">
@@ -501,8 +702,22 @@ const ReportMarkdownLoadedContent: React.FC<ReportMarkdownLoadedContentProps> = 
         <p className="mt-3 rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/35 px-3 py-2 text-xs leading-5 text-secondary-text">
           {executiveSummary.coverageBoundary}
         </p>
+        <ReportMarkdownMetadataStrip
+          captionClassName={captionClassName}
+          generatedAt={reportGeneratedAt}
+          normalizedLanguage={normalizedLanguage}
+          observationTime={executiveSummary.observationTime}
+        />
       </SupportPanel>
     </div>
+
+    <ReportMarkdownExportControls
+      content={localizedMarkdownContent}
+      fileName={reportMarkdownFileName}
+      normalizedLanguage={normalizedLanguage}
+      stockCode={stockCode}
+      stockName={stockName}
+    />
 
     <details
       data-testid="report-technical-evidence-details"
@@ -614,20 +829,22 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
       || decisionPanel?.riskControlStrategy
       || getRiskBoundaryFallback(normalizedLanguage),
     ).trim();
+    const observationTime = getObservationTime(standardReport);
     return {
       coverageBoundary: getCoverageBoundaryText(coverageAudit.totalMissingFields, normalizedLanguage),
       firstLine: consumerSafeMarkdownCopy(firstLine, getSummaryFallback(normalizedLanguage)),
       observation: consumerSafeMarkdownCopy(observation, getObservationFallback(normalizedLanguage)),
+      observationTime,
       confidence: consumerSafeMarkdownCopy(confidence, getUnstatedFallback(normalizedLanguage)),
       keyRisk: consumerSafeMarkdownCopy(keyRisk, getRiskBoundaryFallback(normalizedLanguage)),
     };
   })();
+  const reportGeneratedAt = getReportGeneratedTime(standardReport);
+  const reportMarkdownFileName = buildReportExportFileName(stockCode, stockName, reportGeneratedAt);
 
-  // Handle close with animation
   const handleClose = () => {
     dispatch({ type: 'close' });
-    // Delay actual close to allow animation to complete
-    setTimeout(onClose, 300);
+    onClose();
   };
 
   useEffect(() => {
@@ -684,7 +901,11 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
             headingClassName={headingClassName}
             localizedMarkdownContent={localizedMarkdownContent}
             normalizedLanguage={normalizedLanguage}
+            reportGeneratedAt={reportGeneratedAt}
+            reportMarkdownFileName={reportMarkdownFileName}
             state={state}
+            stockCode={stockCode}
+            stockName={stockName}
             text={text}
           />
         ) : null}
