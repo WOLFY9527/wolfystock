@@ -16,7 +16,6 @@ import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { watchlistApi } from '../api/watchlist';
 import { ConsumerProtectedFrame, ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
-import { ConsumerOnboardingCtaPanel } from '../components/common/ConsumerOnboardingCtaPanel';
 import { Input } from '../components/common/Input';
 import { Select } from '../components/common/Select';
 import {
@@ -26,7 +25,6 @@ import {
   DenseRows,
 } from '../components/linear/LinearPrimitives';
 import {
-  CompactEmptyRow,
   DenseCommandBar,
   DensePageHeader,
   DenseSecondaryDisclosure,
@@ -36,6 +34,7 @@ import {
 import {
   TerminalButton,
   TerminalChip,
+  TerminalEmptyState,
   TerminalNotice,
   TerminalPanel,
 } from '../components/terminal/TerminalPrimitives';
@@ -2559,7 +2558,9 @@ const WatchlistPage: React.FC = () => {
       ? 'border-[color:var(--wolfy-market-warn)] bg-[color:color-mix(in_srgb,var(--wolfy-market-warn)_9%,var(--wolfy-surface-input))] text-[color:var(--wolfy-text-primary)]'
       : 'border-[color:var(--wolfy-accent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_9%,var(--wolfy-surface-input))] text-[color:var(--wolfy-text-primary)]';
   const autoRefreshStatus = describeBooleanEnabled(refreshStatus?.enabled, { language });
-  const isWatchlistEmptyWorkspace = !isLoading && !error && !authRequired && items.length === 0;
+  const hasWatchlistListError = Boolean(error);
+  const isWatchlistEmptyWorkspace = !isLoading && !hasWatchlistListError && !authRequired && items.length === 0;
+  const showWatchlistWorkControls = !isWatchlistEmptyWorkspace && !hasWatchlistListError;
   const attentionCount = watchlistConclusion.staleCount + watchlistConclusion.unknownCount + watchlistConclusion.limitedConfidenceCount;
   const monitoringStateLabel = formatMonitoringStateLabel(watchlistConclusion.tone, filteredItems.length, language);
   const statusItems = [
@@ -2672,6 +2673,9 @@ const WatchlistPage: React.FC = () => {
           title={copy.title}
           action={undefined}
         />
+        <h2 className="text-xs font-medium text-[color:var(--wolfy-text-muted)]">
+          {language === 'zh' ? '观察列表' : 'Watchlist'}
+        </h2>
 
         <WatchlistConclusionBand
           model={watchlistConclusion}
@@ -2709,7 +2713,7 @@ const WatchlistPage: React.FC = () => {
       </div>
 
       <DenseTableShell data-testid="watchlist-watch-board" variant="board">
-        {!isWatchlistEmptyWorkspace ? (
+        {showWatchlistWorkControls ? (
           <CompactFilterBar
             data-testid="watchlist-compact-filter-bar"
             className="min-h-0 rounded-none border-x-0 border-t-0 px-3 py-2"
@@ -2812,12 +2816,12 @@ const WatchlistPage: React.FC = () => {
             <ConsoleBoard
               data-testid="watchlist-ledger-scroll-region"
               role="region"
-              aria-label={language === 'en' ? 'Watchlist ledger region' : '观察列表台账区域'}
+              aria-label={language === 'en' ? 'Watchlist ledger horizontal scroll region' : '观察列表台账横向滚动区域'}
               tabIndex={0}
               onFocusCapture={scrollFocusedDescendantIntoHorizontalView}
               className="overflow-x-hidden overscroll-x-contain rounded-none border-0 bg-transparent px-1 pb-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--wolfy-accent-focus)] lg:overflow-x-auto"
             >
-              {!isWatchlistEmptyWorkspace ? (
+              {showWatchlistWorkControls ? (
                 <div className="flex min-w-0 items-center justify-between gap-3 border-b border-[color:var(--wolfy-divider)] px-4 py-3">
                   <div className="min-w-0">
                     <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.tableTitle}</p>
@@ -2846,6 +2850,14 @@ const WatchlistPage: React.FC = () => {
               {isLoading ? (
                 <TerminalPanel as="section" dense className="py-8 text-center text-sm text-[color:var(--wolfy-text-muted)]" role="status">
                   {copy.loading}
+                </TerminalPanel>
+              ) : hasWatchlistListError ? (
+                <TerminalPanel as="section" dense className="py-8 text-center text-sm text-[color:var(--wolfy-text-muted)]" role="status">
+                  <TerminalEmptyState title={language === 'en' ? 'Watchlist temporarily unavailable' : '观察列表暂不可用'}>
+                    {language === 'en'
+                      ? 'The saved-symbol ledger could not be loaded. The empty state is hidden until the service confirms there are no saved rows.'
+                      : '已保存标的台账暂时无法载入。只有服务确认没有保存记录后，才显示空状态。'}
+                  </TerminalEmptyState>
                 </TerminalPanel>
               ) : filteredItems.length > 0 ? (
                 <DenseRows
@@ -3268,63 +3280,111 @@ const WatchlistPage: React.FC = () => {
                   })}
                 </DenseRows>
               ) : (
-                <CompactEmptyRow
+                <div
                   data-testid="watchlist-compact-empty-state"
-                  title={copy.emptyTitle}
                   className={isWatchlistEmptyWorkspace
-                    ? 'mx-auto min-h-[168px] w-full max-w-3xl flex-col items-center justify-center rounded-none border-0 bg-transparent px-4 py-8 text-center sm:min-h-[188px]'
-                    : 'min-h-[72px] flex-col items-start justify-start rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent px-4 py-4 sm:flex-row sm:items-center sm:justify-between'
+                    ? 'mx-auto flex min-h-[168px] w-full max-w-3xl flex-col items-center justify-center gap-4 rounded-none border-0 bg-transparent px-4 py-8 text-center text-xs text-[color:var(--wolfy-text-muted)] sm:min-h-[188px] sm:items-center'
+                    : 'flex min-h-[72px] flex-col items-start justify-start gap-3 rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent px-4 py-4 text-xs text-[color:var(--wolfy-text-muted)] sm:flex-row sm:items-center sm:justify-between'
                   }
-                  action={undefined}
                 >
                   <div className="grid w-full min-w-0 gap-4">
-                    <div className="space-y-1">
-                    <p>{copy.emptyBody}</p>
-                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.emptyHelp}</p>
-                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.emptyScannerHelp}</p>
+                    <div className="w-full min-w-0 space-y-1">
+                      <p className="text-xs text-[color:var(--wolfy-text-secondary)]">{copy.emptyTitle}</p>
+                      <p>{copy.emptyBody}</p>
+                      <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.emptyHelp}</p>
+                      <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">
+                        {language === 'en'
+                          ? 'After adding, saved candidate evidence and status appear here.'
+                          : '添加后可在这里查看已保存的候选证据与状态。'}
+                      </p>
+                      <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.emptyScannerHelp}</p>
                     </div>
+                  </div>
 
-                    {isWatchlistEmptyWorkspace ? (
-                      <ConsumerOnboardingCtaPanel
-                        data-testid="watchlist-empty-onboarding-cta"
-                        language={language}
-                        title={language === 'en' ? 'Start with market context or one user-chosen symbol' : '先看市场语境，再选择一个你想观察的代码'}
-                        actions={[
-                          {
-                            route: '/market-overview',
-                            description: language === 'en'
-                              ? 'Read the broad market context before choosing a symbol.'
-                              : '先阅读市场背景，再决定是否继续进入标的研究。',
-                          },
-                          {
-                            route: '/scanner',
-                            description: language === 'en'
-                              ? 'Run scanner only when you want a fresh candidate set.'
-                              : '需要候选集合时，由你手动运行扫描。',
-                          },
-                          {
-                            route: '/watchlist',
-                            description: language === 'en'
-                              ? 'Use the input below to research one symbol before saving it.'
-                              : '用下方输入框先研究一个代码，确认后再保存观察。',
-                          },
-                          {
-                            route: '/research/radar',
-                            description: language === 'en'
-                              ? 'Review the radar after scanner or watchlist activity.'
-                              : '扫描或观察列表有活动后，再回到研究雷达。',
-                          },
-                        ]}
-                        starterResearchWorkflow={language === 'en'
-                          ? ['Open Market Overview.', 'Research one symbol here.', 'Run Scanner if you need candidates.', 'Return to Research Radar after activity.']
-                          : ['打开市场概览。', '在这里研究一个你选择的代码。', '需要候选集合时再运行 Scanner。', '有活动后回到研究雷达。']}
-                        firstRunChecklist={language === 'en'
-                          ? ['No symbol is saved automatically.', 'No seeded watchlist item is created.', 'Scanner and account actions stay user-triggered.']
-                          : ['不会自动保存代码。', '不会创建预置观察标的。', '扫描和账户动作都保持用户触发。']}
-                      />
-                    ) : null}
+                  {isWatchlistEmptyWorkspace ? (
+                    <section
+                      data-testid="watchlist-empty-onboarding-cta"
+                      data-density="compact"
+                      className="w-full max-w-3xl min-w-0 rounded-xl border border-[color:color-mix(in_srgb,var(--wolfy-accent)_28%,transparent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_7%,transparent)] p-3 text-left"
+                    >
+                      <div className="min-w-0">
+                        <TerminalChip variant="info">{language === 'en' ? 'First research path' : '首次研究路径'}</TerminalChip>
+                        <h3 className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
+                          {language === 'en' ? 'Start with market context or one user-chosen symbol' : '先看市场语境，再选择一个你想观察的代码'}
+                        </h3>
+                      </div>
+                      <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+                        <a
+                          role="button"
+                          href={buildLocalizedPath('/scanner', language)}
+                          aria-label={language === 'en' ? 'Open Scanner' : '打开扫描器'}
+                          className="inline-flex min-h-10 min-w-0 items-center rounded-md border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-3 py-2 text-xs font-medium text-[color:var(--theme-button-primary-text)] transition-colors hover:bg-[var(--sage-deep)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
+                        >
+                          {language === 'en' ? 'Open Scanner' : '打开扫描器'}
+                        </a>
+                        <a
+                          role="button"
+                          href={buildLocalizedPath('/market-overview', language)}
+                          aria-label={language === 'en' ? 'Market Overview first' : '先看市场概览'}
+                          className="inline-flex min-h-10 min-w-0 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--surface)] px-3 py-2 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
+                        >
+                          {language === 'en' ? 'Market Overview first' : '先看市场概览'}
+                        </a>
+                        <a
+                          role="button"
+                          href={buildLocalizedPath('/watchlist', language)}
+                          aria-label={language === 'en' ? 'Choose watchlist symbol' : '选择观察标的'}
+                          className="inline-flex min-h-10 min-w-0 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--surface)] px-3 py-2 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
+                        >
+                          {language === 'en' ? 'Choose watchlist symbol' : '选择观察标的'}
+                        </a>
+                        <a
+                          role="button"
+                          href={buildLocalizedPath('/research/radar', language)}
+                          aria-label={language === 'en' ? 'Open Research Radar' : '查看研究雷达'}
+                          className="inline-flex min-h-10 min-w-0 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--surface)] px-3 py-2 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
+                        >
+                          {language === 'en' ? 'Open Research Radar' : '查看研究雷达'}
+                        </a>
+                      </div>
+                      <ul className="mt-3 space-y-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                        {(language === 'en'
+                          ? [
+                              'Run scanner only when you want a fresh candidate set.',
+                              'Read the broad market context before choosing a symbol.',
+                              'Use the input below to research one symbol before saving it.',
+                              'Review the radar after scanner or watchlist activity.',
+                            ]
+                          : [
+                              '从研究扫描器添加标的到观察列表。',
+                              '先阅读市场背景，再决定是否继续进入标的研究。',
+                              '用下方输入框先研究一个代码，确认后再保存观察。',
+                              '扫描或观察列表有活动后，再回到研究雷达。',
+                            ]).map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                      <div className="mt-3 space-y-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                        <p>
+                          <span className="font-medium text-[color:var(--wolfy-text-secondary)]">
+                            {language === 'en' ? 'Starter flow: ' : '起步流程：'}
+                          </span>
+                          {language === 'en'
+                            ? 'Open Market Overview. → Research one symbol here. → Run Scanner if you need candidates. → Return to Research Radar after activity.'
+                            : '打开市场概览。 → 在这里研究一个你选择的代码。 → 需要候选集合时再运行 Scanner。 → 有活动后回到研究雷达。'}
+                        </p>
+                        <ul className="space-y-1">
+                          {(language === 'en'
+                            ? ['No symbol is saved automatically.', 'No seeded watchlist item is created.', 'Scanner and account actions stay user-triggered.']
+                            : ['不会自动保存代码。', '不会创建预置观察标的。', '扫描和账户动作都保持用户触发。']).map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </section>
+                  ) : null}
 
-                    {isWatchlistEmptyWorkspace ? (
+                  {isWatchlistEmptyWorkspace ? (
                       <div
                         data-testid="watchlist-empty-manual-research"
                         data-research-path="primary"
@@ -3372,8 +3432,7 @@ const WatchlistPage: React.FC = () => {
                         <p className="pt-1 text-[11px] leading-relaxed text-[color:var(--wolfy-text-muted)]">{copy.emptyScannerHelp}</p>
                       </div>
                     ) : null}
-                  </div>
-                </CompactEmptyRow>
+                </div>
               )}
             </ConsoleBoard>
           </div>
@@ -3718,7 +3777,7 @@ const WatchlistPage: React.FC = () => {
           ) : null}
         </div>
 
-        {!isWatchlistEmptyWorkspace ? (
+        {showWatchlistWorkControls ? (
         <div data-layout-zone="SecondaryDeck" data-testid="watchlist-secondary-deck" className="min-w-0 border-t border-[color:var(--wolfy-divider)]">
           {watchlistWorkflowSymbol ? (
             <div className="border-b border-[color:var(--wolfy-divider)] px-3 py-3" data-watchlist-role="research-handoff">

@@ -3316,9 +3316,9 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
     const conclusion = screen.getByTestId('market-overview-decision-readiness');
     expect(conclusion).toHaveTextContent('市场论点');
-    expect(conclusion).toHaveTextContent('发生了什么');
-    expect(conclusion).toHaveTextContent('重要点');
-    expect(conclusion).toHaveTextContent('下一步看什么');
+    expect(conclusion).toHaveTextContent('现在市场发生了什么');
+    expect(conclusion).toHaveTextContent('为什么');
+    expect(conclusion).toHaveTextContent('接下来观察什么');
     expect(screen.getByTestId('market-overview-status-line')).toHaveTextContent(/信心水平/);
     expect(screen.queryByTestId('market-command-chips')).not.toBeInTheDocument();
     expect(screen.getByTestId('market-overview-quick-actions')).toHaveTextContent('决策驾驶舱');
@@ -3718,12 +3718,12 @@ describe('MarketOverviewPage', () => {
     const evidenceDisclosure = screen.getByTestId('market-overview-evidence-disclosure');
 
     expect(within(decisionReadiness).getByText('市场论点')).toBeInTheDocument();
-    expect(within(firstReadSummary).getAllByText('发生了什么')).toHaveLength(1);
-    expect(within(firstReadSummary).getAllByText('重要点')).toHaveLength(1);
-    expect(within(firstReadSummary).getAllByText('下一步看什么')).toHaveLength(1);
-    expect(screen.getAllByText('发生了什么')).toHaveLength(1);
-    expect(screen.getAllByText('重要点')).toHaveLength(1);
-    expect(screen.getAllByText('下一步看什么')).toHaveLength(1);
+    expect(within(firstReadSummary).getAllByText('现在市场发生了什么')).toHaveLength(1);
+    expect(within(firstReadSummary).getAllByText('为什么')).toHaveLength(1);
+    expect(within(firstReadSummary).getAllByText('接下来观察什么')).toHaveLength(1);
+    expect(screen.getAllByText('现在市场发生了什么')).toHaveLength(1);
+    expect(screen.getAllByText('为什么')).toHaveLength(1);
+    expect(screen.getAllByText('接下来观察什么')).toHaveLength(1);
     expect(evidenceDisclosure).not.toHaveAttribute('open');
     expect(within(evidenceDisclosure).getByRole('button', { name: '展开 数据说明' })).toBeInTheDocument();
     expect(firstReadSummary.compareDocumentPosition(evidenceDisclosure) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -3752,9 +3752,9 @@ describe('MarketOverviewPage', () => {
     render(createElement(MarketOverviewPage));
 
     const firstReadSummary = await screen.findByRole('region', { name: /首读摘要|first-read summary/i });
-    expect(within(firstReadSummary).getByText('发生了什么')).toBeInTheDocument();
-    expect(within(firstReadSummary).getByText('重要点')).toBeInTheDocument();
-    expect(within(firstReadSummary).getByText('下一步看什么')).toBeInTheDocument();
+    expect(within(firstReadSummary).getByText('现在市场发生了什么')).toBeInTheDocument();
+    expect(within(firstReadSummary).getByText('为什么')).toBeInTheDocument();
+    expect(within(firstReadSummary).getByText('接下来观察什么')).toBeInTheDocument();
     await waitFor(() => expect(firstReadSummary).toHaveTextContent(/VIX.*-2\.40%/));
     expect(firstReadSummary).toHaveTextContent(/US ?10Y.*-0\.14%/);
     expect(firstReadSummary).toHaveTextContent(/BTC|Bitcoin/);
@@ -3810,7 +3810,7 @@ describe('MarketOverviewPage', () => {
     expect(row).toHaveClass('min-w-0', 'overflow-hidden');
     expect(within(row).getByTestId('market-overview-quote-value')).toHaveClass('text-right', 'font-mono');
     expect(within(row).getByTestId('market-overview-quote-change')).toHaveClass('text-right', 'font-mono');
-    expect(within(row).getByTestId('market-overview-dense-quote-sparkline')).toHaveClass('w-[64px]');
+    expect(within(row).getByTestId('market-overview-dense-quote-sparkline')).toHaveClass('w-[48px]');
   });
 
   it('places quote metadata in a compact middle column instead of a right-side stack', async () => {
@@ -3933,7 +3933,7 @@ describe('MarketOverviewPage', () => {
     expect(copiedText).toContain('- 市场温度: 偏暖 (62)');
     expect(copiedText).toMatch(/- 数据质量: (延迟可用|部分数据暂不可用)/);
     expect(copiedText).not.toMatch(/provider_timeout|sourceAuthorityAllowed|scoreContributionAllowed|raw|debug|trace|schema|MarketCache|buy|sell|target price|position sizing|买入|卖出|目标价|止损|仓位/i);
-    expect(await screen.findByText('证据快照已复制')).toBeInTheDocument();
+    expect(await screen.findByText('已复制摘要')).toBeInTheDocument();
   });
 
   it('shows a clear failure state when evidence snapshot copy fails', async () => {
@@ -3971,7 +3971,7 @@ describe('MarketOverviewPage', () => {
     await waitFor(() => expect(screen.getByTestId('market-overview-top-verdict')).toHaveTextContent('偏强观察'));
     fireEvent.click(exportButton);
 
-    expect(await screen.findByText('证据快照已复制')).toBeInTheDocument();
+    expect(await screen.findByText('已复制摘要')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '美股' }));
 
     expect(screen.getByTestId('market-overview-export-summary')).toHaveTextContent('复制证据快照');
@@ -4089,9 +4089,9 @@ describe('MarketOverviewPage', () => {
 
     const conclusion = await screen.findByTestId('market-overview-decision-readiness');
     expect(conclusion).toHaveTextContent('市场论点');
-    expect(conclusion).toHaveTextContent('发生了什么');
-    expect(conclusion).toHaveTextContent('重要点');
-    expect(conclusion).toHaveTextContent('下一步看什么');
+    expect(conclusion).toHaveTextContent('现在市场发生了什么');
+    expect(conclusion).toHaveTextContent('为什么');
+    expect(conclusion).toHaveTextContent('接下来观察什么');
     expect(conclusion.textContent || '').not.toMatch(/买入|卖出|买卖|target|stop|recommend/i);
     expandMarketEvidenceDetails();
     await screen.findByTestId('market-overview-direction-summary');
@@ -4115,9 +4115,9 @@ describe('MarketOverviewPage', () => {
 
     const readyBand = await screen.findByTestId('market-overview-decision-readiness');
     expect(readyBand).toHaveTextContent('市场论点');
-    expect(readyBand).toHaveTextContent('发生了什么');
-    expect(readyBand).toHaveTextContent('重要点');
-    expect(readyBand).toHaveTextContent('下一步看什么');
+    expect(readyBand).toHaveTextContent('现在市场发生了什么');
+    expect(readyBand).toHaveTextContent('为什么');
+    expect(readyBand).toHaveTextContent('接下来观察什么');
     await waitFor(() => expect(readyBand).toHaveTextContent('中等'));
     expect(readyBand).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足/);
     expect(within(readyBand).queryByText('查看需配置的数据源')).not.toBeInTheDocument();
@@ -4178,8 +4178,8 @@ describe('MarketOverviewPage', () => {
     await waitFor(() => expect(screen.getByTestId('market-overview-decision-readiness')).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足/));
     const observationBand = screen.getByTestId('market-overview-decision-readiness');
     expect(observationBand).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足/);
-    expect(observationBand).toHaveTextContent('重要点');
-    expect(observationBand).toHaveTextContent('下一步看什么');
+    expect(observationBand).toHaveTextContent('为什么');
+    expect(observationBand).toHaveTextContent('接下来观察什么');
     expect(observationBand).toHaveTextContent('有限');
     expect(observationBand).toHaveTextContent('标普500');
     expect(observationBand).toHaveTextContent(/信心水平：有限|有限/);
@@ -4245,8 +4245,8 @@ describe('MarketOverviewPage', () => {
 
     expect(posturePanel).toHaveTextContent('市场论点');
     expect(posturePanel).toHaveTextContent('数据说明');
-    expect(posturePanel).toHaveTextContent('重要点');
-    expect(posturePanel).toHaveTextContent('下一步看什么');
+    expect(posturePanel).toHaveTextContent('为什么');
+    expect(posturePanel).toHaveTextContent('接下来观察什么');
     expect(posturePanel).not.toHaveTextContent('主要阻断原因');
     expect(posturePanel).not.toHaveTextContent('下一步需要的数据/配置');
     expect(posturePanel).not.toHaveTextContent('Liquidity beta watch');
@@ -4428,7 +4428,7 @@ describe('MarketOverviewPage', () => {
     expect(posturePanel).toHaveTextContent(/关键证据未补齐|关键证据仍待补齐|关键确认仍待补齐|信号置信度仍偏有限|评分待恢复|数据更新中/);
     expect(posturePanel).toHaveTextContent(/待补|待确认|更新中/);
     expect(posturePanel).toHaveTextContent(/研究观察，不构成投资建议/);
-    expect(posturePanel).toHaveTextContent(/可见事实有限|等待.*证据补齐|下一步看什么/);
+    expect(posturePanel).toHaveTextContent(/可见事实有限|等待.*证据补齐|接下来观察什么/);
     expect(posturePanel).not.toHaveTextContent('missing_scoring_pillars');
     expect(readinessBand).toHaveTextContent(/证据待补/);
     expect(readinessBand).toHaveTextContent(/关键证据未补齐|关键证据仍待补齐|关键确认仍待补齐|信号置信度仍偏有限|评分待恢复|数据更新中/);
@@ -4797,13 +4797,13 @@ describe('MarketOverviewPage', () => {
     const indicesCard = await screen.findByTestId('market-overview-card-indices');
     const firstQuote = await waitFor(() => within(indicesCard).getAllByTestId('market-overview-dense-quote-item')[0]);
     expect(firstQuote).toHaveAttribute('data-quote-item-layout', 'compact-grid');
-    expect(firstQuote).toHaveClass('grid', 'min-w-0', 'grid-cols-[minmax(96px,1fr)_minmax(104px,0.9fr)_76px_minmax(82px,max-content)_minmax(92px,max-content)]');
+    expect(firstQuote).toHaveClass('grid', 'min-w-0', 'grid-cols-[minmax(96px,1fr)_minmax(96px,0.8fr)_64px_minmax(72px,max-content)_minmax(54px,max-content)]');
     expect(indicesCard.className).toContain("[&_[data-testid='market-overview-dense-quote-grid']]:overflow-x-hidden");
-    expect(indicesCard.className).toContain("[&_[data-testid='market-overview-dense-quote-item']]:grid-cols-[minmax(0,1fr)_minmax(0,0.72fr)_minmax(44px,56px)_minmax(62px,max-content)_minmax(64px,max-content)]");
+    expect(indicesCard.className).toContain("[&_[data-testid='market-overview-dense-quote-item']]:grid-cols-[minmax(0,1fr)_minmax(0,0.64fr)_minmax(40px,52px)_minmax(58px,max-content)_minmax(48px,max-content)]");
     expect(indicesCard.className).toContain("max-[520px]:[&_[data-testid='market-overview-dense-quote-sparkline']]:hidden");
     expect(within(firstQuote).getByTestId('market-overview-quote-metadata')).toHaveClass('col-start-2');
     const sparklineSlot = within(firstQuote).getByTestId('market-overview-dense-quote-sparkline');
-    expect(sparklineSlot.className).toContain('w-[76px]');
+    expect(sparklineSlot.className).toContain('w-[64px]');
     expect(sparklineSlot.className).not.toContain('flex-1');
     expect(within(firstQuote).getByTestId('market-overview-quote-value')).toHaveClass('col-start-4');
     expect(within(firstQuote).getByTestId('market-overview-quote-change')).toHaveClass('col-start-5');

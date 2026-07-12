@@ -509,12 +509,14 @@ function CockpitFirstViewportSummary({
   briefing,
   loading,
   dailyLoading,
+  error,
   narrativeSentences,
 }: {
   data: MarketDecisionCockpitResponse | null;
   briefing: DailyIntelligenceResponse | null;
   loading: boolean;
   dailyLoading: boolean;
+  error: ParsedApiError | null;
   narrativeSentences: string[];
 }) {
   const { language } = useI18n();
@@ -604,13 +606,18 @@ function CockpitFirstViewportSummary({
       .forEach((item) => pushUniqueLabel(missingData, item, 3));
     pushSanitizedLabels(missingData, data?.optionsStructureStatus?.blockedReasonCodes, locale, 3);
 
-    const headline = (readModelPrimary ? safeReadModelDisplayText(readModel?.summary, locale) : null)
+    const noConfirmedData = !data && !briefing;
+    const headline = noConfirmedData
+      ? (locale === 'en'
+        ? 'Market decision cockpit is unavailable until evidence returns.'
+        : '市场决策驾驶舱暂不可用，等待证据恢复。')
+      : (readModelPrimary ? safeReadModelDisplayText(readModel?.summary, locale) : null)
       || briefing?.marketRegimeSummary?.summary
       || data?.cockpitSummary?.whatChanged?.[0]
       || narrativeSentences[0]
       || (locale === 'en'
-        ? 'The research packet is still assembling market context.'
-        : '研究包正在整理当前市场语境。');
+        ? 'Market context has not produced a confirmed readout yet.'
+        : '市场语境尚未形成已确认读数。');
 
     return {
       headline: sanitizeCockpitDisplayItems([headline], locale)[0] || headline,
@@ -630,6 +637,24 @@ function CockpitFirstViewportSummary({
       evidenceStrip: buildCockpitEvidenceStrip(data, locale),
     };
   }, [briefing, data, locale, narrativeSentences]);
+
+  if (error && !data && !briefing) {
+    return (
+      <div className="border-b border-[color:var(--wolfy-divider)] p-3">
+        <RoughSectionCard
+          eyebrow={locale === 'en' ? 'Research state' : '研究状态'}
+          title={locale === 'en' ? 'Market context unavailable' : '市场语境暂不可用'}
+          data-testid="decision-cockpit-first-viewport-summary"
+        >
+          <TerminalEmptyState title={error.title || (locale === 'en' ? 'Evidence unavailable' : '证据暂不可用')}>
+            {error.message || (locale === 'en'
+              ? 'Retry after the market decision evidence becomes available again.'
+              : '请在市场判断证据恢复后重试。')}
+          </TerminalEmptyState>
+        </RoughSectionCard>
+      </div>
+    );
+  }
 
   if (loading && dailyLoading && !data && !briefing) {
     return (
@@ -1330,11 +1355,12 @@ export default function MarketDecisionCockpitPage() {
               briefing={dailyIntelligence}
               loading={loading}
               dailyLoading={dailyIntelligenceLoading}
+              error={error}
               narrativeSentences={cockpitNarrative?.sentences ?? []}
             />
             <DailyIntelligenceBriefingSection
               briefing={dailyIntelligence}
-              loading={dailyIntelligenceLoading}
+              loading={error && !data ? false : dailyIntelligenceLoading}
               error={dailyIntelligenceError}
               language={locale}
               localizePath={localize}

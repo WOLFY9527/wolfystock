@@ -421,7 +421,7 @@ describe('WatchlistPage', () => {
     expect(screen.getByRole('table', { name: '观察列表研究台账' })).toBe(screen.getByTestId('watchlist-candidate-list'));
     expect(screen.getByTestId('watchlist-candidate-list')).toHaveAttribute('data-linear-primitive', 'dense-rows');
     expect(screen.getByTestId('watchlist-candidate-list')).toHaveClass('min-w-0', 'lg:min-w-[860px]');
-    const ledgerScrollRegion = screen.getByRole('region', { name: '观察列表台账区域' });
+    const ledgerScrollRegion = screen.getByRole('region', { name: '观察列表台账横向滚动区域' });
     expect(ledgerScrollRegion).toBe(screen.getByTestId('watchlist-ledger-scroll-region'));
     expect(ledgerScrollRegion).toHaveAttribute('tabindex', '0');
     expect(ledgerScrollRegion).toHaveClass('overflow-x-hidden', 'overscroll-x-contain', 'lg:overflow-x-auto');
@@ -2664,10 +2664,10 @@ describe('WatchlistPage', () => {
     expect(onboardingPanel).toHaveTextContent('运行 Scanner');
     expect(onboardingPanel).toHaveTextContent('选择观察标的');
     expect(onboardingPanel).toHaveTextContent('查看研究雷达');
-    expect(within(onboardingPanel).getByRole('link', { name: '先看市场概览' })).toHaveAttribute('href', '/zh/market-overview');
-    expect(within(onboardingPanel).getByRole('link', { name: '运行 Scanner' })).toHaveAttribute('href', '/zh/scanner');
-    expect(within(onboardingPanel).getByRole('link', { name: '选择观察标的' })).toHaveAttribute('href', '/zh/watchlist');
-    expect(within(onboardingPanel).getByRole('link', { name: '查看研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
+    expect(within(onboardingPanel).getByRole('button', { name: '先看市场概览' })).toHaveAttribute('href', '/zh/market-overview');
+    expect(within(onboardingPanel).getByRole('button', { name: '打开扫描器' })).toHaveAttribute('href', '/zh/scanner');
+    expect(within(onboardingPanel).getByRole('button', { name: '选择观察标的' })).toHaveAttribute('href', '/zh/watchlist');
+    expect(within(onboardingPanel).getByRole('button', { name: '查看研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(onboardingPanel).toHaveTextContent('不会自动保存代码。');
     expect(within(emptyState).getByLabelText('手动研究代码')).toBeInTheDocument();
     expect(emptyState).not.toHaveTextContent(/数据不足，禁止判断|买入|卖出|下单|交易|券商|broker/i);
