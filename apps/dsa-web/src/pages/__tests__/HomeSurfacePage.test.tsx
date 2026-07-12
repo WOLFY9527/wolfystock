@@ -501,7 +501,15 @@ describe('HomeSurfacePage', () => {
       liquidityRisk: { summary: 'Stable', volatilityTone: 'calm', fundingStress: 'low', dollarRatePressure: 'low', status: 'ready' },
       sectorThemeRotation: { leadingThemes: ['Software'], laggingThemes: [], diffusion: 'broadening', summary: 'Rotation improving.', status: 'ready' },
       researchQueue: { status: 'ready', items: [] },
-      dataQuality: { state: 'ready', label: 'Ready', summary: 'Ready', sections: {} },
+      dataQuality: {
+        state: 'ready',
+        label: 'Ready',
+        summary: 'Ready',
+        sections: {
+          moneyFlow: 'ready',
+          liquidityRisk: 'ready',
+        },
+      },
       productReadModel: {
         contractVersion: 'product_read_model_v1',
         surface: 'Dashboard',
@@ -652,12 +660,18 @@ describe('HomeSurfacePage', () => {
     const guestMarketPreviewStrip = await screen.findByTestId('guest-home-market-preview-strip');
     const guestTrustStrip = screen.getByTestId('guest-home-trust-strip');
     const guestPreviewStrip = screen.getByTestId('guest-home-preview-strip');
-    expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
+    const dashboard = screen.getByTestId('home-bento-dashboard');
+    expect(dashboard).toBeInTheDocument();
+    expect(dashboard).toHaveAttribute('data-route-identity', 'guest-home');
+    expect(document.title).toBe('WolfyStock 游客研究控制台');
     expect(guestSurface).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'WolfyStock 研究控制台' })).toBeInTheDocument();
     expect(guestCommandSurface).toBeInTheDocument();
     expect(guestCommandSurface).toHaveClass('rounded-[12px]');
     expect(guestMarketPreviewStrip).toBeInTheDocument();
+    expect(guestMarketPreviewStrip).toHaveAttribute('role', 'status');
+    expect(guestMarketPreviewStrip).toHaveAttribute('aria-live', 'polite');
+    expect(guestMarketPreviewStrip).toHaveAttribute('aria-atomic', 'true');
     expect(guestMarketPreviewStrip).toHaveClass('rounded-[10px]', 'bg-[var(--wolfy-surface-input)]');
     expect(screen.getByText('WolfyStock 是面向独立研究者与自驱投资者的股票研究工作区。你可以先查看单个标的预览，登录后再保存报告、回看历史，并继续进入组合或扫描工作台。')).toBeInTheDocument();
     expect(guestMarketPreviewStrip).toHaveTextContent('当前市场观察');
@@ -723,9 +737,9 @@ describe('HomeSurfacePage', () => {
           createdAt: '2026-06-08T08:00:00Z',
         },
         summary: {
-          analysisSummary: '建议买入，目标价看 133.50，跌破 117.40 止损。',
-          operationAdvice: '买入',
-          trendPrediction: '入场后可加仓。',
+          analysisSummary: '目标价看 133.50，跌破 117.40 止损。',
+          operationAdvice: '目标价 133.50',
+          trendPrediction: '跌破 117.40 止损。',
           sentimentScore: 73,
         },
         strategy: {
@@ -748,6 +762,7 @@ describe('HomeSurfacePage', () => {
     expect(keyLevels).toHaveTextContent('上行情景');
     expect(keyLevels).toHaveTextContent('需要确认');
     expect(keyLevels).not.toHaveTextContent(/关键价位|价格触发|失效位|下一关注区间|观察区间|风险失效线|上方观察区|Watch Zone|Upper Watch Zone|Invalidation Line/i);
+    expect(dashboard).toHaveTextContent('当前仅供观察');
     expect(dashboard.textContent).not.toMatch(GUEST_PREVIEW_PRICE_ZONE_FORBIDDEN_COPY_PATTERN);
 
     const exposedAttributeText = Array.from(dashboard.querySelectorAll('[title], [aria-label], summary'))
@@ -839,6 +854,8 @@ describe('HomeSurfacePage', () => {
     const stopLossMetric = screen.getByTestId('home-bento-strategy-metric-风险失效线');
 
     expect(root).toHaveAttribute('data-route-surface', 'ResearchConsole');
+    expect(root).toHaveAttribute('data-route-identity', 'member-home');
+    expect(document.title).toBe('WolfyStock 首页研究控制台');
     expect(root).toHaveClass('w-full', 'flex', 'flex-1', 'min-h-0', 'min-w-0', 'flex-col', 'overflow-x-hidden');
     expect(root).toHaveClass('bg-transparent');
     expect(root.getAttribute('style') || '').not.toContain('radial-gradient');
@@ -2969,6 +2986,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('member-home-index-path-sp500')).toHaveTextContent('S&P 500');
     expect(screen.getByTestId('member-home-data-ledger')).toHaveTextContent('数据账本');
     expect(screen.getByTestId('member-home-data-ledger')).toHaveTextContent('证据与限制');
+    expect(screen.getByTestId('member-home-data-ledger')).toHaveTextContent('资金流向');
+    expect(screen.getByTestId('member-home-data-ledger')).not.toHaveTextContent(/证据域|Evidence domain/);
     expect(screen.getByTestId('member-home-research-queue').compareDocumentPosition(screen.getByTestId('member-home-watch-changes'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.getByTestId('member-home-watch-changes').compareDocumentPosition(screen.getByTestId('member-home-index-path'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.getByTestId('member-home-index-path').compareDocumentPosition(screen.getByTestId('member-home-data-ledger'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);

@@ -125,7 +125,10 @@ describe('GuestHomePage', () => {
     const trustStrip = screen.getByTestId('guest-home-trust-strip');
     const previewStrip = screen.getByTestId('guest-home-preview-strip');
 
-    expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
+    const dashboard = screen.getByTestId('home-bento-dashboard');
+    expect(dashboard).toBeInTheDocument();
+    expect(dashboard).toHaveAttribute('data-route-identity', 'guest-home');
+    expect(document.title).toBe('WolfyStock 游客研究控制台');
     expect(guestFirstScreen).toBeInTheDocument();
     expect(screen.queryByTestId('home-research-console')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'WolfyStock 研究控制台' })).toBeInTheDocument();
@@ -138,6 +141,9 @@ describe('GuestHomePage', () => {
     expect(screen.getByRole('button', { name: '分析' })).toBeEnabled();
     expect(screen.getByText('WolfyStock 是面向独立研究者与自驱投资者的股票研究工作区。你可以先查看单个标的预览，登录后再保存报告、回看历史，并继续进入组合或扫描工作台。')).toBeInTheDocument();
     expect(marketPreviewStrip).toHaveTextContent('当前市场观察');
+    expect(marketPreviewStrip).toHaveAttribute('role', 'status');
+    expect(marketPreviewStrip).toHaveAttribute('aria-live', 'polite');
+    expect(marketPreviewStrip).toHaveAttribute('aria-atomic', 'true');
     // Strip mounts in loading state; wait for public-safe briefing settlement (ready != loading).
     await waitFor(() => {
       expect(marketPreviewStrip).toHaveTextContent('公开市场观察已准备');
@@ -259,6 +265,20 @@ describe('GuestHomePage', () => {
     expect(marketPreviewStrip).not.toHaveTextContent('Preparing public market observation');
     expect(marketPreviewStrip).not.toHaveTextContent('Loading a limited market snapshot using public-safe fields only');
     expect(marketPreviewStrip).not.toHaveTextContent(/\bNVDA\b|NVIDIA|TSLA|Tesla|AAPL|Apple/i);
+  });
+
+  it('announces empty guest first-screen submits without starting preview work', async () => {
+    renderGuest();
+
+    fireEvent.click(screen.getByRole('button', { name: '分析' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('请输入股票代码后再开始分析');
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveAttribute('aria-atomic', 'true');
+    expect(previewMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId('guest-home-clean-search')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-research-console')).not.toBeInTheDocument();
   });
 
   it('shows bounded preview-unavailable copy when the live preview API rate-limits', async () => {
