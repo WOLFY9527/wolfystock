@@ -103,6 +103,14 @@ const { reportImportGate } = vi.hoisted(() => {
   };
 });
 
+async function openHistoryTab() {
+  fireEvent.click(screen.getByRole('tab', { name: '历史结果' }));
+  await act(async () => {
+    await vi.dynamicImportSettled();
+  });
+  await screen.findByTestId('deterministic-result-tab-panel-history', undefined, { timeout: CHART_IMPORT_TIMEOUT });
+}
+
 vi.mock('../../api/backtest', () => ({
   backtestApi: {
     getRuleBacktestRun,
@@ -643,8 +651,7 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getAllByText('实际执行内容').length).toBeGreaterThan(0);
     expect(screen.getByText('原始输入与解析')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('tab', { name: '历史结果' }));
-    expect(await screen.findByTestId('deterministic-result-tab-panel-history')).toBeInTheDocument();
+    await openHistoryTab();
     expect(screen.getByText('同标的历史回测')).toBeInTheDocument();
   }, 10000);
 
@@ -1518,7 +1525,7 @@ describe('DeterministicBacktestResultPage', () => {
     renderResultPage();
 
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');
-    fireEvent.click(screen.getByRole('tab', { name: '历史结果' }));
+    await openHistoryTab();
     expect(await screen.findByText('同标的历史回测')).toBeInTheDocument();
     const historyButtons = await screen.findAllByRole('button', { name: '查看' });
 
@@ -1553,7 +1560,7 @@ describe('DeterministicBacktestResultPage', () => {
     renderResultPage();
 
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: '历史结果' }));
+    await openHistoryTab();
     expect(await screen.findByText('运行比较')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('checkbox', { name: '比较运行 123' }));
@@ -1580,7 +1587,7 @@ describe('DeterministicBacktestResultPage', () => {
     renderResultPage();
 
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: '历史结果' }));
+    await openHistoryTab();
     fireEvent.click(await screen.findByRole('checkbox', { name: '比较运行 123' }));
 
     await waitFor(() => {
@@ -1814,7 +1821,7 @@ describe('DeterministicBacktestResultPage', () => {
     renderResultPageWithCompareWorkbench();
 
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: '历史结果' }));
+    await openHistoryTab();
     fireEvent.click(screen.getByRole('checkbox', { name: '比较运行 123' }));
 
     await waitFor(() => {
@@ -1852,7 +1859,7 @@ describe('DeterministicBacktestResultPage', () => {
     expect(await screen.findByText('至少需要 2 条已完成运行才能打开比较工作台。')).toBeInTheDocument();
   });
 
-  it('updates the inline report when compare summary adds parameter stability evidence', async () => {
+  it('keeps result-page history selection separate from compare evidence execution', async () => {
     const currentRun = makeResultRun({ id: 99 });
     const compareRun = makeResultRun({ id: 123, totalReturnPct: 26.8, benchmarkReturnPct: 20.1 });
     getRuleBacktestRun.mockImplementation(async (id: number) => (id === 123 ? compareRun : currentRun));
@@ -1862,24 +1869,6 @@ describe('DeterministicBacktestResultPage', () => {
       limit: 10,
       items: [currentRun, compareRun],
     });
-    compareRuleBacktestRuns.mockResolvedValue({
-      comparisonSource: 'stored_compare_summary',
-      readMode: 'stored_first',
-      requestedRunIds: [99, 123],
-      resolvedRunIds: [99, 123],
-      comparableRunIds: [99, 123],
-      missingRunIds: [],
-      unavailableRuns: [],
-      fieldGroups: ['parameter_stability_evidence'],
-      parameterStabilityEvidence: {
-        contractKind: 'backtest_parameter_stability_diagnostic_evidence',
-        state: 'available',
-        diagnosticOnly: true,
-        decisionGrade: false,
-        source: 'stored_compare_summary',
-      },
-      items: [],
-    });
 
     renderResultPage();
 
@@ -1887,21 +1876,17 @@ describe('DeterministicBacktestResultPage', () => {
     expect(parameterRow).toHaveTextContent('缺失 / 待验证');
     expect(compareRuleBacktestRuns).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('tab', { name: '历史结果' }));
-    await act(async () => {
-      await vi.dynamicImportSettled();
-    });
+    await openHistoryTab();
     fireEvent.click(screen.getByRole('checkbox', { name: '比较运行 123' }));
 
     await waitFor(() => {
-      expect(compareRuleBacktestRuns).toHaveBeenCalledWith({ runIds: [99, 123] });
+      expect(getRuleBacktestRun).toHaveBeenCalledWith(123);
     });
-    await waitFor(() => {
-      expect(screen.getByTestId('backtest-research-review-row-parameter')).toHaveTextContent('参数稳定性证据可用');
-    });
+    expect(compareRuleBacktestRuns).not.toHaveBeenCalled();
+    expect(screen.getByTestId('backtest-research-review-row-parameter')).toHaveTextContent('缺失 / 待验证');
   });
 
-  it('keeps parameter evidence missing when compare summary loading fails', async () => {
+  it('does not surface compare API errors while selecting history runs on the result page', async () => {
     const currentRun = makeResultRun({ id: 99 });
     const compareRun = makeResultRun({ id: 123 });
     getRuleBacktestRun.mockImplementation(async (id: number) => (id === 123 ? compareRun : currentRun));
@@ -1917,16 +1902,15 @@ describe('DeterministicBacktestResultPage', () => {
 
     expect(await screen.findByTestId('backtest-research-review-row-parameter')).toHaveTextContent('缺失 / 待验证');
 
-    fireEvent.click(screen.getByRole('tab', { name: '历史结果' }));
-    await act(async () => {
-      await vi.dynamicImportSettled();
-    });
+    await openHistoryTab();
     fireEvent.click(screen.getByRole('checkbox', { name: '比较运行 123' }));
 
     await waitFor(() => {
-      expect(compareRuleBacktestRuns).toHaveBeenCalledWith({ runIds: [99, 123] });
+      expect(getRuleBacktestRun).toHaveBeenCalledWith(123);
     });
+    expect(compareRuleBacktestRuns).not.toHaveBeenCalled();
     expect(await screen.findByTestId('backtest-research-review-row-parameter')).toHaveTextContent('缺失 / 待验证');
+    expect(screen.queryByText('compare unavailable')).not.toBeInTheDocument();
   });
 
   it('runs lightweight scenario variants and exports the summary report with a robustness appendix', async () => {
