@@ -507,9 +507,27 @@ describe('LoginPage', () => {
     expect(container.querySelectorAll('.input-field__trailing')).toHaveLength(1);
   });
 
-  it('links the login page to the reset-password route', () => {
+  it('links the login page to the reset-password route and preserves safe redirects', () => {
     window.history.replaceState(window.history.state, '', '/login?redirect=%2Fsettings');
     useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fsettings')]);
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login: vi.fn(),
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    renderPage();
+
+    expect(screen.getByRole('link', { name: translate('zh', 'auth.login.forgotPassword') })).toHaveAttribute(
+      'href',
+      '/reset-password?redirect=%2Fsettings',
+    );
+  });
+
+  it('drops unsafe redirect values from the reset-password route link', () => {
+    window.history.replaceState(window.history.state, '', '/login?redirect=https%3A%2F%2Fevil.example%2Fsettings');
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=https%3A%2F%2Fevil.example%2Fsettings')]);
     useAuthMock.mockReturnValue({
       authEnabled: true,
       login: vi.fn(),

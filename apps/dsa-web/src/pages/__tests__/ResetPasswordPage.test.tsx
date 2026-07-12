@@ -72,6 +72,39 @@ describe('ResetPasswordPage', () => {
       translate('en', 'auth.reset.identifierPlaceholder'),
     );
     expect(screen.getByRole('button', { name: translate('en', 'auth.reset.submit') })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: translate('en', 'auth.reset.backToLogin') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('en', 'auth.reset.backToLogin') })).toHaveAttribute(
+      'href',
+      '/en/login',
+    );
+  });
+
+  it('preserves safe redirect values when linking back to login', () => {
+    window.history.replaceState(window.history.state, '', '/reset-password?redirect=%2Fsettings');
+    renderPage('/reset-password?redirect=%2Fsettings');
+
+    expect(screen.getByRole('link', { name: translate('zh', 'auth.reset.backToLogin') })).toHaveAttribute(
+      'href',
+      '/login?redirect=%2Fsettings',
+    );
+  });
+
+  it('does not send duplicate reset requests while the first submit is pending', async () => {
+    let resolveRequest: (value: { ok: boolean; message: string }) => void = () => undefined;
+    requestPasswordReset.mockReturnValue(new Promise((resolve) => {
+      resolveRequest = resolve;
+    }));
+
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.reset.identifierLabel')), {
+      target: { value: 'alice@example.com' },
+    });
+    fireEvent.submit(screen.getByLabelText(translate('zh', 'auth.reset.identifierLabel')).closest('form') as HTMLFormElement);
+    fireEvent.submit(screen.getByLabelText(translate('zh', 'auth.reset.identifierLabel')).closest('form') as HTMLFormElement);
+
+    expect(requestPasswordReset).toHaveBeenCalledTimes(1);
+
+    resolveRequest({ ok: true, message: translate('zh', 'auth.reset.successBody') });
+    expect(await screen.findByText(translate('zh', 'auth.reset.successTitle'))).toBeInTheDocument();
   });
 });

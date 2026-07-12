@@ -31,6 +31,7 @@ import {
 } from '../components/terminal/TerminalPrimitives';
 import AdminOpsL0OverviewStrip, { type AdminOpsTrustState } from '../components/admin/AdminOpsL0OverviewStrip';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { useProductSurface } from '../hooks/useProductSurface';
 import { cn } from '../utils/cn';
 import {
   describeAdminNotificationStatus,
@@ -100,6 +101,39 @@ function displayEventMessage(message: string | null | undefined, language: 'zh' 
   return raw;
 }
 
+const DELIVERY_SECRET_KEY_PATTERN = /(token|secret|password|cookie|session|authorization|bearer|credential|api[_-]?key|webhook|url|payload|raw|body|trace|stack|prompt)/i;
+const DELIVERY_SECRET_VALUE_PATTERN = /(https?:\/\/|www\.|token=|api[_-]?key=|secret=|password=|cookie=|authorization|bearer\s+|payload|traceback|stack trace|internal_|diagnostic[_-]?ref|backend[_-]?field|provider)/i;
+
+function sanitizeDeliveryText(value: unknown, fallback: string): string {
+  const text = String(value ?? '').trim();
+  if (!text) return fallback;
+  if (DELIVERY_SECRET_VALUE_PATTERN.test(text)) return fallback;
+  return text.slice(0, 180);
+}
+
+function sanitizeTroubleshooting(items: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(items)) return fallback;
+  const sanitized = items.flatMap((item) => {
+    const text = sanitizeDeliveryText(item, '');
+    return text ? [text] : [];
+  });
+  return sanitized.length ? sanitized : fallback;
+}
+
+function summarizeDeliveryDiagnostics(diagnostics?: Record<string, unknown>): string | null {
+  if (!diagnostics || !Object.keys(diagnostics).length) return null;
+  const safeEntries = Object.entries(diagnostics)
+    .filter(([key]) => !DELIVERY_SECRET_KEY_PATTERN.test(key))
+    .flatMap(([key, value]) => {
+      if (value === null || value === undefined || typeof value === 'object') return [];
+      const safeValue = sanitizeDeliveryText(value, '');
+      return safeValue ? [[key, safeValue] as const] : [];
+    })
+    .slice(0, 6);
+  if (!safeEntries.length) return null;
+  return JSON.stringify(Object.fromEntries(safeEntries), null, 2);
+}
+
 function isSslDeliveryError(message?: string | null, code?: string | null): boolean {
   const text = `${code || ''} ${message || ''}`.toLowerCase();
   return /ssl_certificate_verify_failed|certificate verify failed|ssl certificate verification failed|ssl 证书|证书.*验证失败|证书校验失败/.test(text);
@@ -115,40 +149,39 @@ function formatDeliveryError(
   if (!rawMessage) {
     return null;
   }
-  const diagnosticDetails = diagnostics && Object.keys(diagnostics).length > 0
-    ? JSON.stringify(diagnostics, null, 2)
-    : null;
-
-  const troubleshooting = Array.isArray(diagnostics?.troubleshooting)
-    ? diagnostics.troubleshooting.flatMap((item) => {
-      const message = String(item);
-      return message ? [message] : [];
-    })
-    : [];
+  const safeRawMessage = sanitizeDeliveryText(
+    rawMessage,
+    language === 'en' ? 'Delivery error details were redacted.' : '投递错误细节已脱敏。',
+  );
+  const diagnosticDetails = summarizeDeliveryDiagnostics(diagnostics);
+  const sslFallback = language === 'en'
+    ? [
+      'Check the certificate chain, trusted CA, and hostname.',
+      'Self-signed, expired, or proxy-rewritten TLS certificates can all trigger this failure.',
+      'Confirm the TLS handshake succeeds from the server or proxy that reaches the webhook URL.',
+    ]
+    : [
+      '请检查证书链、受信任 CA 和主机名是否匹配。',
+      '自签名证书、过期证书或中间代理改写 TLS 证书链都可能导致校验失败。',
+      '请在服务器或代理侧确认该 webhook URL 的 TLS 握手可以通过。',
+    ];
+  const troubleshooting = sanitizeTroubleshooting(diagnostics?.troubleshooting, sslFallback);
 
   if (isSslDeliveryError(rawMessage, code)) {
     if (language === 'en') {
       return {
         tone: 'danger',
         message: 'Webhook SSL certificate verification failed.',
-        details: troubleshooting.length > 0 ? troubleshooting : [
-          'Check the certificate chain, trusted CA, and hostname.',
-          'Self-signed, expired, or proxy-rewritten TLS certificates can all trigger this failure.',
-          'Confirm the TLS handshake succeeds from the server or proxy that reaches the webhook URL.',
-        ],
-        rawMessage,
+        details: troubleshooting,
+        rawMessage: safeRawMessage,
       };
     }
 
     return {
       tone: 'danger',
       message: 'Webhook SSL 证书校验失败。',
-      details: troubleshooting.length > 0 ? troubleshooting : [
-        '请检查证书链、受信任 CA 和主机名是否匹配。',
-        '自签名证书、过期证书或中间代理改写 TLS 证书链都可能导致校验失败。',
-        '请在服务器或代理侧确认该 webhook URL 的 TLS 握手可以通过。',
-      ],
-      rawMessage,
+      details: troubleshooting,
+      rawMessage: safeRawMessage,
     };
   }
 
@@ -167,7 +200,7 @@ function formatDeliveryError(
           '请检查目标服务、DNS、代理和上游延迟。',
           '如果 webhook 目标位于网关之后，请确认请求能够在超时时间内完成。',
         ],
-      rawMessage,
+      rawMessage: safeRawMessage,
     };
   }
 
@@ -180,13 +213,13 @@ function formatDeliveryError(
       details: language === 'en'
         ? [
           'Check the target service, URL, credentials, and network connectivity.',
-          'Use the raw diagnostic below if the target returned a specific HTTP status or payload error.',
+          'Use the sanitized diagnostic below if the target returned a specific HTTP status.',
         ]
         : [
           '请检查目标服务、URL、认证凭据和网络连通性。',
-          '如果目标返回了具体的 HTTP 状态码或载荷错误，请继续参考下方原始诊断。',
+          '如果目标返回了具体的 HTTP 状态码，请继续参考下方脱敏诊断。',
         ],
-      rawMessage,
+      rawMessage: safeRawMessage,
     };
   }
 
@@ -195,7 +228,7 @@ function formatDeliveryError(
     message: language === 'en'
       ? 'Notification delivery failed.'
       : '通知投递失败。',
-    rawMessage,
+    rawMessage: safeRawMessage,
     details: language === 'en'
       ? ['Review the collapsed operator diagnostics before retrying this route.']
       : ['请先展开下方运维诊断并核对后，再重试该路由。'],
@@ -262,8 +295,9 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
     : (language === 'en' ? 'Unacknowledged' : '未确认');
 }
 
-  const AdminNotificationsPage: React.FC = () => {
+const AdminNotificationsPage: React.FC = () => {
   const { language } = useI18n();
+  const { canReadNotifications } = useProductSurface();
   const isEnglish = language === 'en';
   const text = (en: string, zh: string) => (isEnglish ? en : zh);
   const [channels, setChannels] = useState<NotificationChannel[]>([]);
@@ -334,6 +368,14 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
       : text('Keep route coverage current and dry-run when ownership changes.', '保持路由覆盖，通道变更时先做试运行。');
 
   const loadAll = useCallback(async () => {
+    if (!canReadNotifications) {
+      setChannels([]);
+      setAvailableSystemChannels([]);
+      setEvents([]);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -359,7 +401,7 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [canReadNotifications]);
 
   useEffect(() => {
     void loadAll();
@@ -391,6 +433,7 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
   })();
 
   async function createChannel() {
+    if (!canReadNotifications) return;
     setFormError(null);
     setNotice(null);
     if (!payload.name) {
@@ -419,6 +462,7 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
   }
 
   async function toggleChannel(channel: NotificationChannel) {
+    if (!canReadNotifications) return;
     setBusyId(channel.id);
     setNotice(null);
     try {
@@ -432,6 +476,7 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
   }
 
   async function testChannel(channelId: number, dryRun: boolean) {
+    if (!canReadNotifications) return;
     setBusyId(channelId);
     setNotice(null);
     try {
@@ -448,7 +493,7 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
         setNotice(failure || {
           tone: 'danger',
           message: dryRun ? text('Dry run failed.', '试运行失败。') : text('Test notification failed.', '测试通知失败。'),
-          rawMessage: response.error || null,
+          rawMessage: response.error ? sanitizeDeliveryText(response.error, text('Delivery error details were redacted.', '投递错误细节已脱敏。')) : null,
         });
       }
       await loadAll();
@@ -460,6 +505,7 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
   }
 
   async function deleteChannel(channelId: number) {
+    if (!canReadNotifications) return;
     const confirmed = window.confirm(text(
       'Remove only this log notification route association? The configured system channel and credentials will not be deleted.',
       '仅解除日志路由绑定？这不会删除系统通道或已配置凭据。',
@@ -484,6 +530,7 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
   }
 
   async function acknowledge(eventId: number) {
+    if (!canReadNotifications) return;
     setBusyId(eventId);
     setNotice(null);
     try {
@@ -494,6 +541,27 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
     } finally {
       setBusyId(null);
     }
+  }
+
+  if (!canReadNotifications) {
+    return (
+      <TerminalPageShell
+        data-testid="admin-notifications-workspace"
+        className="min-h-0 flex-1 overflow-x-hidden py-5 md:py-6"
+      >
+        <TerminalPageHeading
+          eyebrow={text('Operational alerts', '运维告警')}
+          title={text('Admin notifications', '管理员通知')}
+          action={<TerminalChip variant="danger">{text('Missing capability', '缺少权限')}</TerminalChip>}
+        />
+        <TerminalNotice data-testid="admin-notifications-capability-denied" variant="danger">
+          {text(
+            'Notifications are fail-closed because this account is missing the notifications capability.',
+            '当前账号缺少通知管理权限，通知页面已 fail-closed。',
+          )}
+        </TerminalNotice>
+      </TerminalPageShell>
+    );
   }
 
   return (

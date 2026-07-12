@@ -39,6 +39,7 @@ import AdminDrillThroughStrip from '../components/admin/AdminDrillThroughStrip';
 import AdminOpsL0OverviewStrip, { type AdminOpsTrustState } from '../components/admin/AdminOpsL0OverviewStrip';
 import { getStatusLabel, normalizeStatus, type UnifiedStatus } from '../components/ui/StatusBadge.helpers';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { useProductSurface } from '../hooks/useProductSurface';
 import { describeAdminLogLevel } from '../utils/displayStatus';
 import { formatDateTime as formatDateTimeValue, formatDurationMs } from '../utils/format';
 
@@ -1426,6 +1427,7 @@ async function copyTextValue(value: unknown): Promise<void> {
 
 const AdminLogsPage: React.FC = () => {
   const { language, t } = useI18n();
+  const { canReadOpsLogs } = useProductSurface();
   const locale = language as AdminLogsLanguage;
   const [drillQuery] = useState(readAdminLogsQuery);
   const [activeTab, setActiveTab] = useState<LogsTab>(drillQuery.activeTab);
@@ -1466,15 +1468,24 @@ const AdminLogsPage: React.FC = () => {
   const [drillHighlight] = useState<string | null>(drillQuery.eventId);
 
   const loadStorageSummary = useCallback(async () => {
+    if (!canReadOpsLogs) {
+      setStorageSummary(null);
+      return;
+    }
     try {
       const response = await adminLogsApi.getStorageSummary();
       setStorageSummary(response);
     } catch {
       setStorageSummary(null);
     }
-  }, []);
+  }, [canReadOpsLogs]);
 
   const loadDataMissing = useCallback(async () => {
+    if (!canReadOpsLogs) {
+      setDataMissingItems([]);
+      setIsLoadingDataMissing(false);
+      return;
+    }
     if (activeTab === 'raw') {
       setDataMissingItems([]);
       return;
@@ -1491,9 +1502,14 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsLoadingDataMissing(false);
     }
-  }, [activeTab, sinceFilter]);
+  }, [activeTab, canReadOpsLogs, sinceFilter]);
 
   const loadOperatorIssues = useCallback(async () => {
+    if (!canReadOpsLogs) {
+      setOperatorIssueItems([]);
+      setIsLoadingOperatorIssues(false);
+      return;
+    }
     if (activeTab === 'raw') {
       setOperatorIssueItems([]);
       return;
@@ -1510,9 +1526,20 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsLoadingOperatorIssues(false);
     }
-  }, [activeTab, sinceFilter]);
+  }, [activeTab, canReadOpsLogs, sinceFilter]);
 
   const loadSessions = useCallback(async () => {
+    if (!canReadOpsLogs) {
+      setBusinessEvents([]);
+      setBusinessTotal(0);
+      setBusinessHasMore(false);
+      setBusinessHealth(null);
+      setSessions([]);
+      setSummary(null);
+      setError(null);
+      setIsLoadingList(false);
+      return;
+    }
     setIsLoadingList(true);
     setError(null);
     try {
@@ -1567,9 +1594,10 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsLoadingList(false);
     }
-  }, [activeTab, categoryFilter, levelFilter, pageOffset, searchQuery, showDebugLogs, sinceFilter, statusFilter]);
+  }, [activeTab, canReadOpsLogs, categoryFilter, levelFilter, pageOffset, searchQuery, showDebugLogs, sinceFilter, statusFilter]);
 
   const previewCleanup = useCallback(async () => {
+    if (!canReadOpsLogs) return;
     setIsCleanupBusy(true);
     setCleanupMessage(null);
     try {
@@ -1583,9 +1611,10 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsCleanupBusy(false);
     }
-  }, [locale]);
+  }, [canReadOpsLogs, locale]);
 
   const previewCapacityCleanup = useCallback(async () => {
+    if (!canReadOpsLogs) return;
     setIsCleanupBusy(true);
     setCleanupMessage(null);
     try {
@@ -1603,9 +1632,10 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsCleanupBusy(false);
     }
-  }, [locale]);
+  }, [canReadOpsLogs, locale]);
 
   const confirmCleanup = useCallback(async () => {
+    if (!canReadOpsLogs) return;
     const expectedCount = cleanupPreview?.matchedLogCount ?? storageSummary?.logsOlderThanRetentionCount ?? 0;
     const cutoff = cleanupPreview?.cutoff || storageSummary?.retentionCutoff || '';
     const mode = cleanupPreview?.mode === 'capacity' ? 'capacity' : 'retention';
@@ -1645,7 +1675,7 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsCleanupBusy(false);
     }
-  }, [cleanupPreview, loadSessions, loadStorageSummary, locale, storageSummary]);
+  }, [canReadOpsLogs, cleanupPreview, loadSessions, loadStorageSummary, locale, storageSummary]);
 
   useEffect(() => {
     setPageOffset(0);
@@ -2027,6 +2057,20 @@ const AdminLogsPage: React.FC = () => {
     || businessEvents[0]?.startedAt
     || filteredSessions[0]?.startedAt
     || null;
+
+  if (!canReadOpsLogs) {
+    return (
+      <section data-testid="admin-logs-workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-x-hidden">
+        <TerminalPageShell data-testid="admin-logs-page-shell" className="min-h-0 flex-1 overflow-x-hidden py-5 md:py-6">
+          <TerminalNotice data-testid="admin-logs-capability-denied" variant="danger">
+            {locale === 'zh'
+              ? '当前账号缺少运维日志读取权限，管理员日志页面已 fail-closed。'
+              : 'Admin logs are fail-closed because this account is missing the ops log capability.'}
+          </TerminalNotice>
+        </TerminalPageShell>
+      </section>
+    );
+  }
 
   return (
     <section data-testid="admin-logs-workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-x-hidden">

@@ -153,7 +153,12 @@ const LoginPage: React.FC = () => {
   const homePath = routeLanguage ? buildLocalizedPath('/', routeLanguage) : '/';
   const postAuthPath = resolveAuthRedirect(`?${searchParams.toString()}`, homePath);
   const guestPath = routeLanguage ? buildLocalizedPath('/guest', routeLanguage) : '/guest';
-  const resetPasswordPath = routeLanguage ? buildLocalizedPath('/reset-password', routeLanguage) : '/reset-password';
+  const resetPasswordPath = (() => {
+    const redirect = searchParams.get('redirect');
+    const sanitizedRedirect = redirect ? resolveAuthRedirect(`?redirect=${encodeURIComponent(redirect)}`, '') : '';
+    const suffix = sanitizedRedirect ? `?redirect=${encodeURIComponent(sanitizedRedirect)}` : '';
+    return routeLanguage ? buildLocalizedPath(`/reset-password${suffix}`, routeLanguage) : `/reset-password${suffix}`;
+  })();
 
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');

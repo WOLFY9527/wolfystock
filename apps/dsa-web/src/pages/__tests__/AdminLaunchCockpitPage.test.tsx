@@ -4,10 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminLaunchCockpitPage from '../AdminLaunchCockpitPage';
 import type { AdminOpsStatusResponse, AdminOpsStatusSection } from '../../api/adminOpsStatus';
 
-const { getStatus, getScannerUniverseReadiness, requestScannerUniverseRefresh } = vi.hoisted(() => ({
+const { getStatus, getScannerUniverseReadiness, requestScannerUniverseRefresh, capabilityState } = vi.hoisted(() => ({
   getStatus: vi.fn(),
   getScannerUniverseReadiness: vi.fn(),
   requestScannerUniverseRefresh: vi.fn(),
+  capabilityState: { canReadOpsLogs: true },
 }));
 
 vi.mock('../../api/adminOpsStatus', () => ({
@@ -16,6 +17,10 @@ vi.mock('../../api/adminOpsStatus', () => ({
     getScannerUniverseReadiness,
     requestScannerUniverseRefresh,
   },
+}));
+
+vi.mock('../../hooks/useProductSurface', () => ({
+  useProductSurface: () => capabilityState,
 }));
 
 const forbiddenVisibleCopy =
@@ -323,8 +328,24 @@ function scannerRefreshFixture(market: 'us' | 'cn') {
 describe('AdminLaunchCockpitPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    capabilityState.canReadOpsLogs = true;
     getScannerUniverseReadiness.mockImplementation((market: 'us' | 'cn') => Promise.resolve(scannerReadinessFixture(market)));
     requestScannerUniverseRefresh.mockImplementation((market: 'us' | 'cn') => Promise.resolve(scannerRefreshFixture(market)));
+  });
+
+  it('fails closed without ops log capability and does not fetch cockpit data', () => {
+    capabilityState.canReadOpsLogs = false;
+
+    render(
+      <MemoryRouter initialEntries={['/admin/launch-cockpit']}>
+        <AdminLaunchCockpitPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('admin-launch-cockpit-capability-denied')).toBeInTheDocument();
+    expect(getStatus).not.toHaveBeenCalled();
+    expect(getScannerUniverseReadiness).not.toHaveBeenCalled();
+    expect(requestScannerUniverseRefresh).not.toHaveBeenCalled();
   });
 
   it('renders a read-only private beta cockpit with NO-GO and evidence states first', async () => {
