@@ -2645,6 +2645,8 @@ const UserScannerPage: React.FC = () => {
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window === 'undefined' ? 1440 : window.innerWidth));
   const selectedRunIdRef = useRef<number | null>(null);
   const scannerRunInFlightRef = useRef(false);
+  const moreActionsTriggerRef = useRef<HTMLButtonElement>(null);
+  const moreActionsPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -2653,6 +2655,26 @@ const UserScannerPage: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (!isMoreActionsOpen) return undefined;
+
+    const focusFirstAction = window.requestAnimationFrame(() => {
+      moreActionsPanelRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+    });
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setIsMoreActionsOpen(false);
+      moreActionsTriggerRef.current?.focus();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.cancelAnimationFrame(focusFirstAction);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMoreActionsOpen]);
 
   const profileOptions = useMemo(
     () => getScannerProfileOptions(market, t).map((option) => ({
@@ -4716,6 +4738,7 @@ const UserScannerPage: React.FC = () => {
                     data-layout-zone="PrimaryWorkRegion"
                     data-discovery-role="result-workspace"
                     data-scanner-workspace-state={scannerWorkspaceState}
+                    aria-busy={scannerWorkspaceState === 'loading'}
                     className="flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]"
                   >
                   <div data-testid="scanner-ranked-workbench" className="flex min-h-0 flex-1 min-w-0 flex-col">
@@ -4723,7 +4746,7 @@ const UserScannerPage: React.FC = () => {
                       <div className="flex min-w-0 flex-row flex-wrap items-center gap-2">
                         {runDetail && hasCandidateDiagnostics ? (
                           <div data-testid="scanner-compact-filter-bar" className="min-w-0">
-                            <div data-testid="scanner-candidate-filters" className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1.5 border-r border-[color:var(--wolfy-divider)] pr-2 [&_button]:h-9 [&_button]:px-2.5 [&_button]:py-1.5 md:[&_button]:h-7 md:[&_button]:py-0.5" role="group" aria-label={language === 'en' ? 'Candidate view' : '候选视图'}>
+                            <div data-testid="scanner-candidate-filters" className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1.5 overflow-x-auto overscroll-x-contain border-r border-[color:var(--wolfy-divider)] pr-2 [-webkit-overflow-scrolling:touch] [&_button]:h-9 [&_button]:px-2.5 [&_button]:py-1.5 md:[&_button]:h-7 md:[&_button]:py-0.5" role="group" aria-label={language === 'en' ? 'Candidate view' : '候选视图'}>
                               {([
                                 ['selected', language === 'en' ? 'Selected' : '入选'],
                                 ['pool', language === 'en' ? 'Candidate pool' : '候选池'],
@@ -4739,6 +4762,7 @@ const UserScannerPage: React.FC = () => {
                                       ? 'border-[color:var(--wolfy-accent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_12%,transparent)] text-[color:var(--wolfy-text-primary)]'
                                       : 'border-transparent text-[color:var(--wolfy-text-muted)] hover:bg-[var(--wolfy-surface-input)] hover:text-[color:var(--wolfy-text-secondary)]'
                                   }`}
+                                  aria-pressed={candidateFilter === key}
                                   onClick={() => setCandidateFilter(key)}
                                 >
                                   <span className="ui-truncate block">{label}</span>
@@ -4747,7 +4771,7 @@ const UserScannerPage: React.FC = () => {
                             </div>
                           </div>
                         ) : null}
-                        <div data-testid="scanner-ranked-sortbar" className="flex flex-wrap items-center gap-1.5 text-xs text-[color:var(--wolfy-text-muted)] [&_button]:h-9 [&_button]:px-2.5 [&_button]:py-1.5 md:[&_button]:h-7 md:[&_button]:py-0.5">
+                        <div data-testid="scanner-ranked-sortbar" className="flex flex-wrap items-center gap-1.5 text-xs text-[color:var(--wolfy-text-muted)] [&_button]:h-9 [&_button]:px-2.5 [&_button]:py-1.5 md:[&_button]:h-7 md:[&_button]:py-0.5" role="group" aria-label={language === 'en' ? 'Result sorting' : '结果排序'}>
                           <span>{language === 'en' ? 'Sort by' : '排序'}</span>
                           {([
                             ['score', language === 'en' ? 'scanner score' : '扫描评分'],
@@ -4759,6 +4783,10 @@ const UserScannerPage: React.FC = () => {
                               key={key}
                               type="button"
                               className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 ${sortKey === key ? 'border-[color:var(--wolfy-accent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_12%,transparent)] text-[color:var(--wolfy-text-primary)]' : 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)] hover:text-[color:var(--wolfy-text-secondary)]'}`}
+                              aria-pressed={sortKey === key}
+                              aria-label={sortKey === key
+                                ? `${label} · ${sortDirection === 'asc' ? (language === 'en' ? 'ascending' : '升序') : (language === 'en' ? 'descending' : '降序')}`
+                                : label}
                               onClick={() => handleSortChange(key)}
                             >
                               {label}
@@ -4788,11 +4816,13 @@ const UserScannerPage: React.FC = () => {
                             )))}
                           </div>
                         ) : null}
-                        <div data-testid="scanner-more-actions" className="relative min-w-0">
+                        <div data-testid="scanner-more-actions" className="relative min-w-0 shrink-0">
                           <TerminalButton
+                            ref={moreActionsTriggerRef}
                             type="button"
                             variant="compact"
                             aria-expanded={isMoreActionsOpen}
+                            aria-controls="scanner-more-actions-panel"
                             aria-label={language === 'en' ? 'More scanner actions' : '更多扫描操作'}
                             className="min-h-[44px] px-3 py-2 text-sm md:min-h-8 md:px-2.5 md:py-1 md:text-xs"
                             onClick={() => setIsMoreActionsOpen((current) => !current)}
@@ -4801,7 +4831,7 @@ const UserScannerPage: React.FC = () => {
                             <span>{language === 'en' ? 'More' : '更多'}</span>
                           </TerminalButton>
                           {isMoreActionsOpen ? (
-                            <div data-testid="scanner-more-actions-panel" className="absolute right-0 z-20 mt-2 grid min-w-[220px] gap-1.5 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-2 shadow-[var(--wolfy-shadow-panel)]">
+                            <div ref={moreActionsPanelRef} id="scanner-more-actions-panel" data-testid="scanner-more-actions-panel" className="absolute right-0 z-20 mt-2 grid min-w-[220px] gap-1.5 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-2 shadow-[var(--wolfy-shadow-panel)]" role="group" aria-label={language === 'en' ? 'More scanner actions' : '更多扫描操作'}>
                               <ActionButton
                                 label={language === 'en' ? 'Export CSV' : '导出 CSV'}
                                 icon={<Download className="h-3.5 w-3.5" />}
@@ -4870,11 +4900,17 @@ const UserScannerPage: React.FC = () => {
                               data-testid="scanner-ranked-list"
                               className="overflow-x-auto overscroll-x-contain rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] [-webkit-overflow-scrolling:touch]"
                               aria-label={language === 'en' ? 'Ranked scanner results' : '扫描排名结果'}
+                              aria-describedby="scanner-ranked-list-scroll-hint"
                               role="table"
                               aria-colcount={8}
                               aria-rowcount={workbenchDiagnostics.length + 1}
                               tabIndex={0}
                             >
+                              <p id="scanner-ranked-list-scroll-hint" className="sr-only">
+                                {language === 'en'
+                                  ? 'Results remain a table. On narrow screens, scroll this region horizontally to review every column.'
+                                  : '结果保留为表格；窄屏下可在此区域横向滚动以查看全部列。'}
+                              </p>
                               <div data-testid="scanner-result-table" className="contents md:block md:min-w-[1220px]">
                                 <div role="row" aria-rowindex={1} className="hidden items-center gap-3 border-b border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)] md:grid md:grid-cols-[64px_minmax(180px,1fr)_minmax(120px,auto)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)]">
                                   <span role="columnheader" aria-colindex={1}>{language === 'en' ? 'Rank' : '排名'}</span>
@@ -4973,6 +5009,11 @@ const UserScannerPage: React.FC = () => {
                             data-testid="scanner-workbench-empty-state"
                             title={workbenchEmptyState.title}
                             className="m-0 min-h-[120px]"
+                            role={scannerWorkspaceState === 'error' ? 'alert' : 'status'}
+                            aria-live={scannerWorkspaceState === 'error' ? 'assertive' : 'polite'}
+                            aria-atomic="true"
+                            aria-busy={scannerWorkspaceState === 'loading'}
+                            aria-label={`${workbenchEmptyState.title}. ${workbenchEmptyState.body}`}
                           >
                             <div className="grid min-w-0 gap-3">
                               <p>{workbenchEmptyState.body}</p>
