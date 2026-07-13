@@ -166,7 +166,6 @@ class AnalysisPreviewMeta(BaseModel):
     report_generated_at: Optional[str] = Field(None, description="报告生成时间（ISO 8601, aware）")
     current_price: Optional[float] = Field(None, description="分析时股价")
     change_pct: Optional[float] = Field(None, description="分析时涨跌幅(%)")
-    model_used: Optional[str] = Field(None, description="公开预览不暴露模型标识，固定为空")
 
 
 class AnalysisPreviewSummary(BaseModel):
@@ -221,7 +220,6 @@ def build_consumer_safe_preview_report(report: AnalysisReport) -> AnalysisPrevie
             report_generated_at=meta.report_generated_at,
             current_price=meta.current_price,
             change_pct=meta.change_pct,
-            model_used=None,
         ),
         summary=AnalysisPreviewSummary(
             analysis_summary="研究摘要：公开预览仅保留观察性信息，完整研究需登录后查看。",
