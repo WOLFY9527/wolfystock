@@ -2581,10 +2581,11 @@ const MarketRotationRadarPage: React.FC = () => {
     <div
       data-testid="market-rotation-radar-page"
       data-bento-surface="true"
-      className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden no-scrollbar text-[color:var(--wolfy-text-primary)]"
+      className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 overflow-y-auto no-scrollbar text-[color:var(--wolfy-text-primary)]"
+      aria-busy={state.loading}
     >
       <ConsumerWorkspaceScope className="min-h-0 flex-1">
-      <ConsumerWorkspacePageShell className="flex min-h-0 flex-1">
+      <ConsumerWorkspacePageShell className="flex min-h-0 flex-1 flex-col gap-4 md:gap-6">
         <TerminalPanel as="section" dense className="relative shrink-0 overflow-hidden">
           <TerminalPageHeading
             eyebrow="主题轮动"

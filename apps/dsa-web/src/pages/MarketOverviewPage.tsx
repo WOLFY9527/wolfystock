@@ -329,12 +329,6 @@ function withPanelTimeout<T>(promise: Promise<T>, panelKey: PanelKey): Promise<T
   });
 }
 
-function debugMarketPanel(panelKey: PanelKey, status: 'loading' | 'success' | 'fallback' | 'error'): void {
-  if (import.meta.env.DEV && import.meta.env.MODE !== 'test') {
-    console.debug(`[market-overview] ${String(panelKey)} ${status}`);
-  }
-}
-
 type AutoRevalidateMeta = Partial<MarketDataMeta> & {
   source?: string;
   sourceType?: string | null;
@@ -1354,7 +1348,6 @@ const MarketOverviewPage = () => {
     const routeEntrySnapshotPanels = { ...latestPanelsRef.current };
 
     const runRequest = async ([panelKey, loadPanel]: PanelRequest) => {
-      debugMarketPanel(panelKey, 'loading');
       try {
         const panel = await withPanelTimeout(loadPanelWithRequestDedupe(panelKey, loadPanel), panelKey);
         if (!cancelledRef?.current) {
@@ -1366,7 +1359,6 @@ const MarketOverviewPage = () => {
           commitPanelValue(panelKey, panel);
           assignPanelValue(routeEntrySnapshotPanels, panelKey, panel);
         }
-        debugMarketPanel(panelKey, 'success');
       } catch (error) {
         if (!cancelledRef?.current) {
           setRefreshErrors((currentErrors) => ({
@@ -1381,7 +1373,6 @@ const MarketOverviewPage = () => {
             }
           }
         }
-        debugMarketPanel(panelKey, 'fallback');
       } finally {
         markSettled();
       }
@@ -1415,7 +1406,6 @@ const MarketOverviewPage = () => {
     if (!options?.silent) {
       setRefreshingPanel(panelKey);
     }
-    debugMarketPanel(panelKey, 'loading');
     try {
       const panel = await withPanelTimeout(loadPanelWithRequestDedupe(panelKey, loadPanel), panelKey);
       setRefreshErrors((currentErrors) => {
@@ -1424,7 +1414,6 @@ const MarketOverviewPage = () => {
         return nextErrors;
       });
       commitPanelValue(panelKey, panel, { persist: true });
-      debugMarketPanel(panelKey, 'success');
     } catch (error) {
       setRefreshErrors((currentErrors) => ({
         ...currentErrors,
@@ -1433,7 +1422,6 @@ const MarketOverviewPage = () => {
       if (!latestPanelsRef.current[panelKey]) {
         commitPanelValue(panelKey, fallbackPanelValue(panelKey, error), { persist: true });
       }
-      debugMarketPanel(panelKey, 'fallback');
     } finally {
       if (!options?.silent) {
         setRefreshingPanel((currentPanel) => (currentPanel === panelKey ? null : currentPanel));
@@ -1685,6 +1673,7 @@ const MarketOverviewPage = () => {
         data-testid="market-overview-shell"
         data-product-surface="market-overview"
         className="flex min-h-0 flex-1 flex-col gap-4 md:gap-6"
+        aria-busy={loading}
       >
         <MarketOverviewWorkbench
           heading={null}

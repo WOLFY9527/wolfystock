@@ -1342,7 +1342,7 @@ export default function MarketDecisionCockpitPage() {
             </ConsoleContextRail>
           )}
         >
-          <ConsoleBoard className="min-h-0" data-testid="market-decision-cockpit-page">
+          <ConsoleBoard className="min-h-0" data-testid="market-decision-cockpit-page" aria-busy={loading && !data}>
             <RoughSurfaceIntro
               eyebrow={locale === 'en' ? 'Market decision cockpit' : '市场决策驾驶舱'}
               title={locale === 'en' ? 'Market structure, positioning context, and research queue' : '市场结构、定位语境与研究队列'}

@@ -4444,7 +4444,11 @@ const MarketProviderOperationsPage: React.FC = () => {
       : '保持只读观察，按需切换影响面。';
 
   return (
-    <div data-testid="market-provider-operations-page" className={ADMIN_PROVIDER_OPERATIONS_PAGE_CLASSNAME}>
+    <div
+      data-testid="market-provider-operations-page"
+      className={ADMIN_PROVIDER_OPERATIONS_PAGE_CLASSNAME}
+      aria-busy={isLoading}
+    >
       <TerminalPageShell className="min-w-0 py-5 md:py-6">
         <TerminalPanel as="section" className="relative">
           <TerminalPageHeading
