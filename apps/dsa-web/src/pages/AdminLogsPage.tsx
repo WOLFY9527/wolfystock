@@ -67,8 +67,17 @@ const SINCE_OPTIONS = ['15m', '1h', '24h', '7d'] as const;
 const STATUS_FILTER_OPTIONS = ['all', 'success', 'partial', 'failed', 'skipped', 'running', 'unknown', 'cancelled'] as const;
 const PAGE_SIZE = 20;
 type TerminalChipVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+const LOGS_TABS: LogsTab[] = ['business', 'analysis', 'scanner', 'backtest', 'data_source', 'security', 'raw'];
 
 const INCIDENT_KIND_ORDER = ['data_quality', 'provider_cache_circuit', 'llm_cost', 'notification', 'evidence_posture'] as const;
+
+function adminLogsTabId(tab: LogsTab): string {
+  return `admin-logs-tab-${tab}`;
+}
+
+function adminLogsTabPanelId(tab: LogsTab): string {
+  return `admin-logs-tabpanel-${tab}`;
+}
 
 type AdminLogsQueryState = {
   activeTab: LogsTab;
@@ -1461,10 +1470,12 @@ const AdminLogsPage: React.FC = () => {
   const [incidentDrawerError, setIncidentDrawerError] = useState<ParsedApiError | null>(null);
   const [isIncidentLoading, setIsIncidentLoading] = useState(false);
   const [isLoadingList, setIsLoadingList] = useState(false);
+  const [hasLoadedList, setHasLoadedList] = useState(false);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [detailError, setDetailError] = useState<ParsedApiError | null>(null);
   const skipDebugClickRef = useRef(false);
+  const tabRefs = useRef<Partial<Record<LogsTab, HTMLButtonElement | null>>>({});
   const [drillHighlight] = useState<string | null>(drillQuery.eventId);
 
   const loadStorageSummary = useCallback(async () => {
@@ -1592,6 +1603,7 @@ const AdminLogsPage: React.FC = () => {
       }
       setSummary(null);
     } finally {
+      setHasLoadedList(true);
       setIsLoadingList(false);
     }
   }, [activeTab, canReadOpsLogs, categoryFilter, levelFilter, pageOffset, searchQuery, showDebugLogs, sinceFilter, statusFilter]);
@@ -1862,6 +1874,23 @@ const AdminLogsPage: React.FC = () => {
     setShowDebugLogs((current) => !current);
   }, []);
 
+  const selectTab = useCallback((tab: LogsTab, focusTab = false) => {
+    setActiveTab(tab);
+    if (focusTab) tabRefs.current[tab]?.focus();
+  }, []);
+
+  const handleTabKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>, tab: LogsTab) => {
+    const currentIndex = LOGS_TABS.indexOf(tab);
+    let nextIndex: number | null = null;
+    if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + LOGS_TABS.length) % LOGS_TABS.length;
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % LOGS_TABS.length;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = LOGS_TABS.length - 1;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    selectTab(LOGS_TABS[nextIndex], true);
+  }, [selectTab]);
+
   const drawerDetail = selectedDetail;
   const businessDetail = selectedBusinessDetail;
   const readable = drawerDetail?.readableSummary || {};
@@ -2057,6 +2086,10 @@ const AdminLogsPage: React.FC = () => {
     || businessEvents[0]?.startedAt
     || filteredSessions[0]?.startedAt
     || null;
+  const isInitialListLoading = isLoadingList && !hasLoadedList;
+  const isRefreshingList = isLoadingList && hasLoadedList;
+  const listLoadingLabel = locale === 'zh' ? '正在读取日志记录' : 'Loading log records';
+  const listRefreshLabel = locale === 'zh' ? '正在刷新日志记录，当前内容可能正在更新。' : 'Refreshing log records; the current content may be updating.';
 
   if (!canReadOpsLogs) {
     return (
@@ -2130,17 +2163,22 @@ const AdminLogsPage: React.FC = () => {
             </div>
 
             <div role="tablist" aria-label={locale === 'zh' ? '日志视图' : 'Log views'} className="flex max-w-full gap-2 overflow-x-auto no-scrollbar pb-1 sm:flex-wrap sm:overflow-visible">
-              {(['business', 'analysis', 'scanner', 'backtest', 'data_source', 'security', 'raw'] as LogsTab[]).map((tab) => {
+              {LOGS_TABS.map((tab) => {
                 const isActive = activeTab === tab;
                 return (
                   <TerminalButton
                     key={tab}
+                    ref={(element) => { tabRefs.current[tab] = element; }}
                     type="button"
                     role="tab"
+                    id={adminLogsTabId(tab)}
+                    aria-controls={adminLogsTabPanelId(tab)}
                     aria-selected={isActive}
+                    tabIndex={isActive ? 0 : -1}
                     variant={isActive ? 'compact' : 'secondary'}
                     className={`shrink-0 px-3 py-1.5 text-xs font-semibold ${isActive ? 'border-[color:color-mix(in_srgb,var(--wolfy-market-up)_40%,var(--wolfy-border-subtle))] bg-[color:color-mix(in_srgb,var(--wolfy-market-up)_12%,var(--wolfy-surface-input))] text-[color:var(--wolfy-text-primary)]' : 'text-secondary-text'}`}
-                    onClick={() => setActiveTab(tab)}
+                    onClick={() => selectTab(tab)}
+                    onKeyDown={(event) => handleTabKeyDown(event, tab)}
                   >
                     {tabLabel(tab, locale)}
                   </TerminalButton>
@@ -2638,7 +2676,15 @@ const AdminLogsPage: React.FC = () => {
           </TerminalPanel>
         ) : null}
 
-        <TerminalPanel as="section" className="min-h-0" dense>
+        <TerminalPanel
+          as="section"
+          id={adminLogsTabPanelId(activeTab)}
+          role="tabpanel"
+          aria-labelledby={adminLogsTabId(activeTab)}
+          aria-busy={isLoadingList}
+          className="min-h-0"
+          dense
+        >
           <TerminalSectionHeader
             eyebrow={locale === 'zh' ? '主队列' : 'MAIN QUEUE'}
             title={t('adminLogs.sessionListTitle')}
@@ -2648,14 +2694,31 @@ const AdminLogsPage: React.FC = () => {
             {locale === 'zh' ? '点击查看详情会打开右侧抽屉，调用链和数据源可独立折叠。' : 'View Details opens a right drawer; LLM and data-source chains collapse independently.'}
           </TerminalNotice>
 
+          {isInitialListLoading ? (
+            <TerminalNotice data-testid="admin-logs-list-initial-loading" variant="info" role="status" aria-live="polite" aria-atomic="true" className="mt-3">
+              {listLoadingLabel}
+            </TerminalNotice>
+          ) : isRefreshingList ? (
+            <>
+              <p data-testid="admin-logs-list-refresh-status" role="status" aria-live="polite" aria-atomic="true" className="mt-3 text-xs text-muted-text">
+                {listRefreshLabel}
+              </p>
+              {activeTab !== 'raw' ? (
+                businessEvents.length === 0 ? null : (
+                  <div className="sr-only">{locale === 'zh' ? '刷新前的日志记录仍可用。' : 'Previously loaded log records remain available during refresh.'}</div>
+                )
+              ) : null}
+            </>
+          ) : null}
+
           {activeTab !== 'raw' ? (
-            businessEvents.length === 0 ? (
-              <TerminalEmptyState className="mt-3 min-h-[88px]" title={activeTab === 'scanner' && locale === 'zh' ? '暂无扫描器日志' : t('adminLogs.noSessionsTitle')}>
+            !isInitialListLoading && !error && businessEvents.length === 0 ? (
+              <TerminalEmptyState data-testid="admin-logs-list-empty-state" role="status" aria-live="polite" aria-atomic="true" className="mt-3 min-h-[88px]" title={activeTab === 'scanner' && locale === 'zh' ? '暂无扫描器日志' : t('adminLogs.noSessionsTitle')}>
                 {activeTab === 'scanner' && locale === 'zh'
                   ? '暂无扫描器日志。运行一次扫描后，这里会显示扫描开始、完成、失败和耗时。'
                   : t('adminLogs.noSessionsBody')}
               </TerminalEmptyState>
-            ) : (
+            ) : isInitialListLoading || (error && businessEvents.length === 0) ? null : (
               <>
                 <div data-testid="business-events-mobile-list" className="mt-3 grid gap-2 md:hidden">
                   {businessEvents.map((item) => {
@@ -2782,11 +2845,11 @@ const AdminLogsPage: React.FC = () => {
                 </TerminalDenseList>
               </>
             )
-          ) : filteredSessions.length === 0 ? (
-            <TerminalEmptyState className="mt-3 min-h-[88px]" title={t('adminLogs.noSessionsTitle')}>
+          ) : !isInitialListLoading && !error && filteredSessions.length === 0 ? (
+            <TerminalEmptyState data-testid="admin-logs-list-empty-state" role="status" aria-live="polite" aria-atomic="true" className="mt-3 min-h-[88px]" title={t('adminLogs.noSessionsTitle')}>
               {t('adminLogs.noSessionsBody')}
             </TerminalEmptyState>
-          ) : (
+          ) : isInitialListLoading || (error && filteredSessions.length === 0) ? null : (
             <TerminalDenseTable data-testid="raw-logs-table-shell" className="-mx-4 mt-3 relative overflow-x-auto overscroll-x-contain px-4 border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] sm:mx-0 sm:px-0">
               <div data-testid="raw-logs-table-inner" className="min-w-[880px]">
                 <div className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] gap-3 border-b border-[color:var(--wolfy-border-subtle)] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
