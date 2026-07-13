@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../i18n/core';
 import AdminLogsPage from '../AdminLogsPage';
@@ -698,6 +698,91 @@ describe('AdminLogsPage', () => {
     expect(cleanupLogs).not.toHaveBeenCalled();
   });
 
+  it('connects each log tab to its selected tabpanel and manages focus with keyboard navigation', async () => {
+    render(<AdminLogsPage />);
+
+    const businessTab = await screen.findByRole('tab', { name: '业务事件' });
+    const analysisTab = screen.getByRole('tab', { name: '股票分析' });
+    const rawTab = screen.getByRole('tab', { name: '原始日志' });
+    const tabPanel = screen.getByRole('tabpanel');
+
+    expect(businessTab).toHaveAttribute('id', 'admin-logs-tab-business');
+    expect(businessTab).toHaveAttribute('aria-controls', 'admin-logs-tabpanel-business');
+    expect(businessTab).toHaveAttribute('aria-selected', 'true');
+    expect(businessTab).toHaveAttribute('tabindex', '0');
+    expect(analysisTab).toHaveAttribute('aria-selected', 'false');
+    expect(analysisTab).toHaveAttribute('tabindex', '-1');
+    expect(tabPanel).toHaveAttribute('id', 'admin-logs-tabpanel-business');
+    expect(tabPanel).toHaveAttribute('aria-labelledby', 'admin-logs-tab-business');
+
+    businessTab.focus();
+    fireEvent.keyDown(businessTab, { key: 'ArrowRight' });
+    expect(analysisTab).toHaveFocus();
+    await waitFor(() => expect(analysisTab).toHaveAttribute('aria-selected', 'true'));
+
+    fireEvent.keyDown(analysisTab, { key: 'End' });
+    expect(rawTab).toHaveFocus();
+    await waitFor(() => expect(rawTab).toHaveAttribute('aria-selected', 'true'));
+
+    fireEvent.keyDown(rawTab, { key: 'Home' });
+    expect(businessTab).toHaveFocus();
+    await waitFor(() => expect(businessTab).toHaveAttribute('aria-selected', 'true'));
+
+    fireEvent.keyDown(businessTab, { key: 'ArrowLeft' });
+    expect(rawTab).toHaveFocus();
+    await waitFor(() => expect(rawTab).toHaveAttribute('aria-selected', 'true'));
+  });
+
+  it('distinguishes announceable initial loading from a polite background refresh', async () => {
+    let resolveInitialLoad: ((value: unknown) => void) | undefined;
+    listBusinessEvents.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveInitialLoad = resolve;
+    }));
+
+    render(<AdminLogsPage />);
+
+    const loading = await screen.findByTestId('admin-logs-list-initial-loading');
+    expect(loading).toHaveAttribute('role', 'status');
+    expect(loading).toHaveAttribute('aria-live', 'polite');
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-busy', 'true');
+
+    await act(async () => {
+      resolveInitialLoad?.({
+        total: businessEvents.length,
+        limit: 20,
+        offset: 0,
+        hasMore: true,
+        items: businessEvents,
+        healthSummary: null,
+      });
+    });
+    await screen.findByTestId('business-events-table-shell');
+    await screen.findByRole('button', { name: '刷新列表' });
+
+    let resolveRefresh: ((value: unknown) => void) | undefined;
+    listBusinessEvents.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveRefresh = resolve;
+    }));
+    fireEvent.click(screen.getByRole('button', { name: '刷新列表' }));
+
+    const refresh = await screen.findByTestId('admin-logs-list-refresh-status');
+    expect(refresh).toHaveAttribute('role', 'status');
+    expect(refresh).toHaveAttribute('aria-live', 'polite');
+    expect(screen.queryByTestId('admin-logs-list-initial-loading')).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveRefresh?.({
+        total: businessEvents.length,
+        limit: 20,
+        offset: 0,
+        hasMore: true,
+        items: businessEvents,
+        healthSummary: null,
+      });
+    });
+    await waitFor(() => expect(screen.queryByTestId('admin-logs-list-refresh-status')).not.toBeInTheDocument());
+  });
+
   it('defaults to business events and does not show raw step names as the main list', async () => {
     render(<AdminLogsPage />);
 
@@ -1365,6 +1450,7 @@ describe('AdminLogsPage', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('服务器暂时不可用');
     expect(alert).toHaveTextContent('服务器暂时不可用，请稍后重试。');
+    expect(screen.queryByTestId('admin-logs-list-empty-state')).not.toBeInTheDocument();
   });
 
   it('renders healthy health summary when there are no events', async () => {
@@ -1395,6 +1481,9 @@ describe('AdminLogsPage', () => {
     expect(await screen.findByTestId('admin-logs-health-summary')).toHaveTextContent('健康');
     expect(screen.getByText('0 / 0')).toBeInTheDocument();
     expect(screen.getAllByText('--').length).toBeGreaterThan(0);
+    const emptyState = screen.getByTestId('admin-logs-list-empty-state');
+    expect(emptyState).toHaveAttribute('role', 'status');
+    expect(emptyState).toHaveAttribute('aria-live', 'polite');
   });
 
   it('shows a unified message when the detail drawer fails to load', async () => {
