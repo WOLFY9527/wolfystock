@@ -840,7 +840,7 @@ export default function ScenarioLabPage() {
               </div>
             ) : null}
             {contextLoading && !scenarioResult ? (
-              <div className="p-4 md:p-5">
+              <div className="p-4 md:p-5" role="status" aria-busy="true">
                 <ScenarioResearchEmptyState title={locale === 'en' ? 'Loading market context' : '正在载入市场上下文'}>
                   {locale === 'en'
                     ? 'This passive read prepares the setup only. Scenario evaluation starts from the explicit action.'

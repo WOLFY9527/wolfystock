@@ -1169,6 +1169,87 @@ describe('BacktestPage', () => {
     expect(runRuleParameterSweep).not.toHaveBeenCalled();
   });
 
+  describe('module and control-mode tab accessibility', () => {
+    it('exposes a labelled tablist with stable tab ids, aria-controls, and a linked tabpanel', async () => {
+      renderBacktestRoutes(['/zh/backtest']);
+
+      await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+
+      const moduleTablist = screen.getByRole('tablist', { name: bt('zh', 'page.moduleTabsLabel') });
+      const controlTablist = screen.getByRole('tablist', { name: bt('zh', 'page.controlModeLabel') });
+      expect(moduleTablist).toBeInTheDocument();
+      expect(controlTablist).toBeInTheDocument();
+
+      const ruleTab = screen.getByRole('tab', { name: bt('zh', 'page.ruleTab') });
+      const historicalTab = screen.getByRole('tab', { name: bt('zh', 'page.historicalTab') });
+      const normalTab = screen.getByRole('tab', { name: bt('zh', 'page.normalMode') });
+      const professionalTab = screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') });
+
+      expect(ruleTab).toHaveAttribute('id', 'backtest-module-tab-rule');
+      expect(historicalTab).toHaveAttribute('id', 'backtest-module-tab-historical');
+      expect(normalTab).toHaveAttribute('id', 'backtest-control-tab-normal');
+      expect(professionalTab).toHaveAttribute('id', 'backtest-control-tab-professional');
+
+      for (const tab of [ruleTab, historicalTab, normalTab, professionalTab]) {
+        expect(tab).toHaveAttribute('aria-controls', 'backtest-v1-stage');
+      }
+
+      const panel = screen.getByTestId('backtest-v1-stage');
+      expect(panel).toHaveAttribute('role', 'tabpanel');
+      expect(panel).toHaveAttribute('id', 'backtest-v1-stage');
+      // Default selection is rule + normal: panel labelled by both active tabs.
+      expect(panel).toHaveAttribute(
+        'aria-labelledby',
+        'backtest-module-tab-rule backtest-control-tab-normal',
+      );
+    });
+
+    it('applies roving tabindex so only the selected tab is in the tab sequence', async () => {
+      renderBacktestRoutes(['/zh/backtest']);
+
+      await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+
+      const ruleTab = screen.getByRole('tab', { name: bt('zh', 'page.ruleTab') });
+      const historicalTab = screen.getByRole('tab', { name: bt('zh', 'page.historicalTab') });
+      const normalTab = screen.getByRole('tab', { name: bt('zh', 'page.normalMode') });
+      const professionalTab = screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') });
+
+      expect(ruleTab).toHaveAttribute('tabindex', '0');
+      expect(historicalTab).toHaveAttribute('tabindex', '-1');
+      expect(normalTab).toHaveAttribute('tabindex', '0');
+      expect(professionalTab).toHaveAttribute('tabindex', '-1');
+    });
+
+    it('moves and activates tabs with Arrow/Home/End keys within each tablist', async () => {
+      renderBacktestRoutes(['/zh/backtest']);
+
+      await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+
+      const ruleTab = screen.getByRole('tab', { name: bt('zh', 'page.ruleTab') });
+      const historicalTab = screen.getByRole('tab', { name: bt('zh', 'page.historicalTab') });
+      const normalTab = screen.getByRole('tab', { name: bt('zh', 'page.normalMode') });
+
+      ruleTab.focus();
+      fireEvent.keyDown(ruleTab, { key: 'ArrowRight' });
+      expect(historicalTab).toHaveFocus();
+      expect(historicalTab).toHaveAttribute('aria-selected', 'true');
+      expect(ruleTab).toHaveAttribute('aria-selected', 'false');
+
+      fireEvent.keyDown(historicalTab, { key: 'ArrowLeft' });
+      expect(ruleTab).toHaveFocus();
+      expect(ruleTab).toHaveAttribute('aria-selected', 'true');
+
+      fireEvent.keyDown(ruleTab, { key: 'End' });
+      expect(historicalTab).toHaveFocus();
+      fireEvent.keyDown(historicalTab, { key: 'Home' });
+      expect(ruleTab).toHaveFocus();
+
+      normalTab.focus();
+      fireEvent.keyDown(normalTab, { key: 'ArrowRight' });
+      expect(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') })).toHaveFocus();
+    });
+  });
+
   it('renders exactly one compact semantic backtest page heading without internal terms', async () => {
     renderBacktestRoutes(['/zh/backtest']);
 

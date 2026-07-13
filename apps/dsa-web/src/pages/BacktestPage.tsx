@@ -43,6 +43,41 @@ import { getConsumerSafeApiErrorCopy } from '../utils/consumerErrorCopy';
 
 const HISTORICAL_PAGE_SIZE = 20;
 const HISTORY_PAGE_SIZE = 10;
+
+function handleBacktestTablistKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+  const tablist = event.currentTarget.closest('[role="tablist"]');
+  if (!tablist) return;
+  const tabs = Array.from(
+    tablist.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+  );
+  const currentIndex = tabs.indexOf(event.currentTarget);
+  if (currentIndex === -1) return;
+
+  let nextIndex = currentIndex;
+  switch (event.key) {
+    case 'ArrowRight':
+    case 'ArrowDown':
+      nextIndex = (currentIndex + 1) % tabs.length;
+      break;
+    case 'ArrowLeft':
+    case 'ArrowUp':
+      nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+      break;
+    case 'Home':
+      nextIndex = 0;
+      break;
+    case 'End':
+      nextIndex = tabs.length - 1;
+      break;
+    default:
+      return;
+  }
+
+  event.preventDefault();
+  const nextTab = tabs[nextIndex];
+  nextTab.focus();
+  nextTab.click();
+}
 const RULE_HISTORY_PAGE_SIZE = 10;
 const PRO_MONTE_CARLO_SIMULATION_DEFAULT = '12';
 const PRO_MONTE_CARLO_SIMULATION_MIN = 1;
@@ -1484,23 +1519,31 @@ const BacktestPage: React.FC = () => {
     <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.moduleTabsLabel')}>
       <button
         ref={showRuleModuleButtonRef}
+        id="backtest-module-tab-rule"
         type="button"
         role="tab"
         aria-selected={activeModule === 'rule'}
+        aria-controls="backtest-v1-stage"
+        tabIndex={activeModule === 'rule' ? 0 : -1}
         className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${activeModule === 'rule' ? ' is-active' : ''}`}
         onClick={handleShowRuleModuleClick}
         onPointerUp={handleShowRuleModulePointerUp}
+        onKeyDown={handleBacktestTablistKeyDown}
       >
         {bt(language, 'page.ruleTab')}
       </button>
       <button
         ref={showHistoricalModuleButtonRef}
+        id="backtest-module-tab-historical"
         type="button"
         role="tab"
         aria-selected={activeModule === 'historical'}
+        aria-controls="backtest-v1-stage"
+        tabIndex={activeModule === 'historical' ? 0 : -1}
         className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${activeModule === 'historical' ? ' is-active' : ''}`}
         onClick={handleShowHistoricalModuleClick}
         onPointerUp={handleShowHistoricalModulePointerUp}
+        onKeyDown={handleBacktestTablistKeyDown}
       >
         {bt(language, 'page.historicalTab')}
       </button>
@@ -1511,23 +1554,31 @@ const BacktestPage: React.FC = () => {
     <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.controlModeLabel')}>
       <button
         ref={showNormalModeButtonRef}
+        id="backtest-control-tab-normal"
         type="button"
         role="tab"
         aria-selected={controlPanelMode === 'normal'}
+        aria-controls="backtest-v1-stage"
+        tabIndex={controlPanelMode === 'normal' ? 0 : -1}
         className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${controlPanelMode === 'normal' ? ' is-active' : ''}`}
         onClick={handleShowNormalModeClick}
         onPointerUp={handleShowNormalModePointerUp}
+        onKeyDown={handleBacktestTablistKeyDown}
       >
         {bt(language, 'page.normalMode')}
       </button>
       <button
         ref={showProfessionalModeButtonRef}
+        id="backtest-control-tab-professional"
         type="button"
         role="tab"
         aria-selected={controlPanelMode === 'professional'}
+        aria-controls="backtest-v1-stage"
+        tabIndex={controlPanelMode === 'professional' ? 0 : -1}
         className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${controlPanelMode === 'professional' ? ' is-active' : ''}`}
         onClick={handleShowProfessionalModeClick}
         onPointerUp={handleShowProfessionalModePointerUp}
+        onKeyDown={handleBacktestTablistKeyDown}
       >
         {bt(language, 'page.professionalMode')}
       </button>
@@ -1625,6 +1676,13 @@ const BacktestPage: React.FC = () => {
           <AnimatePresence mode="wait" initial={false}>
             <m.div
               key={activeModule === 'rule' ? `${activeModule}-${controlPanelMode}` : activeModule}
+              id="backtest-v1-stage"
+              role="tabpanel"
+              aria-labelledby={
+                activeModule === 'rule'
+                  ? `backtest-module-tab-rule backtest-control-tab-${controlPanelMode}`
+                  : 'backtest-module-tab-historical'
+              }
               className={`backtest-v1-stage backtest-v1-stage--${activeModule} w-full min-w-0 ${normalModeRadiusTaxonomyClass}`}
               data-testid="backtest-v1-stage"
               initial={{ opacity: 0, y: 18 }}
