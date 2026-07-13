@@ -11,9 +11,10 @@ interface PageButtonProps {
   disabled?: boolean;
   onClick?: () => void;
   children?: React.ReactNode;
+  ariaLabel?: string;
 }
 
-const PageButton: React.FC<PageButtonProps> = ({ page, isActive, disabled, onClick, children }) => {
+const PageButton: React.FC<PageButtonProps> = ({ page, isActive, disabled, onClick, children, ariaLabel }) => {
   const isEllipsis = page === '...';
 
   if (isEllipsis) {
@@ -25,6 +26,7 @@ const PageButton: React.FC<PageButtonProps> = ({ page, isActive, disabled, onCli
       type="button"
       onClick={onClick}
       disabled={disabled}
+      aria-label={ariaLabel}
       className={cn(
         'pagination__button',
         'inline-flex h-10 min-w-[2.75rem] items-center justify-center rounded-[var(--theme-button-radius)] border px-3 text-[0.76rem] font-normal uppercase tracking-[0.14em] transition-all duration-200',
@@ -79,10 +81,11 @@ export const Pagination: React.FC<PaginationProps> = ({
       {/* Previous page */}
       <PageButton
         page="prev"
+        ariaLabel="Previous page"
         disabled={currentPage === 1}
         onClick={() => onPageChange(currentPage - 1)}
       >
-        <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
       </PageButton>
@@ -100,10 +103,11 @@ export const Pagination: React.FC<PaginationProps> = ({
       {/* Next page */}
       <PageButton
         page="next"
+        ariaLabel="Next page"
         disabled={currentPage === totalPages}
         onClick={() => onPageChange(currentPage + 1)}
       >
-        <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       </PageButton>
