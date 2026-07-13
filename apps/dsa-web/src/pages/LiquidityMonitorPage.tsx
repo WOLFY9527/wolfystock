@@ -30,6 +30,7 @@ import {
   TerminalChip,
   TerminalDenseTable,
   TerminalDisclosure,
+  TerminalEmptyState,
   TerminalGrid,
   TerminalMetric,
   TerminalPageHeading,
@@ -2557,7 +2558,7 @@ const LiquidityMonitorPage: React.FC = () => {
 
   return (
     <ConsumerWorkspaceScope className="min-h-0 flex-1">
-    <ConsumerWorkspacePageShell className="flex min-h-0 flex-1">
+    <ConsumerWorkspacePageShell className="flex min-h-0 flex-1 flex-col gap-4 md:gap-6">
       <TerminalPageHeading
         eyebrow="流动性"
         title="流动性监测"
@@ -2566,11 +2567,19 @@ const LiquidityMonitorPage: React.FC = () => {
       {error ? <ApiErrorAlert error={error} /> : null}
 
       {loading && !data ? (
-        <TerminalPanel>
+        <TerminalPanel as="section" role="status" aria-live="polite" aria-label="正在读取流动性监测快照">
           <TerminalSectionHeader eyebrow="快照" title="读取中" />
           <div data-testid="liquidity-decision-readiness" className={cn('mt-3 text-sm', PAPER_TEXT_MUTED_CLASS)}>
             判断可用性：{decisionReadinessStateLabel('waiting')}
           </div>
+        </TerminalPanel>
+      ) : null}
+
+      {!loading && !error && !data ? (
+        <TerminalPanel as="section" role="status" aria-live="polite" aria-label="流动性监测暂无可用快照">
+          <TerminalEmptyState title="流动性监测暂未返回快照">
+            当前无法形成流动性观察；可稍后重新打开页面核对数据状态。
+          </TerminalEmptyState>
         </TerminalPanel>
       ) : null}
 
