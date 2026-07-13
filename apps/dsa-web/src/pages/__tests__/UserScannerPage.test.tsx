@@ -2634,9 +2634,16 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-command-panel')).toContainElement(screen.getByTestId('scanner-command-bar'));
     expect(screen.getByTestId('scanner-results-panel')).toContainElement(screen.getByTestId('scanner-ranked-list'));
     expect(compactFilterBar).toBeInTheDocument();
+    const candidateFilters = screen.getByTestId('scanner-candidate-filters');
+    expect(candidateFilters).toHaveAttribute('role', 'group');
+    expect(candidateFilters).toHaveClass('overflow-x-auto', 'overscroll-x-contain');
+    expect(within(candidateFilters).getByRole('button', { name: /入选|Selected/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(candidateFilters).getByRole('button', { name: /候选池|Candidate pool/i })).toHaveAttribute('aria-pressed', 'false');
     expect(primaryWorkRegion).toContainElement(screen.getByTestId('scanner-ranked-list'));
     expect(primaryWorkRegion).toContainElement(screen.getByTestId('scanner-result-table'));
     expect(primaryWorkRegion).toContainElement(screen.getByTestId('scanner-candidate-scroll-region'));
+    expect(screen.getByTestId('scanner-ranked-list')).toHaveAttribute('aria-describedby', 'scanner-ranked-list-scroll-hint');
+    expect(screen.getByText(/窄屏下可在此区域横向滚动|scroll this region horizontally/i)).toBeInTheDocument();
     expect(screen.getByTestId('scanner-candidate-scroll-region')).toContainElement(screen.getByTestId('scanner-candidate-row-WULF'));
     expect(contextRail).toContainElement(screen.getByTestId('scanner-inline-detail-panel'));
     expect(contextRail).toContainElement(screen.getByTestId('scanner-candidate-inspector'));
@@ -3196,11 +3203,18 @@ describe('UserScannerPage', () => {
     const getRunsCallsBeforeSort = getRuns.mock.calls.length;
     const getRunCallsBeforeSort = getRun.mock.calls.length;
     const sortbar = screen.getByTestId('scanner-ranked-sortbar');
+    const scoreSort = within(sortbar).getByRole('button', { name: /扫描评分|scanner score/i });
+
+    expect(sortbar).toHaveAttribute('role', 'group');
+    expect(scoreSort).toHaveAttribute('aria-pressed', 'true');
+    expect(scoreSort).toHaveAccessibleName(/降序|descending/i);
 
     fireEvent.click(within(sortbar).getByRole('button', { name: /代码|symbol/i }));
     await waitFor(() => {
       expect(orderedSymbolsFromRows()).toEqual(['AMD', 'AVGO', 'NVDA']);
     });
+    expect(within(sortbar).getByRole('button', { name: /代码|symbol/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(sortbar).getByRole('button', { name: /代码|symbol/i })).toHaveAccessibleName(/升序|ascending/i);
 
     fireEvent.click(within(sortbar).getByRole('button', { name: /扫描评分|scanner score/i }));
     await waitFor(() => {
@@ -3326,6 +3340,8 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent('扫描器会先按当前范围筛出可继续观察的候选。');
     expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent('A股 · 默认市场池 · 300 只 · 60 条详评');
     expect(await screen.findByTestId('scanner-workbench-empty-state')).toHaveTextContent('尚未运行扫描');
+    expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveAttribute('role', 'status');
+    expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveAttribute('aria-busy', 'false');
     expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('扫描器会先按当前范围整理候选与观察线索。');
     expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('A股 · 默认市场池 · 300 只 · 60 条详评');
     expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('先直接启动一次扫描');
@@ -3582,7 +3598,9 @@ describe('UserScannerPage', () => {
     expect(screen.queryByTestId('scanner-more-actions-panel')).not.toBeInTheDocument();
 
     const more = screen.getByTestId('scanner-more-actions');
-    fireEvent.click(within(more).getByRole('button', { name: /更多|More/i }));
+    const trigger = within(more).getByRole('button', { name: /更多|More/i });
+    expect(trigger).toHaveAttribute('aria-controls', 'scanner-more-actions-panel');
+    fireEvent.click(trigger);
     expect(screen.getByTestId('scanner-more-actions-panel')).toBeInTheDocument();
     expect(within(more).getByRole('button', { name: /导出 CSV|Export CSV/i })).toBeInTheDocument();
     expect(within(more).getByRole('button', { name: /复制全部代码|Copy all symbols/i })).toBeInTheDocument();
@@ -3591,6 +3609,13 @@ describe('UserScannerPage', () => {
     expect(within(more).getByRole('button', { name: /加入预览入选|Add preview selected/i })).toBeInTheDocument();
     expect(within(more).getByRole('button', { name: /批量回测|Batch backtest/i })).toBeInTheDocument();
     expect(within(more).queryByRole('button', { name: /历史扫描回放|Historical replay/i })).not.toBeInTheDocument();
+    await waitFor(() => expect(within(more).getByRole('button', { name: /导出 CSV|Export CSV/i })).toHaveFocus());
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(screen.queryByTestId('scanner-more-actions-panel')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('keeps strategy experiment collapsed by default and exposes Backtest Lab inside it', async () => {
@@ -4351,6 +4376,7 @@ describe('UserScannerPage', () => {
     expect(runButton).toBeDisabled();
     expect(runButton).toHaveAttribute('aria-busy', 'true');
     expect(runButton).toHaveTextContent(/扫描中|Scanning/i);
+    expect(screen.getByTestId('scanner-results-panel')).toHaveAttribute('aria-busy', 'true');
     fireEvent.click(runButton);
     expect(runScan).toHaveBeenCalledTimes(1);
 
