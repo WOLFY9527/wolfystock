@@ -355,7 +355,7 @@ describe('WatchlistPage', () => {
     expect(screen.getByTestId('watchlist-row-TSM')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-600519')).toBeInTheDocument();
     expect(screen.queryByText('Details')).not.toBeInTheDocument();
-    expect(screen.getByTestId('watchlist-filter-grid')).toHaveClass('grid', 'grid-cols-2');
+    expect(screen.getByTestId('watchlist-filter-grid')).toHaveClass('grid', 'grid-cols-1', 'sm:grid-cols-2');
     const marketSelect = screen.getByLabelText('市场');
     expect(marketSelect).toHaveClass('select-surface', 'absolute', 'inset-0', 'opacity-0');
     expect(marketSelect.closest('.select-field__control')).toHaveClass('ui-control-shell', 'relative', 'min-w-0', 'w-full');
@@ -370,6 +370,53 @@ describe('WatchlistPage', () => {
     expect(contextSelect.closest('.select-field__control')?.querySelector('.select-field__overlay')).toHaveAttribute('aria-hidden', 'true');
     expect(contextSelect.closest('.select-field__control')?.querySelector('.select-field__value')).toHaveTextContent('全部');
     expect(listWatchlistItems).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps initial loading distinct from a confirmed empty watchlist', async () => {
+    let resolveList: (response: { items: WatchlistItem[] }) => void = () => undefined;
+    listWatchlistItems.mockImplementationOnce(() => new Promise<{ items: WatchlistItem[] }>((resolve) => {
+      resolveList = resolve;
+    }));
+
+    renderWatchlist();
+
+    expect(screen.getByText('正在加载观察列表...')).toBeInTheDocument();
+    expect(screen.getByTestId('watchlist-ledger-scroll-region')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.queryByTestId('watchlist-compact-empty-state')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('watchlist-status-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('watchlist-conclusion-band')).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveList({ items: [] });
+    });
+
+    expect(await screen.findByTestId('watchlist-compact-empty-state')).toBeInTheDocument();
+    expect(screen.queryByText('正在加载观察列表...')).not.toBeInTheDocument();
+    expect(screen.getByTestId('watchlist-ledger-scroll-region')).toHaveAttribute('aria-busy', 'false');
+    expect(screen.getByTestId('watchlist-status-strip')).toBeInTheDocument();
+  });
+
+  it('keeps a watchlist request failure separate from the successful empty state', async () => {
+    listWatchlistItems.mockRejectedValue(Object.assign(new Error('watchlist unavailable'), {
+      status: 503,
+      parsedError: {
+        title: 'backend error',
+        message: 'watchlist unavailable',
+        rawMessage: 'watchlist unavailable',
+        status: 503,
+        category: 'upstream_unavailable',
+        isAuthError: false,
+      },
+    }));
+
+    renderWatchlist();
+
+    expect(await screen.findByText('观察列表暂不可用')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByTestId('watchlist-compact-empty-state')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('watchlist-status-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('watchlist-conclusion-band')).not.toBeInTheDocument();
+    expect(screen.getByTestId('watchlist-ledger-scroll-region')).toHaveAttribute('aria-busy', 'false');
   });
 
   it('filters scanner handoff routes to existing watchlist records without writes', async () => {
@@ -424,6 +471,8 @@ describe('WatchlistPage', () => {
     const ledgerScrollRegion = screen.getByRole('region', { name: '观察列表台账横向滚动区域' });
     expect(ledgerScrollRegion).toBe(screen.getByTestId('watchlist-ledger-scroll-region'));
     expect(ledgerScrollRegion).toHaveAttribute('tabindex', '0');
+    expect(ledgerScrollRegion).toHaveAttribute('aria-describedby', 'watchlist-ledger-scroll-help');
+    expect(document.getElementById('watchlist-ledger-scroll-help')).toHaveTextContent('在较宽布局中，可横向滚动此台账以查看全部列和行操作。');
     expect(ledgerScrollRegion).toHaveClass('overflow-x-hidden', 'overscroll-x-contain', 'lg:overflow-x-auto');
     expect(screen.getByTestId('watchlist-list-header')).toHaveAttribute('role', 'row');
     expect(screen.getByTestId('watchlist-primary-work-region')).toHaveAttribute('data-layout-zone', 'PrimaryWorkRegion');
@@ -2370,6 +2419,34 @@ describe('WatchlistPage', () => {
     const searchInput = screen.getByLabelText('搜索');
     expect(searchInput).toHaveClass('pr-12');
     expect(screen.getByTestId('watchlist-primary-filters').className).not.toContain('overflow-hidden');
+    expect(screen.getByTestId('watchlist-filter-grid')).toHaveClass('grid-cols-1', 'sm:grid-cols-2');
+  });
+
+  it('announces a background research refresh without replacing usable watchlist rows', async () => {
+    let resolveRefresh: (response: { items: WatchlistItem[] }) => void = () => undefined;
+    listWatchlistItems
+      .mockResolvedValueOnce({ items: watchlistItems })
+      .mockImplementationOnce(() => new Promise<{ items: WatchlistItem[] }>((resolve) => {
+        resolveRefresh = resolve;
+      }));
+
+    renderWatchlist();
+    expect(await screen.findByTestId('watchlist-row-NVDA')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '刷新观察依据' }));
+
+    expect(await screen.findByTestId('watchlist-ledger-refresh-status')).toHaveTextContent('正在刷新已保存的研究上下文…');
+    expect(screen.getByRole('button', { name: '正在刷新已保存的研究上下文…' })).toBeDisabled();
+    expect(screen.getByTestId('watchlist-ledger-scroll-region')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByTestId('watchlist-row-NVDA')).toBeInTheDocument();
+
+    await act(async () => {
+      resolveRefresh({ items: watchlistItems });
+    });
+
+    await waitFor(() => expect(screen.queryByTestId('watchlist-ledger-refresh-status')).not.toBeInTheDocument());
+    expect(screen.getByTestId('watchlist-ledger-scroll-region')).toHaveAttribute('aria-busy', 'false');
+    expect(screen.getByTestId('watchlist-row-NVDA')).toBeInTheDocument();
   });
 
   it('keeps watchlist mobile rows wrap-safe instead of truncating stale research context at 390px', async () => {

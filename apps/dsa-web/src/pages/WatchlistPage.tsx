@@ -1758,6 +1758,8 @@ function getCopy(language: 'zh' | 'en') {
       tableTitle: 'Monitoring list',
       tableDescription: 'Rows keep state, observation, and actions aligned.',
       loading: 'Loading watchlist...',
+      refreshingIntelligence: 'Refreshing saved research context…',
+      ledgerScrollHelp: 'On wider layouts, scroll this ledger horizontally to reach every column and row action.',
       removed: 'Removed from watchlist.',
       copyFailed: 'Copy failed.',
       clipboardUnavailable: 'Clipboard is not available in this browser.',
@@ -1875,6 +1877,8 @@ function getCopy(language: 'zh' | 'en') {
     tableTitle: '监控列表',
     tableDescription: '按行查看状态、观察与操作。',
     loading: '正在加载观察列表...',
+    refreshingIntelligence: '正在刷新已保存的研究上下文…',
+    ledgerScrollHelp: '在较宽布局中，可横向滚动此台账以查看全部列和行操作。',
     removed: '已从观察列表移除。',
     copyFailed: '复制失败。',
     clipboardUnavailable: '当前浏览器不支持剪贴板。',
@@ -1953,7 +1957,8 @@ const WatchlistPage: React.FC = () => {
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [researchPriorityQueue, setResearchPriorityQueue] = useState<WatchlistResearchPriorityQueueItem[]>([]);
   const [researchOverlayState, setResearchOverlayState] = useState<WatchlistResearchOverlayViewState>('loading');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshingIntelligence, setIsRefreshingIntelligence] = useState(false);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [query, setQuery] = useState('');
@@ -2322,6 +2327,7 @@ const WatchlistPage: React.FC = () => {
 
   const handleRefreshIntelligence = useCallback(async () => {
     setNotice(null);
+    setIsRefreshingIntelligence(true);
     setResearchOverlayState('loading');
     try {
       const [listResult, statusResult, overlayResult] = await Promise.all([
@@ -2357,6 +2363,8 @@ const WatchlistPage: React.FC = () => {
       }
     } catch (err) {
       setNotice({ tone: 'danger', message: getParsedApiError(err).message });
+    } finally {
+      setIsRefreshingIntelligence(false);
     }
   }, [applyResearchOverlayFailure, applyResearchOverlayResponse]);
 
@@ -2560,7 +2568,7 @@ const WatchlistPage: React.FC = () => {
   const autoRefreshStatus = describeBooleanEnabled(refreshStatus?.enabled, { language });
   const hasWatchlistListError = Boolean(error);
   const isWatchlistEmptyWorkspace = !isLoading && !hasWatchlistListError && !authRequired && items.length === 0;
-  const showWatchlistWorkControls = !isWatchlistEmptyWorkspace && !hasWatchlistListError;
+  const showWatchlistWorkControls = !isLoading && !isWatchlistEmptyWorkspace && !hasWatchlistListError;
   const attentionCount = watchlistConclusion.staleCount + watchlistConclusion.unknownCount + watchlistConclusion.limitedConfidenceCount;
   const monitoringStateLabel = formatMonitoringStateLabel(watchlistConclusion.tone, filteredItems.length, language);
   const statusItems = [
@@ -2677,26 +2685,30 @@ const WatchlistPage: React.FC = () => {
           {language === 'zh' ? '观察列表' : 'Watchlist'}
         </h2>
 
-        <WatchlistConclusionBand
-          model={watchlistConclusion}
-          trackedCount={summary.total}
-          monitoringStateLabel={monitoringStateLabel}
-          language={language}
-        />
+        {!isLoading && !hasWatchlistListError ? (
+          <>
+            <WatchlistConclusionBand
+              model={watchlistConclusion}
+              trackedCount={summary.total}
+              monitoringStateLabel={monitoringStateLabel}
+              language={language}
+            />
 
-        <DenseStatusStrip
-          data-testid="watchlist-status-strip"
-          ariaLabel="watchlist summary"
-          items={statusItems}
-        />
+            <DenseStatusStrip
+              data-testid="watchlist-status-strip"
+              ariaLabel="watchlist summary"
+              items={statusItems}
+            />
 
-        {filteredItems.length > 0 ? (
-          <WatchlistConsumerObservationBoard
-            items={filteredItems}
-            activeItem={activeItem}
-            onSelect={(item) => setActiveItemId(item.id)}
-            language={language}
-          />
+            {filteredItems.length > 0 ? (
+              <WatchlistConsumerObservationBoard
+                items={filteredItems}
+                activeItem={activeItem}
+                onSelect={(item) => setActiveItemId(item.id)}
+                language={language}
+              />
+            ) : null}
+          </>
         ) : null}
 
         {notice ? (
@@ -2722,7 +2734,7 @@ const WatchlistPage: React.FC = () => {
             <div className="flex min-w-0 flex-col gap-2">
               <div
                 data-testid="watchlist-filter-grid"
-                className="grid min-w-0 grid-cols-2 gap-2 md:flex md:flex-wrap md:items-end"
+                className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 md:flex md:flex-wrap md:items-end"
               >
                 <div data-testid="watchlist-primary-filters" className="col-span-2 min-w-0 md:flex-[2_1_20rem]">
                   <Input
@@ -2817,6 +2829,8 @@ const WatchlistPage: React.FC = () => {
               data-testid="watchlist-ledger-scroll-region"
               role="region"
               aria-label={language === 'en' ? 'Watchlist ledger horizontal scroll region' : '观察列表台账横向滚动区域'}
+              aria-describedby="watchlist-ledger-scroll-help"
+              aria-busy={isLoading || isRefreshingIntelligence}
               tabIndex={0}
               onFocusCapture={scrollFocusedDescendantIntoHorizontalView}
               className="overflow-x-hidden overscroll-x-contain rounded-none border-0 bg-transparent px-1 pb-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--wolfy-accent-focus)] lg:overflow-x-auto"
@@ -2827,11 +2841,21 @@ const WatchlistPage: React.FC = () => {
                     <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.tableTitle}</p>
                     <p className="truncate text-xs text-[color:var(--wolfy-text-secondary)]">{copy.tableDescription}</p>
                   </div>
-                  <TerminalChip variant="neutral" className="font-mono">
-                    {actionScopeLabel}
-                  </TerminalChip>
+                  <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                    {isRefreshingIntelligence ? (
+                      <span data-testid="watchlist-ledger-refresh-status" role="status" className="text-[11px] text-[color:var(--wolfy-text-muted)]">
+                        {copy.refreshingIntelligence}
+                      </span>
+                    ) : null}
+                    <TerminalChip variant="neutral" className="font-mono">
+                      {actionScopeLabel}
+                    </TerminalChip>
+                  </div>
                 </div>
               ) : null}
+              <p id="watchlist-ledger-scroll-help" className="sr-only">
+                {copy.ledgerScrollHelp}
+              </p>
               {filteredItems.length > 0 && activeItem ? (
                 <div
                   data-testid="watchlist-selected-context-bar"
@@ -2848,7 +2872,7 @@ const WatchlistPage: React.FC = () => {
                 </div>
               ) : null}
               {isLoading ? (
-                <TerminalPanel as="section" dense className="py-8 text-center text-sm text-[color:var(--wolfy-text-muted)]" role="status">
+                <TerminalPanel as="section" dense className="py-8 text-center text-sm text-[color:var(--wolfy-text-muted)]" role="status" aria-live="polite">
                   {copy.loading}
                 </TerminalPanel>
               ) : hasWatchlistListError ? (
@@ -3852,9 +3876,14 @@ const WatchlistPage: React.FC = () => {
               >
                 {copy.clearSelection}
               </TerminalButton>
-              <TerminalButton type="button" variant="compact" onClick={() => void handleRefreshIntelligence()}>
-                <RefreshCw className="h-3.5 w-3.5" />
-                {copy.refreshIntelligence}
+              <TerminalButton
+                type="button"
+                variant="compact"
+                disabled={isRefreshingIntelligence}
+                onClick={() => void handleRefreshIntelligence()}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingIntelligence ? 'animate-spin' : ''}`} />
+                {isRefreshingIntelligence ? copy.refreshingIntelligence : copy.refreshIntelligence}
               </TerminalButton>
               <TerminalButton
                 type="button"
