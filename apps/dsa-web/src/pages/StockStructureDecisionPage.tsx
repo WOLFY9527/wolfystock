@@ -1907,7 +1907,7 @@ function SingleStockEvidencePackControls({
 }) {
   const [status, setStatus] = useState<string | null>(null);
   const canExport = entry.state === 'available' && Boolean(entry.exportContent);
-  const actionClass = 'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] disabled:cursor-not-allowed disabled:opacity-45';
+  const actionClass = 'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] disabled:cursor-not-allowed disabled:opacity-45';
 
   const copy = async () => {
     if (!canExport || !entry.exportContent || !navigator.clipboard?.writeText) {
@@ -2316,7 +2316,13 @@ function StockEvidenceLedger({
           role="region"
           tabIndex={0}
           aria-label={language === 'en' ? 'Scrollable stock evidence ledger' : '可横向滚动的个股证据账本'}
+          aria-describedby="stock-evidence-ledger-scroll-help"
         >
+          <p id="stock-evidence-ledger-scroll-help" className="sr-only">
+            {language === 'en'
+              ? 'This ledger scrolls horizontally to reveal all evidence columns.'
+              : '此账本可横向滚动，以查看全部证据列。'}
+          </p>
           <table className="stock-evidence-ledger__table product-table">
             <caption className="sr-only">
               {language === 'en' ? 'Stock research evidence ledger' : '个股研究证据账本'}
@@ -2581,19 +2587,19 @@ function StockConsumerResearchSummary({
           <div className="mt-4 flex flex-wrap gap-2" data-testid="stock-first-viewport-next-actions">
             <Link
               to={localize('/research/radar')}
-              className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-accent)]"
+              className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
             >
               {language === 'en' ? 'Open Research Radar' : '查看研究雷达'}
             </Link>
             <Link
               to={localize(`/backtest?symbol=${encodeURIComponent(data.ticker)}`)}
-              className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-accent)]"
+              className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
             >
               {language === 'en' ? 'Open Backtest' : '打开回测'}
             </Link>
             <button
               type="button"
-              className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!canCopyEvidence}
               onClick={handleCopyEvidence}
               data-testid="stock-first-viewport-copy-evidence"
@@ -3294,13 +3300,13 @@ function StockStructureCannotResearchState({
           <div className="flex shrink-0 flex-wrap justify-end gap-2">
             <Link
               to={localize('/research/radar')}
-              className="inline-flex min-h-9 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+              className="inline-flex min-h-9 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
             >
               {isEnglish ? 'Back to Research Radar' : '返回研究雷达'}
             </Link>
             <Link
               to={localize('/watchlist')}
-              className="inline-flex min-h-9 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+              className="inline-flex min-h-9 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
             >
               {isEnglish ? 'Back to watchlist' : '返回观察列表'}
             </Link>
@@ -3643,7 +3649,7 @@ function StockMissingDataNextStepsPanel({
             <TerminalChip variant="info">{isEnglish ? 'Admin only' : '仅管理员可见'}</TerminalChip>
             <Link
               to={adminReadinessPath}
-              className="inline-flex min-h-9 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+              className="inline-flex min-h-9 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
             >
               {isEnglish ? 'Open data readiness diagnostics' : '打开数据就绪诊断'}
             </Link>
@@ -3691,7 +3697,7 @@ function StockStructureSymbolNotFoundState({
               <Link
                 key={action.to}
                 to={action.to}
-                className="inline-flex min-h-9 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+                className="inline-flex min-h-9 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
               >
                 {action.label}
               </Link>
@@ -3733,7 +3739,7 @@ function CompareWithPeerLink({
   return (
     <Link
       to={to}
-      className="inline-flex w-fit max-w-full items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+      className="inline-flex w-fit max-w-full items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
     >
       {language === 'en' ? `Compare evidence with ${peerSymbol}` : `与 ${peerSymbol} 对比证据`}
     </Link>
@@ -3948,6 +3954,7 @@ export default function StockStructureDecisionPage() {
   const [symbolNotFound, setSymbolNotFound] = useState<SymbolNotFoundState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
+  const isRefreshing = loading && Boolean(data);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -4250,14 +4257,21 @@ export default function StockStructureDecisionPage() {
             <WolfyCommandBar
               leading={<span className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Single-name Research / Structure' : '个股研究 / 结构'}</span>}
               trailing={(
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <Link
                     to={localize('/market/decision-cockpit')}
-                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
                   >
                     {locale === 'en' ? 'Market cockpit' : '市场驾驶舱'}
                   </Link>
-                  <TerminalButton variant="compact" onClick={() => void load()}>
+                  <TerminalButton
+                    variant="compact"
+                    onClick={() => void load()}
+                    disabled={loading}
+                    aria-label={locale === 'en'
+                      ? (isRefreshing ? 'Refreshing stock research' : 'Refresh stock research')
+                      : (isRefreshing ? '正在刷新个股研究' : '刷新个股研究')}
+                  >
                     {locale === 'en' ? 'Refresh' : '刷新'}
                   </TerminalButton>
                 </div>
@@ -4270,7 +4284,18 @@ export default function StockStructureDecisionPage() {
           )}
           rail={railContent}
         >
-          <ConsoleBoard className="min-h-0" data-testid={!data && loading ? 'stock-structure-decision-loading' : 'stock-structure-decision-page'}>
+          <ConsoleBoard
+            className="min-h-0"
+            data-testid={!data && loading ? 'stock-structure-decision-loading' : 'stock-structure-decision-page'}
+            aria-busy={loading}
+          >
+            <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+              {loading
+                ? (isRefreshing
+                  ? (locale === 'en' ? 'Refreshing stock research. Current research remains visible.' : '正在刷新个股研究。当前研究内容保持可见。')
+                  : (locale === 'en' ? 'Loading stock research.' : '正在载入个股研究。'))
+                : ''}
+            </span>
             <RoughSurfaceIntro
               eyebrow={locale === 'en' ? 'Stock research' : '个股研究'}
               title={introTitle}

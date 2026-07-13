@@ -1173,6 +1173,8 @@ describe('research IA pages', () => {
     const ledger = within(overview).getByTestId('research-radar-candidate-ledger');
     expect(ledger).toHaveTextContent('限制');
     expect(ledger).toHaveTextContent('下一步检查');
+    expect(ledger).toHaveAttribute('aria-describedby', 'research-radar-candidate-ledger-scroll-help');
+    expect(document.getElementById('research-radar-candidate-ledger-scroll-help')).toHaveTextContent('此台账可横向滚动，以查看全部候选证据列。');
     const selectedCandidate = within(overview).getByTestId('research-radar-selected-candidate-detail');
     expect(selectedCandidate).toHaveAttribute('data-discovery-role', 'selected-candidate-detail');
     expect(selectedCandidate).toHaveTextContent('当前研究观察');
@@ -1257,6 +1259,14 @@ describe('research IA pages', () => {
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/Evidence missing|Evidence quality is acceptable|Low-evidence filter active|Relative strength is above the research threshold/i);
     expect(findConsumerRawLeakage(hub.textContent || '')).toEqual([]);
     expect(hub.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
+
+    getResearchRadarMock.mockImplementationOnce(() => new Promise(() => undefined));
+    fireEvent.click(screen.getByRole('button', { name: '刷新研究雷达' }));
+
+    await waitFor(() => expect(page).toHaveAttribute('aria-busy', 'true'));
+    expect(within(page).getByRole('status')).toHaveTextContent('正在刷新研究雷达。当前研究队列保持可见。');
+    expect(within(page).getByTestId('research-radar-candidate-ALFA')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '正在刷新研究雷达' })).toBeDisabled();
   });
 
   it('fails closed when the unified queue contract is not observation-only', async () => {

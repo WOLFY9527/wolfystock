@@ -70,16 +70,16 @@ export default function StockStructureDecisionEntryPage() {
             <WolfyCommandBar
               leading={<span className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Stock Structure / Entry' : '个股结构 / 入口'}</span>}
               trailing={(
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <Link
                     to={localize('/research/radar')}
-                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
                   >
                     {locale === 'en' ? 'Research radar' : '研究雷达'}
                   </Link>
                   <Link
                     to={localize('/watchlist')}
-                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
                   >
                     {locale === 'en' ? 'Watchlist context' : '观察列表上下文'}
                   </Link>
@@ -154,7 +154,7 @@ export default function StockStructureDecisionEntryPage() {
                       <input
                         id="stock-structure-direct-symbol"
                         value={symbolInput}
-                        className="min-h-11 flex-1 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface)] px-3 py-2 font-mono text-sm uppercase text-[color:var(--wolfy-text-primary)] outline-none transition-colors placeholder:normal-case placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)]"
+                        className="min-h-11 flex-1 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface)] px-3 py-2 font-mono text-sm uppercase text-[color:var(--wolfy-text-primary)] outline-none transition-colors placeholder:normal-case placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)] focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
                         onChange={(event) => {
                           setSymbolInput(event.target.value);
                           if (symbolError) setSymbolError('');

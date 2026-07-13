@@ -454,9 +454,15 @@ function ResearchRadarQueueOverview({
                 data-discovery-role="candidate-queue comparison-ledger"
                 role="region"
                 aria-label={locale === 'en' ? 'Research Radar candidate ledger horizontal scroll region' : '研究雷达候选台账横向滚动区域'}
+                aria-describedby="research-radar-candidate-ledger-scroll-help"
                 tabIndex={0}
                 className="min-w-0 overflow-x-auto overscroll-x-contain rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--wolfy-accent-focus)]"
               >
+                <p id="research-radar-candidate-ledger-scroll-help" className="sr-only">
+                  {locale === 'en'
+                    ? 'This ledger scrolls horizontally to reveal all candidate evidence columns.'
+                    : '此台账可横向滚动，以查看全部候选证据列。'}
+                </p>
                 <table className="min-w-[760px] w-full border-collapse text-left text-sm">
                   <caption className="sr-only">
                     {locale === 'en' ? 'Research Radar candidate queue' : '研究雷达候选队列'}
@@ -1250,6 +1256,7 @@ export default function ResearchRadarPage() {
   const [unifiedQueueUnavailable, setUnifiedQueueUnavailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
+  const isRefreshing = loading && Boolean(data);
 
   const market = searchParams.get('market') || undefined;
   const profile = searchParams.get('profile') || undefined;
@@ -1327,14 +1334,21 @@ export default function ResearchRadarPage() {
             <WolfyCommandBar
               leading={<span className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Research Queue / Radar' : '研究队列 / 雷达'}</span>}
               trailing={(
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <Link
                     to={localize('/market/decision-cockpit')}
-                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
                   >
                     {locale === 'en' ? 'Market cockpit' : '市场驾驶舱'}
                   </Link>
-                  <TerminalButton variant="compact" onClick={() => void load()}>
+                  <TerminalButton
+                    variant="compact"
+                    onClick={() => void load()}
+                    disabled={loading}
+                    aria-label={locale === 'en'
+                      ? (isRefreshing ? 'Refreshing Research Radar' : 'Refresh Research Radar')
+                      : (isRefreshing ? '正在刷新研究雷达' : '刷新研究雷达')}
+                  >
                     {locale === 'en' ? 'Refresh' : '刷新'}
                   </TerminalButton>
                 </div>
@@ -1385,7 +1399,14 @@ export default function ResearchRadarPage() {
             </ConsoleContextRail>
           )}
         >
-          <ConsoleBoard className="min-h-0" data-testid="research-radar-page">
+          <ConsoleBoard className="min-h-0" data-testid="research-radar-page" aria-busy={loading}>
+            <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+              {loading
+                ? (isRefreshing
+                  ? (locale === 'en' ? 'Refreshing Research Radar. Current research queue remains visible.' : '正在刷新研究雷达。当前研究队列保持可见。')
+                  : (locale === 'en' ? 'Loading Research Radar.' : '正在载入研究雷达。'))
+                : ''}
+            </span>
             <RoughSurfaceIntro
               eyebrow={locale === 'en' ? 'Research radar' : '研究雷达'}
               title={locale === 'en' ? 'Today’s observation queue' : '今日观察队列'}
