@@ -833,4 +833,13 @@ describe('ScenarioLabPage', () => {
     expect(firstRead).toHaveTextContent('可复用基线');
     expect(firstRead).not.toHaveTextContent('仅观察 / 非决策级');
   });
+
+  it('exposes the market-context loading state as a busy status region', async () => {
+    getDecisionCockpitMock.mockReturnValue(new Promise(() => {}));
+
+    renderRoute(<ScenarioLabPage />);
+
+    const loadingRegion = await screen.findByRole('status', { busy: true });
+    expect(loadingRegion).toHaveTextContent('正在载入市场上下文');
+  });
 });

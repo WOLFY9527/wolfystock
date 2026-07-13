@@ -3725,10 +3725,10 @@ const OptionsLabPageContent: React.FC = () => {
                 <DataWorkbenchFrame className="overflow-hidden xl:col-start-1 xl:row-start-5">
                   <SectionHeader eyebrow="链表工作区" title="Call / Put 链" icon={BarChart3} />
                   {state.loading ? (
-                    <TerminalNotice variant="info" className="mt-4">正在加载期权链快照...</TerminalNotice>
+                    <TerminalNotice variant="info" role="status" aria-busy="true" className="mt-4">正在加载期权链快照...</TerminalNotice>
                   ) : null}
                   {state.error ? (
-                    <TerminalNotice variant="danger" className="mt-4">{state.error}</TerminalNotice>
+                    <TerminalNotice variant="danger" role="alert" className="mt-4">{state.error}</TerminalNotice>
                   ) : null}
                   {!state.loading && !state.error && hasChainRows ? (
                     <div className="mt-4 grid gap-4 xl:grid-cols-2">

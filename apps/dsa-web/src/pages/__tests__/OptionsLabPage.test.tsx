@@ -3009,6 +3009,9 @@ describe('OptionsLabPage', () => {
     }));
     renderPage();
     expect(screen.getByText('正在加载期权链快照...')).toBeInTheDocument();
+    const chainLoading = screen.getByText('正在加载期权链快照...');
+    expect(chainLoading).toHaveAttribute('role', 'status');
+    expect(chainLoading).toHaveAttribute('aria-busy', 'true');
     await act(async () => resolveChain({
       symbol: 'TEM',
       expiration: '2026-06-19',
