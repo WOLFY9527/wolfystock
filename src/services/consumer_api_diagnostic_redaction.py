@@ -123,12 +123,7 @@ _MARKET_DATA_PLANE_METADATA_KEYS = frozenset(
         "freshnessstate",
         "isproxy",
         "proxyidentity",
-        "sourceauthorityallowed",
         "sourceauthoritystate",
-        "scorecontributionallowed",
-        "scoreauthorityeligible",
-        "authoritygrant",
-        "decisiongrade",
         "unavailablereason",
     }
 )
