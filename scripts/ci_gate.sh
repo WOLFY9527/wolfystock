@@ -18,6 +18,7 @@ if [[ -z "${PYTHON_BIN}" ]]; then
     exit 127
   fi
 fi
+export PYTHON_BIN
 
 print_step() {
   echo "==> backend-gate: $1"
