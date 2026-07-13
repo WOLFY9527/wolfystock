@@ -738,6 +738,9 @@ describe('StockStructureDecisionPage', () => {
     expect(screen.getByRole('button', { name: '打开研究' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(screen.getByRole('link', { name: '观察列表上下文' })).toHaveAttribute('href', '/zh/watchlist');
+    expect(screen.getByLabelText('股票代码')).toHaveClass('focus-visible:ring-2');
+    expect(screen.getByRole('link', { name: '研究雷达' })).toHaveClass('focus-visible:ring-2');
+    expect(screen.getByRole('link', { name: '观察列表上下文' })).toHaveClass('focus-visible:ring-2');
     expect(page).toHaveTextContent('直接输入已知股票代码，或从市场总览、研究雷达、观察列表与二级验证工具继续进入。');
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
@@ -909,6 +912,8 @@ describe('StockStructureDecisionPage', () => {
     expect(ledgerScroll).toHaveAttribute('role', 'region');
     expect(ledgerScroll).toHaveAttribute('tabIndex', '0');
     expect(ledgerScroll).toHaveAttribute('aria-label', '可横向滚动的个股证据账本');
+    expect(ledgerScroll).toHaveAttribute('aria-describedby', 'stock-evidence-ledger-scroll-help');
+    expect(document.getElementById('stock-evidence-ledger-scroll-help')).toHaveTextContent('此账本可横向滚动，以查看全部证据列。');
     expect(ledgerScroll.querySelector('table')).toHaveClass('stock-evidence-ledger__table', 'product-table');
     expect(within(ledger).getByRole('columnheader', { name: '来源边界' })).toBeInTheDocument();
     const stockCoreChart = within(page).getByTestId('stock-history-core-chart');
@@ -1033,6 +1038,25 @@ describe('StockStructureDecisionPage', () => {
     })).toEqual([]);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/available|not_integrated|insufficient|blocked|observationOnly|not personalized financial advice/i);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
+  });
+
+  it('keeps current stock research visible and announced during a background refresh', async () => {
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    getStructureDecisionMock.mockImplementationOnce(() => new Promise(() => undefined));
+    fireEvent.click(screen.getByRole('button', { name: '刷新个股研究' }));
+
+    await waitFor(() => expect(page).toHaveAttribute('aria-busy', 'true'));
+    expect(within(page).getByRole('status')).toHaveTextContent('正在刷新个股研究。当前研究内容保持可见。');
+    expect(within(page).getByTestId('stock-workspace-product-flow')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '正在刷新个股研究' })).toBeDisabled();
   });
 
   it('keeps stock evidence-package headings semantic without changing compact typography', async () => {
