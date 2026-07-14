@@ -562,7 +562,10 @@
             "isPartial": false,
             "isUnavailable": false,
             "isProxy": true,
+            "observationOnly": true,
+            "sourceAuthorityAllowed": false,
             "sourceAuthorityState": "proxy",
+            "scoreContributionAllowed": false,
             "scoreAuthorityEligible": false,
             "coverage": 1.0,
             "confidenceWeight": 0.7

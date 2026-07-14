@@ -548,12 +548,24 @@ def _authorized_us_breadth_cache_payload(
     }
 
 
-def _make_service(*, allow_external_provider_calls: bool = False) -> LiquidityMonitorService:
-    return LiquidityMonitorService(
-        cache=MarketCache(max_workers=1),
+def _make_service(
+    *,
+    allow_external_provider_calls: bool = False,
+    evaluation_time: datetime | None = None,
+) -> LiquidityMonitorService:
+    cache = MarketCache(max_workers=1)
+    service = LiquidityMonitorService(
+        cache=cache,
         db=DatabaseManager.get_instance(),
         allow_external_provider_calls=allow_external_provider_calls,
     )
+    if evaluation_time is not None:
+        def controlled_now() -> datetime:
+            return evaluation_time
+
+        cache._now = controlled_now
+        service._now = controlled_now
+    return service
 
 
 def _activation(payload: Dict[str, Any], key: str) -> Dict[str, Any]:
@@ -649,11 +661,10 @@ def _liquidity_monitor_imports() -> set[str]:
 
 
 def _cache_only_liquidity_service_payload(build_seed) -> dict[str, Any]:
-    service = _make_service()
+    service = _make_service(evaluation_time=FROZEN_GOLDEN_NOW)
     quote_map: dict[str, _FakeHistoryFrame] = {}
     build_seed(service, quote_map)
     with (
-        patch.object(LiquidityMonitorService, "_now", return_value=FROZEN_GOLDEN_NOW),
         patch(
             "src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame",
             side_effect=lambda ticker: quote_map.get(ticker, _FakeHistoryFrame([])),
@@ -1318,7 +1329,7 @@ def test_default_liquidity_monitor_read_does_not_fetch_yfinance_proxy_when_cache
 def test_default_liquidity_monitor_read_scores_authorized_fresh_cached_evidence_without_provider_calls(
     isolated_db: DatabaseManager,
 ) -> None:
-    service = _make_service()
+    service = _make_service(evaluation_time=FROZEN_GOLDEN_NOW)
     now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
     service.cache.set(
         "crypto",
@@ -1376,10 +1387,21 @@ def test_default_liquidity_monitor_read_scores_authorized_fresh_cached_evidence_
     mock_proxy.assert_not_called()
     assert payload["sourceMetadata"]["externalProviderCalls"] is False
     assert indicators["crypto_spot_momentum"]["includedInScore"] is True
-    assert indicators["vix_pressure"]["includedInScore"] is True
+    assert indicators["vix_pressure"]["includedInScore"] is False
+    assert indicators["vix_pressure"]["coverageDiagnostics"]["realSourceAvailable"] is True
+    assert (
+        indicators["vix_pressure"]["coverageDiagnostics"]["scoreExclusionReason"]
+        == "volatility_snapshot_score_default_closed"
+    )
     assert indicators["us_rates_pressure"]["includedInScore"] is True
-    assert payload["score"]["includedIndicatorCount"] == 3
-    assert payload["score"]["regime"] != "unavailable"
+    assert payload["score"] == {
+        "value": 50,
+        "regime": "unavailable",
+        "confidence": 0.24,
+        "includedIndicatorCount": 2,
+        "possibleIndicatorWeight": 49,
+        "includedIndicatorWeight": 12,
+    }
 
 
 def test_persistent_raw_macro_snapshot_prefers_official_vix_without_proxy_fetch(isolated_db: DatabaseManager) -> None:
@@ -2390,12 +2412,11 @@ def test_liquidity_monitor_observation_evidence_snapshot_preserves_indicator_lev
     isolated_db: DatabaseManager,
 ) -> None:
     del isolated_db
-    service = _make_service()
+    service = _make_service(evaluation_time=FROZEN_GOLDEN_NOW)
     quote_map: dict[str, _FakeHistoryFrame] = {}
     _seed_provider_unavailable_stale_malformed_context(service, quote_map)
 
     with (
-        patch.object(LiquidityMonitorService, "_now", return_value=FROZEN_GOLDEN_NOW),
         patch(
             "src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame",
             side_effect=lambda ticker: quote_map.get(ticker, _FakeHistoryFrame([])),
@@ -2497,8 +2518,45 @@ def test_liquidity_monitor_observation_evidence_snapshot_preserves_indicator_lev
             "degradationReason": None,
             "unavailableReason": None,
             "capReason": None,
+            "observationOnly": True,
+            "sourceAuthorityAllowed": False,
             "sourceAuthorityState": "proxy",
+            "scoreContributionAllowed": False,
             "scoreAuthorityEligible": False,
+            "consumerEligibility": {
+                "marketOverview": False,
+                "liquidity": False,
+                "scenarioBaseline": False,
+            },
+            "volatilityAuthoritySnapshot": {
+                "contractVersion": "volatility_authority_snapshot_v1",
+                "snapshotId": "volatility:VIX:unknown_source:unknown_observation_time",
+                "instrumentIdentity": {
+                    "symbol": "VIX",
+                    "canonicalSymbol": "VIX",
+                    "officialSeriesId": "VIXCLS",
+                    "identityState": "canonical_official_vix",
+                },
+                "sourceId": None,
+                "sourceType": "unofficial_proxy",
+                "authorityState": "proxy",
+                "observationTime": None,
+                "retrievalTime": None,
+                "freshnessState": "delayed",
+                "delayedStaleReason": "unofficial_proxy_delayed",
+                "coverageState": "missing",
+                "proxyFallback": True,
+                "consumerEligibility": {
+                    "marketOverview": False,
+                    "liquidity": False,
+                    "scenarioBaseline": False,
+                },
+                "scoreEligibility": {
+                    "allowed": False,
+                    "reason": "volatility_snapshot_missing",
+                },
+            },
+            "volatilitySnapshotId": "volatility:VIX:unknown_source:unknown_observation_time",
         }
     ]
     assert rates_snapshot["inputs"] == [
@@ -2599,11 +2657,11 @@ def test_liquidity_coverage_contract_keeps_proxy_only_and_observation_families_o
     contract = _coverage_contract(payload)
     indicators = _indicators_by_key(payload)
 
-    assert payload["score"]["includedIndicatorCount"] == 2
+    assert payload["score"]["includedIndicatorCount"] == 1
     assert payload["score"]["regime"] == "unavailable"
     assert contract["requiredInputCount"] == 39
     assert 0 < contract["scoreEligibleInputCount"] < contract["requiredInputCount"]
-    assert contract["observationOnlyInputCount"] == 3
+    assert contract["observationOnlyInputCount"] == 4
 
     for key in ("cn_hk_flows", "cn_money_market_rates", "futures_premarket", "crypto_funding"):
         diagnostics = indicators[key]["coverageDiagnostics"]
@@ -3371,7 +3429,8 @@ def test_liquidity_api_facing_evidence_preserves_official_macro_authority_metada
     rates_inputs = {item["key"]: item for item in indicators["us_rates_pressure"]["evidence"]["inputs"]}
 
     assert vix_inputs["VIX"]["sourceAuthorityAllowed"] is True
-    assert vix_inputs["VIX"]["scoreContributionAllowed"] is True
+    assert vix_inputs["VIX"]["scoreContributionAllowed"] is False
+    assert vix_inputs["VIX"]["scoreAuthorityEligible"] is False
     assert vix_inputs["VIX"]["sourceAuthorityRouteRejected"] is False
     assert vix_inputs["VIX"]["officialSeriesId"] == "VIXCLS"
     assert vix_inputs["VIX"]["officialObservationDate"] == "2026-05-06"
@@ -4220,7 +4279,7 @@ def test_cache_snapshot_representative_breadth_cannot_score_when_input_gates_are
 def test_score_assembly_ignores_blocked_cache_snapshot_etf_flow(
     isolated_db: DatabaseManager,
 ) -> None:
-    service = _make_service()
+    service = _make_service(evaluation_time=FROZEN_GOLDEN_NOW)
     now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
     service.cache.set(
         "crypto",
@@ -4367,13 +4426,17 @@ def test_score_assembly_ignores_blocked_cache_snapshot_etf_flow(
     indicators = _indicators_by_key(payload)
 
     assert indicators["crypto_spot_momentum"]["includedInScore"] is True
-    assert indicators["vix_pressure"]["includedInScore"] is True
+    assert indicators["vix_pressure"]["includedInScore"] is False
+    assert (
+        indicators["vix_pressure"]["coverageDiagnostics"]["scoreExclusionReason"]
+        == "volatility_snapshot_score_default_closed"
+    )
     assert indicators["us_rates_pressure"]["includedInScore"] is True
     assert indicators["us_etf_flow_proxy"]["includedInScore"] is False
     assert indicators["us_etf_flow_proxy"]["scoreContribution"] == 0
-    assert payload["score"]["includedIndicatorCount"] == 3
-    assert payload["score"]["includedIndicatorWeight"] == 20
-    assert payload["score"]["value"] == 66
+    assert payload["score"]["includedIndicatorCount"] == 2
+    assert payload["score"]["includedIndicatorWeight"] == 12
+    assert payload["score"]["value"] == 50
 
 
 def test_liquidity_provider_activation_diagnostics_classify_proxy_indicators_and_cap_score(
@@ -7794,10 +7857,10 @@ def test_liquidity_monitor_credit_stress_fixture_remains_observation_only_and_pr
     assert baseline["score"] == with_credit["score"] == {
         "value": 50,
         "regime": "unavailable",
-        "confidence": 0.29,
-        "includedIndicatorCount": 2,
+        "confidence": 0.12,
+        "includedIndicatorCount": 1,
         "possibleIndicatorWeight": 49,
-        "includedIndicatorWeight": 14,
+        "includedIndicatorWeight": 6,
     }
     assert "CREDIT" not in str(baseline_indicator["summary"])
     assert "CREDIT +341.00bps" in str(with_credit_indicator["summary"])

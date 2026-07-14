@@ -4,10 +4,10 @@
   "score": {
     "value": 50,
     "regime": "unavailable",
-    "confidence": 0.29,
-    "includedIndicatorCount": 2,
+    "confidence": 0.12,
+    "includedIndicatorCount": 1,
     "possibleIndicatorWeight": 49,
-    "includedIndicatorWeight": 14
+    "includedIndicatorWeight": 6
   },
   "coverageContract": {
     "contractVersion": "liquidity_coverage_contract_v1",
@@ -19,10 +19,10 @@
     "requiredInputCount": 39,
     "fulfilledInputCount": 8,
     "missingInputCount": 31,
-    "scoreEligibleInputCount": 5,
-    "observationOnlyInputCount": 3,
+    "scoreEligibleInputCount": 4,
+    "observationOnlyInputCount": 4,
     "scoreWeightBudget": 49,
-    "scoreWeightIncluded": 14,
+    "scoreWeightIncluded": 6,
     "families": [
       {
         "indicatorId": "crypto_spot_momentum",
@@ -83,10 +83,10 @@
         "requiredInputCount": 1,
         "fulfilledInputCount": 1,
         "missingInputCount": 0,
-        "scoreEligibleInputCount": 1,
-        "observationOnlyInputCount": 0,
-        "contributesToScore": true,
-        "scoreContributionAllowed": true,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 1,
+        "contributesToScore": false,
+        "scoreContributionAllowed": false,
         "observationOnly": false,
         "proxyOnly": false
       },
@@ -524,8 +524,8 @@
       "label": "VIX / 波动率压力",
       "status": "partial",
       "freshness": "cached",
-      "includedInScore": true,
-      "scoreContribution": 6,
+      "includedInScore": false,
+      "scoreContribution": 0,
       "scoreWeight": 8,
       "summary": "-4.66% | 来源 FRED VIXCLS (fred) | 类型 official_public | 截至 2026-05-07T10:00:00+08:00 | 新鲜度 cached",
       "updatedAt": "2026-05-07T10:00:00+08:00",
@@ -542,8 +542,8 @@
         "isPartial": true,
         "isUnavailable": false,
         "isProxy": false,
-        "sourceAuthorityState": "available",
-        "scoreAuthorityEligible": true,
+        "sourceAuthorityState": "unknown",
+        "scoreAuthorityEligible": false,
         "coverage": 1.0,
         "confidenceWeight": 0.7,
         "degradationReason": "partial_coverage",
@@ -566,9 +566,9 @@
             "isUnavailable": false,
             "isProxy": false,
             "sourceAuthorityAllowed": true,
-            "sourceAuthorityState": "available",
-            "scoreContributionAllowed": true,
-            "scoreAuthorityEligible": true,
+            "sourceAuthorityState": "official",
+            "scoreContributionAllowed": false,
+            "scoreAuthorityEligible": false,
             "officialSeriesId": "VIXCLS",
             "officialObservationDate": "2026-05-07",
             "officialAsOf": "2026-05-07",
@@ -590,26 +590,27 @@
         "requiredInputCount": 1,
         "fulfilledInputCount": 1,
         "missingInputCount": 0,
-        "scoreEligibleInputCount": 1,
-        "observationOnlyInputCount": 0,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 1,
         "requiredProviderClass": "official_public.vix_or_volatility",
         "configuredProviderAvailable": true,
         "realSourceAvailable": true,
         "proxyOnly": false,
         "observationOnly": false,
-        "scoreContributionAllowed": true,
+        "scoreContributionAllowed": false,
+        "scoreExclusionReason": "volatility_snapshot_score_default_closed",
         "requiredRealSourceForScore": true,
         "paidDataLikelyRequired": false,
         "sourceTier": "official_public",
         "freshness": "partial",
         "trustLevel": "usable_with_caution",
-        "contributesToScore": true,
-        "scoreContribution": 6,
+        "contributesToScore": false,
+        "scoreContribution": 0,
         "capReason": "partial_coverage",
         "degradationReason": "partial_coverage",
         "sourceAuthorityRouteRejected": false,
         "routeRejectedReasonCodes": [],
-        "activationHint": "现有宏观 / 波动率快照可用时激活；yfinance proxy 会被 trust gate 限制为延迟或部分。；requiredProviderClass=official_public.vix_or_volatility；requiredRealSourceForScore=True；已激活: VIX；freshness=partial；cap=partial_coverage；score capped；source=mixed"
+        "activationHint": "现有宏观 / 波动率快照可用时激活；yfinance proxy 会被 trust gate 限制为延迟或部分。；requiredProviderClass=official_public.vix_or_volatility；requiredRealSourceForScore=True；scoreExclusionReason=volatility_snapshot_score_default_closed；已激活: VIX；scoreContributionAllowed=False；freshness=partial；cap=partial_coverage；score capped；source=mixed"
       }
     },
     {
@@ -1591,12 +1592,12 @@
     "liquidityImpulse": "data_insufficient",
     "impulseLabel": "Data insufficient for a reliable liquidity call",
     "subtype": "data_insufficient",
-    "confidence": 0.256,
+    "confidence": 0.178,
     "confidenceLabel": "insufficient",
     "pillarScores": {
       "dollar_pressure": 0.0,
       "rates_pressure": -0.079,
-      "volatility_stress": -1.0,
+      "volatility_stress": 0.0,
       "crypto_liquidity_beta": 0.0,
       "risk_asset_demand": 0.0,
       "funding_stress": 0.0,
@@ -1604,28 +1605,8 @@
       "breadth_confirmation": 0.0,
       "china_liquidity_context": 0.0
     },
-    "directionScore": 0.539,
+    "directionScore": 0.079,
     "dominantDrivers": [
-      {
-        "key": "liquidity_monitor:vix_pressure",
-        "label": "VIX / 波动率压力",
-        "pillar": "volatility_stress",
-        "direction": "supports_expansion",
-        "signal": -1.0,
-        "weight": 0.432,
-        "impact": 0.432,
-        "source": "fred",
-        "sourceTier": "official_public",
-        "trustLevel": "usable_with_caution",
-        "freshness": "partial",
-        "observationOnly": false,
-        "scoreContributionAllowed": true,
-        "includedInScore": true,
-        "proxyOnly": false,
-        "discountReasons": [
-          "freshness_discount"
-        ]
-      },
       {
         "key": "liquidity_monitor:us_rates_pressure",
         "label": "US Rates / 利率压力",
@@ -1678,6 +1659,21 @@
         "includedInScore": false,
         "proxyOnly": false,
         "degradationReason": "fallback_source"
+      },
+      {
+        "key": "liquidity_monitor:vix_pressure",
+        "label": "VIX / 波动率压力",
+        "pillar": "volatility_stress",
+        "reason": "score_contribution_not_allowed",
+        "source": "fred",
+        "sourceTier": "official_public",
+        "trustLevel": "usable_with_caution",
+        "freshness": "partial",
+        "observationOnly": false,
+        "scoreContributionAllowed": false,
+        "includedInScore": false,
+        "proxyOnly": false,
+        "degradationReason": "partial_coverage"
       },
       {
         "key": "liquidity_monitor:usd_pressure",
@@ -1806,6 +1802,12 @@
         "reason": "missing_scoring_evidence"
       },
       {
+        "key": "missing:volatility_stress",
+        "label": "Missing scoring evidence for volatility_stress",
+        "pillar": "volatility_stress",
+        "reason": "missing_scoring_evidence"
+      },
+      {
         "key": "missing:crypto_liquidity_beta",
         "label": "Missing scoring evidence for crypto_liquidity_beta",
         "pillar": "crypto_liquidity_beta",
@@ -1844,20 +1846,20 @@
     ],
     "narrativeBullets": [
       "Liquidity impulse synthesis is unavailable because score-contributing coverage is below threshold or lacks real-source evidence.",
-      "Covered pillars: 2 of 9.",
+      "Covered pillars: 1 of 9.",
       "Unavailable, rejected, stale, proxy-only, and score-blocked inputs were not promoted into a false expansion or contraction call."
     ],
     "evidenceQuality": {
       "version": "liquidity_impulse_synthesis_v1",
       "inputCount": 12,
-      "scoringEvidenceCount": 2,
-      "scoringPillarCount": 2,
+      "scoringEvidenceCount": 1,
+      "scoringPillarCount": 1,
       "coveredPillars": [
-        "rates_pressure",
-        "volatility_stress"
+        "rates_pressure"
       ],
       "missingPillars": [
         "dollar_pressure",
+        "volatility_stress",
         "crypto_liquidity_beta",
         "risk_asset_demand",
         "funding_stress",
@@ -1865,16 +1867,16 @@
         "breadth_confirmation",
         "china_liquidity_context"
       ],
-      "coverageRatio": 0.222,
-      "scoreContributingWeight": 0.864,
+      "coverageRatio": 0.111,
+      "scoreContributingWeight": 0.432,
       "averageEvidenceWeight": 0.432,
-      "discountedEvidenceCount": 2,
+      "discountedEvidenceCount": 1,
       "observationOnlyEvidenceCount": 5,
-      "scoreBlockedEvidenceCount": 10,
+      "scoreBlockedEvidenceCount": 11,
       "proxyOnlyScoringCount": 0,
-      "realScoringEvidenceCount": 2,
+      "realScoringEvidenceCount": 1,
       "allScoringEvidenceProxyOnly": false,
-      "dataGapCount": 17,
+      "dataGapCount": 19,
       "conflictPenalty": 0.0
     },
     "notInvestmentAdvice": true
