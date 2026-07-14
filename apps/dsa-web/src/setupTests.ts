@@ -1,3 +1,4 @@
+import './test-utils/axiosTestBootstrap';
 import '@testing-library/jest-dom';
 import { afterEach } from 'vitest';
 import { installAsyncHarness } from './test-utils/asyncHarness';
