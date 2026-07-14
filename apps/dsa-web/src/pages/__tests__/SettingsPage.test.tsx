@@ -2042,10 +2042,10 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    expect(await screen.findByRole('heading', { name: '通知通道' })).toBeInTheDocument();
+    const telegramCard = await screen.findByTestId('notification-channel-card-telegram');
+    expect(screen.getByRole('heading', { name: '通知通道' })).toBeInTheDocument();
     expect(screen.getAllByText('通知凭据在这里专用管理，并从原始系统设置中隐藏。').length).toBeGreaterThan(0);
 
-    const telegramCard = screen.getByTestId('notification-channel-card-telegram');
     const wechatCard = screen.getByTestId('notification-channel-card-wechat');
     const pushplusCard = screen.getByTestId('notification-channel-card-pushplus');
     const customWebhookCard = screen.getByTestId('notification-channel-card-custom_webhook');
