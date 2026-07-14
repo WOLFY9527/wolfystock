@@ -133,7 +133,11 @@ describe('AdminMissionControlPage', () => {
   it('surfaces operator state before domain diagnostics', async () => {
     renderPage();
 
-    const stateBand = await screen.findByTestId('admin-mission-state-band');
+    await waitFor(() => {
+      expect(screen.getByTestId('admin-mission-primary-state')).toHaveTextContent(/NO-GO/);
+    });
+
+    const stateBand = screen.getByTestId('admin-mission-state-band');
     const domainSection = screen.getByTestId('admin-mission-domain-section');
     const stateTop = stateBand.getBoundingClientRect().top;
     const domainTop = domainSection.getBoundingClientRect().top;
