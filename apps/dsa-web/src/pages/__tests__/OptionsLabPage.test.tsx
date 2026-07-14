@@ -2821,7 +2821,11 @@ describe('OptionsLabPage', () => {
     const timeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation(((handler: TimerHandler, timeout?: number, ...args: unknown[]) => (
       originalSetTimeout(handler, timeout === 12_000 ? 0 : timeout, ...args)
     )) as typeof window.setTimeout);
-    vi.mocked(optionsLabApi.compareStrategies).mockReturnValueOnce(new Promise(() => {}));
+    let rejectComparison: (reason?: unknown) => void = () => {};
+    const pendingComparison = new Promise<never>((_, reject) => {
+      rejectComparison = reject;
+    });
+    vi.mocked(optionsLabApi.compareStrategies).mockReturnValueOnce(pendingComparison);
 
     try {
       renderPage();
@@ -2832,6 +2836,12 @@ describe('OptionsLabPage', () => {
       });
       expect((await screen.findAllByText('TEM260619C00055000')).length).toBeGreaterThan(0);
     } finally {
+      cleanup();
+      await act(async () => {
+        rejectComparison(new Error('test comparison request aborted after timeout assertion'));
+        await pendingComparison.catch(() => undefined);
+        await Promise.resolve();
+      });
       timeoutSpy.mockRestore();
     }
   });
