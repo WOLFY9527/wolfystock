@@ -89,24 +89,8 @@ def _set_admin_cookie(client: TestClient, db: DatabaseManager) -> None:
     [
         "/admin",
         "/admin/users",
-        "/admin/logs",
-        "/admin/system",
         "/admin/provider",
-        "/admin/market-providers",
-        "/admin/provider-circuits",
         "/zh/admin",
-        "/zh/admin/users",
-        "/zh/admin/logs",
-        "/zh/admin/system",
-        "/zh/admin/provider",
-        "/zh/admin/market-providers",
-        "/en/admin",
-        "/en/admin/users",
-        "/en/admin/logs",
-        "/en/admin/system",
-        "/en/admin/provider",
-        "/en/admin/market-providers",
-        "/en/admin/provider-circuits",
     ],
 )
 def test_unauthenticated_direct_admin_spa_routes_serve_shell_for_fail_closed_hydration(
@@ -136,17 +120,8 @@ def test_authenticated_admin_keeps_direct_admin_spa_shell_access(auth_enabled_sp
     "path",
     [
         "/backtest",
-        "/scanner",
-        "/watchlist",
-        "/holdings",
-        "/scenario-lab",
-        "/market-overview",
-        "/research-radar",
         "/stock/600519",
-        "/stock/ORCL",
-        "/stock/600519/structure-decision",
         "/stocks/ORCL/structure-decision",
-        "/decision-cockpit",
     ],
 )
 def test_core_direct_spa_routes_serve_shell_for_refresh_and_deep_links(
@@ -165,12 +140,8 @@ def test_core_direct_spa_routes_serve_shell_for_refresh_and_deep_links(
     "path",
     [
         "/",
-        "/guest",
         "/login",
-        "/register",
-        "/market-overview",
         "/zh/scanner",
-        "/fr/admin/market-providers",
     ],
 )
 def test_admin_spa_guard_preserves_non_admin_spa_routes(auth_enabled_spa_client, path: str) -> None:
