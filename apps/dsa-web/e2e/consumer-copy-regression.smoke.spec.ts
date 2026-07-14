@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test';
+import type { Locator, Page, Route } from '@playwright/test';
 import { expect as baseExpect, expect as pwExpect } from '@playwright/test';
 import { expect as appExpect, test as appTest } from './fixtures/appSmoke';
 import {
@@ -663,7 +663,7 @@ async function installOptionsRoutes(page: Page) {
 
   await installSignedInSessionRoutes(page);
 
-  await page.route('**/api/v1/options/**', async (route) => {
+  const handleOptionsRoute = async (route: Route) => {
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
@@ -862,7 +862,13 @@ async function installOptionsRoutes(page: Page) {
     }
 
     return fulfillJson(route, { error: `Unhandled options route: ${method} ${path}` }, 500);
-  });
+  };
+
+  await page.route('**/api/v1/options/underlyings/*/summary', handleOptionsRoute);
+  await page.route('**/api/v1/options/underlyings/*/expirations', handleOptionsRoute);
+  await page.route('**/api/v1/options/underlyings/*/chain**', handleOptionsRoute);
+  await page.route('**/api/v1/options/strategies/compare', handleOptionsRoute);
+  await page.route('**/api/v1/options/decision/evaluate', handleOptionsRoute);
 
   return {
     count(method: string, path: string) {
@@ -1029,13 +1035,16 @@ appTest.describe('consumer copy regression smoke', () => {
       await appExpect(decisionEngine).toBeVisible();
       await appExpect(boundaryPanel).toBeVisible();
       await appExpect(visualsPanel).toBeVisible();
+      await page.getByRole('button', { name: '运行结构比较' }).click();
+      await pwExpect.poll(() => harness.count('POST', '/api/v1/options/strategies/compare')).toBeGreaterThan(0);
+      await page.getByRole('button', { name: '评估情景准备度' }).click();
+      await pwExpect.poll(() => harness.count('POST', '/api/v1/options/decision/evaluate')).toBeGreaterThan(0);
       await appExpect(decisionEngine).toContainText(/数据不足，暂不形成结论|情景分析已暂停/);
       await appExpect(boundaryPanel).toContainText('未达到可判断等级，仅供情景观察，暂不形成结论。');
       await appExpect(boundaryPanel).toContainText('仅供观察，不作为结论依据');
       await appExpect(visualsPanel).toContainText('收益边界与 IV 快照');
-      await appExpect(visualsPanel).toContainText('不构成买卖建议');
-      await appExpect(visualsPanel).toContainText('不会触发外部执行');
-      await appExpect(pageRoot).toContainText('不构成执行指令');
+      await appExpect(visualsPanel).toContainText('非交易指令');
+      await appExpect(pageRoot).toContainText('不作为官方实时权威或可执行判断依据');
       await expectConsumerSafeSurface(pageRoot);
       pwExpect(harness.count('POST', '/api/v1/options/strategies/compare')).toBeGreaterThan(0);
       pwExpect(harness.count('POST', '/api/v1/options/decision/evaluate')).toBeGreaterThan(0);
