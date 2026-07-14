@@ -487,7 +487,14 @@ class RuleBacktestTestCase(unittest.TestCase):
             strategy_spec=dict(strategy_spec or {}),
         )
 
-    def _seed_history(self, code: str, closes: list[float], *, start: date = date(2024, 1, 1)) -> None:
+    def _seed_history(
+        self,
+        code: str,
+        closes: list[float],
+        *,
+        start: date = date(2024, 1, 1),
+        data_source: str | None = None,
+    ) -> None:
         with self.db.get_session() as session:
             for index, close in enumerate(closes):
                 session.add(
@@ -498,6 +505,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                         high=float(close) + 0.2,
                         low=max(0.01, float(close) - 0.3),
                         close=float(close),
+                        data_source=data_source,
                     )
                 )
             session.commit()
@@ -2474,6 +2482,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                     "high": close + 0.2,
                     "low": max(0.01, close - 0.3),
                     "close": close,
+                    "adjusted_close": close,
                     "volume": 1000,
                 }
                 for current_date, close in [
@@ -2481,6 +2490,13 @@ class RuleBacktestTestCase(unittest.TestCase):
                     for index in range(24)
                 ]
             ]
+        )
+        frame.attrs.update(
+            {
+                "adjustments_available": True,
+                "source": "local_us_parquet",
+                "asOf": "2024-01-24",
+            }
         )
 
         with patch(
@@ -2502,10 +2518,16 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(fetch_mock.call_args.args[0], "AAPL")
         self.assertEqual(fetch_mock.call_args.kwargs["log_context"], "[rule-backtest date-range history]")
         self.assertEqual(fetch_mock.call_args.kwargs["allow_provider_fallback"], False)
+        self.assertIs(frame.attrs["adjustments_available"], True)
         self.assertEqual(response["code"], "AAPL")
         self.assertIsNone(response["no_result_reason"])
         self.assertGreater(len(response["equity_curve"]), 0)
         self.assertGreater(len(response["trades"]), 0)
+        history_readiness = response["data_sufficiency"]["ohlcv_readiness"]
+        self.assertTrue(history_readiness["executable"])
+        self.assertEqual(history_readiness["adjustedDataRequirement"]["state"], "available")
+        self.assertEqual(response["data_quality"]["historicalOhlcvReadiness"]["asOf"], "2024-01-24")
+        self.assertEqual(response["data_quality"]["source"], "local_us_parquet")
 
         with self.db.get_session() as session:
             daily_rows = session.query(StockDaily).filter(StockDaily.code == "AAPL").order_by(StockDaily.date).all()
@@ -2513,6 +2535,27 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(len(daily_rows), 24)
         self.assertEqual(daily_rows[0].date.isoformat(), "2024-01-01")
         self.assertEqual(daily_rows[-1].date.isoformat(), "2024-01-24")
+
+    def test_service_run_backtest_missing_adjustments_fails_closed(self) -> None:
+        service = RuleBacktestService(self.db)
+        self._seed_history("AAPL", [100.0 + index for index in range(24)])
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.run_backtest(
+                code="AAPL",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=10,
+                benchmark_mode="none",
+                confirmed=True,
+            )
+
+        data_sufficiency = response["data_sufficiency"]
+        readiness = data_sufficiency["ohlcv_readiness"]
+        self.assertEqual(response["no_result_reason"], "missing_adjustments")
+        self.assertEqual(data_sufficiency["status"], "missing_adjustments")
+        self.assertFalse(readiness["executable"])
+        self.assertEqual(readiness["adjustedDataRequirement"]["state"], "missing")
+        self.assertIn("missing_adjustments", response["execution_readiness"]["reason_codes"])
 
     def test_service_missing_us_history_does_not_invoke_provider_fallback(self) -> None:
         self._allow_market_history_fetch()
@@ -2937,11 +2980,27 @@ class RuleBacktestTestCase(unittest.TestCase):
 
     def test_run_backtest_persists_custom_monte_carlo_robustness_config(self) -> None:
         service = RuleBacktestService(self.db)
+        closes = [100.0 + (index * 0.35) + ((-1) ** index) * 1.0 for index in range(96)]
         self._seed_history(
             "AAPL",
-            [100.0 + (index * 0.35) + ((-1) ** index) * 1.0 for index in range(96)],
+            closes,
             start=date(2024, 1, 1),
+            data_source="local_us_parquet",
         )
+        adjusted_history = pd.DataFrame(
+            {
+                "date": [date(2024, 1, 1) + timedelta(days=index) for index in range(len(closes))],
+                "adjusted_close": closes,
+            }
+        )
+        adjusted_history.attrs.update(
+            {
+                "adjustments_available": True,
+                "source": "local_us_parquet",
+                "asOf": "2024-04-05",
+            }
+        )
+        service._remember_adjusted_close_values("AAPL", adjusted_history)
 
         with patch.object(service, "_ensure_market_history", return_value=0), patch.object(service, "_get_llm_adapter", return_value=None):
             response = service.run_backtest(
@@ -2967,6 +3026,12 @@ class RuleBacktestTestCase(unittest.TestCase):
         detail = service.get_run(response["id"])
         history = service.list_runs(code="AAPL", page=1, limit=10)
 
+        self.assertIs(adjusted_history.attrs["adjustments_available"], True)
+        history_readiness = response["data_sufficiency"]["ohlcv_readiness"]
+        self.assertTrue(history_readiness["executable"])
+        self.assertEqual(history_readiness["adjustedDataRequirement"]["state"], "available")
+        self.assertEqual(response["data_quality"]["historicalOhlcvReadiness"]["asOf"], "2024-04-05")
+        self.assertEqual(response["data_quality"]["source"], "local_us_parquet")
         self.assertEqual(response["robustness_analysis"]["seed"], 4242)
         self.assertEqual(response["robustness_analysis"]["monte_carlo"]["simulation_count"], 8)
         self.assertEqual(
