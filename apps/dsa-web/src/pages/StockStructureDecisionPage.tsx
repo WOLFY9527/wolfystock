@@ -289,6 +289,7 @@ const QUOTE_TIMESTAMP_FORMATTERS = {
 type QuoteBoundaryChipVariant = 'success' | 'caution' | 'danger' | 'info' | 'neutral';
 
 type QuoteBoundaryChip = {
+  id: 'state' | 'source' | 'freshness' | 'updated';
   label: string;
   variant: QuoteBoundaryChipVariant;
 };
@@ -774,10 +775,12 @@ function buildQuoteBoundaryView(
         : '报价边界暂不可用，先按观察处理。',
       chips: [
         {
+          id: 'source',
           label: language === 'en' ? 'Source pending' : '来源待确认',
           variant: 'caution',
         },
         {
+          id: 'state',
           label: language === 'en' ? 'Observation only' : '仅观察',
           variant: 'neutral',
         },
@@ -812,10 +815,20 @@ function buildQuoteBoundaryView(
     title: language === 'en' ? 'Quote source and freshness' : '报价来源与新鲜度',
     detail,
     chips: [
-      state,
-      source,
-      freshness,
+      {
+        id: 'state',
+        ...state,
+      },
+      {
+        id: 'source',
+        ...source,
+      },
+      {
+        id: 'freshness',
+        ...freshness,
+      },
       asOf ? {
+        id: 'updated',
         label: `${language === 'en' ? 'Updated' : '更新'} ${asOf}`,
         variant: 'neutral',
       } : null,
@@ -4358,7 +4371,9 @@ export default function StockStructureDecisionPage() {
                       >
                         <div className="flex flex-wrap gap-2">
                           {quoteBoundaryView.chips.map((chip) => (
-                            <StatusBadge key={chip.label} status={chip.variant} label={chip.label} size="sm" />
+                            <span key={chip.id} data-testid={`stock-quote-boundary-chip-${chip.id}`}>
+                              <StatusBadge status={chip.variant} label={chip.label} size="sm" />
+                            </span>
                           ))}
                         </div>
                         <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">

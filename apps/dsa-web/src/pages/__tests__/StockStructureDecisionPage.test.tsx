@@ -907,6 +907,18 @@ describe('StockStructureDecisionPage', () => {
     expect(ledger).toHaveTextContent('证据就绪度');
     expect(ledger).toHaveTextContent('部分可用');
     expect(ledger).toHaveTextContent('缺失字段');
+    const ledgerRows = within(ledger).getAllByRole('row').slice(1);
+    expect(ledgerRows).toHaveLength(8);
+    expect(ledgerRows.map((row) => within(row).getByRole('rowheader').textContent)).toEqual([
+      '报价',
+      '价格历史',
+      '技术指标',
+      '结构观察',
+      '研究包',
+      '证据就绪度',
+      '基本面',
+      '事件 / 催化',
+    ]);
     const ledgerScroll = within(ledger).getByTestId('stock-evidence-ledger-scroll');
     expect(ledgerScroll).toHaveClass('overflow-x-auto', 'overscroll-x-contain');
     expect(ledgerScroll).toHaveAttribute('role', 'region');
@@ -1736,6 +1748,7 @@ describe('StockStructureDecisionPage', () => {
   });
 
   it('renders sample quote lineage as observation only', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error');
     getQuoteMock.mockResolvedValue({
       ...baseQuote(),
       currentPrice: 0,
@@ -1771,10 +1784,25 @@ describe('StockStructureDecisionPage', () => {
 
     const page = await screen.findByTestId('stock-structure-decision-page');
     const quotePanel = await within(page).findByTestId('stock-quote-boundary-panel');
+    const stateChip = within(quotePanel).getByTestId('stock-quote-boundary-chip-state');
+    const sourceChip = within(quotePanel).getByTestId('stock-quote-boundary-chip-source');
+    const freshnessChip = within(quotePanel).getByTestId('stock-quote-boundary-chip-freshness');
+    const sampleBadges = within(quotePanel).getAllByText('样本 / 演示');
+    const duplicateKeyWarningSeen = consoleErrorSpy.mock.calls.some((call) => call.some((arg) => (
+      typeof arg === 'string'
+      && arg.includes('same key')
+      && arg.includes('样本 / 演示')
+    )));
 
-    expect(quotePanel).toHaveTextContent('样本报价');
-    expect(quotePanel).toHaveTextContent('样本 / 演示');
+    expect(stateChip).toHaveTextContent('样本报价');
+    expect(sourceChip).toHaveTextContent('样本 / 演示');
+    expect(freshnessChip).toHaveTextContent('样本 / 演示');
+    expect(sampleBadges).toHaveLength(2);
+    expect(sourceChip).toContainElement(sampleBadges[0]);
+    expect(freshnessChip).toContainElement(sampleBadges[1]);
+    expect(sourceChip.compareDocumentPosition(freshnessChip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(quotePanel).toHaveTextContent('当前为样本/演示数据，仅供观察。');
+    expect(duplicateKeyWarningSeen).toBe(false);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider|cache|debug|trace|sourceAuthority|raw|fallback/i);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
