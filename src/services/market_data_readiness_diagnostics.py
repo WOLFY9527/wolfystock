@@ -816,12 +816,18 @@ def _build_representative_parquet_file_check(
     if not symbols:
         return MarketDataReadinessCheck(
             id="local_us_parquet_representative_files",
-            status="ready",
-            severity="info",
+            status="missing",
+            severity="warning",
             user_facing_message="Representative US parquet file presence was not evaluated because no symbol list was provided.",
             remediation_hint="Provide representative symbols when you want the diagnostic to verify file coverage.",
             affects_surfaces=_LOCAL_US_SURFACES,
-            details={"representativeSymbols": []},
+            details={
+                "representativeSymbols": [],
+                "checkedCount": 0,
+                "availableCount": 0,
+                "missingCount": 0,
+                "reason": "representative_symbols_not_configured",
+            },
         )
     if parquet_dir is None:
         return MarketDataReadinessCheck(
@@ -831,10 +837,19 @@ def _build_representative_parquet_file_check(
             user_facing_message="Representative US parquet file presence was not evaluated because no parquet root is configured.",
             remediation_hint="Configure LOCAL_US_PARQUET_DIR or US_STOCK_PARQUET_DIR before checking representative parquet files.",
             affects_surfaces=_LOCAL_US_SURFACES,
-            details={"representativeSymbols": list(symbols)},
+            details={
+                "representativeSymbols": list(symbols),
+                "checkedCount": 0,
+                "availableCount": 0,
+                "missingCount": 0,
+                "unavailableCount": len(symbols),
+                "reason": "parquet_root_not_configured",
+            },
         )
 
     missing_symbols = [symbol for symbol in symbols if not (parquet_dir / f"{symbol}.parquet").exists()]
+    missing_count = len(missing_symbols)
+    available_count = len(symbols) - missing_count
     if not missing_symbols:
         return MarketDataReadinessCheck(
             id="local_us_parquet_representative_files",
@@ -843,11 +858,15 @@ def _build_representative_parquet_file_check(
             user_facing_message="Representative US parquet files are present.",
             remediation_hint=None,
             affects_surfaces=_LOCAL_US_SURFACES,
-            details={"representativeSymbols": list(symbols)},
+            details={
+                "representativeSymbols": list(symbols),
+                "checkedCount": len(symbols),
+                "availableCount": available_count,
+                "missingCount": missing_count,
+            },
         )
 
-    existing_count = len(symbols) - len(missing_symbols)
-    status = "missing" if existing_count == 0 else "partial"
+    status = "missing" if available_count == 0 else "partial"
     return MarketDataReadinessCheck(
         id="local_us_parquet_representative_files",
         status=status,
@@ -858,7 +877,10 @@ def _build_representative_parquet_file_check(
         details={
             "representativeSymbols": list(symbols),
             "missingSymbols": missing_symbols,
-            "existingCount": existing_count,
+            "existingCount": available_count,
+            "checkedCount": len(symbols),
+            "availableCount": available_count,
+            "missingCount": missing_count,
         },
     )
 

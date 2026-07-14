@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import socket
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -297,8 +298,10 @@ def test_parquet_dir_inspection_error_redacts_configured_path(tmp_path: Path, mo
 def test_parquet_dir_set_but_engine_missing_reports_misconfigured(tmp_path: Path) -> None:
     parquet_dir = tmp_path / "us-parquet"
     parquet_dir.mkdir()
+    (parquet_dir / "AAPL.parquet").touch()
 
     payload = build_market_data_readiness_diagnostics(
+        representative_symbols=["AAPL"],
         env={
             "LOCAL_US_PARQUET_DIR": str(parquet_dir),
             "TUSHARE_TOKEN": "configured",
@@ -307,17 +310,23 @@ def test_parquet_dir_set_but_engine_missing_reports_misconfigured(tmp_path: Path
     ).to_dict()
 
     engine_check = _find_check(payload, "parquet_engine")
+    file_check = _find_check(payload, "local_us_parquet_representative_files")
 
     assert payload["readinessStatus"] == "misconfigured"
     assert engine_check["status"] == "misconfigured"
     assert engine_check["details"]["checkedModules"] == ["pyarrow", "fastparquet"]
+    assert file_check["details"]["checkedCount"] == 1
+    assert file_check["details"]["availableCount"] == 1
+    assert file_check["details"]["missingCount"] == 0
 
 
 def test_parquet_engine_available_reports_ready(tmp_path: Path) -> None:
     parquet_dir = tmp_path / "us-parquet"
     parquet_dir.mkdir()
+    (parquet_dir / "AAPL.parquet").touch()
 
     payload = build_market_data_readiness_diagnostics(
+        representative_symbols=["AAPL"],
         env={
             "LOCAL_US_PARQUET_DIR": str(parquet_dir),
             "TUSHARE_TOKEN": "configured",
@@ -326,10 +335,44 @@ def test_parquet_engine_available_reports_ready(tmp_path: Path) -> None:
     ).to_dict()
 
     engine_check = _find_check(payload, "parquet_engine")
+    file_check = _find_check(payload, "local_us_parquet_representative_files")
 
     assert payload["readinessStatus"] == "ready"
     assert engine_check["status"] == "ready"
     assert engine_check["details"]["availableModules"] == ["pyarrow"]
+    assert file_check["status"] == "ready"
+    assert file_check["details"]["checkedCount"] == 1
+    assert file_check["details"]["availableCount"] == 1
+    assert file_check["details"]["missingCount"] == 0
+
+
+def test_zero_representative_symbols_fail_closed_without_coverage_claim(tmp_path: Path) -> None:
+    parquet_dir = tmp_path / "us-parquet"
+    parquet_dir.mkdir()
+
+    payload = build_market_data_readiness_diagnostics(
+        representative_symbols=[],
+        env={
+            "LOCAL_US_PARQUET_DIR": str(parquet_dir),
+            "TUSHARE_TOKEN": "configured",
+        },
+        spec_finder=_spec_finder_with(ALL_OPTIONAL_MODULES),
+    ).to_dict()
+
+    file_check = _find_check(payload, "local_us_parquet_representative_files")
+
+    assert payload["readinessStatus"] == "missing"
+    assert file_check["status"] == "missing"
+    assert file_check["severity"] == "warning"
+    assert file_check["details"] == {
+        "representativeSymbols": [],
+        "checkedCount": 0,
+        "availableCount": 0,
+        "missingCount": 0,
+        "reason": "representative_symbols_not_configured",
+    }
+    assert "not evaluated" in file_check["userFacingMessage"].lower()
+    assert "are present" not in file_check["userFacingMessage"].lower()
 
 
 def test_tushare_token_missing_reports_boolean_only(tmp_path: Path) -> None:
@@ -391,6 +434,33 @@ def test_representative_file_missing_reports_partial(tmp_path: Path) -> None:
     assert file_check["productAffectedSurfaces"] == ["provider_ops"]
     assert file_check["details"]["missingSymbols"] == ["MSFT"]
     assert file_check["details"]["existingCount"] == 1
+    assert file_check["details"]["checkedCount"] == 2
+    assert file_check["details"]["availableCount"] == 1
+    assert file_check["details"]["missingCount"] == 1
+
+
+def test_representative_files_all_missing_report_truthful_counts(tmp_path: Path) -> None:
+    parquet_dir = tmp_path / "us-parquet"
+    parquet_dir.mkdir()
+
+    payload = build_market_data_readiness_diagnostics(
+        representative_symbols=["AAPL", "MSFT"],
+        env={
+            "LOCAL_US_PARQUET_DIR": str(parquet_dir),
+            "TUSHARE_TOKEN": "configured",
+        },
+        spec_finder=_spec_finder_with(ALL_OPTIONAL_MODULES),
+    ).to_dict()
+
+    file_check = _find_check(payload, "local_us_parquet_representative_files")
+
+    assert payload["readinessStatus"] == "missing"
+    assert file_check["status"] == "missing"
+    assert file_check["details"]["missingSymbols"] == ["AAPL", "MSFT"]
+    assert file_check["details"]["existingCount"] == 0
+    assert file_check["details"]["checkedCount"] == 2
+    assert file_check["details"]["availableCount"] == 0
+    assert file_check["details"]["missingCount"] == 2
 
 
 def test_diagnostics_stay_inert_without_network_or_provider_runtime_calls(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -420,6 +490,8 @@ def test_diagnostics_stay_inert_without_network_or_provider_runtime_calls(tmp_pa
     assert payload["diagnosticOnly"] is True
     assert payload["providerRuntimeCalled"] is False
     assert payload["networkCallsEnabled"] is False
+    assert payload["historicalOhlcvCachePreflight"]["mutationEnabled"] is False
+    assert payload["crossAssetDriverReadiness"]["mutationEnabled"] is False
     assert payload["officialRiskSourceReadiness"]["externalProviderCalls"] is False
     assert payload["officialRiskSourceReadiness"]["mutationEnabled"] is False
     assert seen_modules == [
@@ -486,7 +558,14 @@ def test_historical_ohlcv_cache_preflight_section_is_present_and_redacted() -> N
 
 def test_historical_ohlcv_cache_preflight_section_recognizes_configured_adjusted_local_cache(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return cls(2026, 6, 29)
+
+    monkeypatch.setattr("src.services.historical_ohlcv_cache_preflight.date", FixedDate)
     cache_dir = tmp_path / "us-parquet"
     for symbol in ("SPY", "QQQ", "AAPL", "MSFT"):
         _write_ohlcv_parquet(cache_dir, symbol)
