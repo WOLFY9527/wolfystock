@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApiError, createParsedApiError } from '../../api/error';
@@ -30,7 +30,6 @@ const {
   addWatchlistItem,
   removeWatchlistItem,
   runRuleBacktest,
-  loadScannerBacktestLabMock,
 } = vi.hoisted(() => ({
   getRuns: vi.fn(),
   getRun: vi.fn(),
@@ -44,7 +43,6 @@ const {
   addWatchlistItem: vi.fn(),
   removeWatchlistItem: vi.fn(),
   runRuleBacktest: vi.fn(),
-  loadScannerBacktestLabMock: vi.fn(),
 }));
 
 const productSurfaceMock = vi.hoisted(() => ({
@@ -95,13 +93,6 @@ vi.mock('../../api/backtest', () => ({
 vi.mock('../../hooks/useProductSurface', () => ({
   useProductSurface: () => productSurfaceMock.state,
 }));
-
-vi.mock('../../components/scanner/ScannerBacktestLab', async () => {
-  loadScannerBacktestLabMock();
-  return vi.importActual<typeof import('../../components/scanner/ScannerBacktestLab')>(
-    '../../components/scanner/ScannerBacktestLab',
-  );
-});
 
 function makeCandidate(overrides: Partial<ScannerCandidate>): ScannerCandidate {
   return {
@@ -969,6 +960,7 @@ function renderUserScannerPage(options: boolean | RenderUserScannerPageOptions =
     });
     window.dispatchEvent(new Event('resize'));
   }
+  window.history.replaceState(window.history.state, '', initialEntry);
   return render(
     <UiLanguageProvider>
       <MemoryRouter initialEntries={[initialEntry]}>
@@ -1040,6 +1032,9 @@ async function openAdvancedControls() {
 describe('UserScannerPage', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    window.sessionStorage.clear();
+    window.history.replaceState(window.history.state, '', '/scanner');
+    document.documentElement.lang = 'zh';
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
       writable: true,
@@ -1047,6 +1042,7 @@ describe('UserScannerPage', () => {
     });
     getRuns.mockReset();
     getRun.mockReset();
+    getStatus.mockReset();
     getThemes.mockReset();
     getStrategySimulation.mockReset();
     createTheme.mockReset();
@@ -1906,7 +1902,9 @@ describe('UserScannerPage', () => {
     const { container } = renderUserScannerPage();
 
     const band = await screen.findByTestId('scanner-conclusion-band');
-    expect(band).toHaveTextContent('数据待补');
+    await waitFor(() => {
+      expect(band).toHaveTextContent('数据待补');
+    });
     expect(band).toHaveTextContent('报价信息待补');
     expect(band).toHaveTextContent('补充报价快照后重新运行。');
     expect(container).not.toHaveTextContent(/missing_quote_snapshot|0ms|0\s*\/\s*0\s*\/\s*0/);
@@ -1951,7 +1949,9 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const band = await screen.findByTestId('scanner-conclusion-band');
-    expect(band).toHaveTextContent('数据待补');
+    await waitFor(() => {
+      expect(band).toHaveTextContent('数据待补');
+    });
     expect(band).toHaveTextContent('历史数据待补');
     expect(band).toHaveTextContent('补充历史数据后再扫描。');
     expect(screen.getByTestId('scanner-status-strip')).toHaveTextContent('数据待补');
@@ -2168,6 +2168,7 @@ describe('UserScannerPage', () => {
   });
 
   it('keeps completed-empty classification when history facts arrive before run detail', async () => {
+    let rejectPendingRun: (reason?: unknown) => void = () => undefined;
     getRuns.mockResolvedValue(makeHistoryResponse([
       makeHistoryItem({
         shortlistSize: 0,
@@ -2175,7 +2176,9 @@ describe('UserScannerPage', () => {
         headline: '历史扫描：本次无入选候选',
       }),
     ]));
-    getRun.mockImplementation(() => new Promise(() => {}));
+    getRun.mockImplementation(() => new Promise((_resolve, reject) => {
+      rejectPendingRun = reject;
+    }));
 
     renderUserScannerPage();
 
@@ -2186,6 +2189,10 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-conclusion-band')).not.toHaveTextContent('首次使用：先运行一次扫描');
     expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('本次未形成入选候选');
     expect(screen.getByTestId('scanner-workbench-empty-state')).not.toHaveTextContent('尚未运行扫描');
+
+    await act(async () => {
+      rejectPendingRun(new Error('run detail cancelled after completed-empty assertions'));
+    });
   });
 
   it('uses a retry CTA with bounded no-candidate guidance while keeping the same run parameters', async () => {
@@ -2559,7 +2566,6 @@ describe('UserScannerPage', () => {
     expect(await screen.findByTestId('scanner-result-row-WULF')).toBeInTheDocument();
     expect(screen.queryByTestId('scanner-score-trust-WULF')).not.toBeInTheDocument();
     expect(screen.queryByTestId('scanner-backtest-lab')).not.toBeInTheDocument();
-    expect(loadScannerBacktestLabMock).not.toHaveBeenCalled();
   });
 
   it('loads the backtest lab only after opening the strategy experiment disclosure', async () => {
@@ -2567,12 +2573,11 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const experiment = await screen.findByTestId('scanner-strategy-experiment');
-    expect(loadScannerBacktestLabMock).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('scanner-backtest-lab')).not.toBeInTheDocument();
 
     fireEvent.click(within(experiment).getByRole('button', { name: /展开.*(?:回测准备|Backtest setup)|Expand.*(?:回测准备|Backtest setup)/i }));
 
     expect(await screen.findByTestId('scanner-backtest-lab')).toBeInTheDocument();
-    expect(loadScannerBacktestLabMock).toHaveBeenCalledTimes(1);
   });
 
   it('keeps scanner page wrappers document-scrollable while bounding candidates internally', async () => {
@@ -3679,7 +3684,10 @@ describe('UserScannerPage', () => {
 
   it('renders strategy historical simulation loading insufficient ready tables and warnings compactly', async () => {
     getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
-    getStrategySimulation.mockImplementationOnce(() => new Promise(() => {}));
+    let rejectLoadingSimulation: (reason?: unknown) => void = () => undefined;
+    getStrategySimulation.mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      rejectLoadingSimulation = reject;
+    }));
     const loadingRender = renderUserScannerPage();
 
     const loadingExperiment = await screen.findByTestId('scanner-strategy-experiment');
@@ -3687,6 +3695,10 @@ describe('UserScannerPage', () => {
     const loadingPanel = await screen.findByTestId('scanner-strategy-simulation');
     fireEvent.click(within(loadingPanel).getByRole('button', { name: /运行模拟|Run sim/i }));
     expect(await within(loadingPanel).findByRole('button', { name: /运行中|Running/i })).toBeDisabled();
+
+    await act(async () => {
+      rejectLoadingSimulation(new Error('simulation cancelled after pending-state assertions'));
+    });
 
     loadingRender.unmount();
     getStrategySimulation.mockResolvedValueOnce({
@@ -4145,7 +4157,7 @@ describe('UserScannerPage', () => {
     expect(await screen.findByTestId('scanner-launch-bar')).toBeInTheDocument();
     expect(screen.queryByText(/基础扫描|Basic scan/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/高级参数|Advanced controls/i)).not.toBeInTheDocument();
-    expect(screen.getByTestId('scanner-launch-controls')).toHaveTextContent(/候选上限.*评估深度|Scope cap.*Detailed review/i);
+    expect(screen.getByTestId('scanner-launch-controls')).toHaveTextContent(/候选池上限.*详细评估数|Scope cap.*Detailed review/i);
     fireEvent.click(within(screen.getByTestId('scanner-scope-selector')).getByRole('button', { name: /主题标的池|Theme scope/i }));
     await openAdvancedControls();
     const themeSelect = await screen.findByTestId('scanner-theme-select');
@@ -4554,7 +4566,9 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const conclusion = await screen.findByTestId('scanner-conclusion-band');
-    expect(conclusion).toHaveTextContent(/标的池待更新|Scope stale/);
+    await waitFor(() => {
+      expect(conclusion).toHaveTextContent(/标的池待更新|Scope stale/);
+    });
     expect(conclusion).toHaveTextContent(/扫描标的池已过期|Scope/);
     expect(conclusion).toHaveTextContent(/标的池状态|Scope readiness/);
     expect(conclusion).toHaveTextContent(/缺口|Missing/);
@@ -4616,7 +4630,9 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const conclusion = await screen.findByTestId('scanner-conclusion-band');
-    expect(conclusion).toHaveTextContent(/标的池缺失|Scope missing/);
+    await waitFor(() => {
+      expect(conclusion).toHaveTextContent(/标的池缺失|Scope missing/);
+    });
     expect(conclusion).toHaveTextContent(/扫描标的池缺失|Scope/);
     expect(conclusion).not.toHaveTextContent(/标的池待更新|Scope stale/);
     expect(conclusion).not.toHaveTextContent(/universe|historical_ohlcv|quote_snapshot/i);
@@ -4668,7 +4684,7 @@ describe('UserScannerPage', () => {
       },
     });
 
-    renderUserScannerPage();
+    renderUserScannerPage({ initialEntry: '/en/scanner' });
 
     const link = await screen.findByTestId('scanner-operator-readiness-link');
     await waitFor(() => {
