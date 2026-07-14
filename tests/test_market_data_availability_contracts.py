@@ -307,19 +307,37 @@ def test_official_daily_macro_observations_stay_delayed_or_stale_not_live() -> N
     assert stale["warning"]
 
 
-def test_market_overview_fallback_only_panels_project_to_fallback_static_not_live() -> None:
+def test_market_overview_fallback_only_panels_preserve_unavailable_and_fallback_states() -> None:
     service = MarketOverviewService()
 
-    for getter in (service.get_cn_flows, service.get_rates):
-        payload = getter()
-        provenance = _payload_provenance(payload)
+    cn_flows = service._fallback_cn_flows_snapshot()
+    cn_flows_provenance = _payload_provenance(cn_flows)
 
-        assert payload["isFallback"] is True
-        assert payload["freshness"] == "fallback"
-        assert payload["sourceLabel"] == "备用数据"
-        assert provenance["sourceType"] == "fallback_static"
-        assert provenance["sourceLabel"] == "备用数据"
-        assert provenance["freshnessLabel"] != "实时"
+    assert cn_flows["source"] == "unavailable"
+    assert cn_flows["isFallback"] is False
+    assert cn_flows["isUnavailable"] is True
+    assert cn_flows["freshness"] == "unavailable"
+    assert cn_flows_provenance["sourceType"] == "missing"
+    assert cn_flows_provenance["sourceLabel"] == "未接入"
+    assert cn_flows_provenance["freshnessLabel"] == "不可用"
+    assert all(item["source"] == "unavailable" for item in cn_flows["items"])
+    assert all(item["isUnavailable"] is True for item in cn_flows["items"])
+    assert all(item["value"] is None for item in cn_flows["items"])
+    assert all(item["changePercent"] is None for item in cn_flows["items"])
+
+    rates = service._fallback_rates_snapshot()
+    rates_provenance = _payload_provenance(rates)
+
+    assert rates["source"] == "fallback"
+    assert rates["isFallback"] is True
+    assert rates["fallbackUsed"] is True
+    assert "isUnavailable" not in rates
+    assert rates["sourceLabel"] == "备用数据"
+    assert rates_provenance["sourceType"] == "fallback_static"
+    assert rates_provenance["sourceLabel"] == "备用数据"
+    assert rates_provenance["freshnessLabel"] == "备用/缺失"
+    assert all("isUnavailable" not in item for item in rates["items"])
+    assert all(item["value"] is not None for item in rates["items"])
 
 
 def test_sector_rotation_projection_stays_proxy_computed_not_official_or_live() -> None:
@@ -663,7 +681,7 @@ def test_market_overview_fx_commodities_proxy_payload_projects_to_unofficial_pro
     assert dxy_provenance["freshnessLabel"] != "实时"
 
 
-def test_market_overview_futures_proxy_payload_projects_to_unofficial_proxy_and_delayed_not_live() -> None:
+def test_market_overview_futures_proxy_payload_preserves_proxy_and_fail_closed_freshness() -> None:
     service = MarketOverviewService()
     as_of = datetime.now(CN_TZ) - timedelta(minutes=20)
     frames = {
@@ -681,18 +699,33 @@ def test_market_overview_futures_proxy_payload_projects_to_unofficial_proxy_and_
         payload = service.get_futures()
 
     payload_provenance = _payload_provenance(payload)
-    nq_provenance = _payload_provenance(next(item for item in payload["items"] if item["symbol"] == "NQ"))
-    fallback_provenance = _payload_provenance(next(item for item in payload["items"] if item["symbol"] == "HSI_F"))
+    nq = next(item for item in payload["items"] if item["symbol"] == "NQ")
+    fallback = next(item for item in payload["items"] if item["symbol"] == "HSI_F")
+    nq_provenance = _payload_provenance(nq)
+    fallback_provenance = _payload_provenance(fallback)
 
     assert payload["source"] == "mixed"
     assert payload["sourceType"] == "unofficial_proxy"
     assert payload["freshness"] == "delayed"
     assert payload_provenance["sourceType"] == "unofficial_proxy"
     assert payload_provenance["freshnessLabel"] == "延迟"
+    assert nq["source"] == "yfinance_proxy"
+    assert nq["sourceType"] == "unofficial_proxy"
+    assert nq["freshness"] == "proxy"
+    assert nq["isProxy"] is True
+    assert nq["isUnavailable"] is False
+    assert nq["value"] == 18420.5
+    assert nq["sourceAuthorityState"] == "proxy"
+    assert nq["sourceAuthorityAllowed"] is False
+    assert nq["scoreContributionAllowed"] is False
+    assert nq["scoreAuthorityEligible"] is False
     assert nq_provenance["sourceType"] == "unofficial_proxy"
-    assert nq_provenance["freshnessLabel"] == "延迟"
+    assert nq_provenance["freshnessLabel"] == "不可用"
+    assert fallback["source"] == "fallback"
+    assert fallback["freshness"] == "fallback"
+    assert fallback["isFallback"] is True
     assert fallback_provenance["sourceType"] == "fallback_static"
-    assert fallback_provenance["freshnessLabel"] != "实时"
+    assert fallback_provenance["freshnessLabel"] == "备用/缺失"
 
 
 def test_liquidity_monitor_only_scores_reliable_non_fallback_signals(
@@ -816,43 +849,43 @@ def test_liquidity_monitor_ignores_sentiment_cache_shape_variants(
             ),
             ttl_seconds=30,
         )
-    service.cache.set(
-        "funds_flow",
-        _cache_entry(
-            source="yfinance_proxy",
-            freshness="live",
-            items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.2}],
-            updated_at=now,
-            as_of=now,
-        ),
-        ttl_seconds=30,
-    )
-    service.cache.set(
-        "cn_flows",
-        _cache_entry(
-            source="fallback",
-            freshness="fallback",
-            is_fallback=True,
-            items=[{"symbol": "NORTHBOUND", "label": "北向资金", "value": 88.8}],
-            updated_at=now,
-            as_of=now,
-            warning="备用快照",
-        ),
-        ttl_seconds=30,
-    )
-    service.cache.set(
-        "futures",
-        _cache_entry(
-            source="fallback",
-            freshness="fallback",
-            is_fallback=True,
-            items=[{"symbol": "NQ", "label": "纳指期货", "changePercent": 1.5, "value": 18420.0}],
-            updated_at=now,
-            as_of=now,
-            warning="备用快照",
-        ),
-        ttl_seconds=30,
-    )
+        service.cache.set(
+            "funds_flow",
+            _cache_entry(
+                source="yfinance_proxy",
+                freshness="live",
+                items=[{"symbol": "ETF", "label": "ETF flow proxy", "value": 1.2}],
+                updated_at=now,
+                as_of=now,
+            ),
+            ttl_seconds=30,
+        )
+        service.cache.set(
+            "cn_flows",
+            _cache_entry(
+                source="fallback",
+                freshness="fallback",
+                is_fallback=True,
+                items=[{"symbol": "NORTHBOUND", "label": "北向资金", "value": 88.8}],
+                updated_at=now,
+                as_of=now,
+                warning="备用快照",
+            ),
+            ttl_seconds=30,
+        )
+        service.cache.set(
+            "futures",
+            _cache_entry(
+                source="fallback",
+                freshness="fallback",
+                is_fallback=True,
+                items=[{"symbol": "NQ", "label": "纳指期货", "changePercent": 1.5, "value": 18420.0}],
+                updated_at=now,
+                as_of=now,
+                warning="备用快照",
+            ),
+            ttl_seconds=30,
+        )
 
     baseline = _make_service()
     seed_panels(baseline)
