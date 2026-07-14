@@ -26,18 +26,6 @@ from src.admin_rbac import (
 )
 from src.multi_user import ROLE_ADMIN
 
-PUBLIC_LAUNCH_ADMIN_RBAC_ENDPOINT_FILES = (
-    "agent.py",
-    "admin_cost.py",
-    "admin_logs.py",
-    "admin_notifications.py",
-    "admin_portfolio.py",
-    "admin_provider_circuits.py",
-    "admin_security.py",
-    "scanner.py",
-    "system_config.py",
-    "usage.py",
-)
 FRONTEND_ROUTE_CAPABILITY_FIXTURE = (
     Path(__file__).resolve().parent / "fixtures" / "auth" / "frontend_route_capability_inventory.json"
 )
@@ -45,13 +33,13 @@ FRONTEND_ADMIN_CAPABILITIES_SOURCE = (
     Path(__file__).resolve().parents[1] / "apps" / "dsa-web" / "src" / "utils" / "adminCapabilities.ts"
 )
 
-EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS: dict[str, dict[str, int]] = {
-    "agent.py": {"ops:notifications:write": 1},
-    "admin_cost.py": {"cost:observability:read": 4},
+PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS: dict[str, dict[str, int]] = {
+    "agent.py": {"ops:notifications:write": 1, "ops:providers:read": 3},
+    "admin_cost.py": {"cost:observability:read": 5},
     "admin_logs.py": {"ops:logs:read": 8, "ops:logs:write": 1},
     "admin_notifications.py": {"ops:notifications:read": 2, "ops:notifications:write": 5},
     "admin_portfolio.py": {"users:portfolio:read": 4},
-    "admin_provider_circuits.py": {"ops:providers:read": 5},
+    "admin_provider_circuits.py": {"ops:providers:read": 6},
     "admin_security.py": {"users:security:write": 1},
     "scanner.py": {"scanner:admin:read": 3},
     "system_config.py": {
@@ -214,7 +202,7 @@ def inventory_public_launch_admin_route_capabilities() -> AdminRouteCapabilityIn
     capability_counts: dict[str, dict[str, int]] = {}
     legacy_admin_dependencies: dict[str, tuple[str, ...]] = {}
 
-    for filename in PUBLIC_LAUNCH_ADMIN_RBAC_ENDPOINT_FILES:
+    for filename in PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS:
         text = (endpoint_dir / filename).read_text(encoding="utf-8")
         counted = Counter(_CAPABILITY_DEPENDENCY_PATTERN.findall(text))
         if counted:
@@ -367,10 +355,10 @@ def build_coarse_admin_fallback_disable_rehearsal_evidence() -> dict[str, object
         "denial_details_sanitized": all(legacy_payload_denials + missing_payload_denials),
         "audit_payload_sanitized": _role_assignment_denial_is_sanitized(role_assignment_audit_payload),
         "public_launch_inventory_complete": inventory.capability_counts
-        == EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS,
+        == PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS,
         "public_launch_routes_without_legacy_admin_dependencies": not inventory.legacy_admin_dependencies,
         "backend_admin_routes_explicit_capability_classified": inventory.capability_counts
-        == EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS
+        == PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS
         and not inventory.legacy_admin_dependencies,
         "frontend_admin_gates_capability_based": frontend_gate_evidence["admin_gates_capability_based"],
         "frontend_admin_missing_capabilities_fail_closed": frontend_gate_evidence["missing_capabilities_fail_closed"],
@@ -386,7 +374,7 @@ def _expected_public_launch_rehearsal_capabilities() -> tuple[str, ...]:
         sorted(
             {
                 capability
-                for counts in EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS.values()
+                for counts in PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS.values()
                 for capability in counts
             }
         )
@@ -476,7 +464,7 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
 
     inventory = inventory_public_launch_admin_route_capabilities()
     public_launch_dependency_inventory_complete = (
-        inventory.capability_counts == EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS
+        inventory.capability_counts == PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS
         and not inventory.legacy_admin_dependencies
     )
     coarse_fallback_disable_preflight_ready = (
