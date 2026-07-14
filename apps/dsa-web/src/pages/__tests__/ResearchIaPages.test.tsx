@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApiError, createParsedApiError } from '../../api/error';
@@ -1260,13 +1260,20 @@ describe('research IA pages', () => {
     expect(findConsumerRawLeakage(hub.textContent || '')).toEqual([]);
     expect(hub.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
 
-    getResearchRadarMock.mockImplementationOnce(() => new Promise(() => undefined));
+    let rejectRefresh: (reason?: unknown) => void = () => undefined;
+    getResearchRadarMock.mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      rejectRefresh = reject;
+    }));
     fireEvent.click(screen.getByRole('button', { name: '刷新研究雷达' }));
 
     await waitFor(() => expect(page).toHaveAttribute('aria-busy', 'true'));
     expect(within(page).getByRole('status')).toHaveTextContent('正在刷新研究雷达。当前研究队列保持可见。');
     expect(within(page).getByTestId('research-radar-candidate-ALFA')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '正在刷新研究雷达' })).toBeDisabled();
+    await act(async () => {
+      rejectRefresh(new Error('refresh cancelled after pending-state assertions'));
+    });
+    await waitFor(() => expect(page).toHaveAttribute('aria-busy', 'false'));
   });
 
   it('fails closed when the unified queue contract is not observation-only', async () => {
