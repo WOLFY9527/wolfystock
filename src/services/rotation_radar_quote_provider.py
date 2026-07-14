@@ -148,10 +148,6 @@ _ACTIVATION_BLOCKERS = {
 }
 _TIMEOUT_FAILURE_CLASSES = {"connect_timeout", "read_timeout", "provider_timeout", "timeout"}
 _NETWORK_FAILURE_CLASSES = {"proxy_unreachable", "network_unreachable"}
-_ALPACA_CREDENTIAL_ENV_NAMES = {
-    "key_id": "ALPACA_API_KEY_ID",
-    "secret_key": "ALPACA_API_SECRET_KEY",
-}
 _CREDENTIAL_SOURCE_VALUES = {"env", "config", "control_plane", "unavailable", "unknown"}
 _SOURCE_AUTHORITY_REJECTED_REASON = "source_authority_router_rejected"
 _ROTATION_RADAR_PROXY_AUTHORITY_SOURCES = {"yahoo", "yahooquery", "yfinance", "yfinance_proxy"}
@@ -1043,7 +1039,7 @@ def _merge_configured_activation_stage(
 
 
 def _configured_provider_base_metadata(credentials: ProviderCredentialBundle) -> Dict[str, Any]:
-    missing_fields = _credential_env_field_names(credentials.missing_fields)
+    missing_fields = list(credentials.missing_fields)
     data_feed = str(credentials.extras.get("data_feed") or "iex").strip().lower() or "iex"
     provider_failure_reason: Optional[str] = None
     provider_failure_reasons: list[str] = []
@@ -1433,14 +1429,6 @@ def _sanitize_symbol(symbol: Any) -> str:
     text = str(symbol or "").strip().upper()
     allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_"
     return "".join(char for char in text if char in allowed)[:24]
-
-
-def _credential_env_field_names(missing_fields: Sequence[str]) -> list[str]:
-    return [
-        _ALPACA_CREDENTIAL_ENV_NAMES.get(str(field), str(field))
-        for field in missing_fields
-        if str(field or "").strip()
-    ]
 
 
 def _credential_source(credentials: ProviderCredentialBundle) -> str:

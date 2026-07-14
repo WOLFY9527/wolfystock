@@ -151,7 +151,10 @@ class DataFetcherManagerAlpacaTestCase(unittest.TestCase):
         self.assertEqual(alpaca.calls, ["AAPL"])
         self.assertEqual(yfinance.calls, [])
         trace = manager.get_last_realtime_quote_trace()
-        self.assertTrue(any(item["provider"] == "alpaca" and item["action"] == "succeeded" for item in trace))
+        self.assertEqual(
+            [(item["provider"], item["action"]) for item in trace],
+            [("market_route", "selected"), ("alpaca", "attempting"), ("alpaca", "succeeded")],
+        )
 
     def test_us_quote_falls_back_to_yfinance_when_alpaca_returns_none(self) -> None:
         yfinance = _YfinanceStub(
@@ -177,8 +180,16 @@ class DataFetcherManagerAlpacaTestCase(unittest.TestCase):
         self.assertEqual(alpaca.calls, ["AAPL"])
         self.assertEqual(yfinance.calls, ["AAPL"])
         trace = manager.get_last_realtime_quote_trace()
-        self.assertTrue(any(item["provider"] == "alpaca" and item["action"] == "failed" for item in trace))
-        self.assertTrue(any(item["provider"] == "yfinance" and item["action"] == "succeeded" for item in trace))
+        self.assertEqual(
+            [(item["provider"], item["action"]) for item in trace],
+            [
+                ("market_route", "selected"),
+                ("alpaca", "attempting"),
+                ("alpaca", "failed"),
+                ("yfinance", "attempting"),
+                ("yfinance", "succeeded"),
+            ],
+        )
 
     def test_us_quote_marks_alpaca_as_skipped_when_not_configured(self) -> None:
         yfinance = _YfinanceStub(
@@ -197,6 +208,51 @@ class DataFetcherManagerAlpacaTestCase(unittest.TestCase):
         self.assertIsNotNone(quote)
         trace = manager.get_last_realtime_quote_trace()
         self.assertTrue(any(item["provider"] == "alpaca" and item["action"] == "skipped" for item in trace))
+
+    def test_us_quote_skips_each_partial_alpaca_bundle_and_preserves_fallback_trace(self) -> None:
+        partial_bundles = (
+            ProviderCredentialBundle(
+                provider="alpaca",
+                auth_mode="key_secret",
+                key_id="alpaca-key-sentinel",
+                extras={"data_feed": "iex"},
+            ),
+            ProviderCredentialBundle(
+                provider="alpaca",
+                auth_mode="key_secret",
+                secret_key="alpaca-secret-sentinel",
+                extras={"data_feed": "iex"},
+            ),
+        )
+
+        for credentials in partial_bundles:
+            with self.subTest(missing_fields=credentials.missing_fields):
+                yfinance = _YfinanceStub(
+                    UnifiedRealtimeQuote(code="AAPL", source=RealtimeSource.YFINANCE, price=210.0)
+                )
+                manager = DataFetcherManager(fetchers=[yfinance])
+                with patch(
+                    "data_provider.base.get_provider_credentials",
+                    return_value=credentials,
+                ), patch.object(
+                    manager,
+                    "_get_alpaca_fetcher",
+                    side_effect=AssertionError("partial Alpaca credentials must not construct a provider"),
+                ):
+                    quote = manager.get_realtime_quote("AAPL")
+
+                self.assertIsNotNone(quote)
+                self.assertEqual(yfinance.calls, ["AAPL"])
+                trace = manager.get_last_realtime_quote_trace()
+                self.assertEqual(
+                    [(item["provider"], item["action"], item["reason"]) for item in trace],
+                    [
+                        ("market_route", "selected", None),
+                        ("alpaca", "skipped", "incomplete_credentials"),
+                        ("yfinance", "attempting", None),
+                        ("yfinance", "succeeded", None),
+                    ],
+                )
 
     def test_us_daily_history_prefers_alpaca_when_configured(self) -> None:
         daily_frame = pd.DataFrame(

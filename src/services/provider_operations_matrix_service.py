@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Sequence
 
+from data_provider.provider_credentials import get_provider_credentials
 from src.contracts.source_confidence import evaluate_score_grade_source_authority
 from src.services.data_source_router import (
     DataSourceRouteRequest,
@@ -97,7 +98,6 @@ _CREDENTIAL_ENV_KEYS_BY_PROVIDER = {
     "nasdaq_data_link": ("NASDAQ_DATA_LINK_API_KEY", "QUANDL_API_KEY"),
     "polygon_us_grouped_daily": ("POLYGON_API_KEY",),
     "tushare_pro": ("TUSHARE_TOKEN",),
-    "twelve_data": ("TWELVE_DATA_API_KEY",),
 }
 _MISSING_FEED_PROVIDER_IDS = frozenset(
     {
@@ -757,6 +757,9 @@ class ProviderOperationsMatrixService:
         return "runtime_metadata"
 
     def _credential_state(self, row: _ProviderAccumulator) -> str:
+        if row.provider_id in {"alpaca", "twelve_data"}:
+            credentials = get_provider_credentials(row.provider_id, config=self.env)
+            return "present" if credentials.is_configured else "missing"
         if not row.key_required:
             return "not_required"
         keys = _CREDENTIAL_ENV_KEYS_BY_PROVIDER.get(row.provider_id)
@@ -799,7 +802,7 @@ class ProviderOperationsMatrixService:
             return metadata_gap_state
         if row.provider_id in _MISSING_FEED_PROVIDER_IDS:
             return "missing_provider_configuration"
-        if credential_state == "missing":
+        if credential_state == "missing" and row.key_required:
             return "credential_missing"
         if dependency_state == "missing":
             return "dependency_missing"

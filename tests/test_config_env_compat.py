@@ -79,6 +79,32 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
 
     @patch("src.config.setup_env")
     @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_load_from_env_accepts_each_twelve_data_alias(
+        self,
+        _mock_parse_litellm_yaml,
+        _mock_setup_env,
+    ) -> None:
+        aliases = (
+            "TWELVE_DATA_API_KEYS",
+            "TWELVE_DATA_API_KEY",
+            "TWELVEDATA_API_KEYS",
+            "TWELVEDATA_API_KEY",
+        )
+        credential_value = "td-alias-sentinel"
+
+        for env_name in aliases:
+            with self.subTest(env_name=env_name), patch.dict(
+                os.environ,
+                {"STOCK_LIST": "600519", env_name: credential_value},
+                clear=True,
+            ):
+                config = Config._load_from_env()
+
+                self.assertEqual(config.twelve_data_api_keys, [credential_value])
+                self.assertEqual(config.twelve_data_api_key, credential_value)
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
     def test_schedule_run_immediately_falls_back_to_legacy_run_immediately(
         self,
         _mock_parse_yaml,

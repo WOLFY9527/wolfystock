@@ -10,6 +10,15 @@ from typing import Dict, Mapping, Optional, Sequence, Tuple
 from src.config import Config, get_config
 
 
+_ALPACA_CREDENTIAL_ENV_NAMES = ("ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY")
+_TWELVE_DATA_CREDENTIAL_ENV_NAMES = (
+    "TWELVE_DATA_API_KEYS",
+    "TWELVE_DATA_API_KEY",
+    "TWELVEDATA_API_KEYS",
+    "TWELVEDATA_API_KEY",
+)
+
+
 def _coerce_non_empty(value: object) -> Optional[str]:
     text = str(value or "").strip()
     return text or None
@@ -31,15 +40,12 @@ def _collect_non_empty_strings(config: object, attr_names: Sequence[str]) -> Tup
     values: list[str] = []
     for attr_name in attr_names:
         raw_value = _get_config_raw(config, attr_name)
-        if isinstance(raw_value, (list, tuple)):
-            for item in raw_value:
-                token = _coerce_non_empty(item)
+        raw_items = raw_value if isinstance(raw_value, (list, tuple)) else (raw_value,)
+        for item in raw_items:
+            for candidate in str(item or "").split(","):
+                token = _coerce_non_empty(candidate)
                 if token:
                     values.append(token)
-        else:
-            token = _coerce_non_empty(raw_value)
-            if token:
-                values.append(token)
     deduped: list[str] = []
     seen = set()
     for value in values:
@@ -56,13 +62,14 @@ def _infer_alpaca_credential_source(
     key_id: Optional[str],
     secret_key: Optional[str],
 ) -> str:
-    env_names = ("ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY")
     if isinstance(config, Mapping):
         normalized_keys = {str(key).upper() for key in config.keys()}
-        if any(name in normalized_keys for name in env_names):
+        if (key_id or secret_key) and any(
+            name in normalized_keys for name in _ALPACA_CREDENTIAL_ENV_NAMES
+        ):
             return "control_plane"
-        return "config" if (key_id or secret_key) else "unknown"
-    if any(_coerce_non_empty(os.getenv(name)) for name in env_names):
+        return "config" if (key_id or secret_key) else "unavailable"
+    if any(_coerce_non_empty(os.getenv(name)) for name in _ALPACA_CREDENTIAL_ENV_NAMES):
         return "env"
     if key_id or secret_key:
         return "config"
@@ -74,13 +81,16 @@ def _infer_twelve_data_credential_source(
     *,
     api_keys: Tuple[str, ...],
 ) -> str:
-    env_names = ("TWELVE_DATA_API_KEY", "TWELVE_DATA_API_KEYS")
     if isinstance(config, Mapping):
         normalized_keys = {str(key).upper() for key in config.keys()}
-        if any(name in normalized_keys for name in env_names):
+        if api_keys and any(
+            name in normalized_keys for name in _TWELVE_DATA_CREDENTIAL_ENV_NAMES
+        ):
             return "control_plane"
-        return "config" if api_keys else "unknown"
-    if any(_coerce_non_empty(os.getenv(name)) for name in env_names):
+        return "config" if api_keys else "unavailable"
+    if api_keys and any(
+        _coerce_non_empty(os.getenv(name)) for name in _TWELVE_DATA_CREDENTIAL_ENV_NAMES
+    ):
         return "env"
     if api_keys:
         return "config"
@@ -120,13 +130,13 @@ class ProviderCredentialBundle:
     @property
     def missing_fields(self) -> Tuple[str, ...]:
         if self.auth_mode == "single_key":
-            return ("api_key",) if not self.primary_api_key else ()
+            return ("TWELVE_DATA_API_KEY",) if not self.primary_api_key else ()
         if self.auth_mode == "key_secret":
             missing: list[str] = []
             if not self.key_id:
-                missing.append("key_id")
+                missing.append("ALPACA_API_KEY_ID")
             if not self.secret_key:
-                missing.append("secret_key")
+                missing.append("ALPACA_API_SECRET_KEY")
             return tuple(missing)
         return ()
 
@@ -147,8 +157,7 @@ def get_provider_credentials(
             (
                 "twelve_data_api_keys",
                 "twelve_data_api_key",
-                "TWELVE_DATA_API_KEYS",
-                "TWELVE_DATA_API_KEY",
+                *_TWELVE_DATA_CREDENTIAL_ENV_NAMES,
             ),
         )
         return ProviderCredentialBundle(
