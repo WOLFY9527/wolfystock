@@ -11,12 +11,14 @@ import pytest
 
 from src.services.market_cache import market_cache
 from src.services.market_provider_operations_service import MarketProviderOperationsService
+from src.services.provider_activation_verifier import ProviderActivationVerifierService
 from src.storage import DatabaseManager
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MARKET_PROVIDER_OPERATIONS_SERVICE_PATH = REPO_ROOT / "src/services/market_provider_operations_service.py"
 MARKET_PROVIDER_OPERATIONS_ENDPOINT_PATH = REPO_ROOT / "api/v1/endpoints/market_provider_operations.py"
+PROVIDER_ACTIVATION_VERIFIER_PATH = REPO_ROOT / "src/services/provider_activation_verifier.py"
 FORBIDDEN_PROVIDER_OPERATIONS_IMPORT_PREFIXES = (
     "data_provider",
     "requests",
@@ -36,6 +38,14 @@ FORBIDDEN_PROVIDER_OPERATIONS_RUNTIME_PATTERNS = (
     r"\bvalidate_provider_connection\(",
     r"\btest_builtin_data_source\(",
 )
+FORBIDDEN_VERIFIER_IMPORT_PREFIXES = FORBIDDEN_PROVIDER_OPERATIONS_IMPORT_PREFIXES + (
+    "akshare",
+    "baostock",
+)
+EXPLICIT_WRITE_ROUTES = {
+    "refresh_us_ohlcv_cache",
+    "seed_historical_ohlcv_cache",
+}
 
 
 @pytest.fixture(autouse=True)
@@ -51,7 +61,11 @@ def isolated_db(tmp_path: Path):
 
 
 def _market_provider_operations_imports() -> set[str]:
-    tree = ast.parse(MARKET_PROVIDER_OPERATIONS_SERVICE_PATH.read_text(encoding="utf-8"))
+    return _imports_from(MARKET_PROVIDER_OPERATIONS_SERVICE_PATH)
+
+
+def _imports_from(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
     imported_modules: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -59,6 +73,30 @@ def _market_provider_operations_imports() -> set[str]:
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported_modules.add(node.module)
     return imported_modules
+
+
+def test_provider_activation_verifier_stays_local_and_consumer_safe(tmp_path: Path) -> None:
+    imported_modules = _imports_from(PROVIDER_ACTIVATION_VERIFIER_PATH)
+    forbidden_imports = sorted(
+        module
+        for module in imported_modules
+        if any(
+            module == prefix or module.startswith(prefix + ".")
+            for prefix in FORBIDDEN_VERIFIER_IMPORT_PREFIXES
+        )
+    )
+
+    payload = ProviderActivationVerifierService(
+        env={"SCANNER_LOCAL_UNIVERSE_PATH": str(tmp_path / "missing-universe.csv")},
+        spec_finder=lambda _name: None,
+    ).verify()
+
+    assert not forbidden_imports
+    assert payload["metadata"]["readOnly"] is True
+    assert payload["metadata"]["externalProviderCalls"] is False
+    assert payload["metadata"]["networkCallsEnabled"] is False
+    assert payload["metadata"]["providerRuntimeChanged"] is False
+    assert all(item["consumerSafe"] is True for item in payload["capabilities"])
 
 
 def test_market_provider_operations_source_stays_read_only_and_local() -> None:
@@ -103,11 +141,13 @@ def test_market_provider_operations_service_does_not_import_market_overview_runt
 def test_market_provider_operations_endpoint_stays_get_only_read_model_route() -> None:
     tree = ast.parse(MARKET_PROVIDER_OPERATIONS_ENDPOINT_PATH.read_text(encoding="utf-8"))
     route_methods_by_function: dict[str, set[str]] = {}
-    source_text = MARKET_PROVIDER_OPERATIONS_ENDPOINT_PATH.read_text(encoding="utf-8").lower()
+    verifier_source = ""
 
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef):
             continue
+        if node.name == "get_provider_activation_verifier":
+            verifier_source = ast.unparse(node).lower()
         methods: set[str] = set()
         for decorator in node.decorator_list:
             if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Attribute):
@@ -119,16 +159,16 @@ def test_market_provider_operations_endpoint_stays_get_only_read_model_route() -
     unexpected_mutation_routes = {
         name: methods
         for name, methods in route_methods_by_function.items()
-        if methods - {"get"} and name != "seed_historical_ohlcv_cache"
+        if methods - {"get"} and name not in EXPLICIT_WRITE_ROUTES
     }
     assert unexpected_mutation_routes == {}, (
-        "Market Provider Operations must remain query/read-only except the "
-        "existing explicit historical OHLCV seed preflight route. Found "
+        "Market Provider Operations must remain query/read-only except its "
+        "explicit write-capability-gated historical OHLCV routes. Found "
         f"{unexpected_mutation_routes}"
     )
     for forbidden_term in ("cleanup", "use_retention", "refresh", "mutate", "test provider"):
-        assert forbidden_term not in source_text, (
-            "Market Provider Operations endpoint must stay an observer surface "
+        assert forbidden_term not in verifier_source, (
+            "Provider activation verifier endpoint must stay an observer surface "
             f"without mutation/test semantics; found `{forbidden_term}`"
         )
 

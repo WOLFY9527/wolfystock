@@ -90,6 +90,16 @@ def _json_text(payload: object) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
+class _InstalledSpec:
+    pass
+
+
+def _installed_spec_finder(name: str):
+    if name in {"akshare", "baostock", "yfinance"}:
+        return _InstalledSpec()
+    return None
+
+
 def test_activation_verifier_fails_closed_when_dependencies_and_config_are_absent(tmp_path: Path) -> None:
     service = ProviderActivationVerifierService(
         env={"SCANNER_LOCAL_UNIVERSE_PATH": str(tmp_path / "missing-universe.csv")},
@@ -108,6 +118,15 @@ def test_activation_verifier_fails_closed_when_dependencies_and_config_are_absen
     assert payload["summary"]["availableCount"] == 0
     assert payload["summary"]["missingCount"] >= 3
     assert payload["summary"]["notConfiguredCount"] >= 2
+    assert [item["capabilityId"] for item in payload["capabilities"]] == [
+        "akshare.cn_hk_market_data",
+        "baostock.cn_ohlcv",
+        "fmp.fundamentals_earnings",
+        "yfinance.market_data",
+        "historical_ohlcv.runtime",
+        "earnings_fundamentals.readiness",
+        "scanner.universe",
+    ]
 
     assert _row(payload, "akshare.cn_hk_market_data")["status"] == "missing"
     assert _row(payload, "baostock.cn_ohlcv")["status"] == "missing"
@@ -129,19 +148,104 @@ def test_activation_verifier_fails_closed_when_dependencies_and_config_are_absen
         assert marker.lower() not in text.lower()
 
 
+def test_activation_verifier_does_not_treat_importable_sdks_or_credentials_as_available(
+    tmp_path: Path,
+) -> None:
+    service = ProviderActivationVerifierService(
+        env={
+            "FMP_API_KEY": "FMP_SECRET_VALUE",
+            "SCANNER_LOCAL_UNIVERSE_PATH": str(tmp_path / "missing-universe.csv"),
+        },
+        spec_finder=_installed_spec_finder,
+        today=date(2026, 6, 27),
+    )
+
+    payload = service.verify()
+
+    assert _row(payload, "akshare.cn_hk_market_data")["status"] == "unavailable"
+    assert _row(payload, "baostock.cn_ohlcv")["status"] == "unavailable"
+    assert _row(payload, "yfinance.market_data")["status"] == "unavailable"
+    assert _row(payload, "fmp.fundamentals_earnings")["status"] == "insufficient_permissions"
+    assert "FMP_SECRET_VALUE" not in _json_text(payload)
+
+
+def test_activation_verifier_requires_configuration_even_with_successful_probe_evidence(
+    tmp_path: Path,
+) -> None:
+    service = ProviderActivationVerifierService(
+        env={"SCANNER_LOCAL_UNIVERSE_PATH": str(tmp_path / "missing-universe.csv")},
+        spec_finder=_installed_spec_finder,
+        today=date(2026, 6, 27),
+        local_checks={"fmp_provider_available": True},
+    )
+
+    payload = service.verify()
+
+    assert _row(payload, "fmp.fundamentals_earnings")["status"] == "not_configured"
+
+
+def test_activation_verifier_accepts_explicit_successful_runtime_and_probe_evidence(
+    tmp_path: Path,
+) -> None:
+    service = ProviderActivationVerifierService(
+        env={
+            "FMP_API_KEY": "FMP_SECRET_VALUE",
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+            "SCANNER_LOCAL_UNIVERSE_PATH": str(tmp_path / "missing-universe.csv"),
+        },
+        spec_finder=_installed_spec_finder,
+        today=date(2026, 6, 27),
+        local_checks={
+            "akshare_provider_available": True,
+            "baostock_provider_available": True,
+            "fmp_provider_available": True,
+            "yfinance_provider_available": True,
+            "historical_ohlcv_latest_date": "2026-06-27",
+        },
+    )
+
+    payload = service.verify()
+
+    assert _row(payload, "akshare.cn_hk_market_data")["status"] == "available"
+    assert _row(payload, "baostock.cn_ohlcv")["status"] == "available"
+    assert _row(payload, "fmp.fundamentals_earnings")["status"] == "available"
+    assert _row(payload, "yfinance.market_data")["status"] == "available"
+    assert _row(payload, "historical_ohlcv.runtime")["status"] == "available"
+    assert "FMP_SECRET_VALUE" not in _json_text(payload)
+
+
+def test_activation_verifier_fails_closed_on_failed_and_unknown_probe_evidence(
+    tmp_path: Path,
+) -> None:
+    service = ProviderActivationVerifierService(
+        env={
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+            "SCANNER_LOCAL_UNIVERSE_PATH": str(tmp_path / "missing-universe.csv"),
+        },
+        spec_finder=_installed_spec_finder,
+        today=date(2026, 6, 27),
+        local_checks={
+            "akshare_provider_available": False,
+            "baostock_provider_available": "unknown",
+            "yfinance_provider_available": None,
+        },
+    )
+
+    payload = service.verify()
+
+    assert _row(payload, "akshare.cn_hk_market_data")["status"] == "unavailable"
+    assert _row(payload, "baostock.cn_ohlcv")["status"] == "unavailable"
+    assert _row(payload, "yfinance.market_data")["status"] == "unavailable"
+    assert _row(payload, "historical_ohlcv.runtime")["status"] == "unavailable"
+
+
 def test_activation_verifier_classifies_permission_sample_and_stale_states(tmp_path: Path) -> None:
     stale_universe = tmp_path / "scanner.csv"
     stale_universe.write_text("symbol,name\nORCL,Oracle\n", encoding="utf-8")
     old_mtime = date(2026, 6, 20)
     stale_timestamp = old_mtime.toordinal()
-
-    class _Spec:
-        pass
-
-    def _spec_finder(name: str):
-        if name in {"akshare", "baostock", "yfinance"}:
-            return _Spec()
-        return None
 
     service = ProviderActivationVerifierService(
         env={
@@ -150,10 +254,13 @@ def test_activation_verifier_classifies_permission_sample_and_stale_states(tmp_p
             "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
             "SCANNER_LOCAL_UNIVERSE_PATH": str(stale_universe),
         },
-        spec_finder=_spec_finder,
+        spec_finder=_installed_spec_finder,
         today=date(2026, 6, 27),
         file_mtime=lambda path: stale_timestamp if Path(path) == stale_universe else None,
         local_checks={
+            "akshare_provider_available": True,
+            "baostock_provider_available": True,
+            "yfinance_provider_available": True,
             "historical_ohlcv_latest_date": date(2026, 6, 12).isoformat(),
             "earnings_sample_only": True,
         },
@@ -197,6 +304,10 @@ def test_activation_verifier_keeps_provider_failures_isolated(tmp_path: Path) ->
         },
         spec_finder=_spec_finder,
         today=date(2026, 6, 27),
+        local_checks={
+            "baostock_provider_available": True,
+            "yfinance_provider_available": True,
+        },
     )
 
     payload = service.verify()

@@ -36,6 +36,12 @@ _HISTORICAL_RUNTIME_ENV = "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED"
 _YFINANCE_US_CACHE_ENV = "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED"
 _SCANNER_UNIVERSE_ENV = "SCANNER_LOCAL_UNIVERSE_PATH"
 _FMP_ENV_NAMES = ("FMP_API_KEYS", "FMP_API_KEY")
+_PROVIDER_EVIDENCE_KEYS = {
+    "akshare": "akshare_provider_available",
+    "baostock": "baostock_provider_available",
+    "fmp": "fmp_provider_available",
+    "yfinance": "yfinance_provider_available",
+}
 
 SpecFinder = Callable[[str], object | None]
 FileMtimeReader = Callable[[Path], float | None]
@@ -120,8 +126,7 @@ class ProviderActivationVerifierService:
         }
 
     def _akshare(self) -> dict[str, Any]:
-        state = self._module_state("akshare")
-        status = "available" if state == "installed" else ("missing" if state == "missing" else "unavailable")
+        status = self._provider_status("akshare")
         return self._capability(
             capability_id="akshare.cn_hk_market_data",
             provider="AkShare",
@@ -139,8 +144,7 @@ class ProviderActivationVerifierService:
         )
 
     def _baostock(self) -> dict[str, Any]:
-        state = self._module_state("baostock")
-        status = "available" if state == "installed" else ("missing" if state == "missing" else "unavailable")
+        status = self._provider_status("baostock")
         return self._capability(
             capability_id="baostock.cn_ohlcv",
             provider="BaoStock",
@@ -159,7 +163,12 @@ class ProviderActivationVerifierService:
 
     def _fmp(self) -> dict[str, Any]:
         configured = self._has_any_config(_FMP_ENV_NAMES)
-        status = "insufficient_permissions" if configured else "not_configured"
+        if not configured:
+            status = "not_configured"
+        elif self._provider_evidence_available("fmp"):
+            status = "available"
+        else:
+            status = "insufficient_permissions"
         return self._capability(
             capability_id="fmp.fundamentals_earnings",
             provider="Financial Modeling Prep",
@@ -167,18 +176,25 @@ class ProviderActivationVerifierService:
             status=status,
             impact="Stock Fundamentals, Earnings, News/Catalyst enrichment, and deep single-stock research cannot prove real-data readiness.",
             action=(
-                "Run a bounded FMP permission probe for one known symbol and store only sanitized entitlement evidence before promoting this capability."
-                if configured
-                else "Configure FMP access outside the application response path, then run a bounded permission probe without exposing key values."
+                "Configure FMP access outside the application response path, then run a bounded permission probe without exposing key values."
+                if status == "not_configured"
+                else "Keep FMP entitlement evidence sanitized and rerun the bounded permission probe before it expires."
+                if status == "available"
+                else "Run a bounded FMP permission probe for one known symbol and store only sanitized entitlement evidence before promoting this capability."
             ),
-            freshness_state="permission_unverified" if configured else "not_configured",
+            freshness_state=(
+                "permission_verified"
+                if status == "available"
+                else "permission_unverified"
+                if configured
+                else "not_configured"
+            ),
             validation="python scripts/provider_activation_verifier.py --format json",
             surfaces=("Stock Fundamentals", "Earnings", "News/Catalyst"),
         )
 
     def _yfinance(self) -> dict[str, Any]:
-        state = self._module_state("yfinance")
-        status = "available" if state == "installed" else ("missing" if state == "missing" else "unavailable")
+        status = self._provider_status("yfinance")
         return self._capability(
             capability_id="yfinance.market_data",
             provider="Yahoo Finance / yfinance",
@@ -209,6 +225,9 @@ class ProviderActivationVerifierService:
         elif akshare_state == "missing" and (not us_enabled or yfinance_state == "missing"):
             status = "missing"
             freshness_state = "dependency_missing"
+        elif latest is None:
+            status = "unavailable"
+            freshness_state = "runtime_evidence_unverified"
         elif stale:
             status = "stale"
             freshness_state = f"latest_bar:{latest.isoformat()}"
@@ -229,6 +248,8 @@ class ProviderActivationVerifierService:
                 if status == "stale"
                 else "Install the missing local history dependency and rerun the dry-run cache preflight."
                 if status == "missing"
+                else "Run the dry-run cache preflight and retain sanitized local runtime evidence before enabling dependent workflows."
+                if status == "unavailable"
                 else "Rerun the dry-run cache preflight and keep backtest inputs tied to local cache lineage."
             ),
             freshness_state=freshness_state,
@@ -332,6 +353,18 @@ class ProviderActivationVerifierService:
             return "installed" if self.spec_finder(module_name) is not None else "missing"
         except Exception:
             return "unavailable"
+
+    def _provider_status(self, module_name: str) -> str:
+        state = self._module_state(module_name)
+        if state == "missing":
+            return "missing"
+        if state != "installed":
+            return "unavailable"
+        return "available" if self._provider_evidence_available(module_name) else "unavailable"
+
+    def _provider_evidence_available(self, provider_name: str) -> bool:
+        evidence_key = _PROVIDER_EVIDENCE_KEYS[provider_name]
+        return self.local_checks.get(evidence_key) is True
 
     def _has_any_config(self, names: tuple[str, ...]) -> bool:
         return any(bool(str(self.env.get(name) or "").strip()) for name in names)
