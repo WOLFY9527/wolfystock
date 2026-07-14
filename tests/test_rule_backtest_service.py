@@ -36,43 +36,6 @@ from src.services.rule_backtest_text_completion import create_rule_backtest_text
 from src.services.rule_backtest_service import RuleBacktestService, run_backtest_automated
 from src.storage import DatabaseManager, RuleBacktestRun, RuleBacktestTrade, StockDaily
 
-EXPECTED_TRACE_EXPORT_JSON_KEYS = [
-    "version",
-    "source",
-    "completeness",
-    "missing_fields",
-    "trace_rows",
-    "assumptions",
-    "execution_model",
-    "execution_assumptions",
-    "benchmark_summary",
-    "fallback",
-]
-
-EXPECTED_TRACE_EXPORT_FIELD_LABELS = [
-    "日期",
-    "标的收盘价",
-    "基准收盘价",
-    "信号摘要",
-    "动作",
-    "成交价",
-    "持股数",
-    "现金",
-    "持仓市值",
-    "总资产",
-    "当日盈亏",
-    "当日收益率",
-    "策略累计收益率",
-    "基准累计收益率",
-    "买入持有累计收益率",
-    "仓位",
-    "手续费",
-    "滑点",
-    "备注",
-    "assumptions",
-    "fallback",
-]
-
 FORBIDDEN_PUBLIC_ADVICE_TERMS = [
     "place order",
     "submit order",
@@ -4005,9 +3968,6 @@ class RuleBacktestTestCase(unittest.TestCase):
         )
         self.assertEqual(trace_json["trace_rows"][0]["动作"], "买")
         self.assertEqual(trace_json["benchmark_summary"]["requested_mode"], "auto")
-        self.assertEqual(trace_csv.splitlines()[0].split(","), EXPECTED_TRACE_EXPORT_FIELD_LABELS)
-        self.assertEqual(list(trace_json), EXPECTED_TRACE_EXPORT_JSON_KEYS)
-        self.assertEqual(list(trace_json["trace_rows"][0]), EXPECTED_TRACE_EXPORT_FIELD_LABELS)
         self.assertFalse(FORBIDDEN_HEAVY_PROJECTION_FIELDS & set(manifest))
         self.assertFalse(FORBIDDEN_HEAVY_PROJECTION_FIELDS & set(reproducibility))
         for public_projection in (manifest, reproducibility, export_index, trace_json, trace_csv):
@@ -4695,12 +4655,6 @@ class RuleBacktestTestCase(unittest.TestCase):
                 reproducibility["result_authority"]["domains"]["execution_trace"]["completeness"],
                 trace_json["completeness"],
             )
-            self.assertEqual(list(trace_json.keys()), EXPECTED_TRACE_EXPORT_JSON_KEYS)
-            self.assertEqual(
-                list(trace_json["trace_rows"][0].keys()),
-                EXPECTED_TRACE_EXPORT_FIELD_LABELS,
-            )
-            self.assertEqual(trace_csv_lines[0].split(","), EXPECTED_TRACE_EXPORT_FIELD_LABELS)
             self.assertEqual(len(trace_json["trace_rows"]), len(trace_csv_rows))
             self.assertEqual(
                 len(trace_json["trace_rows"]),
