@@ -978,8 +978,17 @@ appTest.describe('UX audit P0 protected-route smoke', () => {
     await page.waitForLoadState('domcontentloaded');
 
     await appExpect(page).toHaveURL(/\/zh\/options-lab$/);
-    await appExpect(page.getByTestId('auth-guard-overlay')).toBeVisible({ timeout: 15_000 });
-    await appExpect(page.getByRole('heading', { name: /登录后即可进入|Sign in to continue/i })).toContainText(/期权实验室|Options Lab/i);
+    const authGate = page.getByTestId('auth-guard-overlay');
+    await appExpect(authGate).toBeVisible({ timeout: 15_000 });
+    await appExpect(authGate).toHaveAttribute('data-boundary-family', 'consumer-protected');
+    await appExpect(page.getByRole('dialog', { name: /期权实验室|Options Lab/i })).toBeVisible();
+    await appExpect(page.getByTestId('auth-guard-capability')).toContainText(/期权实验室|Options Lab/i);
+    await appExpect(page.getByTestId('auth-guard-status-pill')).toContainText(/需要登录|Sign-in required/i);
+    await appExpect(page.getByTestId('auth-guard-reason')).toContainText(/请先登录后继续访问该页面|Sign in before continuing to this page/i);
+    await appExpect(page.getByTestId('auth-guard-primary-action')).toHaveAttribute(
+      'href',
+      '/zh/login?redirect=%2Fzh%2Foptions-lab',
+    );
     await appExpect(page.getByTestId('options-lab-decision-engine')).toHaveCount(0);
     baseExpect(optionApiCalls).toEqual([]);
     await expectRootNonEmpty(page);
