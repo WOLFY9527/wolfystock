@@ -58,32 +58,39 @@ def test_all_required_options_authority_surfaces_exist() -> None:
     assert tuple(matrix) == OPTIONS_AUTHORITY_SURFACES
 
 
-@pytest.mark.parametrize("surface", OPTIONS_AUTHORITY_SURFACES)
-@pytest.mark.parametrize("source_type", BLOCKED_OPTIONS_AUTHORITY_SOURCE_CLASSES)
-def test_blocked_source_classes_are_blocked_for_all_surfaces(
-    surface: str,
-    source_type: str,
-) -> None:
-    assert is_options_authority_source_blocked(surface, source_type) is True
-    assert is_options_authority_source_granted(surface, source_type) is False
+def test_blocked_source_classes_are_blocked_for_all_surfaces() -> None:
+    for surface in OPTIONS_AUTHORITY_SURFACES:
+        for source_class in BLOCKED_OPTIONS_AUTHORITY_SOURCE_CLASSES:
+            actual_blocked = is_options_authority_source_blocked(surface, source_class)
+            actual_granted = is_options_authority_source_granted(surface, source_class)
+            assert actual_blocked is True, (
+                f"surface={surface}, source class={source_class}, "
+                f"actual authority result: blocked={actual_blocked}"
+            )
+            assert actual_granted is False, (
+                f"surface={surface}, source class={source_class}, "
+                f"actual authority result: granted={actual_granted}"
+            )
 
 
-@pytest.mark.parametrize("surface", OPTIONS_AUTHORITY_SURFACES)
-@pytest.mark.parametrize("provider_id", CURRENT_KNOWN_OPTIONS_AUTHORITY_PROVIDER_IDS)
-def test_current_known_providers_do_not_receive_authority(
-    surface: str,
-    provider_id: str,
-) -> None:
-    assert is_options_authority_provider_granted(surface, provider_id) is False
+def test_current_known_providers_do_not_receive_authority() -> None:
+    for surface in OPTIONS_AUTHORITY_SURFACES:
+        for provider_id in CURRENT_KNOWN_OPTIONS_AUTHORITY_PROVIDER_IDS:
+            actual_granted = is_options_authority_provider_granted(surface, provider_id)
+            assert actual_granted is False, (
+                f"surface={surface}, provider={provider_id}, "
+                f"actual authority result: granted={actual_granted}"
+            )
 
 
-@pytest.mark.parametrize("surface", OPTIONS_AUTHORITY_SURFACES)
-@pytest.mark.parametrize("source_type", CURRENT_KNOWN_OPTIONS_AUTHORITY_SOURCE_TYPES)
-def test_current_known_source_types_do_not_receive_authority(
-    surface: str,
-    source_type: str,
-) -> None:
-    assert is_options_authority_source_granted(surface, source_type) is False
+def test_current_known_source_types_do_not_receive_authority() -> None:
+    for surface in OPTIONS_AUTHORITY_SURFACES:
+        for source_type in CURRENT_KNOWN_OPTIONS_AUTHORITY_SOURCE_TYPES:
+            actual_granted = is_options_authority_source_granted(surface, source_type)
+            assert actual_granted is False, (
+                f"surface={surface}, source type={source_type}, "
+                f"actual authority result: granted={actual_granted}"
+            )
 
 
 @pytest.mark.parametrize("surface", OPTIONS_AUTHORITY_SURFACES)
