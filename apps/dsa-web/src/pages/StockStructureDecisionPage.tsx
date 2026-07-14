@@ -4285,7 +4285,7 @@ export default function StockStructureDecisionPage() {
           rail={railContent}
         >
           <ConsoleBoard
-            className="min-h-0"
+            className="min-h-0 stock-structure-decision-page"
             data-testid={!data && loading ? 'stock-structure-decision-loading' : 'stock-structure-decision-page'}
             aria-busy={loading}
           >

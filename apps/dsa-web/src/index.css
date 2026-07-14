@@ -9236,6 +9236,13 @@ html[data-theme-style='paper'] .stock-workspace-product-flow {
   padding-bottom: 1rem;
 }
 
+html[data-theme-style='paper']:has(.stock-structure-decision-page) .shell-skip-link {
+  position: fixed;
+  top: auto;
+  bottom: 0.75rem;
+  transform: none !important;
+}
+
 html[data-theme-style='paper'] .stock-workspace-grid {
   display: grid;
   min-width: 0;

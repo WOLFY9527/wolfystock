@@ -261,10 +261,18 @@ async function collectContainmentMetrics(page: Page) {
       .filter((element) => /(auto|scroll)/.test(window.getComputedStyle(element).overflowX) && element.scrollWidth > element.clientWidth + 2);
     const focusables = Array.from(document.querySelectorAll<HTMLElement>('button,a[href],input,select,textarea,[tabindex]:not([tabindex="-1"]),[role="button"],[role="menuitem"]'))
       .filter((element) => visible(element));
-    const clippedFocusableCount = focusables.filter((element) => {
+    const clippedFocusables = focusables.filter((element) => {
       const rect = element.getBoundingClientRect();
       return rect.left < -1 || rect.right > window.innerWidth + 1 || rect.top < -1 || rect.bottom > document.documentElement.scrollHeight + 1;
-    }).length;
+    }).map((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        testId: element.getAttribute('data-testid'),
+        tagName: element.tagName.toLowerCase(),
+        text: element.textContent?.trim(),
+        rect: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom },
+      };
+    });
     const largestOverflowingDescendant = localScrollOwners
       .map((element) => ({
         testId: element.getAttribute('data-testid'),
@@ -279,7 +287,8 @@ async function collectContainmentMetrics(page: Page) {
       localHorizontalScrollOwnerCount: localScrollOwners.length,
       localHorizontalScrollOwners: localScrollOwners.map((element) => element.getAttribute('data-testid')).filter(Boolean),
       largestOverflowingDescendant,
-      clippedFocusableCount,
+      clippedFocusableCount: clippedFocusables.length,
+      clippedFocusables,
       actionReachability: focusables.some((element) => {
         const rect = element.getBoundingClientRect();
         return rect.right > 0 && rect.left < window.innerWidth && rect.bottom > 0 && rect.top < window.innerHeight;
@@ -304,7 +313,7 @@ test.describe('T242 Structure Decision responsive containment', () => {
         expect(metrics.pageOwner?.overflow).toBe(0);
         expect(metrics.localHorizontalScrollOwners).toContain('stock-evidence-ledger-scroll');
         expect(metrics.largestOverflowingDescendant?.testId).toBeTruthy();
-        expect(metrics.clippedFocusableCount).toBe(0);
+        expect(metrics.clippedFocusableCount, JSON.stringify(metrics.clippedFocusables)).toBe(0);
         expect(metrics.actionReachability).toBe(true);
         await expect(page.getByTestId('stock-evidence-ledger-scroll')).toBeFocused();
     });
