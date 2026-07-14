@@ -2272,6 +2272,7 @@ function HomeConclusionFirstConsole({
             density="editorial"
             locale={researchLocale}
             data-testid="home-research-observation-head"
+            titleAs="h2"
             className="!border-0 !bg-transparent !p-0 !shadow-none"
             eyebrow={isEnglish ? 'Current conclusion' : '当前结论'}
             title={(

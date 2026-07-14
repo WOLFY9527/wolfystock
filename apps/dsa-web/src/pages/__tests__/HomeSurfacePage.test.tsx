@@ -15,6 +15,7 @@ import { resolveHomeCandlestickTooltipPosition } from '../../components/home-ben
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { useStockPoolStore } from '../../stores/stockPoolStore';
 import { textContentWithoutObservationBoundary } from '../../test-utils/consumerRawLeakageGuard';
+import { setTestViewport } from '../../test-utils/viewportHarness';
 import { buildInstitutionalReportMarkdown, getCompanyWithTicker } from '../../utils/homeReportIdentity';
 import HomeSurfacePage from '../HomeSurfacePage';
 
@@ -1996,6 +1997,32 @@ describe('HomeSurfacePage', () => {
     expect(sourceDetails).not.toHaveTextContent('规则 + LLM');
     expect(within(panel).getByText('报价')).toBeInTheDocument();
     expect(within(panel).getByText('部分可用')).toBeInTheDocument();
+  });
+
+  it.each([
+    { label: 'desktop zh', path: '/', language: 'zh', width: 1440, company: 'Oracle Corporation', observation: '仅观察' },
+    { label: 'mobile zh', path: '/', language: 'zh', width: 390, company: 'Oracle Corporation', observation: '仅观察' },
+    { label: 'desktop en', path: '/en', language: 'en', width: 1440, company: 'Oracle Corporation', observation: 'Observe' },
+    { label: 'mobile en', path: '/en', language: 'en', width: 390, company: 'Oracle Corporation', observation: 'Observe' },
+  ])('keeps a single canonical Home h1 for authenticated company research on $label', async ({ path, language, width, company, observation }) => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    window.localStorage.setItem('dsa-ui-language', language);
+    setTestViewport({ width, height: width < 640 ? 844 : 900 });
+    vi.mocked(stocksApi.getHistory).mockResolvedValue({
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      period: 'daily',
+      data: homeDailyCandles,
+    });
+    vi.mocked(stockEvidenceApi.getStockEvidence).mockResolvedValue(defaultStockEvidenceResponse);
+
+    renderSurface(path);
+
+    const companyHeading = await screen.findByRole('heading', { level: 1, name: company });
+    expect(screen.getAllByRole('heading', { level: 1 })).toEqual([companyHeading]);
+    expect(screen.getByTestId('home-bento-decision-company-header')).toContainElement(companyHeading);
+    expect(screen.getByRole('heading', { level: 2, name: observation })).toHaveAttribute('data-research-type-role', 'observation-title');
+    expect(screen.getByTestId('home-bento-decision-header-actions')).toHaveTextContent(language === 'en' ? 'Full Report' : '完整报告');
   });
 
   it('loads the dev/test decision trace fixture without submitting analysis', async () => {

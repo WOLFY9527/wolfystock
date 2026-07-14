@@ -121,6 +121,23 @@ describe('ObservationHead', () => {
     expect(head.textContent || '').not.toMatch(FORBIDDEN_ADVICE);
   });
 
+  it('allows an owned page to demote the observation title while preserving anatomy labeling', () => {
+    render(
+      <ObservationHead
+        title="子级研究观察"
+        titleAs="h2"
+        lead="仍保留观察标题的视觉与 accessible name。"
+        locale="zh"
+      />,
+    );
+
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    const title = screen.getByRole('heading', { level: 2, name: '子级研究观察' });
+    expect(title).toHaveAttribute('id', 'observation-head-title');
+    expect(title).toHaveAttribute('data-research-type-role', 'observation-title');
+    expect(screen.getByTestId('observation-head')).toHaveAttribute('aria-labelledby', 'observation-head-title');
+  });
+
   it('stacks fact labels in English and avoids recommendation language', () => {
     render(
       <ObservationHead

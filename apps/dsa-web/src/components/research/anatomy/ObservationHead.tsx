@@ -12,6 +12,7 @@ import type {
 export type ObservationHeadProps = {
   eyebrow?: React.ReactNode;
   title: React.ReactNode;
+  titleAs?: keyof React.JSX.IntrinsicElements;
   lead?: React.ReactNode;
   known?: ResearchObservationFact[] | React.ReactNode;
   unknown?: ResearchObservationFact[] | React.ReactNode;
@@ -88,6 +89,7 @@ function renderFactBlock(
 export function ObservationHead({
   eyebrow,
   title,
+  titleAs,
   lead,
   known,
   unknown,
@@ -126,6 +128,7 @@ export function ObservationHead({
         ) : null}
         <ObservationTitle
           id={`${dataTestId}-title`}
+          as={titleAs}
           className="research-observation-head__title"
         >
           {title}
