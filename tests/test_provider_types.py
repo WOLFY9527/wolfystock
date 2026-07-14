@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from src.providers import (
     ProviderCapability,
     ProviderMissingCredentials,
-    ProviderPolicy,
     ProviderReason,
     ProviderResult,
     ProviderStatus,
@@ -127,15 +126,6 @@ class TestProviderTypes(unittest.TestCase):
 
         self.assertEqual(result["startedAt"], started.isoformat())
         self.assertEqual(result["finishedAt"], finished.isoformat())
-
-    def test_provider_policy_defaults(self) -> None:
-        policy = ProviderPolicy()
-
-        self.assertEqual(policy.timeoutSeconds, 15)
-        self.assertEqual(policy.retryCount, 0)
-        self.assertFalse(policy.circuitBreakerEnabled)
-        self.assertEqual(policy.fallbackOrder, [])
-
 
 if __name__ == "__main__":
     unittest.main()

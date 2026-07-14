@@ -11,9 +11,6 @@ from src.services.options_authority_policy_matrix import (
     build_options_expiration_source_candidate_gap,
     build_options_iv_rank_source_candidate_gap,
 )
-from src.services.options_event_calendar_source_candidate_evidence import (
-    build_event_calendar_source_candidate_evidence,
-)
 from src.services.options_expiration_source_candidate_evidence import (
     build_expiration_calendar_source_candidate_evidence,
 )
@@ -1077,31 +1074,6 @@ def test_options_event_candidate_source_registry_metadata_stays_metadata_only_ac
     provenance = project_source_provenance(source=source, freshness="unavailable")
     metadata = project_source_registry_metadata(source)
     gap = build_options_event_calendar_source_candidate_gap(metadata["candidateSourceClass"])
-    contract = build_event_calendar_source_candidate_evidence(
-        {
-            "sourceClass": metadata["candidateSourceClass"],
-            "providerId": "tradier",
-            "providerName": "tradier",
-            "coverageType": "issuer_event_calendar",
-            "observedEventCount": 2,
-            "eventDateRange": {"start": "2026-06-01", "end": "2026-06-30"},
-            "timelineCoverageNotes": ["events_present"],
-            "eventTaxonomy": {
-                "earnings": "proven",
-                "dividends": "partial",
-                "exDividend": "partial",
-                "fomcMacroContext": "proven",
-            },
-            "macroPolicyScope": "generic_macro_context_only",
-            "providerDecisionAuthority": True,
-            "recommendationAuthority": True,
-            "decisionGrade": "tradeable",
-            "gateDecision": "pass",
-            "sourceAuthorityAllowed": True,
-            "providerRouting": {"target": "tradier"},
-            "liveCallEnablement": True,
-        }
-    )
 
     assert provenance["sourceType"] == "missing"
     assert provenance["sourceLabel"] == "Event Calendar Candidate Evidence (diagnostic only)"
@@ -1120,10 +1092,6 @@ def test_options_event_candidate_source_registry_metadata_stays_metadata_only_ac
     assert "provider_self_claims" in metadata["forbiddenAuthorityInputs"]
     assert "current_provider_id" in metadata["forbiddenAuthorityInputs"]
     assert gap["authorityGrant"] is False
-    assert contract["authorityGrant"] is False
-    assert contract["diagnosticOnly"] is True
-    assert contract["candidateOnly"] is True
-    assert contract["sourceIdentity"]["sourceClass"] == metadata["candidateSourceClass"]
 
     for forbidden_field in (
         "providerDecisionAuthority",
@@ -1135,7 +1103,6 @@ def test_options_event_candidate_source_registry_metadata_stays_metadata_only_ac
         "liveCallEnablement",
     ):
         assert forbidden_field not in metadata
-        assert forbidden_field not in contract
         assert forbidden_field not in gap
 
 

@@ -152,7 +152,6 @@ EXPECTED_RUNTIME_HEAVY_DOMAIN_CLASSIFICATIONS = {
 PROVIDER_PRIMITIVE_MODULE_CANDIDATES = (
     "src.providers.types",
     "src.providers.errors",
-    "src.providers.policy",
 )
 FORBIDDEN_PROVIDER_RUNTIME_PREFIXES = (
     "data_provider",
@@ -228,7 +227,6 @@ EXPLICITLY_FORBIDDEN_OPTIONS_LAB_SCHEMA_IMPORT_NAMES = {
     "OptionsStrategyGateSummary",
 }
 EXPECTED_API_SCHEMA_UPWARD_IMPORTS = {
-    "src/services/backtest_factor_research_bridge.py": {"api.v1.schemas.factors"},
     "src/services/custom_strategy_contracts.py": {"api.v1.schemas.custom_strategy"},
     "src/services/event_intelligence_provider_contract.py": {"api.v1.schemas.event_intelligence"},
     "src/services/event_intelligence_timeline.py": {"api.v1.schemas.event_intelligence"},
@@ -240,7 +238,6 @@ EXPECTED_API_SCHEMA_UPWARD_IMPORTS = {
     "src/services/factor_registry.py": {"api.v1.schemas.factors"},
     "src/services/factor_research_report.py": {"api.v1.schemas.factors"},
     "src/services/options_lab_service.py": {"api.v1.schemas.options"},
-    "src/services/portfolio_factor_exposure.py": {"api.v1.schemas.factors"},
 }
 # Transitional, owned upward imports from services into API schemas.
 # These are inventory items, not a pattern to copy into new services.

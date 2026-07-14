@@ -20,12 +20,6 @@ from src.services.options_authority_policy_matrix import (
     is_options_authority_source_blocked,
     is_options_authority_source_granted,
 )
-from src.services.options_event_calendar_source_candidate_evidence import (
-    FORBIDDEN_AUTHORITY_OUTPUTS as EVENT_CALENDAR_FORBIDDEN_AUTHORITY_OUTPUTS,
-    REQUIRED_EVIDENCE_FAMILIES as EVENT_CALENDAR_REQUIRED_EVIDENCE_FAMILIES,
-    build_event_calendar_source_candidate_evidence,
-)
-
 FORBIDDEN_AUTHORITY_FIELDS = (
     "providerDecisionAuthority",
     "recommendationAuthority",
@@ -503,70 +497,11 @@ def test_event_calendar_policy_gap_and_registry_metadata_stay_cross_contract_ali
     policy = get_options_authority_surface_policy("event_calendar")
     registry = project_source_registry_metadata("options_lab.event_calendar_candidate_evidence")
     gap = build_options_event_calendar_source_candidate_gap(registry["candidateSourceClass"])
-    evidence = build_event_calendar_source_candidate_evidence(
-        {
-            "sourceClass": registry["candidateSourceClass"],
-            "providerId": "tradier",
-            "providerName": "tradier",
-            "candidateSourceName": "licensed_event_calendar_packet",
-            "provenanceChain": ["issuer", "licensed_provider"],
-            "licensedProviderBackingClaim": True,
-            "licensedProviderProofReference": "license_ref",
-            "exchangeBackingClaim": True,
-            "issuerBackingClaim": True,
-            "officialCalendarBackingClaim": True,
-            "entitlementRequirements": "internal_research",
-            "allowedInternalUse": "internal_display",
-            "accountBoundary": "team_workspace",
-            "redistributionRights": "internal_only",
-            "internalDecisionUseRights": "not_approved",
-            "environmentType": "production",
-            "liveDelayedStatus": "delayed",
-            "delayWindow": "15m",
-            "asOf": "2026-05-27T09:30:00Z",
-            "freshnessStatement": "publisher_confirmed",
-            "maxAgePolicy": "pt15m",
-            "coverageType": "issuer_event_calendar",
-            "observedEventCount": 3,
-            "eventDateRange": {"start": "2026-06-01", "end": "2026-06-30"},
-            "timelineCoverageNotes": ["events_present"],
-            "eventTaxonomy": {
-                "earnings": "proven",
-                "dividends": "proven",
-                "exDividend": "partial",
-                "splits": "partial",
-                "corporateActions": "partial",
-                "fomcMacroContext": "proven",
-            },
-            "macroPolicyScope": "options_macro_context_only",
-            "confirmationStatusModel": "confirmed_estimated_announced",
-            "confirmationEvidenceSource": "issuer_notice",
-            "providerEventIdField": "provider_event_id",
-            "eventIdentitySemantics": "symbol_type_datetime",
-            "eventDateField": "event_date",
-            "eventTimeField": "event_time",
-            "tradingSessionField": "session",
-            "timezoneField": "timezone",
-            "sanitizedErrorClasses": ["none"],
-            "auditCaptureTimestamp": "2026-05-27T10:00:00Z",
-            "providerDecisionAuthority": True,
-            "recommendationAuthority": True,
-            "decisionGrade": "A",
-            "gateDecision": "pass",
-            "sourceAuthorityAllowed": True,
-            "providerRouting": {"target": "tradier"},
-            "liveCallEnablement": True,
-        }
-    )
 
     assert policy["surface"] == registry["surface"] == gap["surface"] == "event_calendar"
     assert registry["candidateSourceClass"] == gap["candidateSourceClass"]
-    assert evidence["sourceIdentity"]["sourceClass"] == registry["candidateSourceClass"]
     assert registry["diagnosticOnly"] is True
     assert registry["candidateOnly"] is True
-    assert evidence["diagnosticOnly"] is True
-    assert evidence["candidateOnly"] is True
-    assert evidence["authorityGrant"] is False
     assert gap["diagnosticOnly"] is True
     assert gap["candidateOnly"] is True
     assert gap["authorityGrant"] is False
@@ -588,7 +523,6 @@ def test_event_calendar_policy_gap_and_registry_metadata_stay_cross_contract_ali
 
     assert set(policy["required_future_evidence_families"]["event_taxonomy"]) <= set(registry["eventTaxonomyFamily"])
     assert set(gap["requiredEvidenceFamilies"]["event_taxonomy"]) <= set(registry["eventTaxonomyFamily"])
-    assert "event_taxonomy" in EVENT_CALENDAR_REQUIRED_EVIDENCE_FAMILIES
 
     assert set(gap["requiredEvidenceFamilies"]["confirmation_status"]) == set(registry["confirmationFamily"])
     assert set(gap["requiredEvidenceFamilies"]["event_identity"]) == set(registry["eventIdentityFamily"])
@@ -613,12 +547,7 @@ def test_event_calendar_policy_gap_and_registry_metadata_stay_cross_contract_ali
         "provider_self_claims",
         "current_provider_id",
     } <= set(registry["forbiddenAuthorityInputs"])
-    assert evidence["forbiddenAuthorityOutputs"] == list(
-        EVENT_CALENDAR_FORBIDDEN_AUTHORITY_OUTPUTS
-    )
-
     for forbidden_field in FORBIDDEN_AUTHORITY_FIELDS:
-        assert forbidden_field not in evidence
         assert forbidden_field not in gap
         assert forbidden_field not in registry
 
