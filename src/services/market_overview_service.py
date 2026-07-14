@@ -7096,7 +7096,6 @@ class MarketOverviewService:
                 self._breadth_metric_item("上涨比例", "ADV_RATIO", adv_ratio, "%", as_of, updated_at, source, source_label, source_type, detail=detail),
             ],
         }
-        return self._with_breadth_readiness(payload, "CN")
 
     def _fetch_us_breadth_snapshot(self) -> Dict[str, Any]:
         polygon_activation = run_polygon_us_breadth_activation()
