@@ -1,6 +1,9 @@
 import { expect as baseExpect, type BrowserContext, type Page, type Route } from '@playwright/test';
 import { expect, test } from './fixtures/appSmoke';
 import { createMockAdminUser, createMockAuthStatus } from '../src/test-utils/adminAuthHarness';
+import { findConsumerRawLeakage } from '../src/test-utils/consumerRawLeakageGuard';
+
+const allowedConsumerDegradedCopy = ['部分数据暂不可用', '正在刷新，稍后自动更新'] as const;
 
 const adminUser = createMockAdminUser({
   displayName: 'UAT Route Admin',
@@ -31,7 +34,10 @@ const protectedRoutes: RouteIdentity[] = [
     extra: async (page) => {
       await expect(page.getByTestId('market-overview-card-indices')).toBeVisible();
       await expect(page.getByTestId('market-overview-decision-readiness')).toBeVisible();
-      await expect(page.locator('body')).not.toContainText(/request timed out|timeout|请求超时|加载失败|无法加载|部分数据暂不可用|正在刷新，稍后自动更新/i);
+      const leakage = findConsumerRawLeakage(await page.locator('body').innerText(), {
+        allowedPhrases: allowedConsumerDegradedCopy,
+      });
+      expect(leakage).toEqual([]);
     },
   },
   {
@@ -930,7 +936,7 @@ async function expectProtectedRouteIdentity(page: Page, route: RouteIdentity) {
   await expectAuthenticatedAdminSession(page);
   await expect(page.getByTestId(route.readyTestId), route.label).toBeVisible({ timeout: 15_000 });
   if (route.heading) {
-    await expect(page.getByRole('heading', { name: route.heading }).first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: route.heading })).toBeVisible();
   }
   await expect(page.getByTestId('auth-guard-overlay')).toHaveCount(0);
   await expect(page.locator('body')).not.toContainText(/登录后即可进入|登录解锁|登录继续|Sign in to unlock|Sign in to continue/i);
@@ -977,41 +983,49 @@ async function installFreshGuestContextMocks(context: BrowserContext) {
 }
 
 async function clickPrimaryNav(page: Page, name: string | RegExp) {
-  const desktopLink = page.getByTestId('shell-consumer-primary-nav').getByRole('link', { name }).first();
+  const navigationTarget = typeof name === 'string'
+    ? new Map([
+      ['市场总览', { href: '/zh/market-overview', group: 'market' }],
+      ['扫描器', { href: '/zh/scanner', group: 'research' }],
+      ['个股结构', { href: '/zh/stocks/structure-decision', group: 'research' }],
+      ['观察列表', { href: '/zh/watchlist', group: null }],
+    ]).get(name)
+    : undefined;
+
+  const mobileStrip = page.getByTestId('shell-mobile-strip');
+  if (await mobileStrip.isVisible().catch(() => false)) {
+    const mobileMenuButton = mobileStrip.getByRole('button', { name: '打开导航菜单' });
+    await expect(mobileMenuButton).toBeVisible();
+    await mobileMenuButton.click();
+
+    const drawer = page.getByRole('dialog', { name: '导航菜单' });
+    await expect(drawer).toBeVisible();
+    const drawerLink = navigationTarget
+      ? drawer.locator(`a[href="${navigationTarget.href}"]:visible`)
+      : drawer.getByRole('link', { name });
+    await expect(drawerLink).toHaveCount(1);
+    await drawerLink.click();
+    return;
+  }
+
+  const desktopNav = page.getByTestId('shell-consumer-primary-nav');
+  const desktopLink = navigationTarget
+    ? desktopNav.locator(`a[href="${navigationTarget.href}"]:visible`)
+    : desktopNav.getByRole('link', { name });
   if (await desktopLink.isVisible().catch(() => false)) {
+    await expect(desktopLink).toHaveCount(1);
     await desktopLink.click();
     return;
   }
 
-  const moreButton = page.getByTestId('shell-consumer-primary-nav').getByRole('button', { name: '更多' }).first();
-  if (await moreButton.isVisible().catch(() => false)) {
-    await moreButton.click();
-    const moreLink = page.getByTestId('shell-more-menu').getByRole('link', { name }).first();
-    if (await moreLink.isVisible().catch(() => false)) {
-      await moreLink.click();
-      return;
-    }
-  }
-
-  const mobileMenuButton = page.getByRole('button', { name: '打开导航菜单' });
-  if (await mobileMenuButton.isVisible().catch(() => false)) {
-    await mobileMenuButton.click();
-    const drawerLink = page.getByRole('dialog', { name: '导航菜单' }).getByRole('link', { name }).first();
-    if (await drawerLink.isVisible().catch(() => false)) {
-      await drawerLink.click();
-      return;
-    }
-  }
-
-  const localizedRouteByName = new Map<string, string>([
-    ['市场总览', '/zh/market-overview'],
-    ['扫描器', '/zh/scanner'],
-    ['个股结构', '/zh/stocks/structure-decision'],
-    ['个股研究', '/zh/stocks/structure-decision'],
-    ['观察列表', '/zh/watchlist'],
-  ]);
-  if (typeof name === 'string' && localizedRouteByName.has(name)) {
-    await page.goto(localizedRouteByName.get(name)!);
+  if (navigationTarget?.group) {
+    const groupTrigger = page.getByTestId(`shell-nav-group-trigger-${navigationTarget.group}`);
+    await expect(groupTrigger).toBeVisible();
+    await groupTrigger.click();
+    const groupMenu = page.getByTestId(`shell-nav-group-menu-${navigationTarget.group}`);
+    const groupLink = groupMenu.locator(`a[href="${navigationTarget.href}"]:visible`);
+    await expect(groupLink).toHaveCount(1);
+    await groupLink.click();
     return;
   }
 
@@ -1167,9 +1181,31 @@ test.describe('UAT route identity auth-session gate', () => {
       page.getByTestId('market-overview-shell'),
     );
 
-    await page.getByTestId('shell-account-center-entry').getByRole('button', { name: '账户中心' }).click();
-    await page.getByTestId('shell-account-center-menu').getByRole('menuitem', { name: '退出登录' }).click();
-    await page.getByRole('button', { name: '确认退出' }).click();
+    const mobileStrip = page.getByTestId('shell-mobile-strip');
+    if (await mobileStrip.isVisible().catch(() => false)) {
+      const mobileMenuButton = mobileStrip.getByRole('button', { name: '打开导航菜单' });
+      await expect(mobileMenuButton).toBeVisible();
+      await mobileMenuButton.click();
+
+      const drawer = page.getByRole('dialog', { name: '导航菜单' });
+      await expect(drawer).toBeVisible();
+      const mobileAccount = drawer.getByTestId('shell-mobile-account-center');
+      const mobileLogout = mobileAccount.getByRole('button', { name: '退出登录' });
+      await expect(mobileLogout).toBeVisible();
+      await mobileLogout.click();
+    } else {
+      const accountEntry = page.locator('[data-testid="shell-account-center-entry"]:visible');
+      await expect(accountEntry).toHaveCount(1);
+      await accountEntry.getByRole('button', { name: '账户中心' }).click();
+
+      const accountMenu = page.locator('[data-testid="shell-account-center-menu"]:visible');
+      await expect(accountMenu).toHaveCount(1);
+      await accountMenu.getByRole('menuitem', { name: '退出登录' }).click();
+    }
+
+    const logoutDialog = page.getByRole('dialog', { name: '退出登录' });
+    await expect(logoutDialog).toBeVisible();
+    await logoutDialog.getByRole('button', { name: '确认退出' }).click();
 
     await expect(page).toHaveURL(/\/zh\/guest$/);
     expect(session.getLoginState()).toBe(false);
