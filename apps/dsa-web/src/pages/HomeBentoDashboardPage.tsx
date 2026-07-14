@@ -1,5 +1,5 @@
 import type React from 'react';
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { History, Lock, MoreHorizontal, Search, Star, Upload } from 'lucide-react';
 import { getParsedApiError } from '../api/error';
@@ -6745,6 +6745,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [hydratedRouteTaskId, setHydratedRouteTaskId] = useState<string | null>(null);
   const [isTraceDrawerOpen, setTraceDrawerOpen] = useState(false);
   const [isFullReportDrawerOpen, setFullReportDrawerOpen] = useState(false);
+  const fullReportTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [mainCopyState, setMainCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [homeChartContext, setHomeChartContext] = useState<HomeCandlestickChartContext | null>(null);
   const [stockEvidenceFundamentals, setStockEvidenceFundamentals] = useState<StockEvidenceFundamentalsSummary | null>(null);
@@ -7470,6 +7471,13 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
   };
 
+  const closeFullReportDrawer = () => {
+    setFullReportDrawerOpen(false);
+    window.requestAnimationFrame(() => {
+      fullReportTriggerRef.current?.focus({ preventScroll: true });
+    });
+  };
+
   const reportActionButtons = !isGuest ? (
     <>
       <button
@@ -7482,6 +7490,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         <span className="truncate">{mainCopyState === 'copied' ? (locale === 'en' ? 'Added' : '已加入') : (locale === 'en' ? 'Watch' : '加入观察')}</span>
       </button>
       <button
+        ref={fullReportTriggerRef}
         type="button"
         aria-label={locale === 'en' ? 'Full Report' : '完整报告'}
         className="home-research-action-button home-research-action-button--primary inline-flex min-h-9 min-w-0 items-center gap-2 rounded-[7px] border px-3.5 py-1.5 text-xs font-medium text-[color:var(--wolfy-text-primary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
@@ -8551,10 +8560,10 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       />
 
       {isFullReportDrawerOpen ? (
-        <Suspense fallback={<FullDecisionReportDrawerFallback onClose={() => setFullReportDrawerOpen(false)} />}>
+        <Suspense fallback={<FullDecisionReportDrawerFallback onClose={closeFullReportDrawer} />}>
           <LazyFullDecisionReportDrawer
             isOpen={isFullReportDrawerOpen}
-            onClose={() => setFullReportDrawerOpen(false)}
+            onClose={closeFullReportDrawer}
             report={activeTraceReport}
             dashboard={dashboardData}
           />

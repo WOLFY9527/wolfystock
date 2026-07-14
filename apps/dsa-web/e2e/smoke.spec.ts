@@ -260,17 +260,6 @@ test.describe('web deployment smoke', () => {
     await expect(page.getByRole('button', { name: /授权进入工作台|完成设置并登录|登录继续|Sign in|Set password/i })).toBeVisible();
   });
 
-  test('preview report routes render in the preview build', async ({ page }) => {
-    await page.goto('/__preview/report');
-    await page.waitForLoadState('domcontentloaded');
-    await expect(page.locator('[data-testid="preview-report-page"]')).toBeVisible({ timeout: 15_000 });
-
-    await page.goto('/__preview/full-report');
-    await page.waitForLoadState('domcontentloaded');
-    await expect(page.locator('[data-testid="preview-full-report-page"]')).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('[data-testid="preview-shell"]')).toBeVisible({ timeout: 15_000 });
-  });
-
   test('guest route loads the dedicated guest surface', async ({ page }) => {
     await page.goto('/guest');
     await page.waitForLoadState('domcontentloaded');

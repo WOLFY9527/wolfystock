@@ -1,7 +1,34 @@
 import { describe, expect, it } from 'vitest';
 import type { AnalysisReport } from '../../types/analysis';
 import { normalizeFrontendReportContract } from '../reportNormalizer';
-import { previewReport } from '../../dev/reportPreviewFixture';
+
+const standardReportFixture: AnalysisReport = {
+  meta: {
+    queryId: 'standard-report-q1',
+    stockCode: 'NVDA',
+    stockName: 'NVIDIA',
+    reportType: 'full',
+    createdAt: '2026-03-28T21:35:00+08:00',
+  },
+  summary: {
+    analysisSummary: 'Research packet is ready for observation.',
+    operationAdvice: 'Continue observing.',
+    trendPrediction: 'Constructive.',
+    sentimentScore: 78,
+  },
+  details: {
+    standardReport: {
+      summaryPanel: {
+        ticker: 'NVDA',
+        score: 78,
+        marketSessionDate: '2026-03-28',
+      },
+      decisionPanel: {
+        setupType: 'Pullback observation',
+      },
+    },
+  },
+};
 
 describe('normalizeFrontendReportContract', () => {
   it('fills required summary fields and defaults sentiment score when missing', () => {
@@ -610,39 +637,39 @@ describe('normalizeFrontendReportContract', () => {
     }
   });
 
-  it('keeps preview and production-like payloads aligned at normalized contract level', () => {
-    const previewNormalized = normalizeFrontendReportContract(previewReport);
-    const productionLike = {
-      ...previewReport,
+  it('keeps camelCase and snake_case standard report payloads aligned at normalized contract level', () => {
+    const camelCaseNormalized = normalizeFrontendReportContract(standardReportFixture);
+    const snakeCasePayload = {
+      ...standardReportFixture,
       details: {
         standard_report: {
           summary_panel: {
-            ticker: previewReport.details?.standardReport?.summaryPanel?.ticker,
-            score: previewReport.details?.standardReport?.summaryPanel?.score,
-            market_session_date: previewReport.details?.standardReport?.summaryPanel?.marketSessionDate,
+            ticker: standardReportFixture.details?.standardReport?.summaryPanel?.ticker,
+            score: standardReportFixture.details?.standardReport?.summaryPanel?.score,
+            market_session_date: standardReportFixture.details?.standardReport?.summaryPanel?.marketSessionDate,
           },
           decision_panel: {
-            setup_type: previewReport.details?.standardReport?.decisionPanel?.setupType,
+            setup_type: standardReportFixture.details?.standardReport?.decisionPanel?.setupType,
           },
         },
       },
     } as unknown as AnalysisReport;
 
-    const productionLikeNormalized = normalizeFrontendReportContract(productionLike);
+    const snakeCaseNormalized = normalizeFrontendReportContract(snakeCasePayload);
 
-    expect(previewNormalized.details?.standardReport?.summaryPanel?.ticker).toBe(
-      productionLikeNormalized.details?.standardReport?.summaryPanel?.ticker,
+    expect(camelCaseNormalized.details?.standardReport?.summaryPanel?.ticker).toBe(
+      snakeCaseNormalized.details?.standardReport?.summaryPanel?.ticker,
     );
-    expect(previewNormalized.details?.standardReport?.summaryPanel?.score).toBe(
-      productionLikeNormalized.details?.standardReport?.summaryPanel?.score,
+    expect(camelCaseNormalized.details?.standardReport?.summaryPanel?.score).toBe(
+      snakeCaseNormalized.details?.standardReport?.summaryPanel?.score,
     );
-    expect(previewNormalized.details?.standardReport?.summaryPanel?.marketSessionDate).toBe(
-      productionLikeNormalized.details?.standardReport?.summaryPanel?.marketSessionDate,
+    expect(camelCaseNormalized.details?.standardReport?.summaryPanel?.marketSessionDate).toBe(
+      snakeCaseNormalized.details?.standardReport?.summaryPanel?.marketSessionDate,
     );
-    expect(previewNormalized.details?.standardReport?.decisionPanel?.setupType).toBe(
-      productionLikeNormalized.details?.standardReport?.decisionPanel?.setupType,
+    expect(camelCaseNormalized.details?.standardReport?.decisionPanel?.setupType).toBe(
+      snakeCaseNormalized.details?.standardReport?.decisionPanel?.setupType,
     );
-    expect(previewNormalized.contractMeta?.payloadVariant).toBe('standard_report');
-    expect(productionLikeNormalized.contractMeta?.payloadVariant).toBe('standard_report');
+    expect(camelCaseNormalized.contractMeta?.payloadVariant).toBe('standard_report');
+    expect(snakeCaseNormalized.contractMeta?.payloadVariant).toBe('standard_report');
   });
 });

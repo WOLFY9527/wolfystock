@@ -3,15 +3,13 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App, { AppContent, RouteLoadingFallback } from '../App';
 import { expectNoRawI18nKeys } from '../test-utils/i18nRawKeySentinel';
-import { isPreviewRoutePath } from '../utils/appRouteGuards';
 import type { AdminCapabilityFlags } from '../utils/adminCapabilities';
 
-const { useAuthMock, useProductSurfaceMock, setLanguageMock, languageState, previewReportPanelImportSpy, routeCrashState } = vi.hoisted(() => ({
+const { useAuthMock, useProductSurfaceMock, setLanguageMock, languageState, routeCrashState } = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
   useProductSurfaceMock: vi.fn(),
   setLanguageMock: vi.fn(),
   languageState: { value: 'zh' as 'zh' | 'en' },
-  previewReportPanelImportSpy: vi.fn(),
   routeCrashState: {
     marketOverview: false,
   },
@@ -74,19 +72,6 @@ vi.mock('../components/common/ApiErrorAlert', () => ({
 vi.mock('../components/common/BrandedLoadingScreen', () => ({
   BrandedLoadingScreen: () => null,
 }));
-
-vi.mock('../components/report/StandardReportPanel', async () => {
-  previewReportPanelImportSpy();
-  await new Promise((resolve) => {
-    setTimeout(resolve, 100);
-  });
-
-  return {
-    StandardReportPanel: ({ report }: { report: { summary?: { analysisSummary?: string } } }) => (
-      <div data-testid="route-preview-standard-report">{report.summary?.analysisSummary}</div>
-    ),
-  };
-});
 
 vi.mock('../pages/HomeSurfacePage', () => {
   const MockHomeSurfacePage = () => (
@@ -536,15 +521,6 @@ describe('AppContent route flows', () => {
     },
   );
 
-  it('renders the preview report route and resolves the deferred report panel', async () => {
-    languageState.value = 'zh';
-    renderBrowserAppAt('/__preview/report');
-
-    expect(await screen.findByTestId('preview-report-page')).toBeInTheDocument();
-    expect(await screen.findByTestId('route-preview-standard-report')).toHaveTextContent('等待回踩确认');
-    expect(previewReportPanelImportSpy).toHaveBeenCalledTimes(1);
-  });
-
   it('renders a consumer-safe global error boundary on real route crashes', async () => {
     languageState.value = 'en';
     routeCrashState.marketOverview = true;
@@ -569,14 +545,6 @@ describe('AppContent route flows', () => {
     fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
     expect(await screen.findByText('market-overview-page')).toBeInTheDocument();
     await waitFor(() => expect(shellMain).toHaveFocus());
-  });
-
-  it('does not eagerly import the preview report panel on unrelated home routes', async () => {
-    languageState.value = 'en';
-    renderAt('/en');
-
-    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
-    expect(previewReportPanelImportSpy).not.toHaveBeenCalled();
   });
 
   it('redirects guest access from /settings to the dedicated guest page', async () => {
@@ -1304,12 +1272,6 @@ describe('AppContent route flows', () => {
       expect(screen.queryByText(/auth-guard:/)).not.toBeInTheDocument();
     },
   );
-
-  it('treats preview routes as preview pages outside dev-only mode checks', () => {
-    expect(isPreviewRoutePath('/__preview/report')).toBe(true);
-    expect(isPreviewRoutePath('/en/__preview/full-report')).toBe(true);
-    expect(isPreviewRoutePath('/scanner')).toBe(false);
-  });
 
   it('shows the admin-account gate when a normal user visits an admin route', async () => {
     useAuthMock.mockReturnValue({

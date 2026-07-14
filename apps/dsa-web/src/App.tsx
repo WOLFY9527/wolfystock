@@ -6,7 +6,6 @@ import { BrandedLoadingScreen } from './components/common/BrandedLoadingScreen';
 import { AccessGatePage } from './components/access/AccessGatePage';
 import { ConsumerProtectedFrame } from './components/layout/ConsumerWorkspaceShell';
 import { Shell } from './components/layout/Shell';
-import { PreviewShell } from './components/layout/PreviewShell';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { useI18n } from './contexts/UiLanguageContext';
 import { useProductSurface } from './hooks/useProductSurface';
@@ -15,7 +14,6 @@ import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '
 import {
   getAuthBootstrapRouteKind,
   isAuthEntryPath,
-  isPreviewRoutePath,
   isStockStructureDecisionDetailPath,
   type AuthBootstrapRouteKind,
 } from './utils/appRouteGuards';
@@ -31,8 +29,6 @@ const ScannerSurfacePage = lazy(() => import('./pages/ScannerSurfacePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
-const PreviewReportPage = lazy(() => import('./pages/PreviewReportPage'));
-const PreviewFullReportDrawerPage = lazy(() => import('./pages/PreviewFullReportDrawerPage'));
 const PortfolioPage = lazy(() => import('./pages/PortfolioPage'));
 const MarketOverviewPage = lazy(() => import('./pages/MarketOverviewPage'));
 const MarketDecisionCockpitPage = lazy(() => import('./pages/MarketDecisionCockpitPage'));
@@ -745,35 +741,6 @@ export const AppContent: React.FC = () => {
   );
 };
 
-const PreviewRoutes: React.FC = () => {
-  const location = useLocation();
-  const { language, setLanguage } = useI18n();
-  const routeLocale = parseLocaleFromPathname(location.pathname);
-
-  useEffect(() => {
-    if (routeLocale) {
-      setLanguage(routeLocale);
-    }
-  }, [routeLocale, setLanguage]);
-
-  return (
-    <>
-      <DocumentTitleLifecycle language={language} />
-      <PreviewShell>
-        <Suspense fallback={<RouteLoadingFallback language={routeLocale || 'zh'} />}>
-          <Routes>
-            <Route path="/__preview/report" element={<PreviewReportPage />} />
-            <Route path="/__preview/full-report" element={<PreviewFullReportDrawerPage />} />
-            <Route path="/:locale/__preview/report" element={<PreviewReportPage />} />
-            <Route path="/:locale/__preview/full-report" element={<PreviewFullReportDrawerPage />} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
-        </Suspense>
-      </PreviewShell>
-    </>
-  );
-};
-
 const LocalizedShellRoute: React.FC = () => {
   const location = useLocation();
   const { language } = useI18n();
@@ -795,17 +762,6 @@ const LocalizedShellRoute: React.FC = () => {
 };
 
 const AppBody: React.FC = () => {
-  const location = useLocation();
-  const isPreviewRoute = isPreviewRoutePath(location.pathname);
-
-  if (isPreviewRoute) {
-    return (
-      <AppErrorBoundary>
-        <PreviewRoutes />
-      </AppErrorBoundary>
-    );
-  }
-
   return (
     <AppErrorBoundary>
       <AuthProvider>
