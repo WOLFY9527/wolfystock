@@ -14,8 +14,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from statistics import mean, pstdev
-from types import SimpleNamespace
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from types import MappingProxyType, SimpleNamespace
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from src.core.rule_backtest_engine import ExecutionModelConfig, ParsedStrategy, RuleBacktestEngine, RuleBacktestParser, _safe_float
 from src.repositories.rule_backtest_repo import RuleBacktestRepository
@@ -506,35 +506,22 @@ class _PeriodicAccumulationStrategySpecPayload:
     costs: _StrategySpecCostsPayload
 
 
-@dataclass
-class _MovingAverageSignalPayload:
+@dataclass(frozen=True)
+class _StrategyTemplateDefinition:
+    strategy_kind: str
     indicator_family: str
-    fast_period: int
-    slow_period: int
-    fast_type: str
-    slow_type: str
-    entry_condition: str
-    exit_condition: str
-
-
-@dataclass
-class _MacdSignalPayload:
-    indicator_family: str
-    fast_period: int
-    slow_period: int
-    signal_period: int
-    entry_condition: str
-    exit_condition: str
-
-
-@dataclass
-class _RsiSignalPayload:
-    indicator_family: str
-    period: int
-    lower_threshold: float
-    upper_threshold: float
-    entry_condition: str
-    exit_condition: str
+    parameters: tuple[tuple[str, Callable[[Any], Any], Any], ...]
+    signal_field_order: tuple[str, ...]
+    fixed_signal_values: Mapping[str, Any]
+    summary_entry: Any
+    summary_exit: Any
+    classic_priority: Optional[int] = None
+    classic_matchers: tuple[tuple[tuple[str, ...], ...], ...] = ()
+    classic_normalized_text: Optional[str] = None
+    classic_entry: Optional[str] = None
+    classic_exit: Optional[str] = None
+    classic_max_lookback: Optional[int] = None
+    classic_setup: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
 
 
 @dataclass
@@ -581,10 +568,279 @@ class _IndicatorStrategySpecPayload:
     risk_controls: _IndicatorRiskControlsPayload = field(default_factory=_IndicatorRiskControlsPayload)
 
 
+def _strategy_template(
+    strategy_kind: str,
+    indicator_family: Optional[str],
+    signal_fields: tuple[tuple[str, Optional[Callable[[Any], Any]], Any], ...],
+    summaries: tuple[Any, Any],
+    classic: Optional[tuple[Any, ...]] = None,
+) -> _StrategyTemplateDefinition:
+    classic_values = classic or (None, (), None, None, None, None, (), ())
+    default_values: Dict[str, Any] = {}
+    for name, cast, default in signal_fields:
+        if cast is None:
+            continue
+        raw_value = default(default_values) if callable(default) else default
+        default_values[name] = cast(raw_value)
+    classic_setup: Dict[str, Any] = {}
+    if classic is not None:
+        classic_setup["indicator_family"] = indicator_family or strategy_kind
+        setup_order = classic_values[7] or tuple(default_values)
+        classic_setup.update((name, default_values[name]) for name in setup_order)
+        classic_setup.update(classic_values[6])
+    return _StrategyTemplateDefinition(
+        strategy_kind=strategy_kind,
+        indicator_family=indicator_family or strategy_kind,
+        parameters=tuple(field for field in signal_fields if field[1] is not None),
+        signal_field_order=tuple(name for name, _, _ in signal_fields),
+        fixed_signal_values=MappingProxyType({name: value for name, cast, value in signal_fields if cast is None}),
+        summary_entry=summaries[0],
+        summary_exit=summaries[1],
+        classic_priority=classic_values[0],
+        classic_matchers=classic_values[1],
+        classic_normalized_text=classic_values[2],
+        classic_entry=classic_values[3],
+        classic_exit=classic_values[4],
+        classic_max_lookback=classic_values[5],
+        classic_setup=MappingProxyType(classic_setup),
+    )
+
+
 class RuleBacktestService:
     """Orchestrate parsing, deterministic execution, persistence, and async submissions."""
 
     _submission_lock = threading.Lock()
+    _STRATEGY_TEMPLATE_REGISTRY: Mapping[str, _StrategyTemplateDefinition] = MappingProxyType({
+        template.strategy_kind: template
+        for template in (
+            _strategy_template(
+                "moving_average_crossover", "moving_average",
+                (
+                    ("fast_period", int, 5), ("slow_period", int, 20),
+                    ("fast_type", str, "simple"), ("slow_type", str, "simple"),
+                    ("entry_condition", str, "fast_crosses_above_slow"),
+                    ("exit_condition", str, "fast_crosses_below_slow"),
+                ),
+                (
+                    lambda values: (
+                        f"买入条件：{'EMA' if str(values['fast_type']).lower() == 'ema' else 'SMA'}{int(values['fast_period'])} "
+                        f"上穿 {'EMA' if str(values['slow_type']).lower() == 'ema' else 'SMA'}{int(values['slow_period'])}"
+                    ),
+                    lambda values: (
+                        f"卖出条件：{'EMA' if str(values['fast_type']).lower() == 'ema' else 'SMA'}{int(values['fast_period'])} "
+                        f"下穿 {'EMA' if str(values['slow_type']).lower() == 'ema' else 'SMA'}{int(values['slow_period'])}"
+                    ),
+                ),
+            ),
+            _strategy_template(
+                "macd_crossover", "macd",
+                (
+                    ("fast_period", int, 12), ("slow_period", int, 26), ("signal_period", int, 9),
+                    ("entry_condition", str, "macd_crosses_above_signal"),
+                    ("exit_condition", str, "macd_crosses_below_signal"),
+                ),
+                ("买入条件：MACD({fast_period},{slow_period},{signal_period}) 金叉", "卖出条件：MACD({fast_period},{slow_period},{signal_period}) 死叉"),
+            ),
+            _strategy_template(
+                "rsi_threshold", "rsi",
+                (
+                    ("period", int, 14), ("lower_threshold", float, 30.0), ("upper_threshold", float, 70.0),
+                    ("entry_condition", str, "rsi_crosses_below_lower_threshold"),
+                    ("exit_condition", str, "rsi_crosses_above_upper_threshold"),
+                ),
+                ("买入条件：RSI{period} 低于 {lower_threshold:g}", "卖出条件：RSI{period} 高于 {upper_threshold:g}"),
+            ),
+            _strategy_template(
+                "bollinger_breakout", None,
+                (
+                    ("period", int, 20), ("std_dev", float, 2.0),
+                    ("entry_condition", None, "close_crosses_above_upper_band"),
+                    ("exit_condition", None, lambda values: f"close_crosses_below_{values['exit_line']}"),
+                    ("exit_line", str, "middle_band"),
+                ),
+                (
+                    "买入条件：价格上破布林带上轨 ({period}, {std_dev:g})",
+                    lambda values: f"卖出条件：价格跌回布林带{'中轨' if values['exit_line'] == 'middle_band' else '下轨'}",
+                ),
+                (
+                    11, ((("布林带",), ("上轨",)), (("BOLLINGER",), ("UPPER",))),
+                    "价格突破布林带上轨时买入，跌回中轨时卖出。",
+                    "买入条件：收盘价上破布林带上轨", "卖出条件：收盘价跌回布林带中轨", 20, (), (),
+                ),
+            ),
+            _strategy_template(
+                "atr_breakout", None,
+                (
+                    ("atr_period", int, 14), ("breakout_lookback", int, 20),
+                    ("atr_expansion_lookback", int, lambda values: values["breakout_lookback"]),
+                    ("exit_lookback", int, lambda values: max(5, values["breakout_lookback"] // 2)),
+                    ("entry_condition", None, "atr_expands_and_close_breaks_above_range"),
+                    ("exit_condition", None, "close_breaks_below_exit_range"),
+                ),
+                ("买入条件：ATR{atr_period} 扩张且价格突破前 {breakout_lookback} 日高点", "卖出条件：价格跌破前 {exit_lookback} 日防守区"),
+                (
+                    10, ((("ATR",), ("突破前高", "BREAKS A PRIOR HIGH")),),
+                    "ATR14 扩张且价格突破前高时买入，跌回突破区域下方卖出。",
+                    "买入条件：ATR14 扩张且价格突破前高", "卖出条件：价格跌回突破区域下方", 20, (),
+                    ("atr_period", "atr_expansion_lookback", "breakout_lookback", "exit_lookback"),
+                ),
+            ),
+            _strategy_template(
+                "obv_trend_confirmation", None,
+                (
+                    ("trend_average", int, 50), ("obv_lookback", int, 20), ("obv_signal_period", int, 10),
+                    ("entry_condition", None, "price_above_trend_and_obv_breakout"),
+                    ("exit_condition", None, "obv_weakens_or_price_below_trend"),
+                ),
+                ("买入条件：价格站上 SMA{trend_average} 且 OBV 创 {obv_lookback} 日新高", "卖出条件：OBV 跌破信号线或价格跌回 SMA{trend_average} 下方"),
+                (
+                    8, ((("OBV",), ("创新高", "NEW HIGH")),),
+                    "价格站上趋势均线且 OBV 同步创新高时买入，OBV 转弱或跌回均线下方卖出。",
+                    "买入条件：价格在均线上方且 OBV 创新高", "卖出条件：OBV 转弱或价格跌回均线下方", 50, (), (),
+                ),
+            ),
+            _strategy_template(
+                "support_resistance_bounce", None,
+                (
+                    ("support_lookback", int, 20), ("resistance_lookback", int, 20), ("proximity_pct", float, 2.0),
+                    ("entry_condition", None, "bounce_from_support"),
+                    ("exit_condition", None, "touch_resistance_or_break_support"),
+                ),
+                ("买入条件：接近前 {support_lookback} 日支撑并企稳反弹", "卖出条件：接近前 {resistance_lookback} 日阻力或跌破支撑"),
+                (
+                    9, ((("支撑",), ("阻力",)), (("SUPPORT",), ("RESISTANCE",))),
+                    "回踩支撑企稳买入，接近阻力位或跌破支撑时卖出。",
+                    "买入条件：支撑位附近企稳反弹", "卖出条件：接近阻力位或跌破支撑", 20, (), (),
+                ),
+            ),
+            _strategy_template(
+                "macd_rsi_combo", None,
+                (
+                    ("fast_period", int, 12), ("slow_period", int, 26), ("signal_period", int, 9),
+                    ("rsi_period", int, 14), ("rsi_threshold", float, 50.0),
+                    ("entry_condition", None, "macd_crosses_above_signal_and_rsi_above_threshold"),
+                    ("exit_condition", None, "macd_crosses_below_signal_or_rsi_below_threshold"),
+                ),
+                ("买入条件：MACD({fast_period},{slow_period},{signal_period}) 金叉且 RSI{rsi_period} > {rsi_threshold:g}", "卖出条件：MACD 死叉或 RSI{rsi_period} < {rsi_threshold:g}"),
+                (
+                    6, ((("MACD",), ("RSI",), ("上穿50", "ABOVE 50")),),
+                    "MACD 金叉且 RSI14 上穿 50 时买入，任一信号走弱时卖出。",
+                    "买入条件：MACD 金叉且 RSI14 > 50", "卖出条件：MACD 死叉或 RSI14 < 50", 26, (), (),
+                ),
+            ),
+            _strategy_template(
+                "sma_bollinger_combo", None,
+                (
+                    ("trend_fast_period", int, 20), ("trend_slow_period", int, 60),
+                    ("period", int, 20), ("std_dev", float, 2.0),
+                    ("entry_condition", None, "trend_bullish_and_close_reclaims_middle_band"),
+                    ("exit_condition", None, "trend_breaks_or_close_below_middle_band"),
+                ),
+                ("买入条件：SMA{trend_fast_period} > SMA{trend_slow_period} 且价格重回布林带中轨", "卖出条件：价格跌回中轨下方或 SMA{trend_fast_period} 跌回 SMA{trend_slow_period} 下方"),
+                (
+                    5, ((("SMA20",), ("SMA60",), ("布林带", "BOLLINGER")),),
+                    "SMA20 在 SMA60 上方且价格重回布林带中轨上方时买入，跌破中轨或趋势转弱卖出。",
+                    "买入条件：SMA20 > SMA60 且价格重回布林带中轨",
+                    "卖出条件：跌破中轨或 SMA20 跌回 SMA60 下方", 60, (("exit_line", "middle_band"),), (),
+                ),
+            ),
+            _strategy_template(
+                "trend_momentum_volume_mix", None,
+                (
+                    ("fast_period", int, 20), ("mid_period", int, 60), ("slow_period", int, 120),
+                    ("rsi_period", int, 14), ("rsi_threshold", float, 55.0), ("price_lookback", int, 20),
+                    ("volume_period", int, 20), ("volume_multiplier", float, 1.5),
+                    ("entry_condition", None, "trend_momentum_volume_alignment"),
+                    ("exit_condition", None, "trend_momentum_volume_breakdown"),
+                ),
+                ("买入条件：SMA{fast_period}/{mid_period}/{slow_period} 多头排列且 RSI{rsi_period} > {rsi_threshold:g} 并放量突破", "卖出条件：价格跌破 SMA{mid_period} 或 RSI{rsi_period} 失守 {rsi_threshold:g}"),
+                (
+                    4, ((("均线多头", "MOVING AVERAGES ALIGN"), ("RSI",), ("放量", "VOLUME")),),
+                    "均线多头、RSI 强势且放量突破同时出现时买入，任一主信号转弱时卖出。",
+                    "买入条件：均线多头且 RSI 强势并放量突破", "卖出条件：跌破中期均线或 RSI 走弱", 120, (), (),
+                ),
+            ),
+            _strategy_template(
+                "multi_indicator_trend_filter", None,
+                (
+                    ("trend_average", int, 120), ("fast_period", int, 12), ("slow_period", int, 26),
+                    ("signal_period", int, 9), ("atr_period", int, 14),
+                    ("atr_expansion_lookback", int, 20), ("breakout_lookback", int, 20),
+                    ("entry_condition", None, "trend_filter_allows_breakout"),
+                    ("exit_condition", None, "trend_filter_breaks"),
+                ),
+                ("买入条件：价格高于 SMA{trend_average} 且 MACD 为正并 ATR{atr_period} 扩张后突破", "卖出条件：价格跌回 SMA{trend_average} 下方或 MACD 转负"),
+                (
+                    3, ((("长期均线", "LONG-TERM"), ("MACD",), ("ATR", "波动率扩张", "VOLATILITY")),),
+                    "价格位于长期均线上方、MACD 为正且 ATR 扩张时才允许入场。",
+                    "买入条件：价格在长期均线上方且 MACD/ATR 同步转强",
+                    "卖出条件：价格跌破长期均线或 MACD 转弱", 120, (), (),
+                ),
+            ),
+            _strategy_template(
+                "bollinger_rsi_reversion_combo", None,
+                (
+                    ("period", int, 20), ("std_dev", float, 2.0), ("rsi_period", int, 2),
+                    ("rsi_entry_threshold", float, 10.0), ("rsi_exit_threshold", float, 60.0),
+                    ("exit_line", None, "middle_band"),
+                    ("entry_condition", None, "close_below_lower_band_and_rsi_oversold"),
+                    ("exit_condition", None, "close_above_middle_band_or_rsi_recovery"),
+                ),
+                ("买入条件：跌破布林带下轨且 RSI{rsi_period} < {rsi_entry_threshold:g}", "卖出条件：回到中轨或 RSI{rsi_period} > {rsi_exit_threshold:g}"),
+                (
+                    1, ((("布林带下轨",), ("RSI",)), (("BOLLINGER",), ("LOWER",), ("RSI",))),
+                    "价格跌破布林带下轨且 RSI2 低于 10 时买入，回到中轨或 RSI2 回到 60 卖出。",
+                    "买入条件：跌破布林带下轨且 RSI2 < 10", "卖出条件：回到中轨或 RSI2 > 60", 20,
+                    (("exit_line", "middle_band"),), (),
+                ),
+            ),
+            _strategy_template(
+                "triple_moving_average_trend_stack", None,
+                (
+                    ("fast_period", int, 20), ("mid_period", int, 60), ("slow_period", int, 120),
+                    ("entry_condition", None, "bullish_stack_with_fast_pullback_reclaim"),
+                    ("exit_condition", None, "close_below_mid_or_stack_breaks"),
+                ),
+                ("买入条件：SMA{fast_period} > SMA{mid_period} > SMA{slow_period} 且回踩 SMA{fast_period} 后转强", "卖出条件：跌破 SMA{mid_period} 或三重均线失效"),
+                (
+                    7, ((("SMA20",), ("SMA60",), ("SMA120",)), (("三重均线",),)),
+                    "SMA20 > SMA60 > SMA120 且价格回踩 SMA20 后重新转强时买入，跌破 SMA60 时卖出。",
+                    "买入条件：三重均线多头排列且价格回踩后转强", "卖出条件：跌破 SMA60 或均线栈失效", 120, (), (),
+                ),
+            ),
+            _strategy_template(
+                "support_resistance_macd_combo", None,
+                (
+                    ("support_lookback", int, 20), ("resistance_lookback", int, 20),
+                    ("fast_period", int, 12), ("slow_period", int, 26),
+                    ("signal_period", int, 9), ("proximity_pct", float, 2.0),
+                    ("entry_condition", None, "support_bounce_with_macd_confirmation"),
+                    ("exit_condition", None, "resistance_or_macd_breakdown"),
+                ),
+                ("买入条件：支撑位企稳且 MACD({fast_period},{slow_period},{signal_period}) 金叉", "卖出条件：接近阻力位或 MACD 死叉"),
+                (
+                    0, ((("MACD",), ("支撑位企稳", "HOLDS SUPPORT"), ("阻力位", "RESISTANCE")),),
+                    "价格在支撑位企稳且 MACD 金叉时买入，接近阻力位或 MACD 死叉时卖出。",
+                    "买入条件：支撑位企稳且 MACD 金叉", "卖出条件：接近阻力位或 MACD 死叉", 26, (), (),
+                ),
+            ),
+            _strategy_template(
+                "vwap_volume_breakout_combo", None,
+                (
+                    ("price_lookback", int, 20), ("volume_period", int, 20), ("volume_multiplier", float, 1.8),
+                    ("entry_condition", None, "vwap_reclaim_with_volume_breakout"),
+                    ("exit_condition", None, "close_below_vwap"),
+                ),
+                ("买入条件：价格重回 VWAP 上方且放量突破平台高点", "卖出条件：价格跌回 VWAP 下方"),
+                (
+                    2, ((("VWAP",), ("放量", "VOLUME")),),
+                    "价格重回 VWAP 上方且突破平台高点并放量时买入，跌回 VWAP 下方卖出。",
+                    "买入条件：重回 VWAP 上方且放量突破", "卖出条件：跌回 VWAP 下方", 20, (),
+                    ("price_lookback", "volume_multiplier", "volume_period"),
+                ),
+            ),
+        )
+    })
 
     def __init__(
         self,
@@ -9293,218 +9549,34 @@ class RuleBacktestService:
         if not text:
             return None
         upper_text = text.upper()
-
-        def contains_all(*tokens: str) -> bool:
-            return all(token.upper() in upper_text for token in tokens)
-
-        def build_payload(
-            strategy_kind: str,
-            normalized_text: str,
-            entry: str,
-            exit: str,
-            max_lookback: int,
-            setup: Dict[str, Any],
-        ) -> Dict[str, Any]:
-            return {
-                "strategy_kind": strategy_kind,
-                "normalized_text": normalized_text,
-                "summary": {
-                    "entry": entry,
-                    "exit": exit,
-                    "strategy": RuleBacktestService._strategy_kind_label(strategy_kind),
-                },
-                "max_lookback": max_lookback,
-                "setup": setup,
-            }
-
-        if ("MACD" in upper_text and ("支撑位企稳" in text or "HOLDS SUPPORT" in upper_text) and ("阻力位" in text or "RESISTANCE" in upper_text)):
-            return build_payload(
-                "support_resistance_macd_combo",
-                "价格在支撑位企稳且 MACD 金叉时买入，接近阻力位或 MACD 死叉时卖出。",
-                "买入条件：支撑位企稳且 MACD 金叉",
-                "卖出条件：接近阻力位或 MACD 死叉",
-                26,
-                {
-                    "indicator_family": "support_resistance_macd_combo",
-                    "support_lookback": 20,
-                    "resistance_lookback": 20,
-                    "fast_period": 12,
-                    "slow_period": 26,
-                    "signal_period": 9,
-                    "proximity_pct": 2.0,
-                },
+        templates = sorted(
+            (
+                template
+                for template in RuleBacktestService._STRATEGY_TEMPLATE_REGISTRY.values()
+                if template.classic_priority is not None
+            ),
+            key=lambda template: int(template.classic_priority or 0),
+        )
+        for template in templates:
+            matched = any(
+                all(
+                    any(alias.upper() in upper_text for alias in aliases)
+                    for aliases in matcher
+                )
+                for matcher in template.classic_matchers
             )
-        if ("布林带下轨" in text or contains_all("BOLLINGER", "LOWER")) and "RSI" in upper_text:
-            return build_payload(
-                "bollinger_rsi_reversion_combo",
-                "价格跌破布林带下轨且 RSI2 低于 10 时买入，回到中轨或 RSI2 回到 60 卖出。",
-                "买入条件：跌破布林带下轨且 RSI2 < 10",
-                "卖出条件：回到中轨或 RSI2 > 60",
-                20,
-                {
-                    "indicator_family": "bollinger_rsi_reversion_combo",
-                    "period": 20,
-                    "std_dev": 2.0,
-                    "rsi_period": 2,
-                    "rsi_entry_threshold": 10.0,
-                    "rsi_exit_threshold": 60.0,
-                    "exit_line": "middle_band",
-                },
-            )
-        if ("VWAP" in upper_text and ("放量" in text or "VOLUME" in upper_text)):
-            return build_payload(
-                "vwap_volume_breakout_combo",
-                "价格重回 VWAP 上方且突破平台高点并放量时买入，跌回 VWAP 下方卖出。",
-                "买入条件：重回 VWAP 上方且放量突破",
-                "卖出条件：跌回 VWAP 下方",
-                20,
-                {
-                    "indicator_family": "vwap_volume_breakout_combo",
-                    "price_lookback": 20,
-                    "volume_multiplier": 1.8,
-                    "volume_period": 20,
-                },
-            )
-        if (("长期均线" in text or "LONG-TERM" in upper_text) and "MACD" in upper_text and ("ATR" in upper_text or "波动率扩张" in text or "VOLATILITY" in upper_text)):
-            return build_payload(
-                "multi_indicator_trend_filter",
-                "价格位于长期均线上方、MACD 为正且 ATR 扩张时才允许入场。",
-                "买入条件：价格在长期均线上方且 MACD/ATR 同步转强",
-                "卖出条件：价格跌破长期均线或 MACD 转弱",
-                120,
-                {
-                    "indicator_family": "multi_indicator_trend_filter",
-                    "trend_average": 120,
-                    "fast_period": 12,
-                    "slow_period": 26,
-                    "signal_period": 9,
-                    "atr_period": 14,
-                    "atr_expansion_lookback": 20,
-                    "breakout_lookback": 20,
-                },
-            )
-        if (("均线多头" in text or "MOVING AVERAGES ALIGN" in upper_text) and "RSI" in upper_text and ("放量" in text or "VOLUME" in upper_text)):
-            return build_payload(
-                "trend_momentum_volume_mix",
-                "均线多头、RSI 强势且放量突破同时出现时买入，任一主信号转弱时卖出。",
-                "买入条件：均线多头且 RSI 强势并放量突破",
-                "卖出条件：跌破中期均线或 RSI 走弱",
-                120,
-                {
-                    "indicator_family": "trend_momentum_volume_mix",
-                    "fast_period": 20,
-                    "mid_period": 60,
-                    "slow_period": 120,
-                    "rsi_period": 14,
-                    "rsi_threshold": 55.0,
-                    "price_lookback": 20,
-                    "volume_period": 20,
-                    "volume_multiplier": 1.5,
-                },
-            )
-        if (("SMA20" in upper_text and "SMA60" in upper_text and "布林带" in text) or contains_all("SMA20", "SMA60", "BOLLINGER")):
-            return build_payload(
-                "sma_bollinger_combo",
-                "SMA20 在 SMA60 上方且价格重回布林带中轨上方时买入，跌破中轨或趋势转弱卖出。",
-                "买入条件：SMA20 > SMA60 且价格重回布林带中轨",
-                "卖出条件：跌破中轨或 SMA20 跌回 SMA60 下方",
-                60,
-                {
-                    "indicator_family": "sma_bollinger_combo",
-                    "trend_fast_period": 20,
-                    "trend_slow_period": 60,
-                    "period": 20,
-                    "std_dev": 2.0,
-                    "exit_line": "middle_band",
-                },
-            )
-        if "MACD" in upper_text and "RSI" in upper_text and ("上穿50" in text or "ABOVE 50" in upper_text):
-            return build_payload(
-                "macd_rsi_combo",
-                "MACD 金叉且 RSI14 上穿 50 时买入，任一信号走弱时卖出。",
-                "买入条件：MACD 金叉且 RSI14 > 50",
-                "卖出条件：MACD 死叉或 RSI14 < 50",
-                26,
-                {
-                    "indicator_family": "macd_rsi_combo",
-                    "fast_period": 12,
-                    "slow_period": 26,
-                    "signal_period": 9,
-                    "rsi_period": 14,
-                    "rsi_threshold": 50.0,
-                },
-            )
-        if (("SMA20" in upper_text and "SMA60" in upper_text and "SMA120" in upper_text) or ("三重均线" in text)):
-            return build_payload(
-                "triple_moving_average_trend_stack",
-                "SMA20 > SMA60 > SMA120 且价格回踩 SMA20 后重新转强时买入，跌破 SMA60 时卖出。",
-                "买入条件：三重均线多头排列且价格回踩后转强",
-                "卖出条件：跌破 SMA60 或均线栈失效",
-                120,
-                {
-                    "indicator_family": "triple_moving_average_trend_stack",
-                    "fast_period": 20,
-                    "mid_period": 60,
-                    "slow_period": 120,
-                },
-            )
-        if ("OBV" in upper_text and ("创新高" in text or "NEW HIGH" in upper_text)):
-            return build_payload(
-                "obv_trend_confirmation",
-                "价格站上趋势均线且 OBV 同步创新高时买入，OBV 转弱或跌回均线下方卖出。",
-                "买入条件：价格在均线上方且 OBV 创新高",
-                "卖出条件：OBV 转弱或价格跌回均线下方",
-                50,
-                {
-                    "indicator_family": "obv_trend_confirmation",
-                    "trend_average": 50,
-                    "obv_lookback": 20,
-                    "obv_signal_period": 10,
-                },
-            )
-        if (("支撑" in text and "阻力" in text) or contains_all("SUPPORT", "RESISTANCE")):
-            return build_payload(
-                "support_resistance_bounce",
-                "回踩支撑企稳买入，接近阻力位或跌破支撑时卖出。",
-                "买入条件：支撑位附近企稳反弹",
-                "卖出条件：接近阻力位或跌破支撑",
-                20,
-                {
-                    "indicator_family": "support_resistance_bounce",
-                    "support_lookback": 20,
-                    "resistance_lookback": 20,
-                    "proximity_pct": 2.0,
-                },
-            )
-        if ("ATR" in upper_text and ("突破前高" in text or "BREAKS A PRIOR HIGH" in upper_text)):
-            return build_payload(
-                "atr_breakout",
-                "ATR14 扩张且价格突破前高时买入，跌回突破区域下方卖出。",
-                "买入条件：ATR14 扩张且价格突破前高",
-                "卖出条件：价格跌回突破区域下方",
-                20,
-                {
-                    "indicator_family": "atr_breakout",
-                    "atr_period": 14,
-                    "atr_expansion_lookback": 20,
-                    "breakout_lookback": 20,
-                    "exit_lookback": 10,
-                },
-            )
-        if (("布林带" in text and "上轨" in text) or contains_all("BOLLINGER", "UPPER")):
-            return build_payload(
-                "bollinger_breakout",
-                "价格突破布林带上轨时买入，跌回中轨时卖出。",
-                "买入条件：收盘价上破布林带上轨",
-                "卖出条件：收盘价跌回布林带中轨",
-                20,
-                {
-                    "indicator_family": "bollinger_breakout",
-                    "period": 20,
-                    "std_dev": 2.0,
-                    "exit_line": "middle_band",
-                },
-            )
+            if matched:
+                return {
+                    "strategy_kind": template.strategy_kind,
+                    "normalized_text": str(template.classic_normalized_text),
+                    "summary": {
+                        "entry": str(template.classic_entry),
+                        "exit": str(template.classic_exit),
+                        "strategy": RuleBacktestService._strategy_kind_label(template.strategy_kind),
+                    },
+                    "max_lookback": int(template.classic_max_lookback or 1),
+                    "setup": dict(template.classic_setup),
+                }
         return None
 
     def _finalize_strategy_spec(self, parsed: ParsedStrategy, strategy_spec: Dict[str, Any]) -> Dict[str, Any]:
@@ -9814,297 +9886,46 @@ class RuleBacktestService:
                 "",
             )
         ).strip().lower()
-        if parsed.strategy_kind == "moving_average_crossover":
-            fast_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "fast_period"), setup.get("fast_period"), 5))
-            slow_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "slow_period"), setup.get("slow_period"), 20))
-            fast_type = str(self._first_defined(self._nested_value(existing_spec, "signal", "fast_type"), setup.get("fast_type"), "simple"))
-            slow_type = str(self._first_defined(self._nested_value(existing_spec, "signal", "slow_type"), setup.get("slow_type"), "simple"))
-            fast_label = self._format_average_label(fast_type, fast_period)
-            slow_label = self._format_average_label(slow_type, slow_period)
-            return (
-                asdict(
-                    _MovingAverageSignalPayload(
-                        indicator_family=indicator_family or "moving_average",
-                        fast_period=fast_period,
-                        slow_period=slow_period,
-                        fast_type=fast_type,
-                        slow_type=slow_type,
-                        entry_condition=str(self._first_defined(self._nested_value(existing_spec, "signal", "entry_condition"), "fast_crosses_above_slow")),
-                        exit_condition=str(self._first_defined(self._nested_value(existing_spec, "signal", "exit_condition"), "fast_crosses_below_slow")),
-                    )
-                ),
-                f"买入条件：{fast_label} 上穿 {slow_label}",
-                f"卖出条件：{fast_label} 下穿 {slow_label}",
+        template = self._STRATEGY_TEMPLATE_REGISTRY.get(parsed.strategy_kind)
+        if template is None:
+            raise ValueError(f"unsupported deterministic strategy kind: {parsed.strategy_kind}")
+
+        values: Dict[str, Any] = {}
+        for parameter_name, cast, default in template.parameters:
+            raw_value = self._first_defined(
+                self._nested_value(existing_spec, "signal", parameter_name),
+                setup.get(parameter_name),
             )
-        if parsed.strategy_kind == "macd_crossover":
-            fast_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "fast_period"), setup.get("fast_period"), 12))
-            slow_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "slow_period"), setup.get("slow_period"), 26))
-            signal_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "signal_period"), setup.get("signal_period"), 9))
-            label = f"MACD({fast_period},{slow_period},{signal_period})"
-            return (
-                asdict(
-                    _MacdSignalPayload(
-                        indicator_family=indicator_family or "macd",
-                        fast_period=fast_period,
-                        slow_period=slow_period,
-                        signal_period=signal_period,
-                        entry_condition=str(self._first_defined(self._nested_value(existing_spec, "signal", "entry_condition"), "macd_crosses_above_signal")),
-                        exit_condition=str(self._first_defined(self._nested_value(existing_spec, "signal", "exit_condition"), "macd_crosses_below_signal")),
-                    )
-                ),
-                f"买入条件：{label} 金叉",
-                f"卖出条件：{label} 死叉",
+            if raw_value is None:
+                raw_value = (
+                    default(values)
+                    if callable(default)
+                    else default
+                )
+            values[parameter_name] = cast(raw_value)
+
+        signal_spec: Dict[str, Any] = {
+            "indicator_family": indicator_family or template.indicator_family,
+        }
+        for field_name in template.signal_field_order:
+            if field_name in values:
+                signal_spec[field_name] = values[field_name]
+                continue
+            fixed_value = template.fixed_signal_values[field_name]
+            signal_spec[field_name] = (
+                fixed_value(values)
+                if callable(fixed_value)
+                else fixed_value
             )
-        if parsed.strategy_kind == "rsi_threshold":
-            period = int(self._first_defined(self._nested_value(existing_spec, "signal", "period"), setup.get("period"), 14))
-            lower_threshold = float(self._first_defined(self._nested_value(existing_spec, "signal", "lower_threshold"), setup.get("lower_threshold"), 30.0))
-            upper_threshold = float(self._first_defined(self._nested_value(existing_spec, "signal", "upper_threshold"), setup.get("upper_threshold"), 70.0))
-            label = f"RSI{period}"
-            return (
-                asdict(
-                    _RsiSignalPayload(
-                        indicator_family=indicator_family or "rsi",
-                        period=period,
-                        lower_threshold=lower_threshold,
-                        upper_threshold=upper_threshold,
-                        entry_condition=str(self._first_defined(self._nested_value(existing_spec, "signal", "entry_condition"), "rsi_crosses_below_lower_threshold")),
-                        exit_condition=str(self._first_defined(self._nested_value(existing_spec, "signal", "exit_condition"), "rsi_crosses_above_upper_threshold")),
-                    )
-                ),
-                f"买入条件：{label} 低于 {lower_threshold:g}",
-                f"卖出条件：{label} 高于 {upper_threshold:g}",
-            )
-        if parsed.strategy_kind == "bollinger_breakout":
-            period = int(self._first_defined(self._nested_value(existing_spec, "signal", "period"), setup.get("period"), 20))
-            std_dev = float(self._first_defined(self._nested_value(existing_spec, "signal", "std_dev"), setup.get("std_dev"), 2.0))
-            exit_line = str(self._first_defined(self._nested_value(existing_spec, "signal", "exit_line"), setup.get("exit_line"), "middle_band"))
-            exit_label = "中轨" if exit_line == "middle_band" else "下轨"
-            return (
-                {
-                    "indicator_family": indicator_family or "bollinger_breakout",
-                    "period": period,
-                    "std_dev": std_dev,
-                    "entry_condition": "close_crosses_above_upper_band",
-                    "exit_condition": f"close_crosses_below_{exit_line}",
-                    "exit_line": exit_line,
-                },
-                f"买入条件：价格上破布林带上轨 ({period}, {std_dev:g})",
-                f"卖出条件：价格跌回布林带{exit_label}",
-            )
-        if parsed.strategy_kind == "atr_breakout":
-            atr_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "atr_period"), setup.get("atr_period"), 14))
-            breakout_lookback = int(self._first_defined(self._nested_value(existing_spec, "signal", "breakout_lookback"), setup.get("breakout_lookback"), 20))
-            atr_expansion_lookback = int(self._first_defined(self._nested_value(existing_spec, "signal", "atr_expansion_lookback"), setup.get("atr_expansion_lookback"), breakout_lookback))
-            exit_lookback = int(self._first_defined(self._nested_value(existing_spec, "signal", "exit_lookback"), setup.get("exit_lookback"), max(5, breakout_lookback // 2)))
-            return (
-                {
-                    "indicator_family": indicator_family or "atr_breakout",
-                    "atr_period": atr_period,
-                    "breakout_lookback": breakout_lookback,
-                    "atr_expansion_lookback": atr_expansion_lookback,
-                    "exit_lookback": exit_lookback,
-                    "entry_condition": "atr_expands_and_close_breaks_above_range",
-                    "exit_condition": "close_breaks_below_exit_range",
-                },
-                f"买入条件：ATR{atr_period} 扩张且价格突破前 {breakout_lookback} 日高点",
-                f"卖出条件：价格跌破前 {exit_lookback} 日防守区",
-            )
-        if parsed.strategy_kind == "obv_trend_confirmation":
-            trend_average = int(self._first_defined(self._nested_value(existing_spec, "signal", "trend_average"), setup.get("trend_average"), 50))
-            obv_lookback = int(self._first_defined(self._nested_value(existing_spec, "signal", "obv_lookback"), setup.get("obv_lookback"), 20))
-            obv_signal_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "obv_signal_period"), setup.get("obv_signal_period"), 10))
-            return (
-                {
-                    "indicator_family": indicator_family or "obv_trend_confirmation",
-                    "trend_average": trend_average,
-                    "obv_lookback": obv_lookback,
-                    "obv_signal_period": obv_signal_period,
-                    "entry_condition": "price_above_trend_and_obv_breakout",
-                    "exit_condition": "obv_weakens_or_price_below_trend",
-                },
-                f"买入条件：价格站上 SMA{trend_average} 且 OBV 创 {obv_lookback} 日新高",
-                f"卖出条件：OBV 跌破信号线或价格跌回 SMA{trend_average} 下方",
-            )
-        if parsed.strategy_kind == "support_resistance_bounce":
-            support_lookback = int(self._first_defined(self._nested_value(existing_spec, "signal", "support_lookback"), setup.get("support_lookback"), 20))
-            resistance_lookback = int(self._first_defined(self._nested_value(existing_spec, "signal", "resistance_lookback"), setup.get("resistance_lookback"), 20))
-            proximity_pct = float(self._first_defined(self._nested_value(existing_spec, "signal", "proximity_pct"), setup.get("proximity_pct"), 2.0))
-            return (
-                {
-                    "indicator_family": indicator_family or "support_resistance_bounce",
-                    "support_lookback": support_lookback,
-                    "resistance_lookback": resistance_lookback,
-                    "proximity_pct": proximity_pct,
-                    "entry_condition": "bounce_from_support",
-                    "exit_condition": "touch_resistance_or_break_support",
-                },
-                f"买入条件：接近前 {support_lookback} 日支撑并企稳反弹",
-                f"卖出条件：接近前 {resistance_lookback} 日阻力或跌破支撑",
-            )
-        if parsed.strategy_kind == "macd_rsi_combo":
-            fast_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "fast_period"), setup.get("fast_period"), 12))
-            slow_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "slow_period"), setup.get("slow_period"), 26))
-            signal_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "signal_period"), setup.get("signal_period"), 9))
-            rsi_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "rsi_period"), setup.get("rsi_period"), 14))
-            rsi_threshold = float(self._first_defined(self._nested_value(existing_spec, "signal", "rsi_threshold"), setup.get("rsi_threshold"), 50.0))
-            return (
-                {
-                    "indicator_family": indicator_family or "macd_rsi_combo",
-                    "fast_period": fast_period,
-                    "slow_period": slow_period,
-                    "signal_period": signal_period,
-                    "rsi_period": rsi_period,
-                    "rsi_threshold": rsi_threshold,
-                    "entry_condition": "macd_crosses_above_signal_and_rsi_above_threshold",
-                    "exit_condition": "macd_crosses_below_signal_or_rsi_below_threshold",
-                },
-                f"买入条件：MACD({fast_period},{slow_period},{signal_period}) 金叉且 RSI{rsi_period} > {rsi_threshold:g}",
-                f"卖出条件：MACD 死叉或 RSI{rsi_period} < {rsi_threshold:g}",
-            )
-        if parsed.strategy_kind == "sma_bollinger_combo":
-            trend_fast_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "trend_fast_period"), setup.get("trend_fast_period"), 20))
-            trend_slow_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "trend_slow_period"), setup.get("trend_slow_period"), 60))
-            period = int(self._first_defined(self._nested_value(existing_spec, "signal", "period"), setup.get("period"), 20))
-            std_dev = float(self._first_defined(self._nested_value(existing_spec, "signal", "std_dev"), setup.get("std_dev"), 2.0))
-            return (
-                {
-                    "indicator_family": indicator_family or "sma_bollinger_combo",
-                    "trend_fast_period": trend_fast_period,
-                    "trend_slow_period": trend_slow_period,
-                    "period": period,
-                    "std_dev": std_dev,
-                    "entry_condition": "trend_bullish_and_close_reclaims_middle_band",
-                    "exit_condition": "trend_breaks_or_close_below_middle_band",
-                },
-                f"买入条件：SMA{trend_fast_period} > SMA{trend_slow_period} 且价格重回布林带中轨",
-                f"卖出条件：价格跌回中轨下方或 SMA{trend_fast_period} 跌回 SMA{trend_slow_period} 下方",
-            )
-        if parsed.strategy_kind == "trend_momentum_volume_mix":
-            fast_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "fast_period"), setup.get("fast_period"), 20))
-            mid_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "mid_period"), setup.get("mid_period"), 60))
-            slow_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "slow_period"), setup.get("slow_period"), 120))
-            rsi_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "rsi_period"), setup.get("rsi_period"), 14))
-            rsi_threshold = float(self._first_defined(self._nested_value(existing_spec, "signal", "rsi_threshold"), setup.get("rsi_threshold"), 55.0))
-            price_lookback = int(self._first_defined(self._nested_value(existing_spec, "signal", "price_lookback"), setup.get("price_lookback"), 20))
-            volume_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "volume_period"), setup.get("volume_period"), 20))
-            volume_multiplier = float(self._first_defined(self._nested_value(existing_spec, "signal", "volume_multiplier"), setup.get("volume_multiplier"), 1.5))
-            return (
-                {
-                    "indicator_family": indicator_family or "trend_momentum_volume_mix",
-                    "fast_period": fast_period,
-                    "mid_period": mid_period,
-                    "slow_period": slow_period,
-                    "rsi_period": rsi_period,
-                    "rsi_threshold": rsi_threshold,
-                    "price_lookback": price_lookback,
-                    "volume_period": volume_period,
-                    "volume_multiplier": volume_multiplier,
-                    "entry_condition": "trend_momentum_volume_alignment",
-                    "exit_condition": "trend_momentum_volume_breakdown",
-                },
-                f"买入条件：SMA{fast_period}/{mid_period}/{slow_period} 多头排列且 RSI{rsi_period} > {rsi_threshold:g} 并放量突破",
-                f"卖出条件：价格跌破 SMA{mid_period} 或 RSI{rsi_period} 失守 {rsi_threshold:g}",
-            )
-        if parsed.strategy_kind == "multi_indicator_trend_filter":
-            trend_average = int(self._first_defined(self._nested_value(existing_spec, "signal", "trend_average"), setup.get("trend_average"), 120))
-            fast_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "fast_period"), setup.get("fast_period"), 12))
-            slow_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "slow_period"), setup.get("slow_period"), 26))
-            signal_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "signal_period"), setup.get("signal_period"), 9))
-            atr_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "atr_period"), setup.get("atr_period"), 14))
-            atr_expansion_lookback = int(self._first_defined(self._nested_value(existing_spec, "signal", "atr_expansion_lookback"), setup.get("atr_expansion_lookback"), 20))
-            breakout_lookback = int(self._first_defined(self._nested_value(existing_spec, "signal", "breakout_lookback"), setup.get("breakout_lookback"), 20))
-            return (
-                {
-                    "indicator_family": indicator_family or "multi_indicator_trend_filter",
-                    "trend_average": trend_average,
-                    "fast_period": fast_period,
-                    "slow_period": slow_period,
-                    "signal_period": signal_period,
-                    "atr_period": atr_period,
-                    "atr_expansion_lookback": atr_expansion_lookback,
-                    "breakout_lookback": breakout_lookback,
-                    "entry_condition": "trend_filter_allows_breakout",
-                    "exit_condition": "trend_filter_breaks",
-                },
-                f"买入条件：价格高于 SMA{trend_average} 且 MACD 为正并 ATR{atr_period} 扩张后突破",
-                f"卖出条件：价格跌回 SMA{trend_average} 下方或 MACD 转负",
-            )
-        if parsed.strategy_kind == "bollinger_rsi_reversion_combo":
-            period = int(self._first_defined(self._nested_value(existing_spec, "signal", "period"), setup.get("period"), 20))
-            std_dev = float(self._first_defined(self._nested_value(existing_spec, "signal", "std_dev"), setup.get("std_dev"), 2.0))
-            rsi_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "rsi_period"), setup.get("rsi_period"), 2))
-            rsi_entry_threshold = float(self._first_defined(self._nested_value(existing_spec, "signal", "rsi_entry_threshold"), setup.get("rsi_entry_threshold"), 10.0))
-            rsi_exit_threshold = float(self._first_defined(self._nested_value(existing_spec, "signal", "rsi_exit_threshold"), setup.get("rsi_exit_threshold"), 60.0))
-            return (
-                {
-                    "indicator_family": indicator_family or "bollinger_rsi_reversion_combo",
-                    "period": period,
-                    "std_dev": std_dev,
-                    "rsi_period": rsi_period,
-                    "rsi_entry_threshold": rsi_entry_threshold,
-                    "rsi_exit_threshold": rsi_exit_threshold,
-                    "exit_line": "middle_band",
-                    "entry_condition": "close_below_lower_band_and_rsi_oversold",
-                    "exit_condition": "close_above_middle_band_or_rsi_recovery",
-                },
-                f"买入条件：跌破布林带下轨且 RSI{rsi_period} < {rsi_entry_threshold:g}",
-                f"卖出条件：回到中轨或 RSI{rsi_period} > {rsi_exit_threshold:g}",
-            )
-        if parsed.strategy_kind == "triple_moving_average_trend_stack":
-            fast_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "fast_period"), setup.get("fast_period"), 20))
-            mid_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "mid_period"), setup.get("mid_period"), 60))
-            slow_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "slow_period"), setup.get("slow_period"), 120))
-            return (
-                {
-                    "indicator_family": indicator_family or "triple_moving_average_trend_stack",
-                    "fast_period": fast_period,
-                    "mid_period": mid_period,
-                    "slow_period": slow_period,
-                    "entry_condition": "bullish_stack_with_fast_pullback_reclaim",
-                    "exit_condition": "close_below_mid_or_stack_breaks",
-                },
-                f"买入条件：SMA{fast_period} > SMA{mid_period} > SMA{slow_period} 且回踩 SMA{fast_period} 后转强",
-                f"卖出条件：跌破 SMA{mid_period} 或三重均线失效",
-            )
-        if parsed.strategy_kind == "support_resistance_macd_combo":
-            support_lookback = int(self._first_defined(self._nested_value(existing_spec, "signal", "support_lookback"), setup.get("support_lookback"), 20))
-            resistance_lookback = int(self._first_defined(self._nested_value(existing_spec, "signal", "resistance_lookback"), setup.get("resistance_lookback"), 20))
-            fast_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "fast_period"), setup.get("fast_period"), 12))
-            slow_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "slow_period"), setup.get("slow_period"), 26))
-            signal_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "signal_period"), setup.get("signal_period"), 9))
-            proximity_pct = float(self._first_defined(self._nested_value(existing_spec, "signal", "proximity_pct"), setup.get("proximity_pct"), 2.0))
-            return (
-                {
-                    "indicator_family": indicator_family or "support_resistance_macd_combo",
-                    "support_lookback": support_lookback,
-                    "resistance_lookback": resistance_lookback,
-                    "fast_period": fast_period,
-                    "slow_period": slow_period,
-                    "signal_period": signal_period,
-                    "proximity_pct": proximity_pct,
-                    "entry_condition": "support_bounce_with_macd_confirmation",
-                    "exit_condition": "resistance_or_macd_breakdown",
-                },
-                f"买入条件：支撑位企稳且 MACD({fast_period},{slow_period},{signal_period}) 金叉",
-                f"卖出条件：接近阻力位或 MACD 死叉",
-            )
-        if parsed.strategy_kind == "vwap_volume_breakout_combo":
-            price_lookback = int(self._first_defined(self._nested_value(existing_spec, "signal", "price_lookback"), setup.get("price_lookback"), 20))
-            volume_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "volume_period"), setup.get("volume_period"), 20))
-            volume_multiplier = float(self._first_defined(self._nested_value(existing_spec, "signal", "volume_multiplier"), setup.get("volume_multiplier"), 1.8))
-            return (
-                {
-                    "indicator_family": indicator_family or "vwap_volume_breakout_combo",
-                    "price_lookback": price_lookback,
-                    "volume_period": volume_period,
-                    "volume_multiplier": volume_multiplier,
-                    "entry_condition": "vwap_reclaim_with_volume_breakout",
-                    "exit_condition": "close_below_vwap",
-                },
-                "买入条件：价格重回 VWAP 上方且放量突破平台高点",
-                "卖出条件：价格跌回 VWAP 下方",
-            )
-        raise ValueError(f"unsupported deterministic strategy kind: {parsed.strategy_kind}")
+
+        def render_summary(summary: Any) -> str:
+            return str(summary(values) if callable(summary) else summary.format(**values))
+
+        return (
+            signal_spec,
+            render_summary(template.summary_entry),
+            render_summary(template.summary_exit),
+        )
 
     def _build_periodic_assumptions(self, parsed: ParsedStrategy, strategy_spec: Dict[str, Any]) -> List[Dict[str, Any]]:
         assumptions: List[Dict[str, Any]] = []
@@ -10682,10 +10503,6 @@ class RuleBacktestService:
             "vwap_volume_breakout_combo": "VWAP + 放量突破组合策略",
             "rule_conditions": "条件规则策略",
         }.get(strategy_kind, strategy_kind)
-
-    @staticmethod
-    def _format_average_label(average_type: str, period: int) -> str:
-        return f"{'EMA' if str(average_type).lower() == 'ema' else 'SMA'}{int(period)}"
 
     @staticmethod
     def _nested_value(payload: Any, *path: str) -> Any:

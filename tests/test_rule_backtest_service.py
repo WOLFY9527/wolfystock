@@ -8,6 +8,7 @@ import json
 import os
 import tempfile
 import unittest
+from dataclasses import FrozenInstanceError
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -16,7 +17,7 @@ import pandas as pd
 from sqlalchemy import select
 
 from src.config import Config
-from src.core.rule_backtest_engine import RuleBacktestEngine, RuleBacktestParser
+from src.core.rule_backtest_engine import ParsedStrategy, RuleBacktestEngine, RuleBacktestParser
 from src.services.backtest_parameter_stability import build_parameter_stability_plan
 from src.services.backtest_professional_readiness import build_backtest_professional_readiness
 from src.services import rule_backtest_service as rule_backtest_service_module
@@ -133,6 +134,269 @@ WALK_FORWARD_DIAGNOSTIC_WINDOW_KEYS = {
     "metrics",
 }
 
+STRATEGY_SIGNAL_CASES = {
+    "moving_average_crossover": {
+        "first_numeric": "fast_period",
+        "overridable": (
+            "fast_period",
+            "slow_period",
+            "fast_type",
+            "slow_type",
+            "entry_condition",
+            "exit_condition",
+        ),
+        "signal": {
+            "indicator_family": "moving_average",
+            "fast_period": 5,
+            "slow_period": 20,
+            "fast_type": "simple",
+            "slow_type": "simple",
+            "entry_condition": "fast_crosses_above_slow",
+            "exit_condition": "fast_crosses_below_slow",
+        },
+    },
+    "macd_crossover": {
+        "first_numeric": "fast_period",
+        "overridable": ("fast_period", "slow_period", "signal_period", "entry_condition", "exit_condition"),
+        "signal": {
+            "indicator_family": "macd",
+            "fast_period": 12,
+            "slow_period": 26,
+            "signal_period": 9,
+            "entry_condition": "macd_crosses_above_signal",
+            "exit_condition": "macd_crosses_below_signal",
+        },
+    },
+    "rsi_threshold": {
+        "first_numeric": "period",
+        "overridable": ("period", "lower_threshold", "upper_threshold", "entry_condition", "exit_condition"),
+        "signal": {
+            "indicator_family": "rsi",
+            "period": 14,
+            "lower_threshold": 30.0,
+            "upper_threshold": 70.0,
+            "entry_condition": "rsi_crosses_below_lower_threshold",
+            "exit_condition": "rsi_crosses_above_upper_threshold",
+        },
+    },
+    "bollinger_breakout": {
+        "first_numeric": "period",
+        "overridable": ("period", "std_dev", "exit_line"),
+        "signal": {
+            "indicator_family": "bollinger_breakout",
+            "period": 20,
+            "std_dev": 2.0,
+            "entry_condition": "close_crosses_above_upper_band",
+            "exit_condition": "close_crosses_below_middle_band",
+            "exit_line": "middle_band",
+        },
+    },
+    "atr_breakout": {
+        "first_numeric": "atr_period",
+        "overridable": ("atr_period", "breakout_lookback", "atr_expansion_lookback", "exit_lookback"),
+        "signal": {
+            "indicator_family": "atr_breakout",
+            "atr_period": 14,
+            "breakout_lookback": 20,
+            "atr_expansion_lookback": 20,
+            "exit_lookback": 10,
+            "entry_condition": "atr_expands_and_close_breaks_above_range",
+            "exit_condition": "close_breaks_below_exit_range",
+        },
+    },
+    "obv_trend_confirmation": {
+        "first_numeric": "trend_average",
+        "overridable": ("trend_average", "obv_lookback", "obv_signal_period"),
+        "signal": {
+            "indicator_family": "obv_trend_confirmation",
+            "trend_average": 50,
+            "obv_lookback": 20,
+            "obv_signal_period": 10,
+            "entry_condition": "price_above_trend_and_obv_breakout",
+            "exit_condition": "obv_weakens_or_price_below_trend",
+        },
+    },
+    "support_resistance_bounce": {
+        "first_numeric": "support_lookback",
+        "overridable": ("support_lookback", "resistance_lookback", "proximity_pct"),
+        "signal": {
+            "indicator_family": "support_resistance_bounce",
+            "support_lookback": 20,
+            "resistance_lookback": 20,
+            "proximity_pct": 2.0,
+            "entry_condition": "bounce_from_support",
+            "exit_condition": "touch_resistance_or_break_support",
+        },
+    },
+    "macd_rsi_combo": {
+        "first_numeric": "fast_period",
+        "overridable": ("fast_period", "slow_period", "signal_period", "rsi_period", "rsi_threshold"),
+        "signal": {
+            "indicator_family": "macd_rsi_combo",
+            "fast_period": 12,
+            "slow_period": 26,
+            "signal_period": 9,
+            "rsi_period": 14,
+            "rsi_threshold": 50.0,
+            "entry_condition": "macd_crosses_above_signal_and_rsi_above_threshold",
+            "exit_condition": "macd_crosses_below_signal_or_rsi_below_threshold",
+        },
+    },
+    "sma_bollinger_combo": {
+        "first_numeric": "trend_fast_period",
+        "overridable": ("trend_fast_period", "trend_slow_period", "period", "std_dev"),
+        "signal": {
+            "indicator_family": "sma_bollinger_combo",
+            "trend_fast_period": 20,
+            "trend_slow_period": 60,
+            "period": 20,
+            "std_dev": 2.0,
+            "entry_condition": "trend_bullish_and_close_reclaims_middle_band",
+            "exit_condition": "trend_breaks_or_close_below_middle_band",
+        },
+    },
+    "trend_momentum_volume_mix": {
+        "first_numeric": "fast_period",
+        "overridable": (
+            "fast_period",
+            "mid_period",
+            "slow_period",
+            "rsi_period",
+            "rsi_threshold",
+            "price_lookback",
+            "volume_period",
+            "volume_multiplier",
+        ),
+        "signal": {
+            "indicator_family": "trend_momentum_volume_mix",
+            "fast_period": 20,
+            "mid_period": 60,
+            "slow_period": 120,
+            "rsi_period": 14,
+            "rsi_threshold": 55.0,
+            "price_lookback": 20,
+            "volume_period": 20,
+            "volume_multiplier": 1.5,
+            "entry_condition": "trend_momentum_volume_alignment",
+            "exit_condition": "trend_momentum_volume_breakdown",
+        },
+    },
+    "multi_indicator_trend_filter": {
+        "first_numeric": "trend_average",
+        "overridable": (
+            "trend_average",
+            "fast_period",
+            "slow_period",
+            "signal_period",
+            "atr_period",
+            "atr_expansion_lookback",
+            "breakout_lookback",
+        ),
+        "signal": {
+            "indicator_family": "multi_indicator_trend_filter",
+            "trend_average": 120,
+            "fast_period": 12,
+            "slow_period": 26,
+            "signal_period": 9,
+            "atr_period": 14,
+            "atr_expansion_lookback": 20,
+            "breakout_lookback": 20,
+            "entry_condition": "trend_filter_allows_breakout",
+            "exit_condition": "trend_filter_breaks",
+        },
+    },
+    "bollinger_rsi_reversion_combo": {
+        "first_numeric": "period",
+        "overridable": ("period", "std_dev", "rsi_period", "rsi_entry_threshold", "rsi_exit_threshold"),
+        "signal": {
+            "indicator_family": "bollinger_rsi_reversion_combo",
+            "period": 20,
+            "std_dev": 2.0,
+            "rsi_period": 2,
+            "rsi_entry_threshold": 10.0,
+            "rsi_exit_threshold": 60.0,
+            "exit_line": "middle_band",
+            "entry_condition": "close_below_lower_band_and_rsi_oversold",
+            "exit_condition": "close_above_middle_band_or_rsi_recovery",
+        },
+    },
+    "triple_moving_average_trend_stack": {
+        "first_numeric": "fast_period",
+        "overridable": ("fast_period", "mid_period", "slow_period"),
+        "signal": {
+            "indicator_family": "triple_moving_average_trend_stack",
+            "fast_period": 20,
+            "mid_period": 60,
+            "slow_period": 120,
+            "entry_condition": "bullish_stack_with_fast_pullback_reclaim",
+            "exit_condition": "close_below_mid_or_stack_breaks",
+        },
+    },
+    "support_resistance_macd_combo": {
+        "first_numeric": "support_lookback",
+        "overridable": (
+            "support_lookback",
+            "resistance_lookback",
+            "fast_period",
+            "slow_period",
+            "signal_period",
+            "proximity_pct",
+        ),
+        "signal": {
+            "indicator_family": "support_resistance_macd_combo",
+            "support_lookback": 20,
+            "resistance_lookback": 20,
+            "fast_period": 12,
+            "slow_period": 26,
+            "signal_period": 9,
+            "proximity_pct": 2.0,
+            "entry_condition": "support_bounce_with_macd_confirmation",
+            "exit_condition": "resistance_or_macd_breakdown",
+        },
+    },
+    "vwap_volume_breakout_combo": {
+        "first_numeric": "price_lookback",
+        "overridable": ("price_lookback", "volume_period", "volume_multiplier"),
+        "signal": {
+            "indicator_family": "vwap_volume_breakout_combo",
+            "price_lookback": 20,
+            "volume_period": 20,
+            "volume_multiplier": 1.8,
+            "entry_condition": "vwap_reclaim_with_volume_breakout",
+            "exit_condition": "close_below_vwap",
+        },
+    },
+}
+
+CLASSIC_TEMPLATE_ALIAS_CASES = {
+    "support_resistance_macd_combo": (
+        "MACD 支撑位企稳 阻力位",
+        "MACD HOLDS SUPPORT RESISTANCE",
+        "MACD 支撑位企稳 RESISTANCE",
+        "MACD HOLDS SUPPORT 阻力位",
+    ),
+    "bollinger_rsi_reversion_combo": ("布林带下轨 RSI", "BOLLINGER LOWER RSI"),
+    "vwap_volume_breakout_combo": ("VWAP 放量", "VWAP VOLUME"),
+    "multi_indicator_trend_filter": (
+        "长期均线 MACD ATR",
+        "LONG-TERM MACD ATR",
+        "长期均线 MACD 波动率扩张",
+        "长期均线 MACD VOLATILITY",
+    ),
+    "trend_momentum_volume_mix": (
+        "均线多头 RSI 放量",
+        "MOVING AVERAGES ALIGN RSI 放量",
+        "均线多头 RSI VOLUME",
+    ),
+    "sma_bollinger_combo": ("SMA20 SMA60 布林带", "SMA20 SMA60 BOLLINGER"),
+    "macd_rsi_combo": ("MACD RSI 上穿50", "MACD RSI ABOVE 50"),
+    "triple_moving_average_trend_stack": ("SMA20 SMA60 SMA120", "三重均线"),
+    "obv_trend_confirmation": ("OBV 创新高", "OBV NEW HIGH"),
+    "support_resistance_bounce": ("支撑 阻力", "SUPPORT RESISTANCE"),
+    "atr_breakout": ("ATR 突破前高", "ATR BREAKS A PRIOR HIGH"),
+    "bollinger_breakout": ("布林带 上轨", "BOLLINGER UPPER"),
+}
+
 
 class RuleBacktestTestCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -198,6 +462,30 @@ class RuleBacktestTestCase(unittest.TestCase):
             )
             for index, close in enumerate(closes)
         ]
+
+    @staticmethod
+    def _make_indicator_parsed(
+        strategy_kind: str,
+        *,
+        setup: dict | None = None,
+        strategy_spec: dict | None = None,
+    ) -> ParsedStrategy:
+        return ParsedStrategy(
+            version="v1",
+            timeframe="daily",
+            source_text="",
+            normalized_text="",
+            entry={"type": "group", "op": "and", "rules": []},
+            exit={"type": "group", "op": "or", "rules": []},
+            confidence=1.0,
+            needs_confirmation=False,
+            ambiguities=[],
+            summary={"entry": "", "exit": "", "strategy": strategy_kind},
+            max_lookback=1,
+            strategy_kind=strategy_kind,
+            setup=dict(setup or {}),
+            strategy_spec=dict(strategy_spec or {}),
+        )
 
     def _seed_history(self, code: str, closes: list[float], *, start: date = date(2024, 1, 1)) -> None:
         with self.db.get_session() as session:
@@ -920,6 +1208,177 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertTrue(parsed["executable"])
         self.assertEqual(parsed["normalization_state"], "assumed")
         self.assertTrue(any(item.get("key") == "rsi_period" for item in parsed["assumptions"]))
+
+    def test_strategy_template_registry_is_immutable_and_complete(self) -> None:
+        registry = RuleBacktestService._STRATEGY_TEMPLATE_REGISTRY
+
+        self.assertEqual(tuple(registry), tuple(STRATEGY_SIGNAL_CASES))
+        self.assertEqual(set(registry), set(rule_backtest_service_module.SUPPORTED_INDICATOR_STRATEGY_FAMILIES))
+        with self.assertRaises(TypeError):
+            registry["test_only"] = object()
+        for strategy_kind, template in registry.items():
+            with self.subTest(strategy_kind=strategy_kind):
+                self.assertEqual(template.strategy_kind, strategy_kind)
+                self.assertIsInstance(template.parameters, tuple)
+                self.assertIsInstance(template.signal_field_order, tuple)
+                with self.assertRaises(FrozenInstanceError):
+                    template.strategy_kind = "mutated"
+                with self.assertRaises(TypeError):
+                    template.classic_setup["test_only"] = True
+                with self.assertRaises(TypeError):
+                    template.fixed_signal_values["test_only"] = True
+
+    def test_classic_template_registry_retains_every_match_alias(self) -> None:
+        for strategy_kind, aliases in CLASSIC_TEMPLATE_ALIAS_CASES.items():
+            for alias in aliases:
+                with self.subTest(strategy_kind=strategy_kind, alias=alias):
+                    matched = RuleBacktestService._match_supported_classic_template(alias)
+                    self.assertIsNotNone(matched)
+                    self.assertEqual(matched["strategy_kind"], strategy_kind)
+
+        self.assertIsNone(RuleBacktestService._match_supported_classic_template(""))
+        self.assertIsNone(RuleBacktestService._match_supported_classic_template("unknown classic strategy"))
+
+    def test_registered_indicator_signal_contracts_preserve_boundaries_and_errors(self) -> None:
+        service = RuleBacktestService(self.db)
+        for strategy_kind, case in STRATEGY_SIGNAL_CASES.items():
+            setup = {"indicator_family": case["signal"]["indicator_family"]}
+            with self.subTest(strategy_kind=strategy_kind, state="minimum_valid"):
+                parsed = self._make_indicator_parsed(strategy_kind, setup=setup)
+                first = service._build_indicator_signal_spec(parsed, setup, {})
+                second = service._build_indicator_signal_spec(
+                    self._make_indicator_parsed(strategy_kind, setup=setup),
+                    setup,
+                    {},
+                )
+                self.assertEqual(first[0], case["signal"])
+                self.assertEqual(first, second)
+
+            complete_signal = {}
+            for field_name in case["overridable"]:
+                default_value = case["signal"][field_name]
+                if isinstance(default_value, bool):
+                    complete_signal[field_name] = not default_value
+                elif isinstance(default_value, int):
+                    complete_signal[field_name] = default_value + 3
+                elif isinstance(default_value, float):
+                    complete_signal[field_name] = default_value + 0.5
+                else:
+                    complete_signal[field_name] = f"custom_{field_name}"
+            with self.subTest(strategy_kind=strategy_kind, state="complete_valid"):
+                complete = service._build_indicator_signal_spec(
+                    self._make_indicator_parsed(strategy_kind, setup=setup),
+                    setup,
+                    {"signal": complete_signal},
+                )[0]
+                for field_name, expected in complete_signal.items():
+                    self.assertEqual(complete[field_name], expected)
+
+            first_numeric = case["first_numeric"]
+            for label, value in (("below", -1), ("zero", 0), ("above", 1001)):
+                with self.subTest(strategy_kind=strategy_kind, boundary=label):
+                    signal = service._build_indicator_signal_spec(
+                        self._make_indicator_parsed(strategy_kind, setup=setup),
+                        setup,
+                        {"signal": {first_numeric: value}},
+                    )[0]
+                    self.assertEqual(signal[first_numeric], value)
+
+            with self.subTest(strategy_kind=strategy_kind, state="invalid_type"):
+                with self.assertRaises(ValueError):
+                    service._build_indicator_signal_spec(
+                        self._make_indicator_parsed(strategy_kind, setup=setup),
+                        setup,
+                        {"signal": {first_numeric: "invalid"}},
+                    )
+
+    def test_registered_indicator_normalization_and_signal_generation_are_deterministic(self) -> None:
+        service = RuleBacktestService(self.db)
+        bars = self._make_bars(
+            [100.0 + ((index % 24) - 12) * 0.45 + index * 0.025 for index in range(140)],
+            volumes=[1000.0 + (index % 17) * 55.0 for index in range(140)],
+        )
+        for strategy_kind in STRATEGY_SIGNAL_CASES:
+            with self.subTest(strategy_kind=strategy_kind, state="normalized"):
+                first = service._normalize_parsed_strategy(
+                    self._make_indicator_parsed(strategy_kind),
+                    code="TEST",
+                    start_date="2024-01-01",
+                    end_date="2024-05-19",
+                    initial_capital=100000,
+                    fee_bps=2.5,
+                    slippage_bps=1.25,
+                )
+                second = service._normalize_parsed_strategy(
+                    self._make_indicator_parsed(strategy_kind),
+                    code="TEST",
+                    start_date="2024-01-01",
+                    end_date="2024-05-19",
+                    initial_capital=100000,
+                    fee_bps=2.5,
+                    slippage_bps=1.25,
+                )
+                self.assertEqual(first.strategy_spec, second.strategy_spec)
+                self.assertEqual(first.strategy_spec["strategy_type"], strategy_kind)
+                first_series = service.engine._build_strategy_signal_series(bars, first.strategy_spec)
+                second_series = service.engine._build_strategy_signal_series(bars, second.strategy_spec)
+                self.assertEqual(first_series, second_series)
+
+            with self.subTest(strategy_kind=strategy_kind, state="missing_date"):
+                missing_date = self._make_indicator_parsed(strategy_kind)
+                missing_date_spec = service._normalize_indicator_strategy_spec(
+                    missing_date,
+                    code="TEST",
+                    start_date=None,
+                    end_date=None,
+                    initial_capital=100000,
+                    fee_bps=0.0,
+                    slippage_bps=0.0,
+                )
+                self.assertEqual(missing_date.normalization_state, "unsupported")
+                self.assertEqual(missing_date.unsupported_reason, "missing_date_range")
+                self.assertEqual(missing_date_spec["strategy_type"], strategy_kind)
+
+            with self.subTest(strategy_kind=strategy_kind, state="missing_symbol"):
+                missing_symbol = self._make_indicator_parsed(strategy_kind)
+                missing_symbol_spec = service._normalize_indicator_strategy_spec(
+                    missing_symbol,
+                    code=None,
+                    start_date="2024-01-01",
+                    end_date="2024-05-19",
+                    initial_capital=100000,
+                    fee_bps=0.0,
+                    slippage_bps=0.0,
+                )
+                self.assertEqual(missing_symbol.normalization_state, "assumed")
+                self.assertIsNone(missing_symbol.unsupported_reason)
+                self.assertEqual(missing_symbol_spec["symbol"], "NONE")
+                self.assertEqual(missing_symbol_spec["strategy_type"], strategy_kind)
+
+    def test_unknown_indicator_identifier_fails_explicitly(self) -> None:
+        service = RuleBacktestService(self.db)
+        with self.assertRaisesRegex(
+            ValueError,
+            "unsupported deterministic strategy kind: unknown_strategy",
+        ):
+            service._build_indicator_signal_spec(
+                self._make_indicator_parsed("unknown_strategy"),
+                {},
+                {},
+            )
+
+    def test_periodic_zero_order_sizes_remain_invalid(self) -> None:
+        service = RuleBacktestService(self.db)
+        with self.assertRaisesRegex(
+            ValueError,
+            "fixed_shares periodic accumulation requires quantity_per_trade",
+        ):
+            service.parse_strategy("从2025-01-01到2025-12-31，每天买0股ORCL")
+        with self.assertRaisesRegex(
+            ValueError,
+            "fixed_amount periodic accumulation requires amount_per_trade",
+        ):
+            service.parse_strategy("从2025-01-01到2025-12-31，每天买0元ORCL")
 
     def test_parse_strategy_returns_compact_unsupported_rewrite_guidance(self) -> None:
         service = RuleBacktestService(self.db)
