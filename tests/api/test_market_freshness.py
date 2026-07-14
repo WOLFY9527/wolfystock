@@ -94,16 +94,17 @@ class MarketFreshnessCacheTestCase(unittest.TestCase):
         self.assertEqual(payload["providerHealth"]["errorSummary"], "数据源暂不可用")
         self.assertNotIn("cnn down", str(payload))
 
-    def test_fallback_data_keeps_fallback_freshness(self) -> None:
+    def test_unavailable_breadth_fails_closed_without_live_freshness(self) -> None:
         service = MarketOverviewService()
 
         with patch.object(service, "_fetch_cn_breadth_snapshot", Mock(side_effect=RuntimeError("provider down"))):
             payload = service.get_cn_breadth()
 
-        self.assertEqual(payload["freshness"], "fallback")
-        self.assertTrue(payload["isFallback"])
+        self.assertEqual(payload["freshness"], "unavailable")
+        self.assertFalse(payload["isFallback"])
+        self.assertTrue(payload["fallbackUsed"])
         self.assertNotEqual(payload["freshness"], "live")
-        self.assertEqual(payload["items"][0]["freshness"], "fallback")
+        self.assertEqual(payload["items"][0]["freshness"], "unavailable")
 
     def test_partial_source_failure_is_reported_as_partial_not_healthy(self) -> None:
         service = MarketOverviewService()
@@ -234,6 +235,44 @@ class MarketFreshnessCacheTestCase(unittest.TestCase):
         self.assertEqual(delayed["freshness"], "delayed")
         self.assertFalse(delayed["isFallback"])
         self.assertNotIn("live", {fallback["freshness"], synthetic["freshness"], delayed["freshness"]})
+
+    def test_missing_observation_time_is_unavailable_not_fresh(self) -> None:
+        now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ)
+
+        missing = get_freshness_status(None, "equity_index", "sina", False, now=now)
+
+        self.assertEqual(missing["freshness"], "unavailable")
+        self.assertTrue(missing["isUnavailable"])
+        self.assertNotIn(missing["freshness"], {"live", "fresh", "delayed", "cached"})
+
+    def test_official_observation_age_policy_holds_at_restart_boundary(self) -> None:
+        now = datetime(2026, 5, 13, 10, 0, tzinfo=CN_TZ)
+
+        at_boundary = get_freshness_status(
+            "2026-05-08T16:00:00-04:00",
+            "macro_rate",
+            "fred",
+            False,
+            source_type="official_public",
+            series_id="DGS10",
+            official_observation_date="2026-05-08",
+            now=now,
+        )
+        beyond_boundary = get_freshness_status(
+            "2026-05-07T16:00:00-04:00",
+            "macro_rate",
+            "fred",
+            False,
+            source_type="official_public",
+            series_id="DGS10",
+            official_observation_date="2026-05-07",
+            now=now,
+        )
+
+        self.assertEqual(at_boundary["freshness"], "delayed")
+        self.assertFalse(at_boundary["isStale"])
+        self.assertEqual(beyond_boundary["freshness"], "stale")
+        self.assertTrue(beyond_boundary["isStale"])
 
     def test_synthetic_and_delayed_inputs_do_not_get_full_live_confidence(self) -> None:
         synthetic = classify_market_payload_reliability(

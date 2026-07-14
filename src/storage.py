@@ -2537,12 +2537,16 @@ class DatabaseManager:
             raise ValueError("market overview snapshot key is required")
         payload_dict = dict(payload or {})
         now = datetime.now()
+        freshness_evidence = payload_dict.get("sourceFreshnessEvidence")
+        evidence_as_of = (
+            freshness_evidence.get("asOf")
+            if isinstance(freshness_evidence, dict)
+            else None
+        )
         as_of = self._parse_optional_datetime(
             payload_dict.get("asOf")
             or payload_dict.get("as_of")
-            or payload_dict.get("last_update")
-            or payload_dict.get("last_refresh_at")
-            or payload_dict.get("updatedAt")
+            or evidence_as_of
         )
         source = str(payload_dict.get("source") or "")[:64] or None
         freshness = str(payload_dict.get("freshness") or "")[:32] or None

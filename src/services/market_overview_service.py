@@ -932,7 +932,23 @@ def get_freshness_status(
             "warning": FALLBACK_WARNING,
         }
 
-    parsed_as_of = _parse_market_time(as_of) or current
+    parsed_as_of = _parse_market_time(as_of)
+    if parsed_as_of is None and not official_observation_date:
+        is_proxy = source_key == "yfinance_proxy" or source_type_key in {
+            "unofficial_proxy",
+            "public_proxy",
+            "proxy_public",
+        }
+        return {
+            "freshness": "unavailable",
+            "isFallback": False,
+            "isStale": False,
+            "isUnavailable": True,
+            "isProxy": is_proxy,
+            "delayMinutes": 0,
+            "warning": "数据观测时间不可用",
+        }
+    parsed_as_of = parsed_as_of or current
     delay_minutes = max(0, int((current - parsed_as_of).total_seconds() // 60))
     category_key = str(category or "").lower()
 
@@ -4454,65 +4470,176 @@ class MarketOverviewService:
         payload = self._normalize_sentiment_snapshot_payload(cache_key, payload)
         if not self._is_storable_market_snapshot(payload):
             return None
-        last_successful_at = (
-            payload.get("asOf")
-            or payload.get("updatedAt")
-            or payload.get("last_update")
-            or payload.get("last_refresh_at")
-            or row.get("as_of")
-            or row.get("updated_at")
+        freshness_evidence = payload.get("sourceFreshnessEvidence")
+        evidence_as_of = (
+            freshness_evidence.get("asOf")
+            if isinstance(freshness_evidence, dict)
+            else None
         )
+        observation_as_of = payload.get("asOf") or payload.get("as_of") or evidence_as_of
+        last_successful_at = payload.get("lastSuccessfulAt") or observation_as_of or row.get("updated_at")
         snapshot_was_fallback = bool(
             payload.get("isFallback")
-            or payload.get("fallbackUsed")
             or payload.get("fallback_used")
             or str(payload.get("source") or "").lower() in {"fallback", "mock"}
-            or str(row.get("source") or "").lower() in {"fallback", "mock"}
         )
-        official_snapshot = cache_key in {"macro", "rates", "volatility"} and self._snapshot_has_non_fallback_official_rows(payload)
         payload["isFromSnapshot"] = True
-        payload["isStale"] = False if official_snapshot else True
         payload["lastSuccessfulAt"] = last_successful_at
-        payload["updatedAt"] = payload.get("updatedAt") or row.get("updated_at") or _now_iso()
-        payload["asOf"] = payload.get("asOf") or last_successful_at
+        payload["updatedAt"] = payload.get("updatedAt") or row.get("updated_at")
+        payload["asOf"] = observation_as_of
         payload["sourceLabel"] = payload.get("sourceLabel") or "Snapshot"
         payload["source"] = payload.get("source") or "cached"
-        if not official_snapshot:
-            payload["freshness"] = "fallback" if snapshot_was_fallback else "stale"
-        else:
-            payload["freshness"] = payload.get("freshness") or str(row.get("freshness") or "cached")
-        payload["isFallback"] = snapshot_was_fallback
-        payload["fallbackUsed"] = bool(payload.get("fallbackUsed") or snapshot_was_fallback)
-        payload["warning"] = "数据源刷新失败，当前显示最近成功快照"
         items = payload.get("items")
         if isinstance(items, list):
             payload["items"] = [
-                self._mark_persistent_snapshot_item(item, official_snapshot=official_snapshot)
+                self._mark_persistent_snapshot_item(cache_key, item, payload)
                 if isinstance(item, dict)
                 else item
                 for item in items
             ]
+        freshness = self._persistent_snapshot_freshness(cache_key, payload, snapshot_was_fallback)
+        item_freshness = {
+            str(item.get("freshness") or "").lower()
+            for item in payload.get("items", [])
+            if isinstance(item, dict)
+        }
+        preserved_panel_stale = bool(
+            payload.get("isStale")
+            or str(payload.get("freshness") or "").lower() == "stale"
+        )
+        if "stale" in item_freshness:
+            freshness = {**freshness, "freshness": "stale", "isStale": True, "isUnavailable": False}
+        elif item_freshness and item_freshness <= {"unavailable"}:
+            freshness = {**freshness, "freshness": "unavailable", "isStale": False, "isUnavailable": True}
+        elif not preserved_panel_stale and item_freshness and item_freshness <= {"live", "delayed", "cached"}:
+            aggregate_freshness = next(
+                state
+                for state in ("cached", "delayed", "live")
+                if state in item_freshness
+            )
+            freshness = {
+                **freshness,
+                "freshness": aggregate_freshness,
+                "isStale": False,
+                "isUnavailable": False,
+            }
+        payload = self._apply_persistent_snapshot_freshness(payload, freshness)
+        payload["fallbackUsed"] = bool(payload.get("fallbackUsed") or snapshot_was_fallback)
+        payload["warning"] = "数据源刷新失败，当前显示最近成功快照"
         return payload
 
-    def _mark_persistent_snapshot_item(self, item: Dict[str, Any], *, official_snapshot: bool) -> Dict[str, Any]:
-        if official_snapshot and self._is_non_fallback_official_row(item, {"source": "mixed"}):
+    def _persistent_snapshot_freshness(
+        self,
+        cache_key: str,
+        value: Dict[str, Any],
+        is_fallback: bool,
+        *,
+        panel: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        freshness_evidence = value.get("sourceFreshnessEvidence")
+        evidence_as_of = (
+            freshness_evidence.get("asOf")
+            if isinstance(freshness_evidence, dict)
+            else None
+        )
+        as_of = value.get("asOf") or value.get("as_of") or evidence_as_of
+        if as_of is None and panel is not None:
+            as_of = panel.get("asOf")
+        source = str(value.get("source") or (panel or {}).get("source") or "")
+        source_type = str(value.get("sourceType") or (panel or {}).get("sourceType") or "")
+        if source.lower() in {"", "cached"} and not is_fallback:
             return {
-                **item,
-                "isFromSnapshot": True,
-                "isStale": bool(item.get("isStale")),
-                "freshness": item.get("freshness") or "cached",
+                "freshness": "unavailable",
+                "isFallback": False,
+                "isStale": False,
+                "isUnavailable": True,
+                "isProxy": False,
+                "delayMinutes": 0,
+                "warning": "快照缺少原始数据源信息",
             }
+        official_observation_date = (
+            value.get("officialObservationDate")
+            or value.get("officialAsOf")
+        )
+        freshness = get_freshness_status(
+            as_of,
+            self._category_for_cache_key(cache_key),
+            source,
+            is_fallback,
+            source_type=source_type,
+            series_id=(
+                value.get("officialOverlaySeriesId")
+                or value.get("officialSeriesId")
+                or value.get("sourceId")
+            ),
+            official_observation_date=official_observation_date,
+        )
+        existing = str(value.get("freshness") or "").lower()
+        if value.get("isUnavailable") or existing == "unavailable":
+            return {
+                **freshness,
+                "freshness": "unavailable",
+                "isFallback": bool(freshness.get("isFallback") or is_fallback),
+                "isStale": False,
+                "isUnavailable": True,
+            }
+        if is_fallback or existing in {"fallback", "mock"}:
+            return {**freshness, "freshness": "fallback", "isFallback": True, "isStale": False}
+        if value.get("isStale") or existing == "stale":
+            return {**freshness, "freshness": "stale", "isStale": True, "isUnavailable": False}
+        if as_of is None and not official_observation_date:
+            return {**freshness, "freshness": "stale", "isStale": True, "isUnavailable": False}
+        return freshness
+
+    @staticmethod
+    def _apply_persistent_snapshot_freshness(
+        value: Dict[str, Any],
+        freshness: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        payload = {
+            **value,
+            "isFromSnapshot": True,
+            "freshness": freshness["freshness"],
+            "isFallback": bool(freshness.get("isFallback")),
+            "isStale": bool(freshness.get("isStale")),
+            "isUnavailable": bool(freshness.get("isUnavailable")),
+        }
+        source_freshness = payload.get("sourceFreshnessEvidence")
+        if isinstance(source_freshness, dict):
+            payload["sourceFreshnessEvidence"] = {
+                **source_freshness,
+                **freshness,
+                "asOf": payload.get("asOf"),
+                "source": payload.get("source"),
+            }
+        return payload
+
+    def _mark_persistent_snapshot_item(
+        self,
+        cache_key: str,
+        item: Dict[str, Any],
+        panel: Dict[str, Any],
+    ) -> Dict[str, Any]:
         is_fallback = bool(
             item.get("isFallback")
             or item.get("fallbackUsed")
             or str(item.get("source") or "").lower() in {"fallback", "mock"}
         )
-        return {
-            **item,
-            "isFromSnapshot": True,
-            "isStale": True,
-            "freshness": "fallback" if is_fallback else "stale",
-        }
+        freshness = self._persistent_snapshot_freshness(
+            cache_key,
+            item,
+            is_fallback,
+            panel=panel,
+        )
+        item_payload = dict(item)
+        item_evidence = item_payload.get("sourceFreshnessEvidence")
+        item_payload["asOf"] = (
+            item_payload.get("asOf")
+            or item_payload.get("as_of")
+            or (item_evidence.get("asOf") if isinstance(item_evidence, dict) else None)
+            or panel.get("asOf")
+        )
+        return self._apply_persistent_snapshot_freshness(item_payload, freshness)
 
     def _fallback_market_snapshot(self, cache_key: str, source: str) -> Dict[str, Any]:
         cached = self._market_data_cache.get(cache_key)
@@ -5624,7 +5751,15 @@ class MarketOverviewService:
         source = str(payload.get("source") or ("fallback" if payload.get("fallbackUsed") or payload.get("fallback_used") else "mixed"))
         is_fallback = bool(payload.get("isFallback") or source.lower() in {"fallback", "mock"})
         updated_at = payload.get("updatedAt") or payload.get("last_update") or payload.get("last_refresh_at") or _now_iso()
-        as_of = payload.get("asOf") or payload.get("last_update") or payload.get("last_refresh_at") or updated_at
+        if payload.get("isFromSnapshot"):
+            freshness_evidence = payload.get("sourceFreshnessEvidence")
+            as_of = payload.get("asOf") or payload.get("as_of") or (
+                freshness_evidence.get("asOf")
+                if isinstance(freshness_evidence, dict)
+                else None
+            )
+        else:
+            as_of = payload.get("asOf") or payload.get("last_update") or payload.get("last_refresh_at") or updated_at
         freshness = get_freshness_status(as_of, category, source, is_fallback, source_type=payload.get("sourceType") or "")
         preserved_freshness = self._preserved_freshness_meta(payload)
         if not preserved_freshness and payload.get("isPartial"):
@@ -6081,7 +6216,15 @@ class MarketOverviewService:
     def _with_item_meta(self, item: Dict[str, Any], category: str, panel: Dict[str, Any]) -> Dict[str, Any]:
         source = str(item.get("source") or panel.get("source") or "mixed")
         is_fallback = bool(item.get("isFallback") or item.get("fallbackUsed") or source.lower() in {"fallback", "mock"})
-        as_of = item.get("asOf") or item.get("last_update") or item.get("updatedAt") or panel.get("asOf") or panel.get("updatedAt")
+        if item.get("isFromSnapshot") or panel.get("isFromSnapshot"):
+            freshness_evidence = item.get("sourceFreshnessEvidence")
+            as_of = item.get("asOf") or item.get("as_of") or (
+                freshness_evidence.get("asOf")
+                if isinstance(freshness_evidence, dict)
+                else None
+            ) or panel.get("asOf")
+        else:
+            as_of = item.get("asOf") or item.get("last_update") or item.get("updatedAt") or panel.get("asOf") or panel.get("updatedAt")
         updated_at = item.get("updatedAt") or panel.get("updatedAt") or _now_iso()
         official_series_id = (
             item.get("officialOverlaySeriesId")
