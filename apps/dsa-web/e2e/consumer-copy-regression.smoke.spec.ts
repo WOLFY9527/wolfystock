@@ -61,6 +61,62 @@ async function installAuthenticatedHomeEvidenceRoutes(page: Page) {
     await fulfillJson(route, buildHomeHistoryPayload());
   });
 
+  await page.route('**/api/v1/stocks/ORCL/structure-decision', async (route) => {
+    await fulfillJson(route, {
+      schema_version: 'stock_structure_decision_v1',
+      ticker: 'ORCL',
+      symbol: 'ORCL',
+      structure_state: 'range_bound',
+      confidence: 'medium',
+      component_scores: {},
+      explanation: {
+        why_this_structure: 'Oracle remains inside the current review range.',
+        what_confirms_it: [],
+        what_invalidates_it: [],
+        key_levels: [],
+      },
+      research_notes: {
+        watch_next: [],
+        needs_more_evidence: [],
+        risk_flags: [],
+      },
+      data_quality: {
+        status: 'available',
+        source: 'fixture_history',
+        period: 'daily',
+        requested_days: 90,
+        observed_bars: 60,
+        usable_bars: 60,
+        reason: 'history_available',
+      },
+      missing_evidence: [],
+      no_advice_disclosure: 'Observation-only structure context.',
+      peer_correlation_snapshot: {
+        symbol: 'ORCL',
+        peer_group: {
+          status: 'available',
+          label: 'Cloud software',
+          symbols: ['MSFT'],
+        },
+        correlation_state: 'aligned',
+        peer_evidence: [
+          {
+            symbol: 'MSFT',
+            overlap_days: 22,
+            state: 'aligned',
+            summary: 'MSFT stayed broadly aligned with ORCL across the review window.',
+          },
+        ],
+        divergence_evidence: [],
+        stale_inputs: [],
+        missing_inputs: [],
+        confidence_cap: 'medium',
+        observation_boundary: 'Observation-only peer movement context.',
+        research_next_steps: ['Refresh peer closes before extending the read.'],
+      },
+    });
+  });
+
   await page.route('**/api/v1/history/3', async (route) => {
     await fulfillJson(route, {
       meta: buildHomeReportMeta(),
@@ -812,6 +868,9 @@ appTest.describe('consumer copy regression smoke', () => {
 
       const dashboard = page.getByTestId('home-bento-dashboard');
       await appExpect(dashboard).toBeVisible({ timeout: 15_000 });
+      await page.getByRole('button', { name: '历史记录' }).click();
+      await page.getByTestId('home-bento-history-item-3').click();
+      await page.getByTestId('home-research-trust-strip').locator('summary').click();
       const citationStrip = page.getByTestId('home-evidence-citation-strip');
       const evidenceStrip = page.getByTestId('home-evidence-packet-strip');
       await appExpect(evidenceStrip).toBeVisible();
