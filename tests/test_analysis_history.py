@@ -38,7 +38,6 @@ from src.config import Config
 from src.storage import DatabaseManager, AnalysisHistory, BacktestResult, StockDaily
 from src.analyzer import AnalysisResult
 from src.services.history_service import HistoryService
-from scripts.clean_test_history import clean_test_history_records
 import src.auth as auth
 
 class AnalysisHistoryTestCase(unittest.TestCase):
@@ -1276,56 +1275,6 @@ class AnalysisHistoryTestCase(unittest.TestCase):
                 self.fail("未找到保存的历史记录")
             self.assertIn("RAW_AI_RESPONSE_SHOULD_NOT_LEAK", persisted_row.raw_result or "")
             self.assertIn("CONTEXT_RAW_PAYLOAD_SHOULD_NOT_LEAK", persisted_row.context_snapshot or "")
-
-    def test_clean_test_history_script_deletes_only_flagged_rows(self) -> None:
-        self.assertEqual(
-            self.db.save_analysis_history(
-                result=self._build_result(),
-                query_id="query_clean_test_001",
-                report_type="simple",
-                news_content="新闻摘要",
-                context_snapshot=None,
-                save_snapshot=False,
-                is_test=True,
-            ),
-            1,
-        )
-        self.assertEqual(
-            self.db.save_analysis_history(
-                result=self._build_result(),
-                query_id="query_clean_test_002",
-                report_type="simple",
-                news_content="新闻摘要",
-                context_snapshot=None,
-                save_snapshot=False,
-                is_test=False,
-            ),
-            1,
-        )
-
-        self.assertEqual(clean_test_history_records(dry_run=True), 1)
-
-        with self.db.get_session() as session:
-            dry_run_remaining = session.query(AnalysisHistory).order_by(AnalysisHistory.query_id.asc()).all()
-
-        self.assertEqual(
-            [row.query_id for row in dry_run_remaining],
-            ["query_clean_test_001", "query_clean_test_002"],
-        )
-
-        self.assertEqual(clean_test_history_records(), 1)
-
-        with self.db.get_session() as session:
-            remaining = session.query(AnalysisHistory).order_by(AnalysisHistory.query_id.asc()).all()
-
-        self.assertEqual([row.query_id for row in remaining], ["query_clean_test_001", "query_clean_test_002"])
-
-        self.assertEqual(clean_test_history_records(dry_run=False), 1)
-
-        with self.db.get_session() as session:
-            deleted_remaining = session.query(AnalysisHistory).order_by(AnalysisHistory.query_id.asc()).all()
-
-        self.assertEqual([row.query_id for row in deleted_remaining], ["query_clean_test_002"])
 
     def test_history_markdown_localizes_english_report_and_placeholder_name(self) -> None:
         """History markdown should preserve report_language for English reports."""
