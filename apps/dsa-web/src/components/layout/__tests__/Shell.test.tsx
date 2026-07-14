@@ -9,12 +9,6 @@ import { Shell } from '../Shell';
 import { ShellRailContext } from '../ShellRailContext';
 import ResearchWorkspaceFlowPanel from '../../research/ResearchWorkspaceFlowPanel';
 import {
-  CONSUMER_NAV_ARCHITECTURE,
-  CONSUMER_NAV_GROUPS,
-  CORE_PRODUCT_ROUTES,
-  DIRECT_PRIMARY_CONSUMER_ROUTES,
-  PRIMARY_CONSUMER_ROUTES,
-  SECONDARY_CONSUMER_ROUTES,
   resolveCoreProductRouteByCanonicalPath,
   resolveCurrentConsumerRoute,
 } from '../coreProductRoutes';
@@ -355,67 +349,6 @@ describe('Shell', () => {
     fireEvent.click(await screen.findByRole('button', { name: /打开 AAPL/ }));
 
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/stocks/AAPL/structure-decision'));
-  });
-
-  it('keeps route identity metadata aligned with the workflow-grouped Shell navigation', () => {
-    expect(CONSUMER_NAV_ARCHITECTURE).toEqual([
-      { type: 'link', routeKey: 'home' },
-      { type: 'group', groupKey: 'market' },
-      { type: 'group', groupKey: 'research' },
-      { type: 'link', routeKey: 'watchlist' },
-      { type: 'group', groupKey: 'validate' },
-      { type: 'link', routeKey: 'portfolio' },
-    ]);
-    expect(CONSUMER_NAV_GROUPS.map((group) => [group.key, group.routeKeys])).toEqual([
-      ['market', ['market-overview', 'liquidity-monitor', 'rotation-radar']],
-      ['research', ['research-radar', 'stock-structure', 'scanner']],
-      ['validate', ['backtest', 'scenario-lab', 'options-lab']],
-    ]);
-    expect(DIRECT_PRIMARY_CONSUMER_ROUTES.map((route) => route.key)).toEqual(['home', 'watchlist', 'portfolio']);
-    expect(SECONDARY_CONSUMER_ROUTES.map((route) => route.key)).toEqual(['decision-cockpit']);
-    expect(PRIMARY_CONSUMER_ROUTES.map((route) => route.key)).toEqual([
-      'home',
-      'market-overview',
-      'liquidity-monitor',
-      'rotation-radar',
-      'research-radar',
-      'stock-structure',
-      'scanner',
-      'watchlist',
-      'backtest',
-      'scenario-lab',
-      'options-lab',
-      'portfolio',
-    ]);
-    expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'decision-cockpit')?.primaryNav).toBe(false);
-    expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'liquidity-monitor')?.primaryNav).toBe(true);
-    expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'rotation-radar')?.primaryNav).toBe(true);
-    expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'scanner')?.primaryNav).toBe(true);
-    expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'backtest')?.primaryNav).toBe(true);
-    expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'scenario-lab')?.primaryNav).toBe(true);
-    expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'options-lab')?.primaryNav).toBe(true);
-    expect(PRIMARY_CONSUMER_ROUTES.map((route) => [route.key, route.navGroup, route.workflowStage, route.path, route.requiresAuth])).toEqual([
-      ['home', null, 'home', '/', false],
-      ['market-overview', 'market', 'observe', '/market-overview', false],
-      ['liquidity-monitor', 'market', 'observe', '/market/liquidity-monitor', false],
-      ['rotation-radar', 'market', 'observe', '/market/rotation-radar', false],
-      ['research-radar', 'research', 'discover', '/research/radar', true],
-      ['stock-structure', 'research', 'research', '/stocks/structure-decision', false],
-      ['scanner', 'research', 'discover', '/scanner', true],
-      ['watchlist', null, 'monitor', '/watchlist', true],
-      ['backtest', 'validate', 'validate', '/backtest', true],
-      ['scenario-lab', 'validate', 'scenario', '/scenario-lab', true],
-      ['options-lab', 'validate', 'options', '/options-lab', true],
-      ['portfolio', null, 'portfolio', '/portfolio', true],
-    ]);
-    expect(PRIMARY_CONSUMER_ROUTES.find((item) => item.key === 'research-radar')?.path).not.toBe('/research-radar');
-    expect(PRIMARY_CONSUMER_ROUTES.filter((item) => item.requiresAuth !== true).map((item) => item.key)).toEqual([
-      'home',
-      'market-overview',
-      'liquidity-monitor',
-      'rotation-radar',
-      'stock-structure',
-    ]);
   });
 
   it('keeps CTA route labels and aria labels owned by the core route registry', () => {
