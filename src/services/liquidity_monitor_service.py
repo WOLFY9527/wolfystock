@@ -6,7 +6,7 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional
 
 from src.contracts.source_confidence import (
     SOURCE_CONFIDENCE_CONTRACT_VERSION,
