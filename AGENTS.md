@@ -50,6 +50,11 @@
 4. 运行能证明当前改动的最小验证集，不用无关测试堆砌“完整感”。
 5. 完成前检查 `git diff`、`git status`、必要的 secret/link/format 检查。
 
+## Worktree 环境
+
+- 普通 linked worktree 可先运行 `bash scripts/bootstrap_worktree.sh --check`，确认后运行 `--apply` 复用 canonical main worktree 的 `.venv` 与 Web `node_modules`；仅在显式设置 `WORKTREE_BOOTSTRAP_ENV_FILE` 时链接 repo-external `.env`。
+- 处理依赖或 lockfile 变更时，设置 `WORKTREE_BOOTSTRAP_ISOLATED=1` 跳过共享链接并使用隔离环境。
+
 ## 常用命令
 
 运行：

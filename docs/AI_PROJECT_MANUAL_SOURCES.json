@@ -11,13 +11,14 @@
     "candidateMarkdownAfterPolicy": 3,
     "excludedByReason": {
       "legacy_external_product_doc": 1,
+      "legacy_untracked_agent_mirror": 3,
       "not_in_hard_collapse_source_set": 3,
       "required_ai_governance_symlink": 1,
       "required_github_workflow_markdown": 7,
       "required_repository_skill_asset": 4
     },
     "includedSourceCount": 3,
-    "markdownDiscovered": 19,
+    "markdownDiscovered": 22,
     "prunedDirectoryNames": [
       ".cache",
       ".codex",
@@ -63,15 +64,15 @@
   },
   "includedSources": [
     {
-      "bytes": 4788,
+      "bytes": 5192,
       "categories": [
         "governance",
         "workflow"
       ],
-      "lineCount": 98,
+      "lineCount": 103,
       "path": "AGENTS.md",
       "purpose": "repository AI-agent rules and hard safety boundaries",
-      "sha256": "397ea8fc66abf770c022f9802b7c5cb5c25f90a432eaac5d51ba1bdef7576ffa",
+      "sha256": "c9a803ee079ad5f1eeca390b72d5ab6cc8b408ce2c080c4d77336d74bb9dc144",
       "title": "AGENTS.md"
     },
     {
@@ -102,7 +103,7 @@
   "outputs": {
     "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
     "manual": "docs/AI_PROJECT_MANUAL.md",
-    "manualSha256": "a4e04e9ffe4855c25c6476aa39570b58c06e06e5c31551fd7f261089ee41142e"
+    "manualSha256": "00ce5aef3256937111d45e6f4baee58ca50ea8ac4557a147215eb466cc07ee22"
   },
   "schemaVersion": 2,
   "sections": [
