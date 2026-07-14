@@ -67,6 +67,7 @@ vi.mock('../../components/auth/AuthGuardOverlay', () => ({
 }));
 
 const writeTextMock = vi.fn();
+let resolvePendingListRules: Array<(value: ReturnType<typeof makeUserAlertRulesResponse>) => void> = [];
 
 function makeItem(overrides: Partial<WatchlistItem>): WatchlistItem {
   return {
@@ -283,6 +284,16 @@ function makeUserAlertRule(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeUserAlertRulesResponse(items: ReturnType<typeof makeUserAlertRule>[] = []) {
+  return {
+    contractVersion: 'user_alert_contract_v1',
+    deliveryMode: 'in_app',
+    inAppOnly: true,
+    ownerScoped: true,
+    items,
+  };
+}
+
 async function flushPendingUiWork() {
   await act(async () => {
     await Promise.resolve();
@@ -295,6 +306,7 @@ describe('WatchlistPage', () => {
   beforeEach(() => {
     vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-05-01T12:00:00Z').getTime());
     vi.clearAllMocks();
+    resolvePendingListRules = [];
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     listWatchlistItems.mockResolvedValue({ items: watchlistItems });
     removeWatchlistItem.mockResolvedValue({ deleted: 1 });
@@ -326,7 +338,9 @@ describe('WatchlistPage', () => {
     });
     runRuleBacktest.mockResolvedValue(makeRuleBacktestRun());
     analyzeAsync.mockResolvedValue({ taskId: 'task-1' });
-    listRules.mockImplementation(() => new Promise(() => {}));
+    listRules.mockImplementation(() => new Promise((resolve) => {
+      resolvePendingListRules.push(resolve);
+    }));
     createRule.mockResolvedValue(makeUserAlertRule());
     updateRule.mockResolvedValue(makeUserAlertRule());
     Object.defineProperty(navigator, 'clipboard', {
@@ -340,6 +354,8 @@ describe('WatchlistPage', () => {
 
   afterEach(async () => {
     cleanup();
+    const pendingListRules = resolvePendingListRules.splice(0);
+    pendingListRules.forEach((resolve) => resolve(makeUserAlertRulesResponse()));
     await flushPendingUiWork();
     vi.restoreAllMocks();
   });
@@ -2377,7 +2393,7 @@ describe('WatchlistPage', () => {
     fireEvent.click(batchButton);
 
     await waitFor(() => expect(runRuleBacktest).toHaveBeenCalledTimes(1));
-    expect(screen.getByTestId('watchlist-batch-progress')).toHaveTextContent('1 / 1');
+    await waitFor(() => expect(screen.getByTestId('watchlist-batch-progress')).toHaveTextContent('1 / 1'));
     expect(screen.getByTestId('watchlist-batch-progress')).toHaveTextContent('成功 1');
     expect(runRuleBacktest).toHaveBeenCalledWith(expect.objectContaining({
       code: 'NVDA',
@@ -2473,7 +2489,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
     const tsmRow = await screen.findByTestId('watchlist-row-TSM');
     fireEvent.click(within(tsmRow).getByRole('button', { name: '查看详情 TSM' }));
-    expect(screen.getByTestId('watchlist-detail-rail')).toHaveTextContent('TSM');
+    await waitFor(() => expect(screen.getByTestId('watchlist-detail-rail')).toHaveTextContent('TSM'));
 
     const nvdaRow = screen.getByTestId('watchlist-row-NVDA');
     fireEvent.click(within(nvdaRow).getByRole('button', { name: '更多操作 NVDA' }));
