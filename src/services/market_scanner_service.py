@@ -57,6 +57,11 @@ from src.services.scanner_ohlcv_readiness import (
     sanitize_historical_ohlcv_readiness,
     summarize_scanner_ohlcv_readiness,
 )
+from src.services.scanner_readiness_evaluator import (
+    ScannerReadinessEvidence,
+    evaluate_scanner_readiness,
+    serialize_scanner_readiness,
+)
 from src.services.scanner_universe_readiness import (
     build_scanner_universe_readiness_from_cache,
     build_scanner_universe_readiness_from_coverage,
@@ -2275,63 +2280,6 @@ class MarketScannerService:
             return default
 
     @staticmethod
-    def _readiness_reason_counts(coverage_summary: Mapping[str, Any]) -> Dict[str, int]:
-        result: Dict[str, int] = {}
-        for item in coverage_summary.get("excluded_by_reason") or []:
-            if not isinstance(item, Mapping):
-                continue
-            reason = str(item.get("reason") or "").strip().lower()
-            if not reason:
-                continue
-            result[reason] = result.get(reason, 0) + MarketScannerService._readiness_int(item.get("count"))
-        return result
-
-    @staticmethod
-    def _readiness_status_counts(
-        summary: Mapping[str, Any],
-        candidates: Sequence[Mapping[str, Any]],
-    ) -> Dict[str, int]:
-        counts = {
-            "selected": MarketScannerService._readiness_int(summary.get("selected_count")),
-            "rejected": MarketScannerService._readiness_int(summary.get("rejected_count")),
-            "data_failed": MarketScannerService._readiness_int(summary.get("data_failed_count")),
-            "error": MarketScannerService._readiness_int(summary.get("error_count")),
-        }
-        if candidates and not any(counts.values()):
-            for item in candidates:
-                status = str(item.get("status") or "").strip().lower()
-                if status in counts:
-                    counts[status] += 1
-        return counts
-
-    def _quote_readiness_coverage(
-        self,
-        diagnostics: Mapping[str, Any],
-        *,
-        status: str,
-        selected_count: int,
-        evaluated_count: int,
-        blocker_hint: str,
-    ) -> str:
-        if blocker_hint == "missing_quote_snapshot":
-            return "missing"
-        live_quote_stats = diagnostics.get("live_quote_stats")
-        if isinstance(live_quote_stats, Mapping):
-            attempted = self._readiness_int(live_quote_stats.get("attempted_candidates"))
-            available = self._readiness_int(live_quote_stats.get("available_candidates"))
-            if attempted > 0:
-                if available <= 0:
-                    return "missing"
-                return "available" if available >= attempted else "partial"
-        scanner_data = diagnostics.get("scanner_data") if isinstance(diagnostics.get("scanner_data"), Mapping) else {}
-        snapshot_resolution = scanner_data.get("snapshot_resolution") if isinstance(scanner_data.get("snapshot_resolution"), Mapping) else {}
-        if diagnostics.get("snapshot_source") or snapshot_resolution.get("source"):
-            return "available"
-        if status == "completed" and (selected_count > 0 or evaluated_count > 0):
-            return "available"
-        return "unknown"
-
-    @staticmethod
     def _quote_snapshot_readiness_symbols(
         *,
         market: str,
@@ -2378,35 +2326,6 @@ class MarketScannerService:
         )
         return dict(result.readiness)
 
-    def _history_readiness_coverage(
-        self,
-        diagnostics: Mapping[str, Any],
-        *,
-        status: str,
-        evaluated_count: int,
-        reason_counts: Mapping[str, int],
-        blocker_hint: str,
-    ) -> str:
-        if blocker_hint == "missing_history":
-            return "missing"
-        if blocker_hint == "stale_history":
-            return "partial"
-        history_stats = diagnostics.get("history_stats")
-        if isinstance(history_stats, Mapping):
-            available = self._readiness_int(history_stats.get("local_hits")) + self._readiness_int(
-                history_stats.get("network_fetches")
-            )
-            skipped = self._readiness_int(history_stats.get("skipped_for_history"))
-            if available > 0:
-                return "partial" if skipped > 0 else "available"
-            if skipped > 0:
-                return "missing"
-        if self._readiness_int(reason_counts.get("missing_history")) > 0:
-            return "missing"
-        if status == "completed" and evaluated_count > 0:
-            return "available"
-        return "unknown"
-
     @staticmethod
     def _scanner_ohlcv_symbol_readiness(ohlcv_readiness: Mapping[str, Any]) -> Dict[str, List[str]]:
         seeded_symbols: List[str] = []
@@ -2450,179 +2369,6 @@ class MarketScannerService:
         }
 
     @staticmethod
-    def _scanner_missing_data_families(
-        *,
-        universe_availability: str,
-        quote_coverage: str,
-        history_coverage: str,
-        benchmark_missing: bool,
-        ohlcv_requirements: Sequence[str],
-        candidate_generation_blockers: Sequence[str],
-    ) -> List[str]:
-        families: List[str] = []
-
-        def add(value: str) -> None:
-            if value and value not in families:
-                families.append(value)
-
-        if universe_availability in {"missing", "empty", "stale"}:
-            add("universe")
-        if quote_coverage == "missing" or "missing_quote_snapshot" in candidate_generation_blockers:
-            add("quote_snapshot")
-        if quote_coverage == "stale" or "stale_quote_snapshot" in candidate_generation_blockers:
-            add("quote_snapshot")
-            add("freshness")
-        if history_coverage == "missing" or "missing_history" in candidate_generation_blockers:
-            add("historical_ohlcv")
-        if benchmark_missing or "missing_benchmark" in candidate_generation_blockers:
-            add("benchmark_ohlcv")
-
-        for requirement in ohlcv_requirements:
-            normalized = str(requirement or "").strip().lower()
-            if normalized in {"provider_missing", "provider_unavailable", "entitlement_required"}:
-                add("historical_ohlcv")
-            elif normalized == "insufficient_history":
-                add("historical_ohlcv")
-                add("date_coverage")
-            elif normalized == "stale_data":
-                add("freshness")
-            elif normalized == "missing_adjustments":
-                add("adjusted_prices")
-            elif normalized == "missing_benchmark":
-                add("benchmark_ohlcv")
-        return families
-
-    @staticmethod
-    def _scanner_universe_operator_action(
-        *,
-        cache_universe_status: str,
-        quote_coverage: str,
-        benchmark_missing: bool,
-        ohlcv_requirements: Sequence[str],
-        eligible_symbol_count: int,
-        seeded_symbol_count: int,
-    ) -> Optional[str]:
-        requirements = {str(item or "").strip().lower() for item in ohlcv_requirements if str(item or "").strip()}
-        if cache_universe_status in {"missing", "stale", "not_configured", "unavailable"}:
-            return None
-        if quote_coverage == "stale":
-            return "Refresh quote snapshot coverage before candidate generation."
-        if "provider_missing" in requirements:
-            return "Enable the existing historical OHLCV cache/readiness path, or seed local bars for the bounded scanner universe."
-        if requirements.intersection({"provider_unavailable", "entitlement_required"}):
-            return "Restore historical OHLCV availability for the bounded scanner universe, then rerun Scanner readiness."
-        if "insufficient_history" in requirements:
-            return "Seed or refresh enough historical OHLCV bars for the blocked scanner symbols."
-        if "stale_data" in requirements:
-            return "Refresh stale historical OHLCV bars for the bounded scanner universe."
-        if "missing_adjustments" in requirements and quote_coverage == "missing" and seeded_symbol_count > 0:
-            return (
-                f"Cache-backed historical OHLCV rows exist for {seeded_symbol_count} symbol(s), "
-                "but quote snapshot coverage and adjusted prices or adjustment metadata still block Scanner candidates."
-            )
-        if "missing_adjustments" in requirements:
-            return "Provide adjusted historical OHLCV rows or adjustment metadata before generating Scanner candidates."
-        if eligible_symbol_count > 0 and quote_coverage == "missing":
-            return f"Seeded historical OHLCV is usable for {eligible_symbol_count} symbol(s); refresh quote snapshot coverage before candidate generation."
-        if seeded_symbol_count > 0 and quote_coverage == "missing":
-            return f"Seeded historical OHLCV exists for {seeded_symbol_count} symbol(s), but quote snapshot coverage is still missing."
-        if benchmark_missing:
-            return "Seed or refresh the scanner benchmark OHLCV before candidate generation."
-        return None
-
-    @staticmethod
-    def _cache_readiness_summary(
-        *,
-        state: str,
-        ohlcv_requirements: Sequence[str],
-        history_coverage: str,
-        freshness: str,
-    ) -> Dict[str, Any]:
-        requirements = {str(item or "").strip().lower() for item in ohlcv_requirements if str(item or "").strip()}
-        if "provider_missing" in requirements:
-            cache_state = "missing"
-            reason = "missing_cache"
-        elif "provider_unavailable" in requirements:
-            cache_state = "unavailable"
-            reason = "cache_unavailable"
-        elif "insufficient_history" in requirements:
-            cache_state = "insufficient"
-            reason = "insufficient_history"
-        elif "stale_data" in requirements:
-            cache_state = "stale"
-            reason = "stale_cache"
-        elif "missing_adjustments" in requirements and history_coverage in {"available", "partial"}:
-            cache_state = "degraded"
-            reason = "cached_ohlcv_missing_adjustments"
-        elif state in {"ready", "partial"} and history_coverage in {"available", "partial"}:
-            cache_state = "available" if state == "ready" else "degraded"
-            reason = "cached_ohlcv_available"
-        else:
-            cache_state = "unknown"
-            reason = "cache_state_unknown"
-        return {
-            "state": cache_state,
-            "reason": reason,
-            "freshness": freshness,
-            "consumerSafe": True,
-        }
-
-    @staticmethod
-    def _data_readiness_freshness(
-        *,
-        status: str,
-        quote_coverage: str,
-        history_coverage: str,
-        blocker: str,
-        diagnostics: Mapping[str, Any],
-    ) -> str:
-        tokens = " ".join(str(value or "").lower() for value in diagnostics.values() if not isinstance(value, (dict, list)))
-        if blocker == "stale_history" or "stale" in tokens:
-            return "stale"
-        if quote_coverage == "missing" or history_coverage == "missing":
-            return "unknown"
-        if quote_coverage == "partial" or history_coverage == "partial":
-            return "delayed"
-        if status == "completed" and quote_coverage == "available" and history_coverage == "available":
-            return "fresh"
-        return "unknown"
-
-    def _data_readiness_blocker(
-        self,
-        *,
-        status: str,
-        diagnostics: Mapping[str, Any],
-        reason_counts: Mapping[str, int],
-        universe_size: int,
-        selected_count: int,
-    ) -> str:
-        reason_code = str(diagnostics.get("reason_code") or "").strip().lower()
-        empty_reason = str(diagnostics.get("empty_reason") or "").strip().lower()
-        failure = diagnostics.get("failure") if isinstance(diagnostics.get("failure"), Mapping) else {}
-        failure_message = str(failure.get("message") or "").strip().lower()
-        tokens = " ".join([reason_code, empty_reason, failure_message, *reason_counts.keys()])
-
-        if status == "not_run" and universe_size <= 0:
-            return "universe_missing"
-        if any(marker in tokens for marker in ("universe_source_unavailable", "us_universe_unavailable", "hk_universe_unavailable")):
-            return "missing_universe"
-        if any(marker in tokens for marker in ("no_realtime_snapshot_available", "missing_quote_or_snapshot", "snapshot_unavailable")):
-            return "missing_quote_snapshot"
-        if "stale_history" in tokens:
-            return "stale_history"
-        if any(marker in tokens for marker in ("missing_history", "insufficient_history", "not_enough_history", "history_coverage")):
-            return "missing_history"
-        if "扫描宇宙为空" in empty_reason or "empty universe" in tokens:
-            return "empty_universe"
-        if selected_count <= 0 and self._readiness_int(reason_counts.get("filtered_by_profile_constraints")) > 0:
-            return "profile_filters_rejected_all"
-        if selected_count <= 0 and any(marker in tokens for marker in ("source_quality_capped", "source_cap", "score_cap")):
-            return "source_quality_capped"
-        if status == "failed":
-            return "scanner_runtime_unavailable"
-        return "unknown"
-
-    @staticmethod
     def _bounded_local_us_universe_from_parquet(parquet_dir: Path) -> Dict[str, Any]:
         configured_key = "LOCAL_US_PARQUET_DIR" if os.getenv("LOCAL_US_PARQUET_DIR", "").strip() else "US_STOCK_PARQUET_DIR"
         symbols: List[str] = []
@@ -2651,249 +2397,109 @@ class MarketScannerService:
             },
         }
 
-    @staticmethod
-    def _data_readiness_copy(blocker: str, state: str) -> Tuple[str, str]:
-        if state == "not_run":
-            return "Scanner 尚未运行，暂时没有数据准备度结论。", "运行 Scanner 后查看数据准备度。"
-        copies = {
-            "missing_universe": (
-                "Scanner 缺少可用标的池，暂时无法生成候选。",
-                "补充可扫描标的池后重新运行 Scanner。",
-            ),
-            "universe_missing": (
-                "Scanner 缺少可用标的池，暂时无法生成候选。",
-                "补充可扫描标的池后重新运行 Scanner。",
-            ),
-            "universe_not_configured": (
-                "Scanner 标的池尚未配置，暂时无法生成候选。",
-                "配置并刷新可扫描标的池后重新运行 Scanner。",
-            ),
-            "stale_universe": (
-                "Scanner 标的池已过期，暂时无法生成候选。",
-                "刷新扫描标的池后重新运行 Scanner。",
-            ),
-            "empty_universe": (
-                "候选池为空，Scanner 暂时无法生成候选。",
-                "补充可扫描标的池后重新运行 Scanner。",
-            ),
-            "missing_quote_snapshot": (
-                "行情快照不足，Scanner 暂时无法完成候选生成。",
-                "补充行情快照后重新运行 Scanner。",
-            ),
-            "missing_history": (
-                "历史行情覆盖不足，Scanner 暂时无法完成候选生成。",
-                "补充历史行情覆盖后重新运行 Scanner。",
-            ),
-            "insufficient_history": (
-                "历史行情覆盖不足，Scanner 暂时无法完成候选生成。",
-                "补充 required bars 后重新运行 Scanner。",
-            ),
-            "provider_missing": (
-                "历史行情 provider 未配置，Scanner 暂时无法生成可执行候选。",
-                "配置显式 OHLCV runtime/provider 或补充本地历史后重新运行 Scanner。",
-            ),
-            "provider_unavailable": (
-                "历史行情 provider 当前不可用，Scanner 暂时无法生成可执行候选。",
-                "恢复 OHLCV 数据源后重新运行 Scanner。",
-            ),
-            "entitlement_required": (
-                "历史行情需要额外授权，Scanner 暂时无法生成可执行候选。",
-                "确认数据授权后重新运行 Scanner。",
-            ),
-            "stale_data": (
-                "历史行情不够新，Scanner 只能给出受限结果。",
-                "刷新历史行情后再复核 Scanner。",
-            ),
-            "missing_adjustments": (
-                "历史行情缺少复权/公司行动处理，Scanner 结果仅可观察。",
-                "补充复权历史后再复核 Scanner。",
-            ),
-            "missing_benchmark": (
-                "Scanner 缺少所需市场基准历史，结果仅可观察。",
-                "补充 benchmark 历史后再复核 Scanner。",
-            ),
-            "stale_history": (
-                "历史行情不够新，Scanner 只能给出受限结果。",
-                "刷新历史行情后再复核 Scanner。",
-            ),
-            "insufficient_coverage": (
-                "标的池可用，但行情或历史覆盖不足，暂不生成候选。",
-                "补齐行情与历史覆盖后重新运行 Scanner。",
-            ),
-            "profile_filters_rejected_all": (
-                "本轮 profile 过滤后没有留下候选。",
-                "复核扫描配置、标的池和数据覆盖后重新运行 Scanner。",
-            ),
-            "source_quality_capped": (
-                "本轮数据质量不足，候选结果被限制。",
-                "补充可用于评分的数据覆盖后重新运行 Scanner。",
-            ),
-            "scanner_runtime_unavailable": (
-                "Scanner 本轮运行未完成，暂时无法判断候选。",
-                "修复运行条件后重新运行 Scanner。",
-            ),
-        }
-        if blocker in copies:
-            return copies[blocker]
-        if state == "ready":
-            return "Scanner 数据已满足本轮候选生成。", "继续按当前数据节奏复核扫描结果。"
-        if state == "partial":
-            return "Scanner 已生成候选，但部分数据覆盖仍需复核。", "补充缺口数据后复核候选稳定性。"
-        return "Scanner 数据准备度暂时无法判断。", "补充运行记录后再复核。"
-
-    @staticmethod
-    def _exact_candidate_blocked_states(
+    def _collect_data_readiness_evidence(
+        self,
         *,
+        market: str,
+        profile: str,
         status: str,
-        candidate_generation_blockers: Sequence[str],
-        selected_count: int,
-        universe_availability: str,
-    ) -> List[str]:
-        states: List[str] = []
-
-        def add(value: str) -> None:
-            if value and value not in states:
-                states.append(value)
-
-        if status == "not_run":
-            add("scanner_run_not_executed")
-        if universe_availability in {"missing", "empty", "stale"}:
-            add("no_local_universe")
-        blocker_tokens = {str(item or "").strip().lower() for item in candidate_generation_blockers}
-        if blocker_tokens.intersection(
-            {
-                "missing_history",
-                "provider_missing",
-                "provider_unavailable",
-                "entitlement_required",
-                "insufficient_history",
-                "missing_adjustments",
-                "missing_benchmark",
-            }
-        ):
-            add("insufficient_ohlcv")
-        if blocker_tokens.intersection({"missing_quote_snapshot", "stale_quote_snapshot"}):
-            add("quote_unavailable_or_stale")
-        if status in {"empty", "failed"} and selected_count <= 0 and not states:
-            add("candidate_scoring_unavailable")
-        return states
-
-    @staticmethod
-    def _scanner_run_lineage(
-        *,
+        universe_size: int,
+        evaluated_size: int,
+        shortlist_size: int,
         diagnostics: Mapping[str, Any],
-        candidates: Sequence[Mapping[str, Any]],
-        ohlcv_readiness: Mapping[str, Any],
-    ) -> Dict[str, Any]:
-        candidate_diagnostics = (
-            diagnostics.get("candidate_diagnostics")
-            if isinstance(diagnostics.get("candidate_diagnostics"), Mapping)
-            else {}
+        summary: Optional[Mapping[str, Any]] = None,
+        candidates: Optional[Sequence[Mapping[str, Any]]] = None,
+    ) -> ScannerReadinessEvidence:
+        diagnostics_payload = dict(diagnostics or {})
+        summary_payload = dict(summary or {})
+        candidate_payloads = list(candidates or [])
+        ohlcv_readiness = summarize_scanner_ohlcv_readiness(
+            market=market, profile=profile, diagnostics=diagnostics_payload, candidates=candidate_payloads
         )
-        symbols_evaluated: List[str] = []
-        symbols_with_sufficient_data: List[str] = []
-        symbols_skipped: List[Dict[str, str]] = []
-
-        def add(target: List[str], value: Any) -> None:
-            symbol = str(value or "").strip().upper()
-            if symbol and symbol not in target:
-                target.append(symbol)
-
-        def add_skipped(value: Any, reason: Any) -> None:
-            symbol = str(value or "").strip().upper()
-            reason_text = str(reason or "limited").strip().lower() or "limited"
-            if reason_text in {"history", "missing_history", "not_enough_history"}:
-                reason_text = "insufficient_history"
-            if not symbol:
-                return
-            if any(item.get("symbol") == symbol for item in symbols_skipped):
-                return
-            symbols_skipped.append({"symbol": symbol, "reason": reason_text})
-
-        for key, payload in candidate_diagnostics.items():
-            item = payload if isinstance(payload, Mapping) else {}
-            symbol = str(item.get("symbol") or key or "").strip().upper()
-            status_value = str(item.get("status") or "").strip().lower()
-            if status_value in {"selected", "rejected", "evaluated"}:
-                add(symbols_evaluated, symbol)
-                add(symbols_with_sufficient_data, symbol)
-            elif status_value:
-                reasons = item.get("missing_fields") or item.get("failed_rules") or []
-                reason = reasons[0] if isinstance(reasons, Sequence) and not isinstance(reasons, (str, bytes, bytearray)) and reasons else status_value
-                add_skipped(symbol, reason)
-
-        for item in candidates:
-            symbol = str(item.get("symbol") or "").strip().upper()
-            status_value = str(item.get("status") or "").strip().lower()
-            if status_value in {"selected", "rejected", "evaluated"}:
-                add(symbols_evaluated, symbol)
-                add(symbols_with_sufficient_data, symbol)
-
-        for item in ohlcv_readiness.get("symbolStates") or []:
-            if not isinstance(item, Mapping):
-                continue
-            symbol = str(item.get("symbol") or "").strip().upper()
-            if str(item.get("overallState") or "").strip().lower() == "ready":
-                add(symbols_with_sufficient_data, symbol)
-
-        scanner_data = diagnostics.get("scanner_data") if isinstance(diagnostics.get("scanner_data"), Mapping) else {}
-        universe_resolution = (
-            scanner_data.get("universe_resolution")
-            if isinstance(scanner_data.get("universe_resolution"), Mapping)
-            else {}
-        )
-        universe_source = str(
-            diagnostics.get("universeSource")
-            or universe_resolution.get("universeSource")
-            or universe_resolution.get("source")
-            or diagnostics.get("stock_list_source")
-            or "unknown"
-        )
-        universe_symbols = [
-            str(symbol or "").strip().upper()
-            for symbol in (
-                diagnostics.get("boundedStarterUniverse")
-                or universe_resolution.get("boundedStarterUniverse")
-                or universe_resolution.get("resolvedStarterSymbols")
-                or universe_resolution.get("data")
-                or []
+        universe_selection = _context_mapping(diagnostics_payload.get("universe_selection"))
+        universe_type = str(universe_selection.get("universe_type") or "default").strip().lower()
+        uses_default_universe = universe_type == "default"
+        if str(market or "").strip().lower() == "cn" and uses_default_universe:
+            cache_universe_readiness = build_scanner_universe_readiness_from_cache(
+                market=market, cache_path=self.local_universe_cache_path
             )
-            if str(symbol or "").strip()
-        ]
-        resolved_symbols = [
-            str(symbol or "").strip().upper()
-            for symbol in (universe_resolution.get("resolvedStarterSymbols") or universe_resolution.get("data") or [])
-            if str(symbol or "").strip()
-        ]
-        universe_mode = (
-            "bounded_starter_local"
-            if universe_source == "bounded_starter_market_data_spine"
-            or str(universe_resolution.get("coverage_strategy") or "").strip() == "bounded_starter_local_only"
-            or universe_symbols == list(BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS)
-            else str(universe_resolution.get("coverage_strategy") or "default").strip() or "default"
+        elif str(market or "").strip().lower() == "us" and uses_default_universe:
+            cache_universe_readiness = self._bounded_local_us_universe_from_parquet(get_us_stock_parquet_dir())
+        else:
+            runtime_universe_available = self._readiness_int(universe_size) > 0
+            cache_universe_readiness = {
+                "status": "available" if runtime_universe_available else "missing",
+                "lastUpdatedAt": None,
+                "freshnessState": "universe_runtime_input" if runtime_universe_available else "missing_universe",
+            }
+
+        lifecycle_readiness = build_scanner_universe_lifecycle_readiness(market=market)
+        if uses_default_universe and lifecycle_readiness.get("usable"):
+            existing_metadata = _context_mapping(cache_universe_readiness.get("sourceMetadata"))
+            cache_universe_readiness = {
+                **cache_universe_readiness,
+                "status": "available",
+                "universeSize": int(lifecycle_readiness.get("symbolCount") or 0),
+                "lastUpdatedAt": lifecycle_readiness.get("generatedAt"),
+                "freshnessState": str(lifecycle_readiness.get("freshnessState") or "fresh"),
+                "sourceMetadata": {
+                    **existing_metadata,
+                    "sourceClass": lifecycle_readiness.get("sourceClass"),
+                    "sourcePath": lifecycle_readiness.get("sourcePath"),
+                    "symbols": list(lifecycle_readiness.get("symbols") or []),
+                    "generatedFrom": "scanner_universe_lifecycle",
+                    "lifecycleReadiness": lifecycle_readiness,
+                    "noExternalCalls": True,
+                    "providerCallsEnabled": False,
+                    "readOnly": True,
+                    "activationState": "active",
+                },
+            }
+        elif uses_default_universe:
+            existing_metadata = _context_mapping(cache_universe_readiness.get("sourceMetadata"))
+            cache_universe_readiness = {
+                **cache_universe_readiness,
+                "sourceMetadata": {
+                    **existing_metadata,
+                    "lifecycleReadiness": lifecycle_readiness,
+                },
+            }
+
+        ohlcv_symbol_readiness = self._scanner_ohlcv_symbol_readiness(ohlcv_readiness)
+        quote_symbols = self._quote_snapshot_readiness_symbols(
+            market=market, seeded_symbols=ohlcv_symbol_readiness["eligibleSymbols"], universe_selection=universe_selection
         )
-        if universe_mode == "bounded_starter_local":
-            active_symbols = set(resolved_symbols or symbols_evaluated or symbols_with_sufficient_data)
-            for symbol in universe_symbols:
-                if symbol not in active_symbols:
-                    add_skipped(symbol, "missing_cache")
-        return {
-            "source": universe_source,
-            "universeSource": universe_source,
-            "universeMode": universe_mode,
-            "universeSymbols": universe_symbols,
-            "generatedAt": diagnostics.get("generatedAt") or diagnostics.get("completedAt"),
-            "runId": diagnostics.get("runId"),
-            "symbolsEvaluated": symbols_evaluated[:50],
-            "symbolsWithSufficientData": symbols_with_sufficient_data[:50],
-            "symbolsSkipped": symbols_skipped[:50],
-            "universeVersion": universe_resolution.get("universeVersion")
-            or universe_resolution.get("activeUniverseVersion"),
-            "sourceClass": universe_resolution.get("sourceClass"),
-            "sourceArtifactIdentity": universe_resolution.get("sourceArtifactIdentity"),
-            "asOf": universe_resolution.get("asOf") or universe_resolution.get("sourceAsOf"),
-            "freshnessState": universe_resolution.get("freshnessState"),
-        }
+        quote_snapshot_readiness = self._quote_snapshot_readiness_for_symbols(market=market, symbols=quote_symbols)
+        scanner_data = _context_mapping(diagnostics_payload.get("scanner_data"))
+        snapshot_resolution = _context_mapping(scanner_data.get("snapshot_resolution"))
+        source_markers = [
+            diagnostics_payload.get("sourceType"), diagnostics_payload.get("source_type"),
+            diagnostics_payload.get("snapshot_source"), diagnostics_payload.get("quoteSourceType"),
+            diagnostics_payload.get("quote_source_type"), snapshot_resolution.get("source"),
+            snapshot_resolution.get("sourceType"),
+            *(quote_snapshot_readiness.get("sourceFamilies") or []),
+        ]
+        for candidate in candidate_payloads:
+            source_markers.extend((
+                candidate.get("sourceType"), candidate.get("source_type"),
+                candidate.get("quote_source"), candidate.get("quote_source_type"),
+            ))
+
+        return ScannerReadinessEvidence(
+            market=market, profile=profile, status=status,
+            universe_size=universe_size,
+            evaluated_size=evaluated_size, shortlist_size=shortlist_size,
+            diagnostics=diagnostics_payload, summary=summary_payload, candidates=candidate_payloads,
+            cache_universe_readiness=cache_universe_readiness,
+            ohlcv_readiness=ohlcv_readiness,
+            quote_snapshot_readiness=quote_snapshot_readiness,
+            source_markers=tuple(
+                str(marker).strip()
+                for marker in source_markers
+                if str(marker or "").strip()
+            ),
+            bounded_us_symbols=BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS,
+        )
 
     def _build_data_readiness(
         self,
@@ -2909,552 +2515,13 @@ class MarketScannerService:
         summary: Optional[Mapping[str, Any]] = None,
         candidates: Optional[Sequence[Mapping[str, Any]]] = None,
     ) -> Dict[str, Any]:
-        diagnostics = dict(diagnostics or {})
-        summary = dict(summary or {})
-        candidates = list(candidates or [])
-        coverage_summary = diagnostics.get("coverage_summary") if isinstance(diagnostics.get("coverage_summary"), Mapping) else {}
-        reason_counts = self._readiness_reason_counts(coverage_summary)
-        counts = self._readiness_status_counts(summary, candidates)
-        selected_count = counts["selected"] or self._readiness_int(shortlist_size)
-        rejected_count = counts["rejected"]
-        failed_count = counts["data_failed"] + counts["error"]
-        candidate_evaluation_count = self._readiness_int(summary.get("evaluated_count"), self._readiness_int(evaluated_size))
-        if candidate_evaluation_count <= 0:
-            candidate_evaluation_count = self._readiness_int(evaluated_size)
-        resolved_universe_size = self._readiness_int(universe_size)
-        if resolved_universe_size <= 0:
-            resolved_universe_size = self._readiness_int(coverage_summary.get("eligible_after_liquidity_filter"))
-        if resolved_universe_size <= 0 and str(status or "").strip().lower() == "completed":
-            resolved_universe_size = self._readiness_int(coverage_summary.get("input_universe_size"))
-
-        normalized_status = str(status or "").strip().lower()
-        blocker_hint = self._data_readiness_blocker(
-            status=normalized_status,
-            diagnostics=diagnostics,
-            reason_counts=reason_counts,
-            universe_size=resolved_universe_size,
-            selected_count=selected_count,
+        evidence = self._collect_data_readiness_evidence(
+            market=market, profile=profile, status=status,
+            universe_size=universe_size,
+            evaluated_size=evaluated_size, shortlist_size=shortlist_size,
+            diagnostics=diagnostics, summary=summary, candidates=candidates,
         )
-        quote_coverage = self._quote_readiness_coverage(
-            diagnostics,
-            status=normalized_status,
-            selected_count=selected_count,
-            evaluated_count=candidate_evaluation_count,
-            blocker_hint=blocker_hint,
-        )
-        history_coverage = self._history_readiness_coverage(
-            diagnostics,
-            status=normalized_status,
-            evaluated_count=candidate_evaluation_count,
-            reason_counts=reason_counts,
-            blocker_hint=blocker_hint,
-        )
-
-        if normalized_status == "not_run":
-            state = "not_run"
-        elif blocker_hint != "unknown" and (selected_count <= 0 or normalized_status in {"empty", "failed"}):
-            state = "blocked"
-        elif normalized_status == "completed" and selected_count > 0 and quote_coverage == "available" and history_coverage == "available":
-            state = "ready"
-        elif normalized_status == "completed" and selected_count > 0:
-            state = "partial"
-        elif normalized_status in {"empty", "failed"}:
-            state = "blocked"
-        else:
-            state = "unknown"
-
-        freshness = self._data_readiness_freshness(
-            status=normalized_status,
-            quote_coverage=quote_coverage,
-            history_coverage=history_coverage,
-            blocker=blocker_hint,
-            diagnostics=diagnostics,
-        )
-        ohlcv_readiness = summarize_scanner_ohlcv_readiness(
-            market=market,
-            profile=profile,
-            diagnostics=diagnostics,
-            candidates=candidates,
-        )
-        existing_readiness = diagnostics.get("dataReadiness") if isinstance(diagnostics.get("dataReadiness"), Mapping) else {}
-        existing_requirements = (
-            existing_readiness.get("missingRequirements")
-            if isinstance(existing_readiness.get("missingRequirements"), Sequence)
-            and not isinstance(existing_readiness.get("missingRequirements"), (str, bytes, bytearray))
-            else []
-        )
-        ohlcv_requirements = [
-            str(item)
-            for item in (ohlcv_readiness.get("missingRequirements", []) or existing_requirements)
-            if str(item).strip()
-        ]
-        ohlcv_availability = str(ohlcv_readiness.get("availabilityState") or "unknown")
-        ohlcv_execution = str(ohlcv_readiness.get("executionState") or "unknown")
-        if ohlcv_availability == "unknown" and existing_readiness.get("availabilityState"):
-            ohlcv_availability = str(existing_readiness.get("availabilityState") or "unknown")
-        if ohlcv_execution == "unknown" and existing_readiness.get("executionState"):
-            ohlcv_execution = str(existing_readiness.get("executionState") or "unknown")
-        ohlcv_usable_bars = self._readiness_int(ohlcv_readiness.get("usableBars"))
-        ohlcv_missing_bars = self._readiness_int(ohlcv_readiness.get("missingBars"))
-        ohlcv_required_bars = self._readiness_int(ohlcv_readiness.get("requiredBars"))
-        if (
-            ohlcv_availability in {"available", "degraded"}
-            and history_coverage == "unknown"
-            and ohlcv_usable_bars >= ohlcv_required_bars
-            and ohlcv_missing_bars <= 0
-        ):
-            history_coverage = "available"
-        if ohlcv_execution == "blocked" and normalized_status != "not_run":
-            state = "blocked"
-            for requirement in (
-                "provider_missing",
-                "provider_unavailable",
-                "entitlement_required",
-                "insufficient_history",
-            ):
-                if requirement in ohlcv_requirements:
-                    blocker_hint = requirement
-                    break
-            history_coverage = "missing"
-            if "provider_missing" in ohlcv_requirements or "provider_unavailable" in ohlcv_requirements:
-                quote_coverage = quote_coverage if quote_coverage != "unknown" else "unknown"
-        elif ohlcv_execution == "degraded" and state == "ready":
-            state = "partial"
-            for requirement in ("stale_data", "missing_adjustments", "missing_benchmark"):
-                if requirement in ohlcv_requirements:
-                    blocker_hint = requirement
-                    break
-            if "stale_data" in ohlcv_requirements:
-                freshness = "stale"
-            history_coverage = "partial" if history_coverage == "available" else history_coverage
-        if "stale_data" in ohlcv_requirements:
-            freshness = "stale"
-        consumer_summary, next_data_action = self._data_readiness_copy(blocker_hint, state)
-        universe_availability = "available" if resolved_universe_size > 0 else "unknown"
-        if normalized_status == "not_run":
-            universe_availability = "missing" if resolved_universe_size <= 0 else "available"
-        elif blocker_hint in {"missing_universe", "universe_missing"}:
-            universe_availability = "missing"
-        elif blocker_hint == "empty_universe":
-            universe_availability = "empty"
-        elif normalized_status not in {"completed", "empty", "failed"}:
-            universe_availability = "unknown"
-
-        universe_selection = (
-            diagnostics.get("universe_selection")
-            if isinstance(diagnostics.get("universe_selection"), Mapping)
-            else {}
-        )
-        universe_type = str(universe_selection.get("universe_type") or "default").strip().lower()
-        uses_cn_default_universe_cache = (
-            str(market or "").strip().lower() == "cn"
-            and universe_type == "default"
-        )
-        uses_us_default_local_parquet_universe = (
-            str(market or "").strip().lower() == "us"
-            and universe_type == "default"
-        )
-        uses_default_universe = universe_type == "default"
-        cache_universe_readiness = (
-            build_scanner_universe_readiness_from_cache(
-                market=market,
-                cache_path=self.local_universe_cache_path,
-            )
-            if uses_cn_default_universe_cache
-            else self._bounded_local_us_universe_from_parquet(get_us_stock_parquet_dir())
-            if uses_us_default_local_parquet_universe
-            else {
-                "status": "available" if resolved_universe_size > 0 else "missing",
-                "lastUpdatedAt": None,
-                "freshnessState": (
-                    "universe_runtime_input" if resolved_universe_size > 0 else "missing_universe"
-                ),
-            }
-        )
-        lifecycle_readiness = build_scanner_universe_lifecycle_readiness(market=market)
-        if uses_default_universe and lifecycle_readiness.get("usable") and isinstance(cache_universe_readiness, dict):
-            cache_universe_readiness = {
-                **cache_universe_readiness,
-                "status": "available",
-                "universeSize": int(lifecycle_readiness.get("symbolCount") or 0),
-                "lastUpdatedAt": lifecycle_readiness.get("generatedAt"),
-                "freshnessState": str(lifecycle_readiness.get("freshnessState") or "fresh"),
-                "sourceMetadata": {
-                    **(
-                        cache_universe_readiness.get("sourceMetadata")
-                        if isinstance(cache_universe_readiness.get("sourceMetadata"), dict)
-                        else {}
-                    ),
-                    "sourceClass": lifecycle_readiness.get("sourceClass"),
-                    "sourcePath": lifecycle_readiness.get("sourcePath"),
-                    "symbols": list(lifecycle_readiness.get("symbols") or []),
-                    "generatedFrom": "scanner_universe_lifecycle",
-                    "lifecycleReadiness": lifecycle_readiness,
-                    "noExternalCalls": True,
-                    "providerCallsEnabled": False,
-                    "readOnly": True,
-                    "activationState": "active",
-                },
-            }
-        elif uses_default_universe:
-            existing_metadata = (
-                cache_universe_readiness.get("sourceMetadata")
-                if isinstance(cache_universe_readiness, dict)
-                and isinstance(cache_universe_readiness.get("sourceMetadata"), dict)
-                else {}
-            )
-            if isinstance(cache_universe_readiness, dict):
-                cache_universe_readiness = {
-                    **cache_universe_readiness,
-                    "sourceMetadata": {
-                        **existing_metadata,
-                        "lifecycleReadiness": lifecycle_readiness,
-                    },
-                }
-        cache_universe_status = str(cache_universe_readiness.get("status") or "unavailable")
-        if cache_universe_status in {"available", "insufficient_coverage", "local_universe_available", "local_universe_seeded"}:
-            cached_universe_size = self._readiness_int(cache_universe_readiness.get("universeSize"))
-            if resolved_universe_size <= 0 and cached_universe_size > 0:
-                resolved_universe_size = cached_universe_size
-                universe_availability = "available"
-            if blocker_hint in {"missing_universe", "universe_missing"} and normalized_status == "not_run":
-                blocker_hint = "unknown"
-        if uses_cn_default_universe_cache and cache_universe_status in {"missing", "stale", "not_configured", "unavailable"}:
-            universe_availability = "missing" if cache_universe_status != "stale" else "stale"
-            if cache_universe_status == "stale":
-                blocker_hint = "stale_universe"
-                freshness = "stale"
-            elif cache_universe_status == "not_configured":
-                blocker_hint = "universe_not_configured"
-            else:
-                blocker_hint = "universe_missing"
-            if normalized_status != "completed" or selected_count <= 0:
-                state = "blocked"
-
-        benchmark_context = diagnostics.get("benchmark_context") if isinstance(diagnostics.get("benchmark_context"), Mapping) else {}
-        benchmark_code = str(benchmark_context.get("benchmark_code") or "").strip()
-        benchmark_missing = "missing_benchmark" in ohlcv_requirements or (
-            bool(benchmark_code) and benchmark_context.get("available") is not True
-        )
-        if benchmark_missing:
-            benchmark_state = "missing"
-        elif bool(benchmark_code) and benchmark_context.get("available") is True:
-            benchmark_state = "available"
-        else:
-            benchmark_state = "unknown"
-        ohlcv_symbol_readiness = self._scanner_ohlcv_symbol_readiness(ohlcv_readiness)
-        quote_snapshot_symbols = self._quote_snapshot_readiness_symbols(
-            market=market,
-            seeded_symbols=ohlcv_symbol_readiness["eligibleSymbols"],
-            universe_selection=universe_selection,
-        )
-        quote_snapshot_readiness = self._quote_snapshot_readiness_for_symbols(
-            market=market,
-            symbols=quote_snapshot_symbols,
-        )
-        quote_snapshot_available_symbols = (
-            [
-                str(symbol or "").strip().upper()
-                for symbol in quote_snapshot_readiness.get("availableSymbols", [])
-                if str(symbol or "").strip()
-            ]
-            if isinstance(quote_snapshot_readiness, Mapping)
-            else []
-        )
-        quote_snapshot_missing_symbols = (
-            [
-                str(symbol or "").strip().upper()
-                for symbol in quote_snapshot_readiness.get("missingSymbols", [])
-                if str(symbol or "").strip()
-            ]
-            if isinstance(quote_snapshot_readiness, Mapping)
-            else []
-        )
-        quote_snapshot_stale_symbols = (
-            [
-                str(symbol or "").strip().upper()
-                for symbol in quote_snapshot_readiness.get("staleSymbols", [])
-                if str(symbol or "").strip()
-            ]
-            if isinstance(quote_snapshot_readiness, Mapping)
-            else []
-        )
-        quote_snapshot_state = str(
-            quote_snapshot_readiness.get("availabilityState")
-            if isinstance(quote_snapshot_readiness, Mapping)
-            else ""
-        ).strip().lower()
-        if quote_snapshot_symbols:
-            if quote_snapshot_state == "available":
-                quote_coverage = "available"
-                if blocker_hint == "missing_quote_snapshot":
-                    blocker_hint = "unknown"
-            elif quote_snapshot_state == "stale":
-                quote_coverage = "stale"
-                freshness = "stale"
-                if blocker_hint == "missing_quote_snapshot":
-                    blocker_hint = "stale_quote_snapshot"
-            elif quote_snapshot_state == "partial":
-                quote_coverage = "partial"
-
-        quote_optional_limitation = (
-            str(market or "").strip().lower() == "us"
-            and normalized_status == "completed"
-            and selected_count > 0
-            and history_coverage in {"available", "partial"}
-            and quote_coverage in {"missing", "stale"}
-        )
-        if quote_optional_limitation and blocker_hint in {"missing_quote_snapshot", "stale_quote_snapshot"}:
-            blocker_hint = "unknown"
-        universe_reason = (
-            "universe_missing"
-            if universe_availability == "missing"
-            else "stale_universe"
-            if universe_availability == "stale"
-            else "empty_universe"
-            if universe_availability == "empty"
-            else "universe_available"
-            if universe_availability == "available"
-            else "universe_unknown"
-        )
-        quote_reason = (
-            "missing_quote_snapshot"
-            if quote_coverage == "missing"
-            else "stale_quote_snapshot"
-            if quote_coverage == "stale"
-            else "quote_partial"
-            if quote_coverage == "partial"
-            else "quote_available"
-            if quote_coverage == "available"
-            else "quote_unknown"
-        )
-        history_reason = (
-            "missing_history"
-            if history_coverage == "missing"
-            else "history_partial"
-            if history_coverage == "partial"
-            else "history_available"
-            if history_coverage == "available"
-            else "history_unknown"
-        )
-        benchmark_reason = (
-            "missing_benchmark"
-            if benchmark_state == "missing"
-            else "benchmark_available"
-            if benchmark_state == "available"
-            else "benchmark_unknown"
-        )
-
-        candidate_generation_blockers: List[str] = []
-        candidate_generation_limitations: List[str] = []
-        if universe_availability in {"missing", "empty", "stale"}:
-            candidate_generation_blockers.append(universe_reason)
-        if quote_coverage == "missing" and quote_optional_limitation:
-            candidate_generation_limitations.append("quote_unavailable_or_stale")
-        elif quote_coverage == "missing":
-            candidate_generation_blockers.append("missing_quote_snapshot")
-        if quote_coverage == "stale" and quote_optional_limitation:
-            candidate_generation_limitations.append("quote_unavailable_or_stale")
-        elif quote_coverage == "stale":
-            candidate_generation_blockers.append("stale_quote_snapshot")
-        if (
-            quote_snapshot_state == "available"
-            and normalized_status in {"empty", "failed"}
-            and self._readiness_int(reason_counts.get("missing_quote_or_snapshot")) > 0
-        ):
-            candidate_generation_blockers.append("missing_quote_snapshot")
-        if history_coverage == "missing":
-            candidate_generation_blockers.append("missing_history")
-        for requirement in ohlcv_requirements:
-            if requirement not in candidate_generation_blockers:
-                candidate_generation_blockers.append(requirement)
-        if benchmark_missing and "missing_benchmark" not in candidate_generation_blockers:
-            candidate_generation_blockers.append("missing_benchmark")
-        if blocker_hint not in {"unknown", *candidate_generation_blockers}:
-            candidate_generation_blockers.append(blocker_hint)
-        candidate_generation_blockers = list(dict.fromkeys(candidate_generation_blockers))
-        candidate_generation_limitations = list(dict.fromkeys(candidate_generation_limitations))
-        exact_blocked_states = self._exact_candidate_blocked_states(
-            status=normalized_status,
-            candidate_generation_blockers=candidate_generation_blockers,
-            selected_count=selected_count,
-            universe_availability=universe_availability,
-        )
-        missing_data_families = self._scanner_missing_data_families(
-            universe_availability=universe_availability,
-            quote_coverage=quote_coverage,
-            history_coverage=history_coverage,
-            benchmark_missing=benchmark_missing,
-            ohlcv_requirements=ohlcv_requirements,
-            candidate_generation_blockers=candidate_generation_blockers,
-        )
-        scanner_operator_action = self._scanner_universe_operator_action(
-            cache_universe_status=cache_universe_status,
-            quote_coverage=quote_coverage,
-            benchmark_missing=benchmark_missing,
-            ohlcv_requirements=ohlcv_requirements,
-            eligible_symbol_count=len(ohlcv_symbol_readiness["eligibleSymbols"]),
-            seeded_symbol_count=len(ohlcv_symbol_readiness["seededSymbols"]),
-        )
-        scanner_universe_readiness = build_scanner_universe_readiness_from_coverage(
-            market=market,
-            universe_status=(
-                cache_universe_status
-                if cache_universe_status in {"local_universe_available", "local_universe_seeded"}
-                else "quote_snapshot_stale"
-                if quote_coverage == "stale" and universe_availability == "available"
-                else "provider_not_configured"
-                if "provider_missing" in ohlcv_requirements and universe_availability == "available"
-                else
-                "available"
-                if universe_availability == "available"
-                else "stale"
-                if universe_availability == "stale"
-                else cache_universe_status
-                if (
-                    (uses_cn_default_universe_cache or uses_us_default_local_parquet_universe)
-                    and cache_universe_status in {"missing", "stale", "not_configured", "unavailable"}
-                )
-                else "missing"
-            ),
-            universe_size=int(resolved_universe_size or cache_universe_readiness.get("universeSize") or 0),
-            last_updated_at=cache_universe_readiness.get("lastUpdatedAt"),
-            freshness_state=str(cache_universe_readiness.get("freshnessState") or freshness),
-            quote_coverage=quote_coverage,
-            history_coverage=history_coverage,
-            blocked=bool(candidate_generation_blockers),
-            historical_requirements=ohlcv_requirements,
-            seeded_symbols=ohlcv_symbol_readiness["seededSymbols"],
-            eligible_symbols=ohlcv_symbol_readiness["eligibleSymbols"],
-            blocked_symbols=ohlcv_symbol_readiness["blockedSymbols"],
-            missing_data_families=missing_data_families,
-            operator_next_action=scanner_operator_action,
-            source_metadata=(
-                cache_universe_readiness.get("sourceMetadata")
-                if isinstance(cache_universe_readiness.get("sourceMetadata"), dict)
-                else None
-            ),
-        )
-        if (
-            scanner_universe_readiness["status"] == "insufficient_coverage"
-            and blocker_hint == "unknown"
-            and normalized_status != "not_run"
-        ):
-            blocker_hint = "insufficient_coverage"
-        cache_readiness = self._cache_readiness_summary(
-            state=state,
-            ohlcv_requirements=ohlcv_requirements,
-            history_coverage=history_coverage,
-            freshness=freshness,
-        )
-        if state == "ready" and not candidate_generation_blockers:
-            candidate_generation_state = "ready"
-        elif selected_count > 0 and not candidate_generation_blockers and candidate_generation_limitations:
-            candidate_generation_state = "degraded"
-        elif state == "partial" and not any(
-            item in candidate_generation_blockers
-            for item in (
-                "universe_missing",
-                "empty_universe",
-                "missing_quote_snapshot",
-                "missing_history",
-                "missing_adjustments",
-                "missing_benchmark",
-            )
-        ):
-            candidate_generation_state = "degraded"
-        elif normalized_status == "not_run" and not candidate_generation_blockers:
-            candidate_generation_state = "not_run"
-        else:
-            candidate_generation_state = "blocked"
-        consumer_summary, next_data_action = self._data_readiness_copy(blocker_hint, state)
-        lineage = self._scanner_run_lineage(
-            diagnostics=diagnostics,
-            candidates=candidates,
-            ohlcv_readiness=ohlcv_readiness,
-        )
-
-        return {
-            "state": state,
-            "availabilityState": ohlcv_availability if ohlcv_availability != "unknown" else (
-                "available" if state == "ready" else "degraded" if state == "partial" else "not_available" if state == "blocked" else "unknown"
-            ),
-            "executionState": ohlcv_execution if ohlcv_execution != "unknown" else (
-                "executable" if state == "ready" else "degraded" if state == "partial" else "blocked" if state == "blocked" else "unknown"
-            ),
-            "market": str(market or "").strip().lower() or "unknown",
-            "profile": str(profile or "").strip() or "unknown",
-            "universeAvailability": universe_availability,
-            "universeSize": int(resolved_universe_size),
-            "quoteCoverage": quote_coverage,
-            "historyCoverage": history_coverage,
-            "universeReadiness": {
-                "state": universe_availability,
-                "reason": universe_reason,
-                "universeSize": int(resolved_universe_size),
-                "consumerSafe": True,
-            },
-            "scannerUniverseReadiness": scanner_universe_readiness,
-            "quoteReadiness": {
-                "state": quote_coverage,
-                "reason": quote_reason,
-                "availableSymbols": quote_snapshot_available_symbols[:50],
-                "missingSymbols": quote_snapshot_missing_symbols[:50],
-                "staleSymbols": quote_snapshot_stale_symbols[:50],
-                "sourceFamilies": (
-                    list(quote_snapshot_readiness.get("sourceFamilies", []))[:10]
-                    if isinstance(quote_snapshot_readiness, Mapping)
-                    else []
-                ),
-                "consumerSafe": True,
-            },
-            "historyReadiness": {
-                "state": history_coverage,
-                "reason": history_reason,
-                "requiredBars": int(ohlcv_readiness.get("requiredBars") or 0),
-                "usableBars": int(ohlcv_readiness.get("usableBars") or 0),
-                "missingBars": int(ohlcv_readiness.get("missingBars") or 0),
-                "missingRequirements": ohlcv_requirements,
-                "consumerSafe": True,
-            },
-            "cacheReadiness": cache_readiness,
-            "benchmarkReadiness": {
-                "state": benchmark_state,
-                "reason": benchmark_reason,
-                "benchmarkCode": benchmark_code or None,
-                "consumerSafe": True,
-            },
-            "candidateGenerationState": candidate_generation_state,
-            "candidateGenerationBlockers": candidate_generation_blockers,
-            "candidateGenerationLimitations": candidate_generation_limitations,
-            "blockedStates": exact_blocked_states,
-            "primaryBlockedState": exact_blocked_states[0] if exact_blocked_states else None,
-            "freshness": freshness,
-            "quoteFreshness": diagnostics.get("quoteFreshness") or quote_coverage,
-            "quoteReadinessLimitation": diagnostics.get("quoteReadinessLimitation"),
-            "universeSource": diagnostics.get("universeSource") or lineage["universeSource"],
-            "scannerLineage": lineage,
-            "symbolsEvaluated": lineage["symbolsEvaluated"],
-            "symbolsWithSufficientData": lineage["symbolsWithSufficientData"],
-            "symbolsSkipped": lineage["symbolsSkipped"],
-            "noExternalCalls": bool(diagnostics.get("noExternalCalls")) if diagnostics.get("noExternalCalls") is not None else False,
-            "providerCallsEnabled": bool(diagnostics.get("providerCallsEnabled")) if diagnostics.get("providerCallsEnabled") is not None else True,
-            "historicalOhlcvReadinessSummary": ohlcv_readiness,
-            "requiredBars": int(ohlcv_readiness.get("requiredBars") or 0),
-            "usableBars": int(ohlcv_readiness.get("usableBars") or 0),
-            "missingBars": int(ohlcv_readiness.get("missingBars") or 0),
-            "missingRequirements": ohlcv_requirements,
-            "blockedSymbols": list(ohlcv_readiness.get("blockedSymbols") or []),
-            "degradedSymbols": list(ohlcv_readiness.get("degradedSymbols") or []),
-            "ohlcvReadiness": ohlcv_readiness,
-            "candidateEvaluationCount": int(candidate_evaluation_count),
-            "selectedCount": int(selected_count),
-            "rejectedCount": int(rejected_count),
-            "failedCount": int(failed_count),
-            "blockerBucket": blocker_hint,
-            "consumerSummary": consumer_summary,
-            "nextDataAction": next_data_action,
-        }
+        return serialize_scanner_readiness(evaluate_scanner_readiness(evidence))
 
     def _attach_data_readiness(
         self,
