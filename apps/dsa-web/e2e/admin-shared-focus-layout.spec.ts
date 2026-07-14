@@ -3,13 +3,6 @@ import { expect, installAdminAuthHarness, test } from './fixtures/adminAuth';
 
 const timestamp = '2026-05-06T10:30:00+08:00';
 
-const viewports = [
-  { width: 1280, height: 800 },
-  { width: 768, height: 1024 },
-  { width: 390, height: 844 },
-  { width: 320, height: 800 },
-];
-
 const adminRoutes = [
   { key: 'launch', path: '/en/admin/launch-cockpit', ready: 'admin-launch-cockpit-page' },
   { key: 'system', path: '/en/settings/system', ready: 'system-settings-page' },
@@ -335,10 +328,8 @@ async function collectLayoutMetrics(page: Page) {
 }
 
 test.describe('admin shared focus and layout closure', () => {
-  for (const viewport of viewports) {
-    for (const route of adminRoutes) {
-      test(`${route.key} has no focus clipping or page overflow at ${viewport.width}px`, async ({ page }) => {
-        await page.setViewportSize(viewport);
+  for (const route of adminRoutes) {
+    test(`${route.key} has no focus clipping or page overflow`, async ({ page }) => {
         await installAdminAuthHarness(page);
         await installAdminLayoutMocks(page);
         await page.goto(route.path);
@@ -347,10 +338,9 @@ test.describe('admin shared focus and layout closure', () => {
         await expect(page.getByTestId(route.ready)).toBeVisible({ timeout: 15_000 });
 
         const metrics = await collectLayoutMetrics(page);
-        expect(metrics.documentOverflow, `${route.key} ${viewport.width}px document overflow`).toBe(0);
-        expect(metrics.pageRootOverflow, `${route.key} ${viewport.width}px page root overflow`).toEqual([]);
-        expect(metrics.focusClips, `${route.key} ${viewport.width}px focus clipping`).toEqual([]);
-      });
-    }
+      expect(metrics.documentOverflow, `${route.key} document overflow`).toBe(0);
+      expect(metrics.pageRootOverflow, `${route.key} page root overflow`).toEqual([]);
+      expect(metrics.focusClips, `${route.key} focus clipping`).toEqual([]);
+    });
   }
 });

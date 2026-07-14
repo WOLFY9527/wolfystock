@@ -3,11 +3,6 @@ import { expect, expectNoHorizontalOverflow, installAdminAuthHarness, test } fro
 
 const timestamp = '2026-06-06T10:30:00+08:00';
 
-const viewports = [
-  { width: 1440, height: 1000 },
-  { width: 1920, height: 1080 },
-] as const;
-
 const adminRailRoutes = [
   { path: '/zh/settings/system', readyTestId: 'system-settings-page' },
   { path: '/zh/admin/logs', readyTestId: 'admin-logs-workspace' },
@@ -522,10 +517,8 @@ async function expectAdminRailContract(page: Page, viewportWidth: number) {
 }
 
 test.describe('admin system-control rail contract', () => {
-  for (const viewport of viewports) {
-    for (const route of adminRailRoutes) {
-      test(`${route.path} keeps the 1600px admin rail at ${viewport.width}px`, async ({ page }) => {
-        await page.setViewportSize(viewport);
+  for (const route of adminRailRoutes) {
+    test(`${route.path} keeps the 1600px admin rail`, async ({ page }) => {
         await installAdminRailMocks(page);
         await page.goto(route.path);
         await page.waitForLoadState('domcontentloaded');
@@ -533,8 +526,7 @@ test.describe('admin system-control rail contract', () => {
         await expect(page).toHaveURL(new RegExp(`${route.path.replaceAll('/', '\\/')}$`));
         await expect(page.getByTestId(route.readyTestId)).toBeVisible({ timeout: 15_000 });
         await expectNoHorizontalOverflow(page);
-        await expectAdminRailContract(page, viewport.width);
-      });
-    }
+      await expectAdminRailContract(page, page.viewportSize()!.width);
+    });
   }
 });

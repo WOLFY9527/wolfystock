@@ -1,12 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 
 const timestamp = '2026-07-06T13:30:00Z';
-const viewports = [
-  { width: 1280, height: 800 },
-  { width: 768, height: 1024 },
-  { width: 390, height: 844 },
-  { width: 320, height: 800 },
-] as const;
 const paths = [
   '/zh/stocks/AAPL/structure-decision',
   '/en/stocks/AAPL/structure-decision',
@@ -296,9 +290,7 @@ async function collectContainmentMetrics(page: Page) {
 
 test.describe('T242 Structure Decision responsive containment', () => {
   for (const path of paths) {
-    for (const viewport of viewports) {
-      test(`contains page-owner overflow for ${path} at ${viewport.width}x${viewport.height}`, async ({ page }) => {
-        await page.setViewportSize(viewport);
+    test(`contains page-owner overflow for ${path}`, async ({ page }) => {
         await installStructureDecisionHarness(page);
         await page.goto(path);
         await page.getByTestId('stock-structure-decision-page').waitFor({ state: 'visible', timeout: 15_000 });
@@ -315,7 +307,6 @@ test.describe('T242 Structure Decision responsive containment', () => {
         expect(metrics.clippedFocusableCount).toBe(0);
         expect(metrics.actionReachability).toBe(true);
         await expect(page.getByTestId('stock-evidence-ledger-scroll')).toBeFocused();
-      });
-    }
+    });
   }
 });

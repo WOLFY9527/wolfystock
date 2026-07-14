@@ -2,11 +2,6 @@ import type { Page, Route } from '@playwright/test';
 import { expect as appExpect, test as appTest } from './fixtures/appSmoke';
 import { expect as adminExpect, installAdminAuthHarness, test as adminTest } from './fixtures/adminAuth';
 
-const viewports = [
-  { name: 'desktop', size: { width: 1440, height: 1000 } },
-  { name: 'mobile', size: { width: 390, height: 844 } },
-] as const;
-
 const productRoutes = [
   { path: '/zh/scanner', canonical: '/zh/scanner', marker: 'scanner-ranking-board-page' },
   { path: '/zh/watchlist', canonical: '/zh/watchlist', marker: 'watchlist-page' },
@@ -929,10 +924,8 @@ function expectCanonicalPath(page: Page, canonicalPath: string) {
 }
 
 appTest.describe('viewport route canonicalization smoke', () => {
-  for (const viewport of viewports) {
-    for (const routeCheck of productRoutes) {
-      appTest(`${routeCheck.path} stays canonical at ${viewport.size.width}px`, async ({ page }) => {
-        await page.setViewportSize(viewport.size);
+  for (const routeCheck of productRoutes) {
+    appTest(`${routeCheck.path} stays canonical`, async ({ page }) => {
         await installSignedInProductSession(page);
         await installProductRouteApiMocks(page);
         await installLiquidityMonitorMock(page);
@@ -942,16 +935,13 @@ appTest.describe('viewport route canonicalization smoke', () => {
 
         await expectCanonicalPath(page, routeCheck.canonical);
         await appExpect(page.getByTestId(routeCheck.marker)).toBeVisible({ timeout: 15_000 });
-      });
-    }
+    });
   }
 });
 
 appTest.describe('viewport route legacy alias canonicalization smoke', () => {
-  for (const viewport of viewports) {
-    for (const routeCheck of productAliasRoutes) {
-      appTest(`${routeCheck.path} redirects to ${routeCheck.canonical} at ${viewport.size.width}px`, async ({ page }) => {
-        await page.setViewportSize(viewport.size);
+  for (const routeCheck of productAliasRoutes) {
+    appTest(`${routeCheck.path} redirects to ${routeCheck.canonical}`, async ({ page }) => {
         await installSignedInProductSession(page);
         await installProductRouteApiMocks(page);
         await installResearchIaMocks(page);
@@ -962,15 +952,12 @@ appTest.describe('viewport route legacy alias canonicalization smoke', () => {
         await expectCanonicalPath(page, routeCheck.canonical);
         await appExpect(page.getByTestId(routeCheck.marker)).toBeVisible({ timeout: 15_000 });
         await appExpect(page.getByTestId('scenario-lab-page')).toHaveCount(0);
-      });
-    }
+    });
   }
 });
 
 adminTest.describe('viewport route alias canonicalization smoke', () => {
-  for (const viewport of viewports) {
-    adminTest(`keeps expected admin provider alias stable at ${viewport.size.width}px`, async ({ page }) => {
-      await page.setViewportSize(viewport.size);
+  adminTest('keeps expected admin provider alias stable', async ({ page }) => {
       await installAdminAuthHarness(page);
       await installProviderOpsMocks(page);
 
@@ -979,10 +966,9 @@ adminTest.describe('viewport route alias canonicalization smoke', () => {
 
       await adminExpect.poll(() => new URL(page.url()).pathname).toBe('/zh/admin/market-providers');
       await adminExpect(page.getByTestId('market-provider-operations-page')).toBeVisible({ timeout: 15_000 });
-    });
+  });
 
-    adminTest(`redirects admin system logs alias to logs workspace at ${viewport.size.width}px`, async ({ page }) => {
-      await page.setViewportSize(viewport.size);
+  adminTest('redirects admin system logs alias to logs workspace', async ({ page }) => {
       await installAdminAuthHarness(page);
       await installAdminLogsMocks(page);
 
@@ -991,6 +977,5 @@ adminTest.describe('viewport route alias canonicalization smoke', () => {
 
       await adminExpect.poll(() => new URL(page.url()).pathname).toBe('/zh/admin/logs');
       await adminExpect(page.getByTestId('admin-logs-workspace')).toBeVisible({ timeout: 15_000 });
-    });
-  }
+  });
 });

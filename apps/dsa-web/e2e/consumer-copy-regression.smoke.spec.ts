@@ -20,11 +20,6 @@ import {
 } from './fixtures/smokeEvidence';
 import { installPortfolioSmokeHarness } from './fixtures/portfolioSmoke';
 
-const viewports = [
-  { width: 1440, height: 1000 },
-  { width: 390, height: 844 },
-] as const;
-
 const forbiddenInternalPattern =
   /(?:^|[\s_-])(raw|debug|payload|prompt|env|trace|credential)(?:$|[\s_-])|providerRoute|sourceAuthority|provider\s+payload|cache\s+router|stack\s+trace/i;
 const forbiddenDiagnosticVocabularyPattern =
@@ -811,11 +806,7 @@ async function installOptionsRoutes(page: Page) {
 }
 
 appTest.describe('consumer copy regression smoke', () => {
-  for (const viewport of viewports) {
-    const viewportLabel = viewport.width >= 768 ? 'desktop' : 'mobile';
-
-    appTest(`Home keeps citation, evidence, and no-advice copy consumer-safe (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
-      await page.setViewportSize(viewport);
+  appTest('Home keeps citation, evidence, and no-advice copy consumer-safe', async ({ page, consoleErrors, unhandledApiRoutes }) => {
       await installAuthenticatedHomeEvidenceRoutes(page);
       await openSignedInRoute(page, '/zh');
 
@@ -838,8 +829,7 @@ appTest.describe('consumer copy regression smoke', () => {
       await expectNoHorizontalOverflow(page);
     });
 
-    appTest(`Market Overview keeps translated source labels and research-only copy bounded (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
-      await page.setViewportSize(viewport);
+  appTest('Market Overview keeps translated source labels and research-only copy bounded', async ({ page, consoleErrors, unhandledApiRoutes }) => {
       await installSignedInSessionRoutes(page);
       await installTemperatureOverride(page);
       await openSignedInRoute(page, '/zh/market-overview');
@@ -858,8 +848,7 @@ appTest.describe('consumer copy regression smoke', () => {
       await expectNoHorizontalOverflow(page);
     });
 
-    appTest(`Scanner keeps candidate research summary and market drivers wording consumer-safe (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
-      await page.setViewportSize(viewport);
+  appTest('Scanner keeps candidate research summary and market drivers wording consumer-safe', async ({ page, consoleErrors, unhandledApiRoutes }) => {
       await installScannerContextRoutes(page);
       await openSignedInRoute(page, '/zh/scanner');
 
@@ -871,7 +860,7 @@ appTest.describe('consumer copy regression smoke', () => {
       await appExpect(topDownStrip).toContainText('市场驱动因素');
       await appExpect(topDownStrip).toContainText('市场：仅观察');
       await appExpect(topDownStrip).toContainText('边界：仅研究观察');
-      const candidateSummary = viewport.width >= 768
+      const candidateSummary = page.viewportSize()!.width >= 768
         ? page.getByTestId('scanner-candidate-summary-row-NVDA')
         : page.getByTestId('scanner-candidate-summary-mobile-row-NVDA');
       await appExpect(candidateSummary).toBeVisible();
@@ -884,8 +873,7 @@ appTest.describe('consumer copy regression smoke', () => {
       await expectNoHorizontalOverflow(page);
     });
 
-    appTest(`Liquidity Monitor keeps degraded copy consumer-safe without exposing diagnostic vocabulary (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
-      await page.setViewportSize(viewport);
+  appTest('Liquidity Monitor keeps degraded copy consumer-safe without exposing diagnostic vocabulary', async ({ page, consoleErrors, unhandledApiRoutes }) => {
       await installLiquidityMonitorRoutes(page);
       await openSignedInRoute(page, '/zh/market/liquidity-monitor');
 
@@ -902,8 +890,7 @@ appTest.describe('consumer copy regression smoke', () => {
       await expectNoHorizontalOverflow(page);
     });
 
-    appTest(`Rotation Radar keeps read-only consumer wording free of backend diagnostics (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
-      await page.setViewportSize(viewport);
+  appTest('Rotation Radar keeps read-only consumer wording free of backend diagnostics', async ({ page, consoleErrors, unhandledApiRoutes }) => {
       await installSignedInSessionRoutes(page);
       await openSignedInRoute(page, '/zh/market/rotation-radar');
 
@@ -924,8 +911,7 @@ appTest.describe('consumer copy regression smoke', () => {
       await expectNoHorizontalOverflow(page);
     });
 
-    appTest(`Watchlist keeps default-visible detail rails consumer-safe (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
-      await page.setViewportSize(viewport);
+  appTest('Watchlist keeps default-visible detail rails consumer-safe', async ({ page, consoleErrors, unhandledApiRoutes }) => {
       await installWatchlistDiagnosticRoutes(page);
       await openSignedInRoute(page, '/zh/watchlist');
 
@@ -942,8 +928,7 @@ appTest.describe('consumer copy regression smoke', () => {
       await expectNoHorizontalOverflow(page);
     });
 
-    appTest(`Portfolio keeps default-visible holdings and risk copy consumer-safe (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
-      await page.setViewportSize(viewport);
+  appTest('Portfolio keeps default-visible holdings and risk copy consumer-safe', async ({ page, consoleErrors, unhandledApiRoutes }) => {
       const harness = await installPortfolioSmokeHarness(page);
       await page.goto('/zh/portfolio');
       await page.waitForLoadState('domcontentloaded');
@@ -961,8 +946,7 @@ appTest.describe('consumer copy regression smoke', () => {
       await page.unrouteAll({ behavior: 'ignoreErrors' });
     });
 
-    appTest(`Options Lab keeps non-decision copy and read-only boundaries consumer-safe (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
-      await page.setViewportSize(viewport);
+  appTest('Options Lab keeps non-decision copy and read-only boundaries consumer-safe', async ({ page, consoleErrors, unhandledApiRoutes }) => {
       const harness = await installOptionsRoutes(page);
       await openSignedInRoute(page, '/zh/options-lab');
 
@@ -989,6 +973,5 @@ appTest.describe('consumer copy regression smoke', () => {
       pwExpect(consoleErrors).toEqual([]);
       pwExpect(unhandledApiRoutes).toEqual([]);
       await expectNoHorizontalOverflow(page);
-    });
-  }
+  });
 });
