@@ -53,16 +53,27 @@ vi.mock('../../api/stockEvidence', () => ({
   },
 }));
 
-vi.mock('../../api/analysis', async () => {
-  const actual = await vi.importActual<typeof import('../../api/analysis')>('../../api/analysis');
+vi.mock('../../api/analysis', () => {
+  class DuplicateTaskError extends Error {
+    stockCode: string;
+    existingTaskId: string;
+
+    constructor(stockCode: string, existingTaskId: string, message?: string) {
+      super(message || `股票 ${stockCode} 正在分析中`);
+      this.name = 'DuplicateTaskError';
+      this.stockCode = stockCode;
+      this.existingTaskId = existingTaskId;
+    }
+  }
+
   return {
-    ...actual,
     analysisApi: {
-      ...actual.analysisApi,
       analyzeAsync: vi.fn(),
       getTasks: vi.fn(),
       getTaskProgress: vi.fn(),
+      getTaskStreamUrl: vi.fn(() => '/api/v1/analysis/tasks/stream'),
     },
+    DuplicateTaskError,
   };
 });
 
@@ -305,6 +316,55 @@ const GUEST_HOME_FORBIDDEN_COPY_PATTERN =
   /provider|cache|debug|schema|raw payload|token|session[_\s-]?id|secret|buy now|sell now|trade now|order now|connect broker|broker CTA|guaranteed|必买|稳赚|保证收益|立即交易|提交订单|连接经纪商/i;
 const GUEST_PREVIEW_PRICE_ZONE_FORBIDDEN_COPY_PATTERN =
   /理想买入|入场|止损|止盈|目标价|买入|卖出|加仓|建仓|target price|entry|stop loss|take profit/i;
+
+function createReadyDashboardOverview(): Awaited<ReturnType<typeof dashboardOverviewApi.getMarketIntelligenceOverview>> {
+  return {
+    status: 'ready',
+    asOf: '2026-06-08T08:00:00Z',
+    marketPulse: {
+      sp500: { label: 'S&P 500', value: '5,300', change: '+0.4%', status: 'ready' },
+      nasdaq: { label: 'Nasdaq', value: '18,100', change: '+0.7%', status: 'ready' },
+      russell2000: { label: 'Russell 2000', value: '2,100', change: '+0.2%', status: 'ready' },
+      vix: { label: 'VIX', value: '14.2', change: '-0.3', status: 'ready' },
+      tenYearYield: { label: '10Y', value: '4.2%', change: '+0.01', status: 'ready' },
+      dollarIndex: { label: 'DXY', value: '104.0', change: '-0.1', status: 'ready' },
+      marketBreadth: { summary: 'Breadth is improving.', status: 'ready' },
+      liquidityState: 'stable',
+    },
+    marketBrief: { headline: 'Market breadth improves', summary: 'Breadth improved.', status: 'ready' },
+    moneyFlow: {
+      topInflows: ['Software'],
+      topOutflows: [],
+      styleBias: 'balanced',
+      offensiveDefensiveBias: 'balanced',
+      sourceStatus: 'ready',
+      status: 'ready',
+    },
+    liquidityRisk: { summary: 'Stable', volatilityTone: 'calm', fundingStress: 'low', dollarRatePressure: 'low', status: 'ready' },
+    sectorThemeRotation: { leadingThemes: ['Software'], laggingThemes: [], diffusion: 'broadening', summary: 'Rotation improving.', status: 'ready' },
+    researchQueue: { status: 'ready', items: [] },
+    dataQuality: {
+      state: 'ready',
+      label: 'Ready',
+      summary: 'Ready',
+      sections: {
+        moneyFlow: 'ready',
+        liquidityRisk: 'ready',
+      },
+    },
+    productReadModel: {
+      contractVersion: 'product_read_model_v1',
+      surface: 'Dashboard',
+      state: 'available',
+      ready: true,
+      blockingChildren: [],
+      freshness: { state: 'available', asOf: '2026-06-08T08:00:00Z' },
+      provenance: { sourceClass: 'dashboard_read_models', asOf: '2026-06-08T08:00:00Z', freshness: 'available', quality: 'available' },
+    },
+    noAdviceDisclosure: 'Research observation only.',
+  };
+}
+
 const defaultStockEvidenceResponse = {
   symbols: ['ORCL'],
   items: [
@@ -446,11 +506,33 @@ const orclPartialEvidencePacket = {
   },
 };
 
-const pendingPromise = () => new Promise<never>(() => {});
+const pendingMockSettlers = new Set<() => void>();
+
+function pendingPromise<T = never>(): Promise<T> {
+  return new Promise<T>((resolve) => {
+    const settle = () => {
+      pendingMockSettlers.delete(settle);
+      resolve(undefined as T);
+    };
+    pendingMockSettlers.add(settle);
+  });
+}
+
+async function settlePendingMockPromises() {
+  const settlers = Array.from(pendingMockSettlers);
+  pendingMockSettlers.clear();
+  for (const settle of settlers) {
+    settle();
+  }
+  if (settlers.length > 0) {
+    await flushPendingUiWork();
+  }
+}
 
 describe('HomeSurfacePage', () => {
   afterEach(async () => {
     cleanup();
+    await settlePendingMockPromises();
     await flushPendingUiWork();
   });
 
@@ -477,51 +559,7 @@ describe('HomeSurfacePage', () => {
         },
       ],
     });
-    vi.mocked(dashboardOverviewApi.getMarketIntelligenceOverview).mockResolvedValue({
-      status: 'ready',
-      asOf: '2026-06-08T08:00:00Z',
-      marketPulse: {
-        sp500: { label: 'S&P 500', value: '5,300', change: '+0.4%', status: 'ready' },
-        nasdaq: { label: 'Nasdaq', value: '18,100', change: '+0.7%', status: 'ready' },
-        russell2000: { label: 'Russell 2000', value: '2,100', change: '+0.2%', status: 'ready' },
-        vix: { label: 'VIX', value: '14.2', change: '-0.3', status: 'ready' },
-        tenYearYield: { label: '10Y', value: '4.2%', change: '+0.01', status: 'ready' },
-        dollarIndex: { label: 'DXY', value: '104.0', change: '-0.1', status: 'ready' },
-        marketBreadth: { summary: 'Breadth is improving.', status: 'ready' },
-        liquidityState: 'stable',
-      },
-      marketBrief: { headline: 'Market breadth improves', summary: 'Breadth improved.', status: 'ready' },
-      moneyFlow: {
-        topInflows: ['Software'],
-        topOutflows: [],
-        styleBias: 'balanced',
-        offensiveDefensiveBias: 'balanced',
-        sourceStatus: 'ready',
-        status: 'ready',
-      },
-      liquidityRisk: { summary: 'Stable', volatilityTone: 'calm', fundingStress: 'low', dollarRatePressure: 'low', status: 'ready' },
-      sectorThemeRotation: { leadingThemes: ['Software'], laggingThemes: [], diffusion: 'broadening', summary: 'Rotation improving.', status: 'ready' },
-      researchQueue: { status: 'ready', items: [] },
-      dataQuality: {
-        state: 'ready',
-        label: 'Ready',
-        summary: 'Ready',
-        sections: {
-          moneyFlow: 'ready',
-          liquidityRisk: 'ready',
-        },
-      },
-      productReadModel: {
-        contractVersion: 'product_read_model_v1',
-        surface: 'Dashboard',
-        state: 'available',
-        ready: true,
-        blockingChildren: [],
-        freshness: { state: 'available', asOf: '2026-06-08T08:00:00Z' },
-        provenance: { sourceClass: 'dashboard_read_models', asOf: '2026-06-08T08:00:00Z', freshness: 'available', quality: 'available' },
-      },
-      noAdviceDisclosure: 'Research observation only.',
-    });
+    vi.mocked(dashboardOverviewApi.getMarketIntelligenceOverview).mockResolvedValue(createReadyDashboardOverview());
     vi.mocked(historyApi.getList).mockResolvedValue({
       total: 3,
       page: 1,
@@ -2981,6 +3019,8 @@ describe('HomeSurfacePage', () => {
 
   it('shows a consumer market brief when there is no saved history or active task', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    const overviewDeferred = createDeferred<ReturnType<typeof createReadyDashboardOverview>>();
+    vi.mocked(dashboardOverviewApi.getMarketIntelligenceOverview).mockReturnValueOnce(overviewDeferred.promise);
     vi.mocked(historyApi.getList).mockResolvedValueOnce({
       total: 0,
       page: 1,
@@ -2996,7 +3036,15 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('member-home-morning-decision-note')).toHaveTextContent('晨间研究判断');
     expect(screen.getByTestId('member-home-observation-head')).toBeInTheDocument();
     expect(screen.getByTestId('member-home-observation-head')).toHaveAttribute('data-research-anatomy', 'observation-head');
-    expect(screen.getByRole('heading', { name: 'Market breadth improves' })).toBeInTheDocument();
+    expect(screen.getByTestId('member-home-observation-head')).toHaveTextContent('正在刷新市场证据。');
+
+    await act(async () => {
+      overviewDeferred.resolve(createReadyDashboardOverview());
+      await overviewDeferred.promise;
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Market breadth improves' })).toBeInTheDocument();
+    expect(screen.getByTestId('member-home-observation-head')).not.toHaveTextContent('正在刷新市场证据。');
     expect(screen.getByTestId('member-home-market-regime')).toHaveTextContent(/当前状态：Risk-on|当前状态：中性|当前状态：Risk-off/);
     expect(screen.getByTestId('member-home-market-reliability')).toHaveTextContent('可靠性 / 新鲜度');
     expect(screen.getByTestId('member-home-market-reliability')).toHaveTextContent('Ready');
