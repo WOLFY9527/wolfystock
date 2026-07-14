@@ -24,45 +24,100 @@ function httpError(status: number, data: unknown): Error & { response: AxiosResp
   };
 }
 
-describe('optionsLabApi fixture fallback boundaries', () => {
+describe('optionsLabApi fail-closed boundaries', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('keeps local fixture fallback for backend-unavailable read probes', async () => {
-    vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('Network Error'));
+  it('rejects summary network failures without producing fixture data', async () => {
+    const error = new Error('Network Error');
+    vi.mocked(apiClient.get).mockRejectedValueOnce(error);
 
-    await expect(optionsLabApi.getUnderlyingSummary('tem')).resolves.toMatchObject({
-      symbol: 'TEM',
-      metadata: {
-        readOnly: true,
-      },
-    });
+    await expect(optionsLabApi.getUnderlyingSummary('tem')).rejects.toBe(error);
+  });
+
+  it('rejects expiration network failures without producing fixed dates', async () => {
+    const error = new Error('Network Error');
+    vi.mocked(apiClient.get).mockRejectedValueOnce(error);
+
+    await expect(optionsLabApi.getExpirations('tem')).rejects.toBe(error);
+  });
+
+  it('rejects chain network failures without producing fixed quotes or Greeks', async () => {
+    const error = new Error('Network Error');
+    vi.mocked(apiClient.get).mockRejectedValueOnce(error);
+
+    await expect(optionsLabApi.getOptionChain('tem', '2030-01-18')).rejects.toBe(error);
   });
 
   it('does not mask authenticated or unsupported-symbol HTTP responses with fixtures', async () => {
-    vi.mocked(apiClient.get).mockRejectedValueOnce(httpError(401, {
+    const authError = httpError(401, {
       error: 'unauthorized',
       message: 'Login required',
-    }));
-
-    await expect(optionsLabApi.getUnderlyingSummary('TEM')).rejects.toMatchObject({
-      response: {
-        status: 401,
-      },
     });
+    vi.mocked(apiClient.get).mockRejectedValueOnce(authError);
 
-    vi.mocked(apiClient.get).mockRejectedValueOnce(httpError(404, {
+    await expect(optionsLabApi.getUnderlyingSummary('TEM')).rejects.toBe(authError);
+    expect(authError).toMatchObject({ message: 'HTTP 401', response: { status: 401 } });
+
+    const unsupportedError = httpError(404, {
       detail: {
         error: 'unsupported_symbol',
         message: 'Options Lab Phase 1 supports fixture-backed US listed equity options only.',
       },
-    }));
+    });
+    vi.mocked(apiClient.get).mockRejectedValueOnce(unsupportedError);
 
-    await expect(optionsLabApi.getExpirations('HK00700')).rejects.toMatchObject({
-      response: {
-        status: 404,
+    await expect(optionsLabApi.getExpirations('HK00700')).rejects.toBe(unsupportedError);
+    expect(unsupportedError).toMatchObject({ message: 'HTTP 404', response: { status: 404 } });
+  });
+
+  it('keeps successful unsupported and empty-expiration responses unchanged', async () => {
+    vi.mocked(apiClient.get)
+      .mockResolvedValueOnce({
+        data: {
+          symbol: 'HK00700',
+          market: 'hk',
+          underlying: {
+            price: null,
+            source: 'unavailable',
+            as_of: '',
+            freshness: 'error',
+          },
+          options_availability: {
+            supported: false,
+            provider: 'unavailable',
+            limitations: ['unsupported_symbol'],
+          },
+          metadata: {
+            read_only: true,
+            no_external_calls_in_tests: false,
+            limitations: ['unsupported_symbol'],
+          },
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        data: {
+          symbol: 'TEM',
+          expirations: [],
+          metadata: {
+            read_only: true,
+            no_external_calls_in_tests: false,
+            limitations: [],
+          },
+        },
+      } as never);
+
+    await expect(optionsLabApi.getUnderlyingSummary('HK00700')).resolves.toMatchObject({
+      symbol: 'HK00700',
+      optionsAvailability: {
+        supported: false,
+        limitations: ['unsupported_symbol'],
       },
+    });
+    await expect(optionsLabApi.getExpirations('TEM')).resolves.toMatchObject({
+      symbol: 'TEM',
+      expirations: [],
     });
   });
 
@@ -698,7 +753,7 @@ describe('optionsLabApi fixture fallback boundaries', () => {
     }));
   });
 
-  it('posts decision evaluation and keeps network-error fallback demo-only', async () => {
+  it('posts decision evaluation and preserves successful backend data', async () => {
     vi.mocked(apiClient.post).mockResolvedValueOnce({
       data: {
         symbol: 'TEM',
@@ -825,26 +880,15 @@ describe('optionsLabApi fixture fallback boundaries', () => {
       strategy: 'long_call',
     }));
 
-    vi.mocked(apiClient.post).mockRejectedValueOnce(new Error('Network Error'));
+  });
+
+  it('rejects decision network failures without producing a synthetic decision', async () => {
+    const error = new Error('Network Error');
+    vi.mocked(apiClient.post).mockRejectedValueOnce(error);
+
     await expect(optionsLabApi.evaluateDecision({
       symbol: 'TEM',
       strategy: 'bull_call_spread',
-    })).resolves.toMatchObject({
-      decisionLabel: '数据不足，禁止判断',
-      decisionGrade: false,
-      gateDecision: 'blocked',
-      failClosedReasonCodes: ['synthetic_or_fixture_data_not_decision_grade'],
-      dataQualityGates: {
-        decisionGrade: false,
-        tier: 'synthetic_demo_only',
-      },
-      liquidityGates: {
-        passed: true,
-        liquidityScore: 76,
-      },
-      dataQuality: {
-        dataQualityTier: 'synthetic_demo_only',
-      },
-    });
+    })).rejects.toBe(error);
   });
 });

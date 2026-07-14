@@ -800,6 +800,46 @@ describe('OptionsLabPage', () => {
     mockHappyPath();
   });
 
+  it('keeps dates unselected until real expirations load, then selects the first response date', async () => {
+    let resolveExpirations: (value: Awaited<ReturnType<typeof optionsLabApi.getExpirations>>) => void = () => {};
+    vi.mocked(optionsLabApi.getExpirations).mockReturnValueOnce(new Promise((resolve) => {
+      resolveExpirations = resolve;
+    }));
+    vi.mocked(optionsLabApi.getOptionChain).mockClear();
+
+    renderPage({ autoRun: false });
+
+    const commandArea = screen.getByTestId('options-lab-assumptions-panel');
+    expect(within(commandArea).getByLabelText('到期日')).toHaveValue('');
+    expect(within(commandArea).getByLabelText('目标日期')).toHaveValue('');
+    expect(within(commandArea).getByLabelText('到期日')).not.toHaveValue('2026-06-19');
+    expect(vi.mocked(optionsLabApi.getOptionChain)).not.toHaveBeenCalled();
+
+    await act(async () => resolveExpirations({
+      symbol: 'TEM',
+      expirations: [{
+        date: '2030-01-18',
+        dte: 31,
+        type: 'monthly',
+        chainAvailable: true,
+        asOf: '2029-12-18T14:30:00Z',
+        source: 'backend',
+        warnings: [],
+      }],
+      metadata: {
+        readOnly: true,
+        noExternalCallsInTests: false,
+        limitations: [],
+      },
+    }));
+
+    await waitFor(() => {
+      expect(within(commandArea).getByLabelText('到期日')).toHaveValue('2030-01-18');
+      expect(within(commandArea).getByLabelText('目标日期')).toHaveValue('2030-01-18');
+    });
+    expect(vi.mocked(optionsLabApi.getOptionChain)).toHaveBeenCalledWith('TEM', '2030-01-18');
+  });
+
   it('keeps passive mount free of compare, evaluate, and analyze requests', async () => {
     renderPage({ autoRun: false });
 
@@ -1147,7 +1187,7 @@ describe('OptionsLabPage', () => {
         scenarioAssumptions: expect.objectContaining({
           direction: 'bullish',
           riskProfile: 'balanced',
-          targetDate: '2026-08-21',
+          targetDate: '2026-06-19',
           inputSource: 'loaded_options_chain',
         }),
         forceRefresh: true,
@@ -2676,31 +2716,19 @@ describe('OptionsLabPage', () => {
         limitations: ['mocked_frontend_shell'],
       },
     });
-    vi.mocked(optionsLabApi.getOptionChain).mockResolvedValueOnce({
-      symbol: 'TEM',
-      expiration: '2026-06-19',
-      underlying: null,
-      calls: [],
-      puts: [],
-      filtersApplied: {},
-      chainAsOf: '2026-05-06T09:45:00-04:00',
-      source: 'fixture',
-      limitations: ['provider_validation_required'],
-      metadata: {
-        readOnly: true,
-        noExternalCallsInTests: true,
-        limitations: ['mocked_frontend_shell'],
-      },
-    });
+    vi.mocked(optionsLabApi.getOptionChain).mockClear();
     renderPage();
 
     expect(await screen.findByText('暂无可用到期日')).toBeInTheDocument();
+    expect(screen.getByLabelText('到期日')).toHaveValue('');
+    expect(screen.getByLabelText('目标日期')).toHaveValue('');
     expect(screen.getByText('等待结构比较前提')).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText('请先加载合约')).toBeInTheDocument();
     });
     expect(vi.mocked(optionsLabApi.compareStrategies)).not.toHaveBeenCalled();
     expect(vi.mocked(optionsLabApi.evaluateDecision)).not.toHaveBeenCalled();
+    expect(vi.mocked(optionsLabApi.getOptionChain)).not.toHaveBeenCalled();
   });
 
   it('keeps the base page usable when compare returns 500', async () => {
@@ -2832,6 +2860,24 @@ describe('OptionsLabPage', () => {
     expect(domText).not.toContain('raw_provider_payload');
     expect(domText).not.toContain('token=abc');
     expect(domText).not.toContain('Traceback');
+  });
+
+  it('shows network unavailability without rendering successful chain, payoff, or decision data', async () => {
+    vi.mocked(optionsLabApi.getUnderlyingSummary).mockRejectedValueOnce(new Error('Network Error token=abc'));
+
+    renderPage({ autoRun: false });
+
+    expect(await screen.findByText('期权链暂不可用。请稍后重试或调整标的。')).toBeInTheDocument();
+    expect(screen.queryByTestId('options-lab-calls-table')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('options-lab-puts-table')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('options-lab-payoff-visual')).not.toBeInTheDocument();
+    expect(screen.getByTestId('options-lab-payoff-empty')).toBeInTheDocument();
+    expect(vi.mocked(optionsLabApi.getOptionChain)).not.toHaveBeenCalled();
+    expect(vi.mocked(optionsLabApi.compareStrategies)).not.toHaveBeenCalled();
+    expect(vi.mocked(optionsLabApi.evaluateDecision)).not.toHaveBeenCalled();
+    expect(vi.mocked(optionsLabApi.analyzeStrategies)).not.toHaveBeenCalled();
+    expect(document.body.textContent || '').not.toContain('Network Error token=abc');
+    expect(document.body.textContent || '').not.toContain('定义风险结构或更低权利金暴露');
   });
 
   it('keeps data readiness user-facing without developer details', async () => {
@@ -3049,18 +3095,7 @@ describe('OptionsLabPage', () => {
       expirations: null,
       metadata: null,
     } as never);
-    vi.mocked(optionsLabApi.getOptionChain).mockResolvedValueOnce({
-      symbol: 'TEM',
-      expiration: '2026-06-19',
-      underlying: null,
-      calls: null,
-      puts: null,
-      filtersApplied: null,
-      chainAsOf: null,
-      source: null,
-      limitations: null,
-      metadata: null,
-    } as never);
+    vi.mocked(optionsLabApi.getOptionChain).mockClear();
 
     renderPage();
 
@@ -3068,6 +3103,7 @@ describe('OptionsLabPage', () => {
     expect(await screen.findByText('暂无可用到期日')).toBeInTheDocument();
     expect(screen.getByText('请先加载合约')).toBeInTheDocument();
     expect(vi.mocked(optionsLabApi.compareStrategies)).not.toHaveBeenCalled();
+    expect(vi.mocked(optionsLabApi.getOptionChain)).not.toHaveBeenCalled();
     expect(document.body.textContent || '').not.toContain('TypeError');
   });
 

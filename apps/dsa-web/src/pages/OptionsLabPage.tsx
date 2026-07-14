@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, BarChart3, ChevronDown, Layers3, LineChart, Search, ShieldCheck } from 'lucide-react';
 import {
   extractOptionsResearchReadiness,
@@ -1713,7 +1713,7 @@ const AssumptionPanel: React.FC<{
             </label>
             <label className={fieldShellClass}>
               <span className={labelClass}>目标日期</span>
-              <input aria-label="目标日期" value={targetDate} onChange={(event) => onTargetDateChange(event.target.value)} className={fieldClass} placeholder="2026-08-21" />
+              <input aria-label="目标日期" value={targetDate} onChange={(event) => onTargetDateChange(event.target.value)} className={fieldClass} placeholder="YYYY-MM-DD" />
             </label>
           </div>
         </CompactFilterBar>
@@ -3135,9 +3135,10 @@ const OptionsLabPageContent: React.FC = () => {
   const [direction, setDirection] = useState<OptionsDirection>('bullish');
   const [riskProfile, setRiskProfile] = useState<OptionsRiskProfile>('balanced');
   const [targetPrice, setTargetPrice] = useState('65');
-  const [targetDate, setTargetDate] = useState('2026-08-21');
+  const [targetDate, setTargetDate] = useState('');
   const [riskBudget, setRiskBudget] = useState('1000');
-  const [selectedExpiration, setSelectedExpiration] = useState('2026-06-19');
+  const [selectedExpiration, setSelectedExpiration] = useState('');
+  const selectedExpirationRef = useRef('');
   const [reloadKey, setReloadKey] = useState(0);
   const [state, setState] = useState<LoadState>({
     loading: true,
@@ -3195,12 +3196,30 @@ const OptionsLabPageContent: React.FC = () => {
           optionsLabApi.getExpirations(activeSymbol),
         ]);
         const expirationItems = asArray(expirations.expirations);
-        const nextExpiration = expirationItems.some((item) => item.date === selectedExpiration)
-          ? selectedExpiration
-          : expirationItems[0]?.date || selectedExpiration;
+        const requestedExpiration = selectedExpirationRef.current;
+        const nextExpiration = expirationItems.some((item) => item.date === requestedExpiration)
+          ? requestedExpiration
+          : expirationItems[0]?.date || '';
+        if (!nextExpiration) {
+          if (ignored) return;
+          selectedExpirationRef.current = '';
+          setSelectedExpiration('');
+          setTargetDate((current) => current === requestedExpiration ? '' : current);
+          setState((current) => ({
+            ...current,
+            loading: false,
+            error: null,
+            summary,
+            expirations,
+            chain: null,
+          }));
+          return;
+        }
         const chain = await optionsLabApi.getOptionChain(activeSymbol, nextExpiration);
         if (ignored) return;
+        selectedExpirationRef.current = nextExpiration;
         setSelectedExpiration(nextExpiration);
+        setTargetDate((current) => current || nextExpiration);
         setState((current) => ({
           ...current,
           loading: false,
@@ -3225,7 +3244,7 @@ const OptionsLabPageContent: React.FC = () => {
     return () => {
       ignored = true;
     };
-  }, [activeSymbol, reloadKey, selectedExpiration]);
+  }, [activeSymbol, reloadKey]);
 
   useEffect(() => {
     if (comparisonRunKey === 0) return;
@@ -3463,13 +3482,18 @@ const OptionsLabPageContent: React.FC = () => {
       setReloadKey((current) => current + 1);
       return;
     }
+    selectedExpirationRef.current = '';
+    setSelectedExpiration('');
+    setTargetDate('');
     setActiveSymbol(normalized);
   }, [activeSymbol, resetExecutionStates, symbolInput]);
 
   const handleExpirationSelect = useCallback((expiration: string) => {
     resetExecutionStates();
     setState((current) => ({ ...current, loading: true, error: null }));
+    selectedExpirationRef.current = expiration;
     setSelectedExpiration(expiration);
+    setReloadKey((current) => current + 1);
   }, [resetExecutionStates]);
 
   const handleSymbolChange = useCallback((value: string) => {
