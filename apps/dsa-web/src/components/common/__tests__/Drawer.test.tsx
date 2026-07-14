@@ -1,20 +1,28 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Drawer } from '../Drawer';
+import { settleDrawerInteractionReady, settleDrawerOpen } from './modalTestHelpers';
 
 describe('Drawer', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
   afterEach(() => {
+    vi.clearAllTimers();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
-  it('closes when Escape is pressed while the drawer is open', () => {
+  it('closes when Escape is pressed while the drawer is open', async () => {
     const onClose = vi.fn();
     render(
       <Drawer isOpen onClose={onClose} title="Navigation">
         <div>content</div>
       </Drawer>,
     );
+
+    await settleDrawerOpen();
 
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -28,9 +36,7 @@ describe('Drawer', () => {
       </Drawer>,
     );
 
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 500));
-    });
+    await settleDrawerInteractionReady();
 
     const drawer = screen.getByRole('dialog', { name: 'Navigation' });
     expect(drawer).toHaveAttribute('aria-modal', 'true');
@@ -60,9 +66,7 @@ describe('Drawer', () => {
     fireEvent.pointerDown(backdrop);
     expect(onClose).not.toHaveBeenCalled();
 
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 500));
-    });
+    await settleDrawerInteractionReady();
     fireEvent.pointerDown(backdrop);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -75,9 +79,7 @@ describe('Drawer', () => {
       </Drawer>,
     );
 
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 500));
-    });
+    await settleDrawerInteractionReady();
 
     const panel = screen.getByText('content').closest('dialog');
     expect(panel).not.toBeNull();
@@ -97,9 +99,7 @@ describe('Drawer', () => {
     const backdrop = screen.getByTestId('drawer-backdrop');
     expect(backdrop).toBeInTheDocument();
 
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 500));
-    });
+    await settleDrawerInteractionReady();
     fireEvent.pointerDown(backdrop);
     expect(onClose).not.toHaveBeenCalled();
   });
@@ -115,16 +115,13 @@ describe('Drawer', () => {
     const backdrop = screen.getByTestId('drawer-backdrop');
     expect(backdrop).toBeInTheDocument();
 
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 500));
-    });
+    await settleDrawerInteractionReady();
     fireEvent.pointerDown(backdrop);
     fireEvent.click(backdrop);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('cancels pending open animation work when unmounted before the drawer settles', () => {
-    vi.useFakeTimers();
     const cancelAnimationFrameSpy = vi.spyOn(window, 'cancelAnimationFrame');
     const onClose = vi.fn();
     const { unmount } = render(

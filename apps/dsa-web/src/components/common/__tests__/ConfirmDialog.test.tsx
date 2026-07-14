@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { advanceConfirmDialogClose, settleConfirmDialogOpen } from './modalTestHelpers';
 
 vi.mock('../../../contexts/UiLanguageContext', () => ({
   useI18n: () => ({
@@ -27,11 +28,11 @@ describe('ConfirmDialog', () => {
   afterEach(() => {
     window.requestAnimationFrame = originalRequestAnimationFrame;
     window.cancelAnimationFrame = originalCancelAnimationFrame;
-    vi.runOnlyPendingTimers();
+    vi.clearAllTimers();
     vi.useRealTimers();
   });
 
-  it('keeps the dialog mounted through the close transition before unmounting', () => {
+  it('keeps the dialog mounted through the close transition before unmounting', async () => {
     const onCancel = vi.fn();
     const { rerender } = render(
       <ConfirmDialog
@@ -42,6 +43,8 @@ describe('ConfirmDialog', () => {
         onCancel={onCancel}
       />
     );
+
+    await settleConfirmDialogOpen();
 
     expect(screen.getByText('Delete position')).toBeInTheDocument();
 
@@ -55,20 +58,18 @@ describe('ConfirmDialog', () => {
       />
     );
 
+    await advanceConfirmDialogClose(0);
+
     expect(screen.getByText('Delete position')).toBeInTheDocument();
 
-    act(() => {
-      vi.advanceTimersByTime(179);
-    });
+    await advanceConfirmDialogClose(179);
     expect(screen.getByText('Delete position')).toBeInTheDocument();
 
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
+    await advanceConfirmDialogClose(1);
     expect(screen.queryByText('Delete position')).not.toBeInTheDocument();
   });
 
-  it('exposes modal dialog semantics and keeps keyboard focus inside', () => {
+  it('exposes modal dialog semantics and keeps keyboard focus inside', async () => {
     const opener = document.createElement('button');
     opener.textContent = 'Open confirm dialog';
     document.body.appendChild(opener);
@@ -84,6 +85,8 @@ describe('ConfirmDialog', () => {
         onCancel={vi.fn()}
       />
     );
+
+    await settleConfirmDialogOpen();
 
     const dialog = screen.getByRole('dialog', { name: 'Delete position' });
     expect(dialog).toHaveAttribute('aria-modal', 'true');
@@ -104,7 +107,7 @@ describe('ConfirmDialog', () => {
     opener.remove();
   });
 
-  it('focuses the typed confirmation field first when a confirmation phrase is required', () => {
+  it('focuses the typed confirmation field first when a confirmation phrase is required', async () => {
     render(
       <ConfirmDialog
         isOpen
@@ -118,11 +121,13 @@ describe('ConfirmDialog', () => {
       />
     );
 
+    await settleConfirmDialogOpen();
+
     expect(screen.getByLabelText('Confirm')).toHaveFocus();
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled();
   });
 
-  it('uses the latest cancel handler for the Escape listener', () => {
+  it('uses the latest cancel handler for the Escape listener', async () => {
     const initialCancel = vi.fn();
     const latestCancel = vi.fn();
     const { rerender } = render(
@@ -134,6 +139,8 @@ describe('ConfirmDialog', () => {
         onCancel={initialCancel}
       />
     );
+
+    await settleConfirmDialogOpen();
 
     rerender(
       <ConfirmDialog
@@ -153,7 +160,7 @@ describe('ConfirmDialog', () => {
     expect(latestCancel).toHaveBeenCalledTimes(1);
   });
 
-  it('returns focus to the previous element when the dialog closes', () => {
+  it('returns focus to the previous element when the dialog closes', async () => {
     const opener = document.createElement('button');
     opener.textContent = 'Open confirm dialog';
     document.body.appendChild(opener);
@@ -169,6 +176,8 @@ describe('ConfirmDialog', () => {
       />
     );
 
+    await settleConfirmDialogOpen();
+
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
 
     rerender(
@@ -181,9 +190,7 @@ describe('ConfirmDialog', () => {
       />
     );
 
-    act(() => {
-      vi.advanceTimersByTime(180);
-    });
+    await advanceConfirmDialogClose();
 
     expect(opener).toHaveFocus();
     opener.remove();

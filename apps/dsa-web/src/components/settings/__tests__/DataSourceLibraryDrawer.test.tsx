@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { settleDrawerOpen } from '../../common/__tests__/modalTestHelpers';
 import { translate } from '../../../i18n/core';
 import type { BuiltinDataSourceValidationResult, DataSourceLibraryEntry } from '../dataSourceLibraryShared';
 import DataSourceLibraryDrawer from '../DataSourceLibraryDrawer';
@@ -38,7 +39,17 @@ function buildBuiltinEntry(): DataSourceLibraryEntry {
 }
 
 describe('DataSourceLibraryDrawer', () => {
-  it('explains known provider impact before a custom source is saved', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('explains known provider impact before a custom source is saved', async () => {
     render(
       <DataSourceLibraryDrawer
         adminLocked={false}
@@ -71,6 +82,8 @@ describe('DataSourceLibraryDrawer', () => {
       />,
     );
 
+    await settleDrawerOpen();
+
     const panel = screen.getByTestId('data-source-impact-panel');
     expect(within(panel).getByText('配置后可能影响')).toBeInTheDocument();
     expect(within(panel).getByText('Market Overview')).toBeInTheDocument();
@@ -82,7 +95,7 @@ describe('DataSourceLibraryDrawer', () => {
     expect(within(panel).getByText(/不会自动变成可评分证据/)).toBeInTheDocument();
   });
 
-  it('keeps unknown provider impact limited to Provider Ops without rendering secret or path text', () => {
+  it('keeps unknown provider impact limited to Provider Ops without rendering secret or path text', async () => {
     render(
       <DataSourceLibraryDrawer
         adminLocked={false}
@@ -115,6 +128,8 @@ describe('DataSourceLibraryDrawer', () => {
       />,
     );
 
+    await settleDrawerOpen();
+
     const panel = screen.getByTestId('data-source-impact-panel');
     expect(within(panel).getByText('Provider Ops / system diagnostics')).toBeInTheDocument();
     expect(within(panel).queryByText('Market Overview')).not.toBeInTheDocument();
@@ -123,7 +138,7 @@ describe('DataSourceLibraryDrawer', () => {
     expect(within(panel).queryByText(/LOCAL_PRIVATE_FEED_PATH/i)).not.toBeInTheDocument();
   });
 
-  it('renders the Twelve Data HK entitlement check as compact badges without exposing raw provider details', () => {
+  it('renders the Twelve Data HK entitlement check as compact badges without exposing raw provider details', async () => {
     const validationResult: BuiltinDataSourceValidationResult = {
       provider: 'twelve_data',
       ok: false,
@@ -178,6 +193,8 @@ describe('DataSourceLibraryDrawer', () => {
         validationResult={validationResult}
       />,
     );
+
+    await settleDrawerOpen();
 
     const panel = screen.getByTestId('builtin-data-source-validation-result');
     expect(within(panel).getByText('港股权限')).toBeInTheDocument();
