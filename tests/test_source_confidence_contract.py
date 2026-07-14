@@ -33,6 +33,7 @@ from src.contracts.source_confidence import (
     evaluate_score_grade_source_authority,
     validate_source_confidence_contract,
 )
+from src.services.market_data_source_registry import resolve_source_type
 
 
 def test_source_confidence_contract_projects_required_camel_case_fields() -> None:
@@ -1077,6 +1078,24 @@ def test_score_grade_source_authority_blocks_known_non_authority_source_types(
         source_authority_allowed=True,
     )
 
+    assert result == ScoreGradeSourceAuthorityResult(
+        allowed=False,
+        reason_codes=("blocked_source_type",),
+    )
+
+
+def test_provider_identity_does_not_grant_score_grade_source_authority() -> None:
+    source_type = resolve_source_type(source="alpaca")
+
+    result = evaluate_score_grade_source_authority(
+        source_type=source_type,
+        source_tier="score_grade",
+        trust_level="score_grade_when_configured",
+        score_contribution_allowed=True,
+        source_authority_allowed=True,
+    )
+
+    assert source_type == "public_proxy"
     assert result == ScoreGradeSourceAuthorityResult(
         allowed=False,
         reason_codes=("blocked_source_type",),

@@ -181,6 +181,72 @@ def test_missing_source_defaults_to_missing_labels() -> None:
     assert resolve_freshness_label("unavailable") == "不可用"
 
 
+def test_vendor_source_names_preserve_identity_without_granting_authority() -> None:
+    expected = {
+        "alpaca": "Alpaca",
+        "eastmoney": "东方财富",
+        "TushareFetcher": "Tushare",
+        " tusharefetcher ": "Tushare",
+        "TUSHAREFETCHER": "Tushare",
+    }
+
+    for source, source_label in expected.items():
+        provenance = project_source_provenance(source=source, freshness="live")
+
+        assert provenance == {
+            "sourceType": "public_proxy",
+            "sourceLabel": source_label,
+            "freshnessLabel": "实时",
+        }
+
+
+def test_unknown_empty_and_explicit_source_types_stay_fail_closed() -> None:
+    assert resolve_source_type(source="arbitrary_vendor_xyz") == "missing"
+    assert resolve_source_type(source="") == "missing"
+    assert resolve_source_type(source=None) == "missing"
+    assert resolve_source_type(source_type="official_public") == "official_public"
+    assert resolve_source_type(source_type="public_proxy") == "public_proxy"
+    assert project_source_provenance(source_type="official_public", freshness="live") == {
+        "sourceType": "official_public",
+        "sourceLabel": "公开数据",
+        "freshnessLabel": "实时",
+    }
+    assert project_source_provenance(source_type="public_proxy", freshness="delayed") == {
+        "sourceType": "public_proxy",
+        "sourceLabel": "公开代理",
+        "freshnessLabel": "延迟",
+    }
+
+
+def test_cache_and_fallback_lineage_cannot_create_authority() -> None:
+    cache_with_upstream_authority = project_source_provenance(
+        source="cache",
+        source_type="official_public",
+        freshness="cached",
+    )
+    cache_without_upstream_authority = project_source_provenance(
+        source="cache",
+        freshness="cached",
+    )
+    fallback = project_source_provenance(
+        source="alpaca",
+        source_type="official_public",
+        freshness="fallback",
+        is_fallback=True,
+    )
+
+    assert cache_with_upstream_authority == cache_without_upstream_authority == {
+        "sourceType": "cache_snapshot",
+        "sourceLabel": "缓存快照",
+        "freshnessLabel": "缓存快照",
+    }
+    assert fallback == {
+        "sourceType": "fallback_static",
+        "sourceLabel": "备用数据",
+        "freshnessLabel": "备用/缺失",
+    }
+
+
 def test_provider_fit_source_aliases_are_additive_and_truthful_for_new_audited_ids() -> None:
     expected = {
         "authorized.us_etf_flow": ("missing", "未接入"),
@@ -372,7 +438,7 @@ def test_scanner_seed_and_degraded_sources_keep_fallback_labels() -> None:
 
 def test_scanner_fetcher_and_manager_sources_keep_provider_labels() -> None:
     expected = {
-        "TushareFetcher": ("official_public", "Tushare"),
+        "TushareFetcher": ("public_proxy", "Tushare"),
         "AkshareFetcher": ("public_proxy", "AkShare"),
         "EfinanceFetcher": ("public_proxy", "Efinance"),
         "DataFetcherManager": ("public_proxy", "DataFetcherManager"),
