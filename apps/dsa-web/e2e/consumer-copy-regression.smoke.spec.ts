@@ -259,6 +259,9 @@ function actionabilityReadyPayload() {
       debugRef: 'market:temperature:evidence',
     },
     regimeSummary: {
+      title: '风险偏好状态',
+      label: '偏强观察',
+      explanation: '研究观察用途，不构成交易或下单指令。',
       headline: '风险偏好改善但仍需确认',
       detail: '流动性与宽度改善，轮动仍偏观察。',
       riskLevel: 'medium',
@@ -267,6 +270,7 @@ function actionabilityReadyPayload() {
       regime: 'risk_on_liquidity_expansion',
       summary: '流动性改善，风险偏好修复。',
       confidence: 0.64,
+      notInvestmentAdvice: true,
     },
     marketDecisionSemantics: {
       version: 'market_decision_semantics_v1',
@@ -285,6 +289,12 @@ function actionabilityReadyPayload() {
           items: [],
         },
       },
+      claimBoundaries: [
+        { claim: 'market_direction_readiness_context', allowed: true, reasonCode: 'direction_ready' },
+        { claim: 'trade_instruction', allowed: false, reasonCode: 'not_investment_advice' },
+        { claim: 'allocation_or_suitability_guidance', allowed: false, reasonCode: 'not_investment_advice' },
+      ],
+      notInvestmentAdvice: true,
       claimBoundary: 'research_only',
       noAdviceBoundary: true,
       summary: '仅供研究观察，不构成交易指令。',
