@@ -16,6 +16,13 @@ def git(*args: str, cwd: Path) -> None:
     subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True)
 
 
+def git_output(*args: str, cwd: Path) -> str:
+    result = subprocess.run(
+        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True
+    )
+    return result.stdout.strip()
+
+
 @pytest.fixture
 def worktree_fixture(tmp_path: Path) -> tuple[Path, Path]:
     canonical = tmp_path / "canonical"
@@ -44,13 +51,18 @@ def run_bootstrap(
     worktree: Path,
     *args: str,
     env: dict[str, str] | None = None,
+    absolute_script: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     command_env = os.environ.copy()
     command_env.pop("WORKTREE_BOOTSTRAP_ENV_FILE", None)
     command_env.pop("WORKTREE_BOOTSTRAP_ISOLATED", None)
     command_env.update(env or {})
     return subprocess.run(
-        ["bash", "scripts/bootstrap_worktree.sh", *args],
+        [
+            "bash",
+            str(SCRIPT_PATH) if absolute_script else "scripts/bootstrap_worktree.sh",
+            *args,
+        ],
         cwd=worktree,
         text=True,
         capture_output=True,
@@ -75,6 +87,73 @@ def test_apply_discovers_canonical_main_worktree_and_creates_dependency_links(
     assert resolved(linked / "apps" / "dsa-web" / "node_modules") == (
         canonical / "apps" / "dsa-web" / "node_modules"
     )
+
+
+def test_absolute_script_invocation_targets_the_current_linked_worktree(
+    worktree_fixture: tuple[Path, Path],
+) -> None:
+    canonical, linked = worktree_fixture
+
+    result = run_bootstrap(linked, "--apply", absolute_script=True)
+
+    assert result.returncode == 0, result.stderr
+    assert resolved(linked / ".venv") == canonical / ".venv"
+    assert resolved(linked / "apps" / "dsa-web" / "node_modules") == (
+        canonical / "apps" / "dsa-web" / "node_modules"
+    )
+
+
+def test_check_reports_unignored_root_venv_without_changing_shared_exclude(
+    worktree_fixture: tuple[Path, Path],
+) -> None:
+    canonical, linked = worktree_fixture
+    common_dir = Path(git_output("rev-parse", "--git-common-dir", cwd=linked))
+    exclude_path = common_dir / "info" / "exclude"
+    before = exclude_path.read_bytes()
+
+    result = run_bootstrap(linked, "--check")
+
+    assert result.returncode == 0, result.stderr
+    assert "would add /.venv" in result.stdout
+    assert exclude_path.read_bytes() == before
+    assert not (canonical / ".venv").is_symlink()
+
+
+def test_apply_adds_root_venv_to_shared_exclude_idempotently(
+    worktree_fixture: tuple[Path, Path],
+) -> None:
+    _, linked = worktree_fixture
+    common_dir = Path(git_output("rev-parse", "--git-common-dir", cwd=linked))
+    exclude_path = common_dir / "info" / "exclude"
+
+    first = run_bootstrap(linked, "--apply")
+    after_first = exclude_path.read_text(encoding="utf-8")
+    second = run_bootstrap(linked, "--apply")
+
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    assert after_first == exclude_path.read_text(encoding="utf-8")
+    assert after_first.splitlines().count("/.venv") == 1
+
+
+def test_relative_git_common_dir_resolves_to_the_shared_exclude(
+    worktree_fixture: tuple[Path, Path],
+) -> None:
+    canonical, linked = worktree_fixture
+    relative_common_dir = os.path.relpath(canonical / ".git", linked)
+    expected_exclude = canonical / ".git" / "info" / "exclude"
+    home_exclude = Path.home() / ".git" / "info" / "exclude"
+    home_exclude_before = home_exclude.read_bytes() if home_exclude.exists() else None
+
+    result = run_bootstrap(
+        linked,
+        "--apply",
+        env={"GIT_COMMON_DIR": relative_common_dir},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert expected_exclude.read_text(encoding="utf-8").splitlines().count("/.venv") == 1
+    assert (home_exclude.read_bytes() if home_exclude.exists() else None) == home_exclude_before
 
 
 def test_check_fails_fast_when_canonical_dependency_is_missing_without_mutation(

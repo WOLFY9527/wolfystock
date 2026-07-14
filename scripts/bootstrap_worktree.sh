@@ -3,8 +3,7 @@
 set -euo pipefail
 
 MODE=""
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(git -C "${SCRIPT_DIR}/.." rev-parse --show-toplevel 2>/dev/null || true)"
+ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 
 usage() {
   cat <<'EOF'
@@ -104,7 +103,12 @@ fi
 [[ -n "${ROOT_DIR}" ]] || fail "Unable to locate the current Git worktree."
 ROOT_DIR="$(resolve_existing_path "${ROOT_DIR}")" || fail "Unable to resolve the current Git worktree."
 
-CANONICAL_ROOT="$(git -C "${ROOT_DIR}" worktree list --porcelain | awk '/^worktree / { sub(/^worktree /, ""); print; exit }')"
+GIT_COMMON_DIR="$(git -C "${ROOT_DIR}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+[[ -n "${GIT_COMMON_DIR}" && "${GIT_COMMON_DIR}" == /* ]] || fail "Unable to resolve the shared Git metadata directory."
+GIT_COMMON_DIR="$(resolve_existing_path "${GIT_COMMON_DIR}")" || fail "Unable to resolve the shared Git metadata directory."
+INFO_EXCLUDE="${GIT_COMMON_DIR}/info/exclude"
+
+CANONICAL_ROOT="$(git --git-dir="${GIT_COMMON_DIR}" worktree list --porcelain | awk '/^worktree / { sub(/^worktree /, ""); print; exit }')"
 [[ -n "${CANONICAL_ROOT}" ]] || fail "Unable to locate the canonical main worktree from Git shared metadata."
 CANONICAL_ROOT="$(resolve_existing_path "${CANONICAL_ROOT}")" || fail "Canonical main worktree reported by Git is missing."
 
@@ -121,6 +125,30 @@ register_link \
   "${ROOT_DIR}/apps/dsa-web/node_modules" \
   "${CANONICAL_ROOT}/apps/dsa-web/node_modules" \
   "directory"
+
+if grep -Fqx '/.venv' "${INFO_EXCLUDE}" 2>/dev/null; then
+  VENV_EXCLUDE_MISSING=0
+else
+  VENV_EXCLUDE_MISSING=1
+fi
+
+if [[ "${VENV_EXCLUDE_MISSING}" == "1" ]]; then
+  if git -C "${CANONICAL_ROOT}" check-ignore -q --no-index -- .venv; then
+    VENV_NEEDS_EXCLUDE=0
+  else
+    VENV_NEEDS_EXCLUDE=1
+  fi
+  if [[ "${MODE}" == "--check" && "${VENV_NEEDS_EXCLUDE}" == "1" ]]; then
+    printf '[bootstrap-worktree] would add /.venv to shared Git info/exclude.\n'
+  elif [[ "${MODE}" == "--apply" ]]; then
+    mkdir -p "$(dirname "${INFO_EXCLUDE}")"
+    if [[ -s "${INFO_EXCLUDE}" && "$(tail -c 1 "${INFO_EXCLUDE}")" != $'\n' ]]; then
+      printf '\n' >>"${INFO_EXCLUDE}"
+    fi
+    printf '/.venv\n' >>"${INFO_EXCLUDE}"
+    printf '[bootstrap-worktree] added /.venv to shared Git info/exclude.\n'
+  fi
+fi
 
 if [[ -n "${WORKTREE_BOOTSTRAP_ENV_FILE:-}" ]]; then
   [[ "${WORKTREE_BOOTSTRAP_ENV_FILE}" == /* ]] || fail "WORKTREE_BOOTSTRAP_ENV_FILE must be an absolute repo-external file path."
