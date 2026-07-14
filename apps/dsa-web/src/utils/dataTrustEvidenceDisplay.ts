@@ -1,5 +1,4 @@
 import type { NormalizedEvidenceSummary } from './evidenceDisplay';
-import type { TrustEvidenceSnapshotLike } from './trustEvidenceConsumerMapping';
 
 export type DataTrustEvidenceState =
   | 'authoritative'
@@ -16,6 +15,26 @@ export type DataTrustEvidenceState =
 export type DataTrustEvidenceLocale = 'zh' | 'en';
 
 export type DataTrustEvidenceTone = 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+
+type TrustEvidenceSnapshotLike = {
+  contractVersion?: unknown;
+  surfaceKey?: unknown;
+  entityKey?: unknown;
+  generatedAt?: unknown;
+  asOf?: unknown;
+  availabilityState?: unknown;
+  freshnessState?: unknown;
+  sourceClass?: unknown;
+  hasFallback?: unknown;
+  isStale?: unknown;
+  isPartial?: unknown;
+  isSynthetic?: unknown;
+  isAdminOnlyDetail?: unknown;
+  consumerState?: unknown;
+  consumerMessageKey?: unknown;
+  consumerBadgeKeys?: readonly unknown[];
+  adminDiagnosticRefs?: readonly unknown[];
+};
 
 export type DataTrustEvidenceChip = {
   state: DataTrustEvidenceState;
