@@ -112,6 +112,40 @@ FORBIDDEN_BACKTEST_MUTATION_SURFACES = [
     "portfolio_mutation",
 ]
 
+FORBIDDEN_PUBLIC_PAYLOAD_TERMS = [
+    "authorization",
+    "bearer ",
+    "cookie",
+    "set-cookie",
+    "session_id",
+    "api_key",
+    "access_token",
+    "refresh_token",
+    "password",
+    "credential",
+    "raw_provider_payload",
+    "raw_payload",
+    "provider_payload",
+    "request_body",
+    "response_body",
+    "stack_trace",
+    "traceback",
+    "synthetic_cache_key",
+    "synthetic_provider_url",
+    "synthetic_request_id",
+    "synthetic_stack_trace",
+    "synthetic_debug_reason",
+    "synthetic_execution_trace_detail",
+]
+
+FORBIDDEN_HEAVY_PROJECTION_FIELDS = {
+    "audit_rows",
+    "equity_curve",
+    "execution_trace",
+    "provider_payload",
+    "trades",
+}
+
 FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS = [
     "optimizer",
     "optimization",
@@ -527,6 +561,21 @@ class RuleBacktestTestCase(unittest.TestCase):
             assert needle.lower() not in normalized, needle
         for needle in FORBIDDEN_BACKTEST_MUTATION_SURFACES:
             assert needle.lower() not in normalized, needle
+
+    @staticmethod
+    def _assert_public_projection_is_sanitized_and_stored_only(payload: object) -> None:
+        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True).lower()
+        for needle in FORBIDDEN_PUBLIC_PAYLOAD_TERMS:
+            assert needle not in serialized, needle
+        for needle in (
+            '"source": "live"',
+            '"is_live": true',
+            '"live_provider_calls_executed": true',
+            '"providercalls": true',
+            "recalculate",
+            "rerun",
+        ):
+            assert needle not in serialized, needle
 
     @staticmethod
     def _assert_robustness_payload_avoids_optimizer_semantics(payload: dict) -> None:
@@ -3903,6 +3952,26 @@ class RuleBacktestTestCase(unittest.TestCase):
             "summary": {"robustness_analysis": {"state": "research_prototype", "seed": 7}},
             "robustness_analysis": {"state": "research_prototype", "seed": 99},
         }
+        run["run_timing"]["synthetic_request_id"] = "synthetic_request_id"
+        run["run_diagnostics"]["synthetic_debug_reason"] = "synthetic_debug_reason"
+        run["artifact_availability"]["synthetic_cache_key"] = "synthetic_cache_key"
+        run["readback_integrity"]["synthetic_stack_trace"] = "synthetic_stack_trace"
+        run["result_authority"]["domains"]["execution_trace"][
+            "synthetic_provider_url"
+        ] = "synthetic_provider_url"
+        run["execution_trace"]["missing_fields"] = ["synthetic_debug_reason"]
+        run["execution_trace"]["execution_model"][
+            "synthetic_provider_url"
+        ] = "synthetic_provider_url"
+        run["execution_trace"]["rows"][0][
+            "synthetic_execution_trace_detail"
+        ] = "synthetic_execution_trace_detail"
+        run["benchmark_summary"]["synthetic_stack_trace"] = "synthetic_stack_trace"
+        run["data_quality"] = {
+            "source": "fixture_local_history",
+            "authority_reason_codes": ["proxy_source_not_reproducible", "synthetic_debug_reason"],
+            "synthetic_cache_key": "synthetic_cache_key",
+        }
 
         authority = build_reproducibility_authority_summary(run["result_authority"])
         fingerprint = build_execution_assumptions_fingerprint(
@@ -3910,6 +3979,7 @@ class RuleBacktestTestCase(unittest.TestCase):
             run["execution_assumptions"],
         )
         manifest = build_support_bundle_manifest(run)
+        reproducibility = build_support_bundle_reproducibility_manifest(run)
         export_index = build_support_export_index(run)
         trace_json = build_execution_trace_export_json_payload(
             run,
@@ -3936,6 +4006,12 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(trace_json["trace_rows"][0]["动作"], "买")
         self.assertEqual(trace_json["benchmark_summary"]["requested_mode"], "auto")
         self.assertEqual(trace_csv.splitlines()[0].split(","), EXPECTED_TRACE_EXPORT_FIELD_LABELS)
+        self.assertEqual(list(trace_json), EXPECTED_TRACE_EXPORT_JSON_KEYS)
+        self.assertEqual(list(trace_json["trace_rows"][0]), EXPECTED_TRACE_EXPORT_FIELD_LABELS)
+        self.assertFalse(FORBIDDEN_HEAVY_PROJECTION_FIELDS & set(manifest))
+        self.assertFalse(FORBIDDEN_HEAVY_PROJECTION_FIELDS & set(reproducibility))
+        for public_projection in (manifest, reproducibility, export_index, trace_json, trace_csv):
+            self._assert_public_projection_is_sanitized_and_stored_only(public_projection)
 
     def test_support_manifests_project_dataset_lineage_from_stored_quality(self) -> None:
         run = {
@@ -4186,6 +4262,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         )
         self._assert_robustness_payload_avoids_optimizer_semantics(payload)
         self._assert_public_backtest_text_is_analytical(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        self._assert_public_projection_is_sanitized_and_stored_only(payload)
 
     def test_service_marks_robustness_evidence_export_unavailable_when_stored_payload_missing(self) -> None:
         service = RuleBacktestService(self.db)
@@ -4268,6 +4345,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertFalse(payload["guardrails"]["optimizer_executed"])
         self.assertFalse(payload["guardrails"]["parameter_sweep_executed"])
         self.assertFalse(payload["guardrails"]["winner_promotion"])
+        self._assert_public_projection_is_sanitized_and_stored_only(payload)
 
         compare_payload = {
             "parameter_stability_evidence": {
@@ -5019,7 +5097,14 @@ class RuleBacktestTestCase(unittest.TestCase):
                 confirmed=True,
             )
 
-        payload = service.compare_runs([int(first["id"]), int(second["id"])])
+        with patch.object(service.engine, "run") as engine_run, patch.object(
+            service,
+            "_ensure_market_history",
+        ) as ensure_market_history:
+            payload = service.compare_runs([int(first["id"]), int(second["id"])])
+
+        engine_run.assert_not_called()
+        ensure_market_history.assert_not_called()
 
         self.assertEqual(payload["comparison_source"], "stored_rule_backtest_runs")
         self.assertEqual(payload["read_mode"], "stored_first")
@@ -5031,6 +5116,10 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(payload["field_groups"], ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"])
         self.assertEqual(len(payload["items"]), 2)
         first_item = payload["items"][0]
+        self.assertEqual(
+            set(first_item),
+            {"metadata", "parsed_strategy", "metrics", "benchmark", "execution_model", "result_authority"},
+        )
         self.assertEqual(first_item["metadata"]["id"], int(first["id"]))
         self.assertEqual(first_item["metadata"]["code"], "600519")
         self.assertEqual(first_item["metadata"]["status"], "completed")
@@ -5068,6 +5157,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(total_return_delta["baseline_value"], first["total_return_pct"])
         self.assertEqual(total_return_delta["deltas"][0]["run_id"], int(first["id"]))
         self.assertEqual(total_return_delta["deltas"][0]["delta_vs_baseline"], 0.0)
+        self._assert_public_projection_is_sanitized_and_stored_only(payload)
 
     def test_compare_runs_reports_missing_requested_runs_without_recomputing(self) -> None:
         service = RuleBacktestService(self.db)
@@ -5618,6 +5708,7 @@ class RuleBacktestTestCase(unittest.TestCase):
             projection["cell_availability_states"],
             ["available", "missing", "ambiguous"],
         )
+        self.assertFalse(FORBIDDEN_HEAVY_PROJECTION_FIELDS & set(projection))
 
         cells = {
             (cell["x_value"], cell["y_value"]): cell
@@ -5648,6 +5739,8 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertFalse(evidence["authority"]["provider_calls_executed"])
         self.assertEqual(evidence["authority"]["execution_count"], 0)
         self._assert_robustness_payload_avoids_optimizer_semantics(evidence)
+        self._assert_public_projection_is_sanitized_and_stored_only(projection)
+        self._assert_public_projection_is_sanitized_and_stored_only(evidence)
 
     def test_compare_runs_omits_heatmap_projection_without_two_usable_axes(self) -> None:
         service = RuleBacktestService(self.db)

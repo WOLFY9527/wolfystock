@@ -1741,10 +1741,34 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(diagnostics.metadata.localDataCoverageState, "mixed")
         self.assertFalse(diagnostics.metadata.pointInTimeUniverse)
         self.assertEqual(diagnostics.metadata.survivorshipBiasState, "uncontrolled")
+        self.assertFalse(diagnostics.metadata.live_provider_calls_executed)
         self.assertFalse(diagnostics.metadata.providerCalls)
         self.assertEqual(results.items[0].symbol, "AAPL")
         self.assertEqual(results.items[0].sequence_index, 0)
         self.assertEqual(results.items[0].total_return_pct, 1.23)
+        result_row = results.items[0].model_dump()
+        self.assertLessEqual(
+            set(result_row),
+            {
+                "id",
+                "job_id",
+                "sequence_index",
+                "symbol",
+                "status",
+                "reason_code",
+                "reason_message",
+                "runtime_ms",
+                "metrics",
+                "total_return_pct",
+                "max_drawdown_pct",
+                "win_rate_pct",
+                "trades_count",
+                "single_run_id",
+                "created_at",
+                "updated_at",
+            },
+        )
+        self.assertFalse({"execution_trace", "equity_curve", "trades", "provider_payload"} & set(result_row))
         service.create_universe_job.assert_called_once()
         service.run_universe_job_sequential.assert_called_once_with(42)
         service.get_universe_job_diagnostics.assert_called_once_with(42)
@@ -2858,6 +2882,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
             payload["heatmap_projection"]["cells"][0]["availability_state"],
             "available",
         )
+        self.assertFalse(
+            {"execution_trace", "equity_curve", "trades", "audit_rows", "provider_payload"}
+            & set(payload["heatmap_projection"])
+        )
         self.assertEqual(
             payload["parameter_stability_evidence"]["contract_kind"],
             "backtest_parameter_stability_diagnostic_evidence",
@@ -2871,6 +2899,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
             [999],
         )
         self.assertEqual(len(payload["items"]), 2)
+        self.assertEqual(
+            set(payload["items"][0]),
+            {"metadata", "parsed_strategy", "metrics", "benchmark", "execution_model", "result_authority"},
+        )
         self.assertEqual(payload["items"][0]["metadata"]["id"], 101)
         self.assertEqual(payload["items"][0]["parsed_strategy"]["strategy_kind"], base_item["parsed_strategy"]["strategy_kind"])
         self.assertEqual(
