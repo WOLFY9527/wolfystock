@@ -46,6 +46,8 @@ describe('document title route identity', () => {
     ['/guest/scanner', 'en', 'Market Scanner - WolfyStock'],
     ['/zh/market-overview', 'en', '市场总览 - WolfyStock'],
     ['/en/market-overview', 'zh', 'Market Overview - WolfyStock'],
+    ['/__preview/report', 'en', 'Page Not Found - WolfyStock'],
+    ['/en/__preview/full-report', 'zh', 'Page Not Found - WolfyStock'],
     ['/missing-route', 'en', 'Page Not Found - WolfyStock'],
   ] as const)('resolves %s in %s', (pathname, language, expected) => {
     expect(getDocumentTitle(pathname, language)).toBe(expected);

@@ -35,8 +35,6 @@ const ROUTE_TITLES: Record<string, LocalizedTitle> = {
   '/login': { zh: '登录', en: 'Login' },
   '/register': { zh: '登录', en: 'Login' },
   '/reset-password': { zh: '重置密码', en: 'Reset Password' },
-  '/__preview/report': { zh: '报告预览', en: 'Report Preview' },
-  '/__preview/full-report': { zh: '完整报告抽屉预览', en: 'Full Report Drawer Preview' },
 };
 
 const ALIASES: Record<string, string> = {

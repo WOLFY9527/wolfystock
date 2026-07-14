@@ -1720,6 +1720,18 @@ describe('AppContent route flows', () => {
     expect(screen.queryByText('market-overview-page')).not.toBeInTheDocument();
   });
 
+  it.each(['/__preview/report', '/en/__preview/full-report'])(
+    'keeps removed preview route %s on the Not Found page',
+    async (path) => {
+      mockSignedInConsumer();
+
+      renderAt(path);
+
+      expect(await screen.findByText('not-found-page')).toBeInTheDocument();
+      expect(screen.queryByText('Home Workspace')).not.toBeInTheDocument();
+    },
+  );
+
   it('renders guest unknown routes through a safe 404 shell without admin navigation', async () => {
     languageState.value = 'zh';
 
