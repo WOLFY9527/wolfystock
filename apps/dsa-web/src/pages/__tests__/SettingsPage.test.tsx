@@ -901,6 +901,14 @@ async function openQuickProviderDrawer(providerName: string) {
   return providerCard as HTMLElement;
 }
 
+async function findLoadedDataSourceSection() {
+  const libraryList = await screen.findByTestId('data-source-library-list');
+  const dataSection = libraryList.closest('section');
+  expect(dataSection).not.toBeNull();
+  expect(screen.queryByTestId('settings-domain-panel-loading')).toBeNull();
+  return dataSection as HTMLElement;
+}
+
 async function importSettingsPageWithLazyDomainMocks() {
   vi.resetModules();
 
@@ -2904,18 +2912,18 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    const dataSection = screen.getByRole('heading', { name: '数据源配置' }).closest('section');
-    expect(dataSection).not.toBeNull();
-    expectNoRawI18nKeys(dataSection as HTMLElement);
-    expect(within(dataSection as HTMLElement).getByText('1. 数据路由')).toBeInTheDocument();
-    expect(within(dataSection as HTMLElement).getByText('Data coverage gaps')).toBeInTheDocument();
-    expect(within(dataSection as HTMLElement).getByText('2. 数据源库')).toBeInTheDocument();
-    expect(within(dataSection as HTMLElement).getByText('MARKET DATA')).toBeInTheDocument();
-    expect(within(dataSection as HTMLElement).getByText('FUNDAMENTALS')).toBeInTheDocument();
-    expect(within(dataSection as HTMLElement).getByText('NEWS & SENTIMENT')).toBeInTheDocument();
-    expect(within(dataSection as HTMLElement).getByText('行情数据')).toBeInTheDocument();
-    expect(within(dataSection as HTMLElement).getByText(/Finnhub -> Yahoo/)).toBeInTheDocument();
-    const finnhubCard = within(dataSection as HTMLElement).getByTestId('data-source-card-finnhub');
+    const dataSection = await findLoadedDataSourceSection();
+    expect(within(dataSection).getByRole('heading', { name: '数据源配置' })).toBeInTheDocument();
+    expectNoRawI18nKeys(dataSection);
+    expect(within(dataSection).getByText('1. 数据路由')).toBeInTheDocument();
+    expect(within(dataSection).getByText('Data coverage gaps')).toBeInTheDocument();
+    expect(within(dataSection).getByText('2. 数据源库')).toBeInTheDocument();
+    expect(within(dataSection).getByText('MARKET DATA')).toBeInTheDocument();
+    expect(within(dataSection).getByText('FUNDAMENTALS')).toBeInTheDocument();
+    expect(within(dataSection).getByText('NEWS & SENTIMENT')).toBeInTheDocument();
+    expect(within(dataSection).getByText('行情数据')).toBeInTheDocument();
+    expect(within(dataSection).getByText(/Finnhub -> Yahoo/)).toBeInTheDocument();
+    const finnhubCard = within(dataSection).getByTestId('data-source-card-finnhub');
     expect(finnhubCard).toHaveAttribute('data-layout', 'row');
     expect(within(finnhubCard).getByText('Finnhub')).toBeInTheDocument();
     expect(within(finnhubCard).getByText('行情')).toBeInTheDocument();
@@ -2928,13 +2936,13 @@ describe('SettingsPage', () => {
     expect(within(finnhubCard).getByText('可能提升为可评分证据')).toBeInTheDocument();
     expect(within(finnhubCard).getByText('已配置待验证')).toBeInTheDocument();
     expect(within(finnhubCard).getByText('状态检查：已配置，未做连通性验证')).toBeInTheDocument();
-    const yahooCard = within(dataSection as HTMLElement).getByTestId('data-source-card-yahoo');
+    const yahooCard = within(dataSection).getByTestId('data-source-card-yahoo');
     expect(within(yahooCard).getByText('内置源')).toBeInTheDocument();
     expect(within(yahooCard).getByText('行情')).toBeInTheDocument();
     expect(within(yahooCard).getByText('基本面')).toBeInTheDocument();
     expect(within(yahooCard).getAllByText('状态检查：内置源无需验证').length).toBeGreaterThan(0);
-    expect(within(dataSection as HTMLElement).queryAllByRole('combobox').length).toBe(0);
-    fireEvent.click(within(dataSection as HTMLElement).getByTestId('data-routing-manage-news'));
+    expect(within(dataSection).queryAllByRole('combobox').length).toBe(0);
+    fireEvent.click(within(dataSection).getByTestId('data-routing-manage-news'));
     const routingDrawer = await screen.findByRole('dialog', { name: '新闻数据' });
     expect(within(routingDrawer).getAllByRole('combobox').length).toBeGreaterThan(0);
     expect(within(routingDrawer).getByRole('button', { name: '保存优先顺序' })).toBeInTheDocument();
