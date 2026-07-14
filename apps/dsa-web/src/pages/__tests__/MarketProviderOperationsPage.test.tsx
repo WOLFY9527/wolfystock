@@ -1297,6 +1297,52 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getByText('正在读取数据源维护快照')).toBeInTheDocument();
   });
 
+  it('renders an explicit unavailable summary state for an empty operations payload', async () => {
+    getOperations.mockResolvedValue({});
+
+    await renderMarketProviderOperationsPage();
+
+    const summaryState = await screen.findByTestId('market-provider-summary-state');
+    expect(summaryState).toHaveTextContent('运维汇总不可用');
+    expect(summaryState).not.toHaveTextContent('0 个数据源');
+  });
+
+  it('renders partial summary counts as unavailable instead of zero', async () => {
+    getOperations.mockResolvedValue({
+      ...populatedPayload,
+      summary: { totalItems: 2, liveCount: 1 },
+    });
+
+    await renderMarketProviderOperationsPage();
+
+    const summaryState = await screen.findByTestId('market-provider-summary-state');
+    expect(summaryState).toHaveTextContent('运维汇总不完整');
+    expect(summaryState).toHaveTextContent('部分计数待统计');
+    expect(summaryState).not.toHaveTextContent('失败 0');
+  });
+
+  it('renders a genuine zero summary as an observed zero state', async () => {
+    getOperations.mockResolvedValue({
+      ...populatedPayload,
+      summary: Object.fromEntries(Object.keys(populatedPayload.summary).map((key) => [key, 0])),
+      items: [],
+      eventRollups: [],
+      cacheStates: [],
+    });
+
+    await renderMarketProviderOperationsPage();
+
+    expect(await screen.findByTestId('market-provider-summary-state')).toHaveTextContent('0 个数据源快照');
+  });
+
+  it('renders a populated summary without changing the existing observed counts', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+
+    await renderMarketProviderOperationsPage();
+
+    expect(await screen.findByTestId('market-provider-summary-state')).toHaveTextContent('2 个数据源快照');
+  });
+
   it('lets the shared shell own the page background instead of locking a local pure-black slab', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 

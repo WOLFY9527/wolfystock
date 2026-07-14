@@ -41,6 +41,128 @@ describe('marketProviderOperationsApi.getHistoricalOhlcvCachePreflight', () => {
     expect(payload.metadata.externalProviderCalls).toBe(false);
   });
 
+  it('preserves a missing operations payload as unavailable', async () => {
+    const { marketProviderOperationsApi } = await import('../marketProviderOperations');
+    get.mockResolvedValueOnce({ data: null });
+
+    await expect(marketProviderOperationsApi.getOperations()).resolves.toBeNull();
+  });
+
+  it('keeps an empty operations payload distinct from a missing payload', async () => {
+    const { marketProviderOperationsApi } = await import('../marketProviderOperations');
+    get.mockResolvedValueOnce({ data: {} });
+
+    await expect(marketProviderOperationsApi.getOperations()).resolves.toMatchObject({
+      summary: null,
+      items: [],
+      eventRollups: [],
+      cacheStates: [],
+    });
+  });
+
+  it('preserves absent summary counts as null in partial operations payloads', async () => {
+    const { marketProviderOperationsApi } = await import('../marketProviderOperations');
+    get.mockResolvedValueOnce({
+      data: {
+        summary: { total_items: 2, live_count: 1 },
+      },
+    });
+
+    await expect(marketProviderOperationsApi.getOperations()).resolves.toMatchObject({
+      summary: {
+        totalItems: 2,
+        liveCount: 1,
+        cacheCount: null,
+        failureCount: null,
+      },
+    });
+  });
+
+  it('preserves genuine returned zero summary counts', async () => {
+    const { marketProviderOperationsApi } = await import('../marketProviderOperations');
+    get.mockResolvedValueOnce({
+      data: {
+        summary: {
+          total_items: 0,
+          live_count: 0,
+          cache_count: 0,
+          stale_count: 0,
+          fallback_count: 0,
+          partial_count: 0,
+          unavailable_count: 0,
+          error_count: 0,
+          refreshing_count: 0,
+          event_count: 0,
+          failure_count: 0,
+          fallback_event_count: 0,
+          stale_event_count: 0,
+          slow_event_count: 0,
+        },
+      },
+    });
+
+    await expect(marketProviderOperationsApi.getOperations()).resolves.toMatchObject({
+      summary: {
+        totalItems: 0,
+        liveCount: 0,
+        cacheCount: 0,
+        failureCount: 0,
+      },
+    });
+  });
+
+  it('normalizes a populated operations payload without changing observed counts', async () => {
+    const { marketProviderOperationsApi } = await import('../marketProviderOperations');
+    get.mockResolvedValueOnce({
+      data: {
+        generated_at: '2026-07-14T09:00:00Z',
+        window: { key: '24h' },
+        summary: {
+          total_items: 3,
+          live_count: 1,
+          cache_count: 1,
+          stale_count: 0,
+          fallback_count: 1,
+          partial_count: 0,
+          unavailable_count: 0,
+          error_count: 0,
+          refreshing_count: 1,
+          event_count: 5,
+          failure_count: 1,
+          fallback_event_count: 1,
+          stale_event_count: 0,
+          slow_event_count: 1,
+        },
+        items: [{ provider: 'primary' }],
+        event_rollups: [{ provider: 'primary' }],
+        cache_states: [{ cache_key: 'provider:primary' }],
+        limitations: ['read_only'],
+      },
+    });
+
+    await expect(marketProviderOperationsApi.getOperations()).resolves.toMatchObject({
+      generatedAt: '2026-07-14T09:00:00Z',
+      summary: {
+        totalItems: 3,
+        liveCount: 1,
+        cacheCount: 1,
+        fallbackCount: 1,
+        failureCount: 1,
+      },
+      items: [{ provider: 'primary' }],
+      eventRollups: [{ provider: 'primary' }],
+      cacheStates: [{ cacheKey: 'provider:primary' }],
+    });
+  });
+
+  it('does not convert a failed operations request into an empty summary', async () => {
+    const { marketProviderOperationsApi } = await import('../marketProviderOperations');
+    const requestError = new Error('admin required');
+    get.mockRejectedValueOnce(requestError);
+
+    await expect(marketProviderOperationsApi.getOperations()).rejects.toBe(requestError);
+  });
+
   it('loads and normalizes the DATA-113 historical cache preflight response', async () => {
     const { marketProviderOperationsApi } = await import('../marketProviderOperations');
     get.mockResolvedValueOnce({

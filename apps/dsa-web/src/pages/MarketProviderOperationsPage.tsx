@@ -102,22 +102,22 @@ const EMPTY_HISTORICAL_OHLCV_SYMBOLS: HistoricalOhlcvCachePreflightSymbol[] = []
 const EMPTY_READINESS_CHECKS: MarketDataReadinessCheck[] = [];
 const EMPTY_CONSUMER_EVIDENCE_ITEMS: ConsumerEvidenceReadinessItem[] = [];
 const PROVIDER_OPS_DIAGNOSTIC_SURFACE = '数据源运维 / 系统诊断';
-const SUMMARY_DEFAULTS: MarketProviderOperationsSummary = {
-  totalItems: 0,
-  liveCount: 0,
-  cacheCount: 0,
-  staleCount: 0,
-  fallbackCount: 0,
-  partialCount: 0,
-  unavailableCount: 0,
-  errorCount: 0,
-  refreshingCount: 0,
-  eventCount: 0,
-  failureCount: 0,
-  fallbackEventCount: 0,
-  staleEventCount: 0,
-  slowEventCount: 0,
-};
+const SUMMARY_KEYS: Array<keyof MarketProviderOperationsSummary> = [
+  'totalItems',
+  'liveCount',
+  'cacheCount',
+  'staleCount',
+  'fallbackCount',
+  'partialCount',
+  'unavailableCount',
+  'errorCount',
+  'refreshingCount',
+  'eventCount',
+  'failureCount',
+  'fallbackEventCount',
+  'staleEventCount',
+  'slowEventCount',
+];
 const MATRIX_SUMMARY_DEFAULTS = {
   totalRows: 0,
   observationOnlyRows: 0,
@@ -153,23 +153,16 @@ function safeCount(value: unknown): number {
   return safeFiniteNumber(value) ?? 0;
 }
 
-function normalizeSummary(summary?: Partial<MarketProviderOperationsSummary> | null): MarketProviderOperationsSummary {
-  return {
-    totalItems: safeCount(summary?.totalItems),
-    liveCount: safeCount(summary?.liveCount),
-    cacheCount: safeCount(summary?.cacheCount),
-    staleCount: safeCount(summary?.staleCount),
-    fallbackCount: safeCount(summary?.fallbackCount),
-    partialCount: safeCount(summary?.partialCount),
-    unavailableCount: safeCount(summary?.unavailableCount),
-    errorCount: safeCount(summary?.errorCount),
-    refreshingCount: safeCount(summary?.refreshingCount),
-    eventCount: safeCount(summary?.eventCount),
-    failureCount: safeCount(summary?.failureCount),
-    fallbackEventCount: safeCount(summary?.fallbackEventCount),
-    staleEventCount: safeCount(summary?.staleEventCount),
-    slowEventCount: safeCount(summary?.slowEventCount),
-  };
+function normalizeSummary(summary?: Partial<MarketProviderOperationsSummary> | null): MarketProviderOperationsSummary | null {
+  if (!summary) return null;
+  return SUMMARY_KEYS.reduce((normalized, key) => {
+    normalized[key] = safeFiniteNumber(summary[key]);
+    return normalized;
+  }, {} as MarketProviderOperationsSummary);
+}
+
+function summaryIsComplete(summary: MarketProviderOperationsSummary | null): boolean {
+  return summary ? SUMMARY_KEYS.every((key) => summary[key] != null) : false;
 }
 
 function normalizeStatus(value: unknown): StatusTone {
@@ -1341,15 +1334,15 @@ function buildBetaReadinessChecklistItems(
   rows: ProviderOperationsMatrixRow[],
   checks: MarketDataReadinessCheck[],
   topSummary: ProviderOpsTopSummaryData,
-  summary: MarketProviderOperationsSummary,
+  summary: MarketProviderOperationsSummary | null,
   readinessStatus?: string | null,
 ): BetaReadinessChecklistItem[] {
   const blockedSetupCount = rows.filter(matrixRowHasMissingSetup).length;
   const nonReadyChecks = checks.filter((check) => shouldIncludeChecklistReadinessCheck(check));
   const cacheRequiredCount = rows.filter((row) => matrixCacheRequired(row)).length;
-  const degradedSignals = summary.fallbackCount + summary.partialCount + summary.staleCount + summary.unavailableCount + summary.errorCount + summary.failureCount;
-  const fallbackSignals = summary.fallbackCount + summary.fallbackEventCount;
-  const staleSignals = summary.staleCount + summary.staleEventCount;
+  const degradedSignals = safeCount(summary?.fallbackCount) + safeCount(summary?.partialCount) + safeCount(summary?.staleCount) + safeCount(summary?.unavailableCount) + safeCount(summary?.errorCount) + safeCount(summary?.failureCount);
+  const fallbackSignals = safeCount(summary?.fallbackCount) + safeCount(summary?.fallbackEventCount);
+  const staleSignals = safeCount(summary?.staleCount) + safeCount(summary?.staleEventCount);
   const liveReadyCount = items.filter(operationItemIsAvailable).length;
   const observeOnlyCount = topSummary.diagnosticSources.length;
   const representativeStatus = readinessStatusLabel(readinessStatus || 'missing');
@@ -1385,14 +1378,18 @@ function buildBetaReadinessChecklistItems(
     {
       key: 'degraded',
       title: '降级 / 备用观察',
-      detail: `备用 ${formatNumber(fallbackSignals, 0)} · 过期 ${formatNumber(staleSignals, 0)} · 部分 ${formatNumber(summary.partialCount, 0)} · 失败 ${formatNumber(summary.failureCount + summary.errorCount, 0)}`,
+      detail: !summary
+        ? '运维汇总不可用，无法判断备用、过期、部分或失败计数。'
+        : summaryIsComplete(summary)
+          ? `备用 ${formatNumber(fallbackSignals, 0)} · 过期 ${formatNumber(staleSignals, 0)} · 部分 ${formatNumber(summary.partialCount, 0)} · 失败 ${formatNumber(safeCount(summary.failureCount) + safeCount(summary.errorCount), 0)}`
+          : `备用 ${formatCountLabel(summary.fallbackCount)} · 过期 ${formatCountLabel(summary.staleCount)} · 部分 ${formatCountLabel(summary.partialCount)} · 失败 ${formatCountLabel(summary.failureCount == null || summary.errorCount == null ? null : summary.failureCount + summary.errorCount)}`,
       nextStep: degradedSignals > 0
         ? '先核对 fallback、stale、partial 与失败路径，再通过 Admin Logs / 熔断页确认是否仍适合 beta 观察。'
         : '当前未见明显降级信号，继续保持只读观测。',
       severity: degradedSignals > 0 ? 'warning' : 'ok',
       badges: [
         { label: `降级 ${formatNumber(degradedSignals, 0)}`, variant: degradedSignals > 0 ? 'caution' : 'success' },
-        { label: summary.refreshingCount > 0 ? `刷新中 ${formatNumber(summary.refreshingCount, 0)}` : '无刷新阻塞', variant: summary.refreshingCount > 0 ? 'info' : 'neutral' },
+        { label: safeCount(summary?.refreshingCount) > 0 ? `刷新中 ${formatCountLabel(summary?.refreshingCount)}` : summary?.refreshingCount === 0 ? '无刷新阻塞' : '刷新状态待统计', variant: safeCount(summary?.refreshingCount) > 0 ? 'info' : 'neutral' },
       ],
     },
     {
@@ -2647,7 +2644,7 @@ const ProviderSetupChecklistPanel: React.FC<{
   isLoading: boolean;
   surfaceFocus: ProductSetupSurface | null;
   topSummary: ProviderOpsTopSummaryData;
-  summary: MarketProviderOperationsSummary;
+  summary: MarketProviderOperationsSummary | null;
   operationItems: MarketProviderOperationItem[];
   readinessStatus?: string | null;
 }> = ({ rows, checks, isLoading, surfaceFocus, topSummary, summary, operationItems, readinessStatus }) => {
@@ -2782,7 +2779,7 @@ const ProviderOperationsMatrixPanel: React.FC<{
   error: ParsedApiError | null;
   surfaceFocus: ProductSetupSurface | null;
   topSummary: ProviderOpsTopSummaryData;
-  opsSummary: MarketProviderOperationsSummary;
+  opsSummary: MarketProviderOperationsSummary | null;
   operationItems: MarketProviderOperationItem[];
 }> = ({ response, readiness, isLoading, isReadinessLoading, error, surfaceFocus, topSummary, opsSummary, operationItems }) => {
   const rows = response?.rows ?? EMPTY_PROVIDER_MATRIX_ROWS;
@@ -3902,7 +3899,11 @@ const DiagnosticsPanel: React.FC<{
       </p>
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
         <TerminalMetric label="可能需付费" value={formatNumber(paidRows, 0)} valueClassName="text-sm" />
-        <TerminalMetric label="失败 / 降级" value={formatNumber(response.summary.failureCount + response.summary.fallbackCount + response.summary.staleCount, 0)} valueClassName="text-sm" />
+        <TerminalMetric label="失败 / 降级" value={formatCountLabel(
+          response.summary?.failureCount == null || response.summary?.fallbackCount == null || response.summary?.staleCount == null
+            ? null
+            : response.summary.failureCount + response.summary.fallbackCount + response.summary.staleCount,
+        )} valueClassName="text-sm" />
         <TerminalMetric label="限制代码" value={formatNumber(response.limitations.length, 0)} valueClassName="text-sm" />
         <TerminalMetric label="追踪标识" value={selectedItem ? providerLabel(selectedItem) : 'Admin Logs'} valueClassName={cn('text-sm', ADMIN_TABLE_IDENTITY_CLASSNAME)} />
       </div>
@@ -4382,8 +4383,11 @@ const MarketProviderOperationsPage: React.FC = () => {
   const readinessChecks = readiness?.checks ?? EMPTY_READINESS_CHECKS;
   const cacheStates = response?.cacheStates ?? EMPTY_PROVIDER_CACHE_STATES;
   const eventRollups = response?.eventRollups ?? EMPTY_PROVIDER_EVENT_ROLLUPS;
-  const summary = normalizeSummary(response?.summary ?? SUMMARY_DEFAULTS);
-  const degradedCount = summary.fallbackCount + summary.partialCount + summary.unavailableCount + summary.errorCount + summary.failureCount;
+  const limitations = response?.limitations ?? [];
+  const summary = normalizeSummary(response?.summary);
+  const summaryComplete = summaryIsComplete(summary);
+  const summaryState = !summary ? 'unavailable' : summaryComplete ? 'available' : 'partial';
+  const degradedCount = safeCount(summary?.fallbackCount) + safeCount(summary?.partialCount) + safeCount(summary?.unavailableCount) + safeCount(summary?.errorCount) + safeCount(summary?.failureCount);
   const preferredProvider = selectPreferredProvider(items);
 
   const effectiveSelectedProviderKey = selectedProviderKey && items.some((item) => providerKey(item) === selectedProviderKey)
@@ -4396,9 +4400,17 @@ const MarketProviderOperationsPage: React.FC = () => {
   const withItemError = items.find((item) => item.errorSummary || item.warning) || null;
   const topException = withReason ? sanitizeOperatorText(withReason.topReasons[0]) : withItemError ? lastFailureLabel(withItemError) : '暂无数据';
 
-  const totalItems = summary.totalItems || items.length;
-  const healthValue = totalItems > 0 ? `${formatNumber(summary.liveCount, 0)}/${formatNumber(totalItems, 0)} 实时` : '暂无数据';
-  const circuitValue = totalItems > 0 ? (degradedCount > 0 ? `${formatNumber(degradedCount, 0)} 降级` : '正常') : '待统计';
+  const totalItems = summary?.totalItems ?? null;
+  const healthValue = totalItems == null
+    ? '运维汇总不可用'
+    : totalItems > 0
+      ? `${formatCountLabel(summary?.liveCount)}/${formatNumber(totalItems, 0)} 实时`
+      : '暂无数据';
+  const circuitValue = totalItems == null
+    ? '待统计'
+    : totalItems > 0
+      ? (degradedCount > 0 ? `${formatNumber(degradedCount, 0)} 降级` : '正常')
+      : '待统计';
   const cacheValue = cacheStates.length > 0
     ? cacheStates.some((state) => state.isRefreshing)
       ? '刷新中'
@@ -4408,9 +4420,9 @@ const MarketProviderOperationsPage: React.FC = () => {
     : '待统计';
 
   const operatorMetrics = [
-    { label: '数据源健康', value: healthValue, subvalue: totalItems > 0 ? `共 ${formatNumber(totalItems, 0)} 个数据源` : '暂无 provider 快照' },
-    { label: '熔断状态', value: circuitValue, subvalue: degradedCount > 0 ? '优先核对降级与失败路径' : '当前未见降级聚合' },
-    { label: '失败率', value: safeRatio(summary.failureCount, summary.eventCount), subvalue: summary.eventCount > 0 ? `事件 ${formatNumber(summary.eventCount, 0)}` : '待统计' },
+    { label: '数据源健康', value: healthValue, subvalue: totalItems == null ? '未收到可用的 provider 汇总' : totalItems > 0 ? `共 ${formatNumber(totalItems, 0)} 个数据源` : '暂无 provider 快照' },
+    { label: '熔断状态', value: circuitValue, subvalue: totalItems == null ? '等待可用汇总后判断' : degradedCount > 0 ? '优先核对降级与失败路径' : '当前未见降级聚合' },
+    { label: '失败率', value: safeRatio(summary?.failureCount, summary?.eventCount), subvalue: summary?.eventCount != null ? `事件 ${formatNumber(summary.eventCount, 0)}` : '待统计' },
     { label: '缓存状态', value: cacheValue, subvalue: cacheStates.length > 0 ? `快照 ${formatNumber(cacheStates.length, 0)}` : '暂无缓存快照' },
     { label: '最近异常', value: topException, subvalue: eventRollups.length > 0 ? '保留异常可见性，但不暴露敏感内容' : '窗口内暂无异常' },
   ];
@@ -4429,15 +4441,21 @@ const MarketProviderOperationsPage: React.FC = () => {
     ? 'blocked'
     : isLoading && !response
       ? 'unknown'
-      : degradedCount > 0 || readiness?.readinessStatus === 'partial'
+      : summaryState === 'unavailable'
+        ? 'unknown'
+        : degradedCount > 0 || readiness?.readinessStatus === 'partial'
         ? 'degraded'
-        : summary.totalItems > 0
+        : summary?.totalItems != null && summary.totalItems > 0
           ? 'healthy'
           : 'observe';
-  const l0Impact = topSummary.affectedSurfaces.length
+  const l0Impact = summaryState === 'unavailable'
+    ? '运维汇总不可用，无法确认跨页面影响。'
+    : topSummary.affectedSurfaces.length
     ? `${formatNumber(degradedCount, 0)} 个降级信号，影响 ${formatReadableList(topSummary.affectedSurfaces, '影响面待汇总')}`
     : (degradedCount > 0 ? `${formatNumber(degradedCount, 0)} 个降级信号待核对` : '当前未见跨页面影响汇总');
-  const l0RecommendedAction = topSummary.missingSources.length > 0
+  const l0RecommendedAction = summaryState === 'unavailable'
+    ? '重新读取运维快照后再判断数据源状态。'
+    : topSummary.missingSources.length > 0
     ? '先看来源缺口，再核对本地就绪诊断。'
     : degradedCount > 0
       ? '先看失败率、熔断与缓存，再下钻最近异常。'
@@ -4539,10 +4557,20 @@ const MarketProviderOperationsPage: React.FC = () => {
               eyebrow="L1 / 数据源就绪"
               title="数据源就绪与运维状态"
               description="先看当前数据源状态、熔断、缓存和最近异常，再决定是否需要下钻到矩阵或 Admin Logs。"
-              action={<TerminalChip variant="neutral">{formatNumber(items.length, 0)} 个数据源快照</TerminalChip>}
+              action={(
+                <span data-testid="market-provider-summary-state">
+                  <TerminalChip variant={summaryState === 'available' ? 'neutral' : summaryState === 'partial' ? 'caution' : 'danger'}>
+                    {summaryState === 'unavailable'
+                      ? '运维汇总不可用'
+                      : summaryState === 'partial'
+                        ? '运维汇总不完整 · 部分计数待统计'
+                        : `${formatNumber(totalItems, 0)} 个数据源快照`}
+                  </TerminalChip>
+                </span>
+              )}
               className={ADMIN_SECTION_HEADING_CLASSNAME}
             />
-            {response ? (
+            {response && summary ? (
               <>
                 <ProviderOperationsTable items={items} selectedKey={effectiveSelectedProviderKey} onSelect={setSelectedProviderKey} />
                 <ProviderDetailsPanel item={selectedItem} />
@@ -4609,10 +4637,10 @@ const MarketProviderOperationsPage: React.FC = () => {
               eyebrow="L2 / 配额与成本"
               title="配额 / 成本线索与下钻"
               description="保留既有失败、缓存、限制代码和 Admin Logs 下钻入口，把付费/配额线索集中到一组里展示。"
-              action={<TerminalChip variant="caution">{formatNumber((matrixResponse?.summary?.paidDataLikelyRequiredRows ?? 0) + (response?.limitations.length ?? 0), 0)} 个线索</TerminalChip>}
+              action={<TerminalChip variant="caution">{formatNumber((matrixResponse?.summary?.paidDataLikelyRequiredRows ?? 0) + limitations.length, 0)} 个线索</TerminalChip>}
               className={ADMIN_SECTION_HEADING_CLASSNAME}
             />
-            {response ? (
+            {response && summary ? (
               <>
                 <EventRollupsPanel eventRollups={eventRollups} />
                 <CacheStatesPanel cacheStates={cacheStates} />

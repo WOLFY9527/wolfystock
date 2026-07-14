@@ -15,20 +15,20 @@ export interface MarketProviderOperationsWindow {
 }
 
 export interface MarketProviderOperationsSummary {
-  totalItems: number;
-  liveCount: number;
-  cacheCount: number;
-  staleCount: number;
-  fallbackCount: number;
-  partialCount: number;
-  unavailableCount: number;
-  errorCount: number;
-  refreshingCount: number;
-  eventCount: number;
-  failureCount: number;
-  fallbackEventCount: number;
-  staleEventCount: number;
-  slowEventCount: number;
+  totalItems: number | null;
+  liveCount: number | null;
+  cacheCount: number | null;
+  staleCount: number | null;
+  fallbackCount: number | null;
+  partialCount: number | null;
+  unavailableCount: number | null;
+  errorCount: number | null;
+  refreshingCount: number | null;
+  eventCount: number | null;
+  failureCount: number | null;
+  fallbackEventCount: number | null;
+  staleEventCount: number | null;
+  slowEventCount: number | null;
 }
 
 export interface MarketProviderOperationItem {
@@ -89,7 +89,7 @@ export interface MarketProviderCacheState {
 export interface MarketProviderOperationsResponse {
   generatedAt: string;
   window: MarketProviderOperationsWindow;
-  summary: MarketProviderOperationsSummary;
+  summary: MarketProviderOperationsSummary | null;
   items: MarketProviderOperationItem[];
   eventRollups: MarketProviderEventRollup[];
   cacheStates: MarketProviderCacheState[];
@@ -368,22 +368,22 @@ export interface HistoricalOhlcvCachePreflightParams {
   requireAdjusted?: boolean;
 }
 
-const DEFAULT_SUMMARY: MarketProviderOperationsSummary = {
-  totalItems: 0,
-  liveCount: 0,
-  cacheCount: 0,
-  staleCount: 0,
-  fallbackCount: 0,
-  partialCount: 0,
-  unavailableCount: 0,
-  errorCount: 0,
-  refreshingCount: 0,
-  eventCount: 0,
-  failureCount: 0,
-  fallbackEventCount: 0,
-  staleEventCount: 0,
-  slowEventCount: 0,
-};
+const SUMMARY_KEYS = [
+  'totalItems',
+  'liveCount',
+  'cacheCount',
+  'staleCount',
+  'fallbackCount',
+  'partialCount',
+  'unavailableCount',
+  'errorCount',
+  'refreshingCount',
+  'eventCount',
+  'failureCount',
+  'fallbackEventCount',
+  'staleEventCount',
+  'slowEventCount',
+] as const;
 
 const DEFAULT_MATRIX_SUMMARY: ProviderOperationsMatrixSummary = {
   totalRows: 0,
@@ -407,12 +407,23 @@ const DEFAULT_ACTIVATION_SUMMARY: ProviderActivationVerifierSummary = {
   uatDiagnosis: null,
 };
 
-function normalizeOperations(payload: Record<string, unknown>): MarketProviderOperationsResponse {
+function normalizeSummary(value: unknown): MarketProviderOperationsSummary | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const summary = value as Partial<MarketProviderOperationsSummary>;
+  return SUMMARY_KEYS.reduce((normalized, key) => {
+    const count = summary[key];
+    normalized[key] = typeof count === 'number' && Number.isFinite(count) ? count : null;
+    return normalized;
+  }, {} as MarketProviderOperationsSummary);
+}
+
+function normalizeOperations(payload: unknown): MarketProviderOperationsResponse | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
   const normalized = toCamelCase<MarketProviderOperationsResponse>(payload);
   return {
     generatedAt: normalized.generatedAt,
     window: normalized.window || { key: '24h' },
-    summary: { ...DEFAULT_SUMMARY, ...(normalized.summary || {}) },
+    summary: normalizeSummary(normalized.summary),
     items: Array.isArray(normalized.items) ? normalized.items : [],
     eventRollups: Array.isArray(normalized.eventRollups) ? normalized.eventRollups : [],
     cacheStates: Array.isArray(normalized.cacheStates) ? normalized.cacheStates : [],
@@ -580,8 +591,8 @@ function encodeSymbols(value?: string[] | string): string | undefined {
 }
 
 export const marketProviderOperationsApi = {
-  async getOperations(window = '24h'): Promise<MarketProviderOperationsResponse> {
-    const response = await apiClient.get<Record<string, unknown>>('/api/v1/admin/market-providers/operations', {
+  async getOperations(window = '24h'): Promise<MarketProviderOperationsResponse | null> {
+    const response = await apiClient.get<unknown>('/api/v1/admin/market-providers/operations', {
       params: { window },
     });
     return normalizeOperations(response.data);
