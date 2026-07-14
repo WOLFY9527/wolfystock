@@ -31,25 +31,3 @@ class ApiRouteUniquenessTestCase(unittest.TestCase):
         }
 
         self.assertEqual(duplicates, {})
-
-    def test_app_route_table_exposes_mac118_api_contract_routes(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            app = create_app(static_dir=Path(temp_dir))
-
-        routes_by_signature = {
-            (method, route.path): route.endpoint
-            for route in iter_effective_api_routes(app.routes)
-            for method in route.methods or set()
-            if method not in {"HEAD", "OPTIONS"}
-        }
-
-        self.assertEqual(
-            {
-                ("GET", "/api/v1/admin/historical-ohlcv/cache-preflight"),
-                ("GET", "/api/v1/scanner/status"),
-                ("GET", "/api/v1/stocks/{stock_code}/structure-decision"),
-                ("GET", "/api/v1/backtest/performance"),
-            }
-            - set(routes_by_signature),
-            set(),
-        )

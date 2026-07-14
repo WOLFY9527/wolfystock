@@ -7,8 +7,6 @@ from collections.abc import Mapping
 import json
 from typing import Any
 
-import pytest
-
 from src.services.homepage_uat_readiness_service import HomepageUatReadinessService
 
 
@@ -218,22 +216,21 @@ def test_cockpit_readiness_is_deterministic_with_fixed_timestamp() -> None:
     assert first == second
 
 
-@pytest.mark.parametrize(
-    "module_key",
-    [key for _, key in EXPECTED_MODULES],
-)
-def test_each_cockpit_module_has_public_uat_review_items(module_key: str) -> None:
-    module = {item["key"]: item for item in _build_payload()["cockpitModules"]}[module_key]
+def test_each_cockpit_module_has_public_uat_review_items() -> None:
+    modules = {item["key"]: item for item in _build_payload()["cockpitModules"]}
 
-    assert module["reviewScope"] == [
-        "public_serialization",
-        "public_copy_boundary",
-        "display_state_labels",
-        "missing_evidence_disclosure",
-    ]
-    assert module["uatChecklistItems"] == [
-        "confirm_public_fields_render",
-        "confirm_boundary_labels_visible",
-        "confirm_missing_evidence_copy",
-        "record_uat_evidence",
-    ]
+    for _, module_key in EXPECTED_MODULES:
+        module = modules[module_key]
+
+        assert module["reviewScope"] == [
+            "public_serialization",
+            "public_copy_boundary",
+            "display_state_labels",
+            "missing_evidence_disclosure",
+        ], module_key
+        assert module["uatChecklistItems"] == [
+            "confirm_public_fields_render",
+            "confirm_boundary_labels_visible",
+            "confirm_missing_evidence_copy",
+            "record_uat_evidence",
+        ], module_key

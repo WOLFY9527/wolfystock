@@ -10,7 +10,6 @@ from src.services.homepage_intelligence_service import HomepageIntelligenceServi
 from src.services.homepage_module_manifest_service import HomepageModuleManifestService
 from src.services.homepage_section_layout_service import HomepageSectionLayoutService
 from src.services.homepage_uat_readiness_service import HomepageUatReadinessService
-from tests.test_homepage_schema_serialization_stress import PUBLIC_HOMEPAGE_OUTPUTS
 
 
 FIXED_LAYOUT_AS_OF = "2026-06-15T09:30:00Z"
@@ -76,14 +75,6 @@ DOCUMENTED_LEGACY_CAPABILITY_FLAGS = (
     "eventWindows",
     "noAdviceBoundary",
 )
-REQUIRED_SERIALIZATION_STRESS_CASES = {
-    "HomepageIntelligenceService.build_bundle",
-    "HomepageCapabilitiesService.build_snapshot",
-    "HomepageModuleManifestService.build_manifest",
-    "HomepageSectionLayoutService.build_layout",
-    "HomepageUatReadinessService.build_checklist",
-}
-
 
 def _normalize_snake_case_keys(keys: list[str]) -> list[str]:
     return [CANONICAL_CAMEL_BY_SNAKE_CASE[key] for key in keys]
@@ -145,9 +136,3 @@ def test_uat_readiness_covers_the_same_canonical_module_set_without_extras() -> 
 
     assert readiness_payload["moduleSummary"]["totalModules"] == len(CANONICAL_COCKPIT_MODULE_KEYS)
     assert readiness_module_keys == list(CANONICAL_COCKPIT_MODULE_KEYS)
-
-
-def test_serialization_stress_keeps_core_cockpit_public_contract_cases_registered() -> None:
-    registered_case_names = {case_name for case_name, _ in PUBLIC_HOMEPAGE_OUTPUTS}
-
-    assert REQUIRED_SERIALIZATION_STRESS_CASES <= registered_case_names

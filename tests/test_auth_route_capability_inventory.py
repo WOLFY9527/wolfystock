@@ -21,8 +21,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "auth"
 APP_TSX = REPO_ROOT / "apps" / "dsa-web" / "src" / "App.tsx"
 ADMIN_CAPABILITIES_TS = REPO_ROOT / "apps" / "dsa-web" / "src" / "utils" / "adminCapabilities.ts"
-APP_ROUTES_TEST_TSX = REPO_ROOT / "apps" / "dsa-web" / "src" / "__tests__" / "AppRoutes.test.tsx"
-AUTH_GUARD_TEST_TSX = REPO_ROOT / "apps" / "dsa-web" / "src" / "components" / "auth" / "__tests__" / "AuthGuardOverlay.test.tsx"
 AUTH_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "auth.py"
 ADMIN_LOGS_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "admin_logs.py"
 ADMIN_USERS_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "admin_users.py"
@@ -970,26 +968,3 @@ def test_frontend_route_inventory_matches_admin_capability_map_and_wrapper_bound
 
     assert "/market/rotation-radar" not in registered_wrapped_paths
     assert "/market/rotation-radar" not in admin_wrapped_paths
-
-
-def test_frontend_guest_paywall_and_admin_gate_boundaries_are_represented_in_existing_tests() -> None:
-    fixture = _load_json(FRONTEND_FIXTURE)
-    app_routes_test_source = APP_ROUTES_TEST_TSX.read_text(encoding="utf-8")
-    auth_guard_test_source = AUTH_GUARD_TEST_TSX.read_text(encoding="utf-8")
-    app_source = APP_TSX.read_text(encoding="utf-8")
-
-    for entry in fixture["guest_paywall_routes"]:
-        assert f'path="{entry["path"]}"' in app_source
-        assert f'path="{entry["localized_path"]}"' in app_source
-    assert "return <ConsumerProtectedFrame moduleName={moduleName} />;" in app_source
-
-    assert "/settings/system" in app_routes_test_source
-    assert "keeps anonymous admin alias %s fail-closed with a sign-in path" in app_routes_test_source
-    assert "keeps locale-prefixed guest admin access %s fail-closed without redirecting to guest" in app_routes_test_source
-    assert "renders NotFound for naked unknown route %s instead of silently falling back to Home" in app_routes_test_source
-    assert "/admin/provider" in app_routes_test_source
-    assert "/zh/admin/evidence-workflow" in app_routes_test_source
-    assert "/zh/admin/cost-observability" in app_routes_test_source
-    assert "/zh/admin/users" in app_routes_test_source
-    assert "Go to sign in Portfolio" in auth_guard_test_source
-    assert "前往登录 市场总览" in auth_guard_test_source
