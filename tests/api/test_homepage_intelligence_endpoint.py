@@ -7,19 +7,12 @@ import json
 import os
 import sys
 import types
+from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib import util
 from pathlib import Path
 
 os.environ.setdefault("DISABLE_SQLALCHEMY_CEXT_RUNTIME", "1")
-if "orjson" not in sys.modules:
-    sys.modules["orjson"] = types.SimpleNamespace(
-        OPT_NON_STR_KEYS=0,
-        OPT_SERIALIZE_NUMPY=0,
-        dumps=lambda value, option=0: json.dumps(value).encode("utf-8"),
-        loads=json.loads,
-    )
-sys.modules.setdefault("greenlet", None)
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -46,14 +39,54 @@ ENDPOINT_PATH = REPO_ROOT / "api/v1/endpoints/homepage_intelligence.py"
 ROUTER_PATH = REPO_ROOT / "api/v1/router.py"
 ROUTE_PATH = "/api/v1/homepage/intelligence"
 
-sys.modules.setdefault(
-    "api.deps",
-    types.SimpleNamespace(CurrentUser=_CurrentUser, get_optional_current_user=_optional_current_user),
-)
-_endpoint_spec = util.spec_from_file_location("homepage_intelligence_under_test", ENDPOINT_PATH)
-assert _endpoint_spec is not None and _endpoint_spec.loader is not None
-homepage_intelligence = util.module_from_spec(_endpoint_spec)
-_endpoint_spec.loader.exec_module(homepage_intelligence)
+_MISSING = object()
+
+
+@contextmanager
+def _scoped_dependency_stubs():
+    temporary_modules = {
+        "orjson": types.SimpleNamespace(
+            OPT_NON_STR_KEYS=0,
+            OPT_SERIALIZE_NUMPY=0,
+            dumps=lambda value, option=0: json.dumps(value).encode("utf-8"),
+            loads=json.loads,
+        ),
+        "greenlet": None,
+        "api.deps": types.SimpleNamespace(
+            CurrentUser=_CurrentUser,
+            get_optional_current_user=_optional_current_user,
+        ),
+    }
+    previous_modules = {
+        name: sys.modules.get(name, _MISSING) for name in temporary_modules
+    }
+    sys.modules.update(temporary_modules)
+    try:
+        yield
+    finally:
+        for name, previous in previous_modules.items():
+            if previous is _MISSING:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = previous
+        assert all(
+            sys.modules.get(name, _MISSING) is previous
+            for name, previous in previous_modules.items()
+        )
+
+
+def _load_homepage_intelligence_endpoint():
+    with _scoped_dependency_stubs():
+        endpoint_spec = util.spec_from_file_location(
+            "homepage_intelligence_under_test", ENDPOINT_PATH
+        )
+        assert endpoint_spec is not None and endpoint_spec.loader is not None
+        endpoint_module = util.module_from_spec(endpoint_spec)
+        endpoint_spec.loader.exec_module(endpoint_module)
+        return endpoint_module
+
+
+homepage_intelligence = _load_homepage_intelligence_endpoint()
 
 FORBIDDEN_ADVICE_TERMS = (
     "买入",
