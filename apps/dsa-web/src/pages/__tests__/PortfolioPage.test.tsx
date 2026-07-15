@@ -112,15 +112,6 @@ vi.mock('../../hooks/useProductSurface', () => ({
   useProductSurface: () => useProductSurfaceMock(),
 }));
 
-vi.mock('recharts', () => ({
-  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  PieChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Pie: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Tooltip: () => null,
-  Legend: () => null,
-  Cell: () => null,
-}));
-
 type AccountItem = {
   id: number;
   name: string;
