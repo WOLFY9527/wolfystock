@@ -40,6 +40,46 @@ class PreflightError(RuntimeError):
     """An actionable, fail-closed bootstrap error."""
 
 
+def detect_shell_flavor(
+    *,
+    executable: str | None = None,
+    environ: dict[str, str] | None = None,
+    platform_name: str | None = None,
+) -> str:
+    """Return ``wsl``, ``msys`` or ``posix`` using explicit capabilities.
+
+    ``bash`` is not sufficient to distinguish these environments. WSL exports
+    WSL_* markers (and its Windows launcher has a distinct path), while
+    Git Bash/MSYS exports MSYSTEM/OSTYPE markers or lives below Git/MSYS.
+    """
+    env = environ or os.environ
+    executable_text = (executable or "").replace("\\", "/").lower()
+    system = (platform_name or platform.system()).lower()
+    if env.get("WSL_DISTRO_NAME") or env.get("WSL_INTEROP") or "/windowsapps/" in executable_text and executable_text.endswith("/bash.exe"):
+        return "wsl"
+    if env.get("MSYSTEM") or env.get("MSYS2_PATH_TYPE") or env.get("OSTYPE", "").lower() in {"msys", "cygwin"}:
+        return "msys"
+    if "/git/" in executable_text or "/msys" in executable_text or executable_text.endswith("/usr/bin/bash") and system == "windows":
+        return "msys"
+    return "posix"
+
+
+def windows_to_posix_path(value: str, *, shell_flavor: str) -> str:
+    """Translate a Windows absolute path for one known POSIX shell flavor."""
+    if shell_flavor == "posix":
+        return value
+    windows = PureWindowsPath(value)
+    if not windows.is_absolute():
+        raise ValueError(f"expected an absolute Windows path: {value}")
+    drive = windows.drive.rstrip(":").lower()
+    suffix = "/".join(windows.parts[1:])
+    if shell_flavor == "msys":
+        return f"/{drive}/{suffix}"
+    if shell_flavor == "wsl":
+        return f"/mnt/{drive}/{suffix}"
+    raise ValueError(f"unsupported shell flavor: {shell_flavor}")
+
+
 def sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 

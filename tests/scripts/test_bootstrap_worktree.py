@@ -387,6 +387,32 @@ def test_normalize_git_path_rejects_malformed_pointers(value: str) -> None:
         preflight.normalized_git_path_text(value)
 
 
+@pytest.mark.parametrize(
+    ("env", "executable", "expected"),
+    [
+        ({"MSYSTEM": "MINGW64"}, r"C:\\Program Files\\Git\\usr\\bin\\bash.exe", "msys"),
+        ({"WSL_DISTRO_NAME": "Ubuntu"}, r"C:\\Windows\\System32\\bash.exe", "wsl"),
+        ({}, r"/usr/bin/bash", "posix"),
+    ],
+)
+def test_detect_shell_flavor_uses_explicit_environment_or_capability(
+    env: dict[str, str], executable: str, expected: str
+) -> None:
+    import scripts.worktree_preflight as preflight
+
+    assert preflight.detect_shell_flavor(executable=executable, environ=env, platform_name="Linux") == expected
+
+
+@pytest.mark.parametrize(
+    ("flavor", "expected"),
+    [("msys", "/c/Users/test/repo"), ("wsl", "/mnt/c/Users/test/repo"), ("posix", r"C:\\Users\\test\\repo")],
+)
+def test_windows_to_posix_path_is_deterministic(flavor: str, expected: str) -> None:
+    import scripts.worktree_preflight as preflight
+
+    assert preflight.windows_to_posix_path(r"C:\\Users\\test\\repo", shell_flavor=flavor) == expected
+
+
 def test_powershell_entrypoint_delegates_to_the_shared_core() -> None:
     content = POWERSHELL_PATH.read_text(encoding="utf-8")
     assert "worktree_preflight.py" in content
@@ -405,9 +431,11 @@ def test_entrypoints_run_shared_core_in_isolated_mode() -> None:
     if os.name == "nt":
         existing = [name for name in env.get("WSLENV", "").split(":") if name]
         env["WSLENV"] = ":".join(dict.fromkeys([*existing, "WORKTREE_BOOTSTRAP_ISOLATED"]))
-    posix_script = str(SCRIPT_PATH)
-    if os.name == "nt":
-        posix_script = f"/mnt/{SCRIPT_PATH.drive.rstrip(':').lower()}{SCRIPT_PATH.as_posix()[2:]}"
+    import scripts.worktree_preflight as preflight
+
+    bash_executable = shutil.which("bash") or ""
+    shell_flavor = preflight.detect_shell_flavor(executable=bash_executable, environ=env)
+    posix_script = preflight.windows_to_posix_path(str(SCRIPT_PATH), shell_flavor=shell_flavor) if os.name == "nt" else str(SCRIPT_PATH)
     posix = subprocess.run(["bash", posix_script, "--check"], text=True, capture_output=True, env=env, check=False)
     powershell = subprocess.run(
         ["pwsh", "-NoProfile", "-File", str(POWERSHELL_PATH), "-Check"],
