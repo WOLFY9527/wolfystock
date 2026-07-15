@@ -8,6 +8,7 @@ from typing import Any
 
 from src.services.user_alert_evaluation import evaluate_user_alert_dry_run
 from src.services.user_alert_event_packet import build_user_alert_event_packet
+from src.services.user_alert_presentation import coerce_user_alert_datetime
 from src.services.user_alert_suppression_policy import evaluate_user_alert_suppression_policy
 
 
@@ -24,8 +25,8 @@ def build_user_alert_dry_run_pipeline_result(
     include_suppressed_local_record: bool = False,
 ) -> dict[str, Any]:
     """Compose evaluation, suppression, and optional local packet without side effects."""
-    current_time = _coerce_datetime(now) or datetime.now(timezone.utc)
-    packet_time = _coerce_datetime(recorded_at) or current_time
+    current_time = coerce_user_alert_datetime(now) or datetime.now(timezone.utc)
+    packet_time = coerce_user_alert_datetime(recorded_at) or current_time
     base_evaluation = evaluate_user_alert_dry_run(
         rule=rule,
         observed_price=observed_price,
@@ -100,7 +101,7 @@ def _build_suppression_result(
         cooldown_seconds=_read_value(payload, "cooldownSeconds", "cooldown_seconds"),
         current_fingerprint=evaluation.get("dedupeFingerprint"),
         current_time_bucket=_time_bucket_label(
-            _coerce_datetime(evaluation.get("observedAt")) or now,
+            coerce_user_alert_datetime(evaluation.get("observedAt")) or now,
             bucket_minutes=dedupe_bucket_minutes,
         ),
         previous_fingerprint=_read_value(payload, "previousFingerprint", "previous_fingerprint"),
@@ -180,21 +181,6 @@ def _read_value(source: dict[str, Any], *keys: str) -> Any:
         if key in source:
             return source[key]
     return None
-
-
-def _coerce_datetime(value: Any) -> datetime | None:
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    text = str(value).strip()
-    if not text:
-        return None
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def _time_bucket_label(value: datetime, *, bucket_minutes: int) -> str:

@@ -8,6 +8,12 @@ from decimal import Decimal, InvalidOperation
 import hashlib
 from typing import Any, Dict, Optional
 
+from src.services.user_alert_presentation import (
+    build_user_alert_presentation_copy,
+    coerce_user_alert_datetime,
+    format_user_alert_price,
+)
+
 
 _ALERT_CLASS = "watchlist_price_threshold"
 _ALLOWED_STATES = {
@@ -35,12 +41,12 @@ def evaluate_user_alert_dry_run(
 ) -> Dict[str, Any]:
     """Evaluate caller-provided alert data without outbound side effects."""
     try:
-        current_time = _coerce_datetime(now) or datetime.now(timezone.utc)
+        current_time = coerce_user_alert_datetime(now) or datetime.now(timezone.utc)
         normalized_rule = _normalize_rule(rule)
         normalized_freshness = _as_dict(freshness)
         normalized_suppression = _as_dict(suppression)
         normalized_price = _normalize_price(observed_price, allow_none=True)
-        normalized_observed_at = _coerce_datetime(observed_at)
+        normalized_observed_at = coerce_user_alert_datetime(observed_at)
 
         state = _classify_data_state(
             observed_price=normalized_price,
@@ -64,7 +70,7 @@ def evaluate_user_alert_dry_run(
                     state = suppression_state
                     suppressed = True
 
-        title, message = _consumer_copy(
+        title, message = build_user_alert_presentation_copy(
             state=state,
             subject=normalized_rule["subject"],
             threshold_price=normalized_rule["threshold_price"],
@@ -93,14 +99,17 @@ def evaluate_user_alert_dry_run(
             dedupe_fingerprint=_build_dedupe_fingerprint(
                 rule_type=normalized_rule["rule_type"],
                 subject=normalized_rule["subject"],
-                condition=f'{normalized_rule["direction"]}@{_format_price(normalized_rule["threshold_price"])}',
+                condition=(
+                    f'{normalized_rule["direction"]}@'
+                    f'{format_user_alert_price(normalized_rule["threshold_price"])}'
+                ),
                 safe_state=state,
                 time_bucket=bucket_label,
             ),
         )
     except Exception:
         subject = _safe_subject(rule)
-        title, message = _consumer_copy(
+        title, message = build_user_alert_presentation_copy(
             state="error",
             subject=subject,
             threshold_price=None,
@@ -113,7 +122,7 @@ def evaluate_user_alert_dry_run(
             direction=None,
             threshold_price=None,
             observed_price=None,
-            observed_at=_coerce_datetime(observed_at),
+            observed_at=coerce_user_alert_datetime(observed_at),
             freshness_status=None,
             title=title,
             message=message,
@@ -124,7 +133,10 @@ def evaluate_user_alert_dry_run(
                 subject=subject,
                 condition="invalid-rule",
                 safe_state="error",
-                time_bucket=_time_bucket_label(_coerce_datetime(now) or datetime.now(timezone.utc), bucket_minutes=60),
+                time_bucket=_time_bucket_label(
+                    coerce_user_alert_datetime(now) or datetime.now(timezone.utc),
+                    bucket_minutes=60,
+                ),
             ),
         )
 
@@ -177,7 +189,7 @@ def _condition_met(*, direction: str, threshold_price: Decimal, observed_price: 
 def _suppression_state(suppression: Dict[str, Any], now: datetime) -> Optional[str]:
     if _coerce_bool(_read_value(suppression, "muted", "isMuted", "is_muted")):
         return "suppressed_muted"
-    snoozed_until = _coerce_datetime(_read_value(suppression, "snoozedUntil", "snoozed_until"))
+    snoozed_until = coerce_user_alert_datetime(_read_value(suppression, "snoozedUntil", "snoozed_until"))
     if snoozed_until is not None and snoozed_until > now:
         return "suppressed_snoozed"
     if _coerce_bool(_read_value(suppression, "cooldownActive", "cooldown_active")):
@@ -185,57 +197,6 @@ def _suppression_state(suppression: Dict[str, Any], now: datetime) -> Optional[s
     if _coerce_bool(_read_value(suppression, "duplicateActive", "duplicate_active")):
         return "suppressed_duplicate"
     return None
-
-
-def _consumer_copy(
-    *,
-    state: str,
-    subject: str,
-    threshold_price: Optional[Decimal],
-    observed_price: Optional[Decimal],
-) -> tuple[str, str]:
-    threshold_text = _format_price(threshold_price)
-    observed_text = _format_price(observed_price)
-
-    if state == "condition_observed":
-        return (
-            f"{subject} 价格提醒已记录",
-            f"价格已达到你设定的关注条件（阈值 {threshold_text}，观察值 {observed_text}）。仅供观察，不会发送外部通知。",
-        )
-    if state == "condition_not_observed":
-        return (
-            f"{subject} 尚未触发提醒",
-            f"价格暂未达到你设定的关注条件（阈值 {threshold_text}，观察值 {observed_text}）。",
-        )
-    if state == "suppressed_cooldown":
-        return (
-            f"{subject} 提醒已暂缓",
-            "本次条件已观察到，但仍在提醒间隔内。结果仅用于站内 dry-run 检查。",
-        )
-    if state == "suppressed_duplicate":
-        return (
-            f"{subject} 重复提醒已折叠",
-            "本次条件已观察到，但与最近一次结果重复。结果仅用于站内 dry-run 检查。",
-        )
-    if state == "suppressed_muted":
-        return (
-            f"{subject} 提醒已静默",
-            "本次条件已观察到，但该提醒当前处于静默状态。结果仅用于站内 dry-run 检查。",
-        )
-    if state == "suppressed_snoozed":
-        return (
-            f"{subject} 提醒稍后再看",
-            "本次条件已观察到，但该提醒仍在稍后再看期间。结果仅用于站内 dry-run 检查。",
-        )
-    if state == "blocked_insufficient_data":
-        return (
-            f"{subject} 数据不足",
-            "最近一次可用价格信息不足，此次不做提醒判断，也不会假定为最新数据。",
-        )
-    return (
-        f"{subject} 无法完成提醒检查",
-        "当前无法完成提醒检查，请稍后再试。",
-    )
 
 
 def _result_payload(
@@ -370,30 +331,8 @@ def _coerce_bool(value: Any) -> bool:
     return text in {"1", "true", "yes", "on"}
 
 
-def _coerce_datetime(value: Any) -> Optional[datetime]:
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    text = str(value).strip()
-    if not text:
-        return None
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-
-
 def _float_or_none(value: Optional[Decimal]) -> Optional[float]:
     return float(value) if value is not None else None
-
-
-def _format_price(value: Optional[Decimal]) -> str:
-    if value is None:
-        return "--"
-    text = format(value.normalize(), "f")
-    return text.rstrip("0").rstrip(".") if "." in text else text
 
 
 def _safe_subject(rule: Any) -> str:

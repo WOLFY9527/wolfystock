@@ -8,6 +8,11 @@ import hashlib
 import json
 from typing import Any, Mapping
 
+from src.services.user_alert_presentation import (
+    build_user_alert_presentation_copy,
+    coerce_user_alert_datetime,
+)
+
 
 PACKET_KIND = "user_alert_event_packet"
 PACKET_VERSION = "user_alert_event_packet_v1"
@@ -32,20 +37,20 @@ def build_user_alert_event_packet(
 ) -> dict[str, Any]:
     """Project a caller-supplied dry-run evaluation into a local-only event packet."""
     payload = _mapping(result)
-    created_at = _coerce_datetime(now) or datetime.now(timezone.utc)
+    created_at = coerce_user_alert_datetime(now) or datetime.now(timezone.utc)
     state = _state(payload.get("state"))
     subject = _subject(payload.get("subject"))
     rule_type = _text(payload.get("ruleType")) or "watchlist_price_threshold"
     direction = _text(payload.get("direction"))
     threshold_price = _number(payload.get("thresholdPrice"))
     observed_price = _number(payload.get("observedPrice"))
-    observed_as_of = _coerce_datetime(payload.get("observedAt")) or created_at
+    observed_as_of = coerce_user_alert_datetime(payload.get("observedAt")) or created_at
     freshness_status = _text(payload.get("freshnessStatus"))
     condition_observed = _bool(payload.get("conditionObserved"))
     suppressed = _bool(payload.get("suppressed"))
     dedupe_fingerprint = _text(payload.get("dedupeFingerprint")) or "user-alert-dry-run:missing"
 
-    title, message = _consumer_copy(
+    title, message = build_user_alert_presentation_copy(
         state=state,
         subject=subject,
         threshold_price=threshold_price,
@@ -88,57 +93,6 @@ def build_user_alert_event_packet(
         "localOnly": True,
         "safeMetadata": safe_metadata,
     }
-
-
-def _consumer_copy(
-    *,
-    state: str,
-    subject: str,
-    threshold_price: float | None,
-    observed_price: float | None,
-) -> tuple[str, str]:
-    threshold_text = _format_price(threshold_price)
-    observed_text = _format_price(observed_price)
-
-    if state == "condition_observed":
-        return (
-            f"{subject} 价格提醒已记录",
-            f"价格已达到你设定的关注条件（阈值 {threshold_text}，观察值 {observed_text}）。仅供观察，不会发送外部通知。",
-        )
-    if state == "condition_not_observed":
-        return (
-            f"{subject} 尚未触发提醒",
-            f"价格暂未达到你设定的关注条件（阈值 {threshold_text}，观察值 {observed_text}）。",
-        )
-    if state == "suppressed_cooldown":
-        return (
-            f"{subject} 提醒已暂缓",
-            "本次条件已观察到，但仍在提醒间隔内。结果仅用于站内 dry-run 检查。",
-        )
-    if state == "suppressed_duplicate":
-        return (
-            f"{subject} 重复提醒已折叠",
-            "本次条件已观察到，但与最近一次结果重复。结果仅用于站内 dry-run 检查。",
-        )
-    if state == "suppressed_muted":
-        return (
-            f"{subject} 提醒已静默",
-            "本次条件已观察到，但该提醒当前处于静默状态。结果仅用于站内 dry-run 检查。",
-        )
-    if state == "suppressed_snoozed":
-        return (
-            f"{subject} 提醒稍后再看",
-            "本次条件已观察到，但该提醒仍在稍后再看期间。结果仅用于站内 dry-run 检查。",
-        )
-    if state == "blocked_insufficient_data":
-        return (
-            f"{subject} 数据不足",
-            "最近一次可用价格信息不足，此次不做提醒判断，也不会假定为最新数据。",
-        )
-    return (
-        f"{subject} 无法完成提醒检查",
-        "当前无法完成提醒检查，请稍后再试。",
-    )
 
 
 def _build_fingerprint(
@@ -213,29 +167,8 @@ def _bool(value: Any) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _coerce_datetime(value: Any) -> datetime | None:
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    text = str(value).strip()
-    if not text:
-        return None
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-
-
 def _isoformat(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _format_price(value: float | None) -> str:
-    if value is None:
-        return "--"
-    return format(value, "g")
 
 
 __all__ = ["build_user_alert_event_packet"]
