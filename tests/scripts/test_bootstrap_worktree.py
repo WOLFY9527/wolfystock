@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,8 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "bootstrap_worktree.sh"
+CORE_PATH = REPO_ROOT / "scripts" / "worktree_preflight.py"
+POWERSHELL_PATH = REPO_ROOT / "scripts" / "bootstrap_worktree.ps1"
 
 
 def git(*args: str, cwd: Path) -> None:
@@ -33,9 +36,19 @@ def worktree_fixture(tmp_path: Path) -> tuple[Path, Path]:
 
     (canonical / "scripts").mkdir()
     shutil.copy2(SCRIPT_PATH, canonical / "scripts" / "bootstrap_worktree.sh")
+    shutil.copy2(CORE_PATH, canonical / "scripts" / "worktree_preflight.py")
     (canonical / "apps" / "dsa-web").mkdir(parents=True)
-    (canonical / "apps" / "dsa-web" / ".gitkeep").touch()
+    (canonical / "requirements.txt").write_text("fixture-package==1.0\n", encoding="utf-8")
+    (canonical / "apps" / "dsa-web" / "package.json").write_text(
+        '{"name":"fixture-web","version":"1.0.0","dependencies":{"echarts":"^6.1.0"}}\n',
+        encoding="utf-8",
+    )
+    (canonical / "apps" / "dsa-web" / "package-lock.json").write_text(
+        '{"name":"fixture-web","lockfileVersion":3,"packages":{"":{"name":"fixture-web","version":"1.0.0","dependencies":{"echarts":"^6.1.0"}},"node_modules/echarts":{"version":"6.1.0","integrity":"sha512-fixture"}}}\n',
+        encoding="utf-8",
+    )
     (canonical / "README.md").write_text("fixture\n", encoding="utf-8")
+    (canonical / ".gitattributes").write_text("*.sh text eol=lf\n", encoding="utf-8")
     git("add", ".", cwd=canonical)
     git("commit", "-m", "fixture", cwd=canonical)
 
@@ -43,7 +56,14 @@ def worktree_fixture(tmp_path: Path) -> tuple[Path, Path]:
     git("worktree", "add", "-b", "fixture-linked", str(linked), "HEAD", cwd=canonical)
 
     (canonical / ".venv").mkdir()
+    (canonical / ".venv" / "pyvenv.cfg").write_text("version = 3.12.1\n", encoding="utf-8")
+    python_metadata = canonical / ".venv" / "Lib" / "site-packages" / "fixture-1.0.dist-info"
+    python_metadata.mkdir(parents=True)
+    (python_metadata / "METADATA").write_text("Name: fixture\nVersion: 1.0\n", encoding="utf-8")
     (canonical / "apps" / "dsa-web" / "node_modules").mkdir(parents=True)
+    echarts = canonical / "apps" / "dsa-web" / "node_modules" / "echarts"
+    echarts.mkdir()
+    (echarts / "package.json").write_text('{"name":"echarts","version":"6.1.0"}\n', encoding="utf-8")
     return canonical, linked
 
 
@@ -57,10 +77,16 @@ def run_bootstrap(
     command_env.pop("WORKTREE_BOOTSTRAP_ENV_FILE", None)
     command_env.pop("WORKTREE_BOOTSTRAP_ISOLATED", None)
     command_env.update(env or {})
+    if os.name == "nt" and env:
+        forwarded = [name for name in env if name.startswith("WORKTREE_BOOTSTRAP_")]
+        if forwarded:
+            existing = [name for name in command_env.get("WSLENV", "").split(":") if name]
+            command_env["WSLENV"] = ":".join(dict.fromkeys([*existing, *forwarded]))
     return subprocess.run(
         [
-            "bash",
-            str(SCRIPT_PATH) if absolute_script else "scripts/bootstrap_worktree.sh",
+            sys.executable,
+            str(CORE_PATH) if absolute_script else "scripts/worktree_preflight.py",
+            "bootstrap",
             *args,
         ],
         cwd=worktree,
@@ -103,7 +129,7 @@ def test_absolute_script_invocation_targets_the_current_linked_worktree(
     )
 
 
-def test_check_reports_unignored_root_venv_without_changing_shared_exclude(
+def test_check_is_read_only_without_changing_shared_git_metadata(
     worktree_fixture: tuple[Path, Path],
 ) -> None:
     canonical, linked = worktree_fixture
@@ -114,12 +140,12 @@ def test_check_reports_unignored_root_venv_without_changing_shared_exclude(
     result = run_bootstrap(linked, "--check")
 
     assert result.returncode == 0, result.stderr
-    assert "would add /.venv" in result.stdout
+    assert "would link" in result.stdout
     assert exclude_path.read_bytes() == before
     assert not (canonical / ".venv").is_symlink()
 
 
-def test_apply_adds_root_venv_to_shared_exclude_idempotently(
+def test_apply_does_not_change_shared_git_metadata(
     worktree_fixture: tuple[Path, Path],
 ) -> None:
     _, linked = worktree_fixture
@@ -127,33 +153,12 @@ def test_apply_adds_root_venv_to_shared_exclude_idempotently(
     exclude_path = common_dir / "info" / "exclude"
 
     first = run_bootstrap(linked, "--apply")
-    after_first = exclude_path.read_text(encoding="utf-8")
+    after_first = exclude_path.read_bytes()
     second = run_bootstrap(linked, "--apply")
 
     assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
-    assert after_first == exclude_path.read_text(encoding="utf-8")
-    assert after_first.splitlines().count("/.venv") == 1
-
-
-def test_relative_git_common_dir_resolves_to_the_shared_exclude(
-    worktree_fixture: tuple[Path, Path],
-) -> None:
-    canonical, linked = worktree_fixture
-    relative_common_dir = os.path.relpath(canonical / ".git", linked)
-    expected_exclude = canonical / ".git" / "info" / "exclude"
-    home_exclude = Path.home() / ".git" / "info" / "exclude"
-    home_exclude_before = home_exclude.read_bytes() if home_exclude.exists() else None
-
-    result = run_bootstrap(
-        linked,
-        "--apply",
-        env={"GIT_COMMON_DIR": relative_common_dir},
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert expected_exclude.read_text(encoding="utf-8").splitlines().count("/.venv") == 1
-    assert (home_exclude.read_bytes() if home_exclude.exists() else None) == home_exclude_before
+    assert after_first == exclude_path.read_bytes()
 
 
 def test_check_fails_fast_when_canonical_dependency_is_missing_without_mutation(
@@ -228,13 +233,19 @@ def test_apply_refuses_symlink_that_points_to_another_target(
     _, linked = worktree_fixture
     wrong_target = tmp_path / "wrong-venv"
     wrong_target.mkdir()
-    (linked / ".venv").symlink_to(wrong_target)
+    try:
+        (linked / ".venv").symlink_to(wrong_target)
+    except OSError:
+        # This is the expected Windows non-admin capability limitation. A real
+        # directory is still a conflicting mutable destination and must fail.
+        (linked / ".venv").mkdir()
 
     result = run_bootstrap(linked, "--apply")
 
     assert result.returncode == 1
-    assert "points somewhere else" in result.stderr
-    assert resolved(linked / ".venv") == wrong_target
+    assert "not the qualified canonical dependency link" in result.stderr
+    if (linked / ".venv").is_symlink():
+        assert resolved(linked / ".venv") == wrong_target
     assert not (linked / "apps" / "dsa-web" / "node_modules").exists()
 
 
@@ -252,8 +263,10 @@ def test_apply_links_explicit_external_env_file_without_printing_its_contents(
         env={"WORKTREE_BOOTSTRAP_ENV_FILE": str(env_file)},
     )
 
-    assert result.returncode == 0, result.stderr
-    assert resolved(linked / ".env") == env_file
+    if result.returncode == 0:
+        assert resolved(linked / ".env") == env_file
+    else:
+        assert "Windows Developer Mode or symlink privilege" in result.stderr
     assert secret not in result.stdout
     assert secret not in result.stderr
 
@@ -279,8 +292,7 @@ def test_isolated_environment_opt_out_makes_no_links(
     result = run_bootstrap(linked, "--apply", env={"WORKTREE_BOOTSTRAP_ISOLATED": "1"})
 
     assert result.returncode == 0, result.stderr
-    assert "isolated environment" in result.stdout
-    assert "lockfile" in result.stdout
+    assert "shared dependency reuse skipped" in result.stdout
     assert not (linked / ".venv").exists()
     assert not (linked / "apps" / "dsa-web" / "node_modules").exists()
 
@@ -307,3 +319,113 @@ def test_bootstrap_does_not_link_runtime_products(worktree_fixture: tuple[Path, 
     ):
         assert not (linked / runtime_product).is_symlink()
         assert not (linked / runtime_product).exists()
+
+
+def test_rejects_stale_echarts_before_links_or_heavy_validation(
+    worktree_fixture: tuple[Path, Path],
+) -> None:
+    canonical, linked = worktree_fixture
+    package_json = canonical / "apps" / "dsa-web" / "node_modules" / "echarts" / "package.json"
+    package_json.write_text('{"name":"echarts","version":"5.6.0"}\n', encoding="utf-8")
+
+    result = run_bootstrap(linked, "--check")
+
+    assert result.returncode == 1
+    assert "lockfile requires 6.1.0, installed 5.6.0" in result.stderr
+    assert not (linked / ".venv").exists()
+    assert not (linked / "apps" / "dsa-web" / "node_modules").exists()
+
+
+def test_rejects_linked_manifest_mismatch_without_mutation(
+    worktree_fixture: tuple[Path, Path],
+) -> None:
+    _, linked = worktree_fixture
+    (linked / "requirements.txt").write_text("fixture-package==2.0\n", encoding="utf-8")
+
+    result = run_bootstrap(linked, "--check")
+
+    assert result.returncode == 1
+    assert "dependency manifests differ" in result.stderr
+    assert not (linked / ".venv").exists()
+
+
+def test_fingerprint_output_is_deterministic(worktree_fixture: tuple[Path, Path]) -> None:
+    canonical, _ = worktree_fixture
+    command = ["python", str(CORE_PATH), "fingerprint", "--root", str(canonical)]
+    first = subprocess.run(command, text=True, capture_output=True, check=False)
+    second = subprocess.run(command, text=True, capture_output=True, check=False)
+
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    assert first.stdout == second.stdout
+
+
+@pytest.mark.parametrize(
+    ("value", "host", "expected"),
+    [
+        (r"C:\\repo\\.git", "Windows", "C:"),
+        ("/c/repo/.git", "Windows", "C:"),
+        (r"C:\\repo\\.git", "Linux", "/mnt/c/repo/.git"),
+        ("/srv/repo/.git", "Linux", "/srv/repo/.git"),
+    ],
+)
+def test_normalize_git_path_cross_platform(value: str, host: str, expected: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    import scripts.worktree_preflight as preflight
+
+    if host == "Linux" and value.startswith("C:"):
+        monkeypatch.setenv("WSL_DISTRO_NAME", "Ubuntu")
+    path = preflight.normalized_git_path_text(value, host=host)
+
+    assert path.replace("\\", "/").startswith(expected)
+
+
+@pytest.mark.parametrize("value", ["", "relative/.git", "gitdir: ../broken"])
+def test_normalize_git_path_rejects_malformed_pointers(value: str) -> None:
+    import scripts.worktree_preflight as preflight
+
+    with pytest.raises(preflight.PreflightError):
+        preflight.normalized_git_path_text(value)
+
+
+def test_powershell_entrypoint_delegates_to_the_shared_core() -> None:
+    content = POWERSHELL_PATH.read_text(encoding="utf-8")
+    assert "worktree_preflight.py" in content
+    assert "bootstrap" in content
+
+
+def test_posix_entrypoint_delegates_to_the_shared_core() -> None:
+    content = SCRIPT_PATH.read_text(encoding="utf-8")
+    assert "worktree_preflight.py" in content
+    assert "python3" in content
+
+
+def test_entrypoints_run_shared_core_in_isolated_mode() -> None:
+    env = os.environ.copy()
+    env["WORKTREE_BOOTSTRAP_ISOLATED"] = "1"
+    if os.name == "nt":
+        existing = [name for name in env.get("WSLENV", "").split(":") if name]
+        env["WSLENV"] = ":".join(dict.fromkeys([*existing, "WORKTREE_BOOTSTRAP_ISOLATED"]))
+    posix_script = str(SCRIPT_PATH)
+    if os.name == "nt":
+        posix_script = f"/mnt/{SCRIPT_PATH.drive.rstrip(':').lower()}{SCRIPT_PATH.as_posix()[2:]}"
+    posix = subprocess.run(["bash", posix_script, "--check"], text=True, capture_output=True, env=env, check=False)
+    powershell = subprocess.run(
+        ["pwsh", "-NoProfile", "-File", str(POWERSHELL_PATH), "-Check"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+    assert posix.returncode == 0, posix.stderr
+    assert powershell.returncode == 0, powershell.stderr
+    assert "shared dependency reuse skipped" in posix.stdout
+    assert "shared dependency reuse skipped" in powershell.stdout
+
+
+def test_link_capabilities_do_not_require_privileged_probe() -> None:
+    import scripts.worktree_preflight as preflight
+
+    capabilities = preflight.symlink_capabilities()
+    assert capabilities["symlink_api"]
+    assert isinstance(capabilities["junction_fallback"], bool)
