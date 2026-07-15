@@ -22,6 +22,7 @@ vi.mock('../hooks/useProductSurface', () => ({
 }));
 
 vi.mock('../contexts/UiLanguageContext', () => ({
+  UiLanguageRouteSynchronizer: () => null,
   useI18n: () => ({
     language: languageState.value,
     setLanguage: (language: 'zh' | 'en') => {
