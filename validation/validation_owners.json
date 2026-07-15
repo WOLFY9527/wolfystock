@@ -1,0 +1,771 @@
+{
+  "schemaVersion": 1,
+  "manifestVersion": "1.0.0",
+  "shadowOnly": true,
+  "tierOrder": [
+    "direct_owner",
+    "bounded_integration",
+    "complete_domain",
+    "browser_owned",
+    "protected_baseline_comparison",
+    "milestone",
+    "release"
+  ],
+  "owners": {
+    "bounded.backend.focused": {
+      "tier": "bounded_integration",
+      "kind": "command_template",
+      "command": ["python", "-m", "pytest", "-q", "{related_pytest_paths}"]
+    },
+    "bounded.desktop.build": {
+      "tier": "bounded_integration",
+      "kind": "command",
+      "command": ["npm", "--prefix", "apps/dsa-desktop", "run", "build"]
+    },
+    "bounded.docs.ai_assets": {
+      "tier": "bounded_integration",
+      "kind": "command",
+      "command": ["python", "scripts/check_ai_assets.py"]
+    },
+    "bounded.docs.manual": {
+      "tier": "bounded_integration",
+      "kind": "command",
+      "command": ["python", "scripts/build_ai_project_manual.py", "--check"]
+    },
+    "bounded.repository.integration": {
+      "tier": "bounded_integration",
+      "kind": "owner_identifier",
+      "identifier": "validation-owner-union-review"
+    },
+    "bounded.rust.tests": {
+      "tier": "bounded_integration",
+      "kind": "command",
+      "command": ["cargo", "test", "--manifest-path", "rust/rule-backtest-shadow-cli/Cargo.toml"]
+    },
+    "bounded.tooling.focused": {
+      "tier": "bounded_integration",
+      "kind": "command_template",
+      "command": ["python", "-m", "pytest", "-q", "{related_pytest_paths}"]
+    },
+    "bounded.validation.owner": {
+      "tier": "bounded_integration",
+      "kind": "command",
+      "targets": ["tests/scripts/test_validation_owner_*.py"],
+      "command": ["python", "-m", "pytest", "-q", "{owner_targets}"]
+    },
+    "bounded.web.locale": {
+      "tier": "bounded_integration",
+      "kind": "command",
+      "targets": [
+        "apps/dsa-web/src/__tests__/AppLocaleRouting.test.tsx",
+        "apps/dsa-web/src/contexts/__tests__/UiLanguageContext.test.tsx",
+        "apps/dsa-web/src/i18n/__tests__/bootstrap.test.ts",
+        "apps/dsa-web/src/i18n/__tests__/catalogs.test.ts",
+        "apps/dsa-web/src/i18n/__tests__/core.test.ts"
+      ],
+      "command": [
+        "npm",
+        "--prefix",
+        "apps/dsa-web",
+        "run",
+        "test",
+        "--",
+        "src/__tests__/AppLocaleRouting.test.tsx",
+        "src/contexts/__tests__/UiLanguageContext.test.tsx",
+        "src/i18n/__tests__/bootstrap.test.ts",
+        "src/i18n/__tests__/catalogs.test.ts",
+        "src/i18n/__tests__/core.test.ts"
+      ]
+    },
+    "bounded.web.typecheck": {
+      "tier": "bounded_integration",
+      "kind": "npm_script",
+      "package": "apps/dsa-web/package.json",
+      "script": "typecheck",
+      "command": ["npm", "--prefix", "apps/dsa-web", "run", "typecheck"]
+    },
+    "browser.changed.specs": {
+      "tier": "browser_owned",
+      "kind": "command_template",
+      "command": ["npm", "--prefix", "apps/dsa-web", "run", "test:e2e", "--", "{changed_browser_specs}"]
+    },
+    "browser.locale.route": {
+      "tier": "browser_owned",
+      "kind": "command",
+      "targets": ["apps/dsa-web/e2e/locale-route-switch.spec.ts"],
+      "command": ["npm", "--prefix", "apps/dsa-web", "run", "test:e2e", "--", "e2e/locale-route-switch.spec.ts"]
+    },
+    "browser.portfolio.contract": {
+      "tier": "browser_owned",
+      "kind": "command",
+      "targets": ["apps/dsa-web/e2e/portfolio-launch-surface.spec.ts"],
+      "command": ["npm", "--prefix", "apps/dsa-web", "run", "test:e2e", "--", "e2e/portfolio-launch-surface.spec.ts"]
+    },
+    "browser.web.smoke": {
+      "tier": "browser_owned",
+      "kind": "command",
+      "targets": ["apps/dsa-web/e2e/smoke.spec.ts"],
+      "command": ["npm", "--prefix", "apps/dsa-web", "run", "test:e2e", "--", "e2e/smoke.spec.ts"]
+    },
+    "complete.auth.contracts": {
+      "tier": "complete_domain",
+      "kind": "command",
+      "targets": [
+        "tests/api/test_auth_rbac_release_contracts.py",
+        "tests/api/test_auth_security_hardening.py",
+        "tests/test_api_app_cors.py"
+      ],
+      "command": ["python", "-m", "pytest", "-q", "{owner_targets}"]
+    },
+    "complete.backend.non_network": {
+      "tier": "complete_domain",
+      "kind": "command",
+      "command": ["python", "-m", "pytest", "-m", "not network"]
+    },
+    "complete.backtest.contracts": {
+      "tier": "complete_domain",
+      "kind": "command",
+      "targets": [
+        "tests/test_backtest_engine.py",
+        "tests/test_backtest_golden_contracts.py",
+        "tests/test_backtest_reproducibility_manifest_contract.py"
+      ],
+      "command": ["python", "-m", "pytest", "-q", "{owner_targets}"]
+    },
+    "complete.broker.contracts": {
+      "tier": "complete_domain",
+      "kind": "command",
+      "targets": ["tests/test_portfolio_ibkr_sync.py"],
+      "command": ["python", "-m", "pytest", "-q", "{owner_targets}"]
+    },
+    "complete.database.contracts": {
+      "tier": "complete_domain",
+      "kind": "command",
+      "targets": ["tests/test_storage_migration_readiness_report.py"],
+      "command": ["python", "-m", "pytest", "-q", "{owner_targets}"]
+    },
+    "complete.desktop.domain": {
+      "tier": "complete_domain",
+      "kind": "owner_identifier",
+      "identifier": "desktop-domain-validation"
+    },
+    "complete.docs.domain": {
+      "tier": "complete_domain",
+      "kind": "owner_identifier",
+      "identifier": "canonical-docs-validation"
+    },
+    "complete.external_network.contracts": {
+      "tier": "complete_domain",
+      "kind": "owner_identifier",
+      "identifier": "external-network-and-notification-validation"
+    },
+    "complete.frontend.domain": {
+      "tier": "complete_domain",
+      "kind": "command",
+      "command": ["npm", "--prefix", "apps/dsa-web", "run", "test"]
+    },
+    "complete.portfolio.contracts": {
+      "tier": "complete_domain",
+      "kind": "command",
+      "targets": [
+        "tests/api/test_portfolio_owner_isolation.py",
+        "tests/test_portfolio_golden_contracts.py",
+        "tests/test_portfolio_service.py"
+      ],
+      "command": ["python", "-m", "pytest", "-q", "{owner_targets}"]
+    },
+    "complete.provider.contracts": {
+      "tier": "complete_domain",
+      "kind": "command",
+      "targets": [
+        "tests/test_provider_runtime_boundary.py",
+        "tests/test_provider_validation.py",
+        "tests/test_provider_freshness_contracts.py"
+      ],
+      "command": ["python", "-m", "pytest", "-q", "{owner_targets}"]
+    },
+    "complete.repository.validation": {
+      "tier": "complete_domain",
+      "kind": "owner_identifier",
+      "identifier": "complete-repository-validation-owner"
+    },
+    "complete.root_config.review": {
+      "tier": "complete_domain",
+      "kind": "owner_identifier",
+      "identifier": "root-config-dependency-lock-review"
+    },
+    "complete.rust.domain": {
+      "tier": "complete_domain",
+      "kind": "owner_identifier",
+      "identifier": "rust-shadow-domain-validation"
+    },
+    "complete.scanner.contracts": {
+      "tier": "complete_domain",
+      "kind": "command",
+      "targets": [
+        "tests/test_market_scanner_service.py",
+        "tests/test_scanner_golden_contracts.py",
+        "tests/test_market_scanner_public_safety.py"
+      ],
+      "command": ["python", "-m", "pytest", "-q", "{owner_targets}"]
+    },
+    "complete.schema_contracts": {
+      "tier": "complete_domain",
+      "kind": "command",
+      "targets": [
+        "tests/test_contracts_namespace.py",
+        "tests/test_data_quality_contracts.py",
+        "tests/test_report_schema.py"
+      ],
+      "command": ["python", "-m", "pytest", "-q", "{owner_targets}"]
+    },
+    "complete.tooling.domain": {
+      "tier": "complete_domain",
+      "kind": "owner_identifier",
+      "identifier": "tooling-domain-validation"
+    },
+    "complete.workflow.review": {
+      "tier": "complete_domain",
+      "kind": "owner_identifier",
+      "identifier": "workflow-local-and-remote-validation-review"
+    },
+    "direct.assets.identity": {
+      "tier": "direct_owner",
+      "kind": "owner_identifier",
+      "identifier": "tracked-asset-integrity"
+    },
+    "direct.docs.whitespace": {
+      "tier": "direct_owner",
+      "kind": "command",
+      "command": ["git", "diff", "--check"]
+    },
+    "direct.pytest.changed": {
+      "tier": "direct_owner",
+      "kind": "command_template",
+      "command": ["python", "-m", "pytest", "-q", "{changed_pytest_paths}"]
+    },
+    "direct.pytest.related_inference": {
+      "tier": "direct_owner",
+      "kind": "command_template",
+      "inferenceOnly": true,
+      "command": ["python", "-m", "pytest", "-q", "{related_pytest_paths}"]
+    },
+    "direct.python.syntax": {
+      "tier": "direct_owner",
+      "kind": "command_template",
+      "command": ["python", "-m", "py_compile", "{changed_existing_python_paths}"]
+    },
+    "direct.tooling.identity": {
+      "tier": "direct_owner",
+      "kind": "owner_identifier",
+      "identifier": "changed-tooling-file-review"
+    },
+    "direct.validation.owner.tests": {
+      "tier": "direct_owner",
+      "kind": "command",
+      "targets": ["tests/scripts/test_validation_owner_*.py"],
+      "command": ["python", "-m", "pytest", "-q", "{owner_targets}"]
+    },
+    "direct.web.lint": {
+      "tier": "direct_owner",
+      "kind": "npm_script",
+      "package": "apps/dsa-web/package.json",
+      "script": "lint:changed",
+      "command": ["npm", "--prefix", "apps/dsa-web", "run", "lint:changed"]
+    },
+    "direct.web.related": {
+      "tier": "direct_owner",
+      "kind": "npm_script",
+      "package": "apps/dsa-web/package.json",
+      "script": "test:related",
+      "command": ["npm", "--prefix", "apps/dsa-web", "run", "test:related", "--", "{changed_existing_web_source_paths}"]
+    },
+    "milestone.owner_manifest.review": {
+      "tier": "milestone",
+      "kind": "owner_identifier",
+      "identifier": "owner-manifest-change-approval"
+    },
+    "milestone.owner_overflow": {
+      "tier": "milestone",
+      "kind": "owner_identifier",
+      "identifier": "owner-union-overflow-review"
+    },
+    "milestone.protected.review": {
+      "tier": "milestone",
+      "kind": "owner_identifier",
+      "identifier": "protected-domain-milestone-review"
+    },
+    "milestone.unknown.review": {
+      "tier": "milestone",
+      "kind": "owner_identifier",
+      "identifier": "unknown-path-milestone-review"
+    },
+    "protected.baseline.compare": {
+      "tier": "protected_baseline_comparison",
+      "kind": "owner_identifier",
+      "identifier": "base-and-candidate-protected-validation-comparison"
+    },
+    "protected.baseline.current_gate": {
+      "tier": "protected_baseline_comparison",
+      "kind": "command",
+      "command": ["bash", "scripts/ci_gate.sh"]
+    },
+    "release.full.validation": {
+      "tier": "release",
+      "kind": "command",
+      "command": ["bash", "scripts/ci_gate.sh"]
+    },
+    "release.owner_manifest.approval": {
+      "tier": "release",
+      "kind": "owner_identifier",
+      "identifier": "owner-manifest-release-approval"
+    },
+    "release.owner_overflow": {
+      "tier": "release",
+      "kind": "owner_identifier",
+      "identifier": "owner-overflow-release-approval"
+    },
+    "release.protected.approval": {
+      "tier": "release",
+      "kind": "owner_identifier",
+      "identifier": "protected-domain-release-approval"
+    },
+    "release.unknown.approval": {
+      "tier": "release",
+      "kind": "owner_identifier",
+      "identifier": "unknown-path-release-approval"
+    }
+  },
+  "unknownEscalation": {
+    "reason": "unknown_validation_relevant_path",
+    "owners": [
+      "protected.baseline.compare",
+      "milestone.unknown.review",
+      "release.unknown.approval",
+      "release.full.validation"
+    ]
+  },
+  "ownerOverflow": {
+    "direct_owner": {
+      "maxOwners": 24,
+      "reason": "direct_owner_union_exceeds_bounded_limit",
+      "owners": [
+        "bounded.repository.integration",
+        "complete.repository.validation",
+        "milestone.owner_overflow"
+      ]
+    },
+    "bounded_integration": {
+      "maxOwners": 12,
+      "reason": "bounded_owner_union_exceeds_domain_limit",
+      "owners": [
+        "complete.repository.validation",
+        "milestone.owner_overflow",
+        "release.owner_overflow"
+      ]
+    },
+    "browser_owned": {
+      "maxOwners": 12,
+      "reason": "browser_owner_union_exceeds_milestone_limit",
+      "owners": ["milestone.owner_overflow", "release.owner_overflow"]
+    }
+  },
+  "rules": [
+    {
+      "id": "backend-python",
+      "include": ["api/**", "bot/**", "data_provider/**", "main.py", "patch/**", "server.py", "src/**", "strategies/**"],
+      "owners": {
+        "direct_owner": ["direct.python.syntax"],
+        "bounded_integration": ["bounded.backend.focused"],
+        "complete_domain": ["complete.backend.non_network"]
+      }
+    },
+    {
+      "id": "backend-tests",
+      "include": ["test_env.py", "tests/**"],
+      "owners": {
+        "direct_owner": ["direct.pytest.changed"],
+        "bounded_integration": ["bounded.backend.focused"],
+        "complete_domain": ["complete.backend.non_network"]
+      }
+    },
+    {
+      "id": "scripts-tooling",
+      "include": ["scripts/**", "test.sh"],
+      "owners": {
+        "direct_owner": ["direct.python.syntax", "direct.tooling.identity"],
+        "bounded_integration": ["bounded.tooling.focused"],
+        "complete_domain": ["complete.tooling.domain"]
+      }
+    },
+    {
+      "id": "validation-tooling",
+      "include": ["validation/**"],
+      "owners": {
+        "direct_owner": ["direct.validation.owner.tests"],
+        "bounded_integration": ["bounded.validation.owner"],
+        "complete_domain": ["complete.tooling.domain"]
+      }
+    },
+    {
+      "id": "validation-planner-script",
+      "include": ["scripts/validation_changed_files.py"],
+      "owners": {
+        "direct_owner": ["direct.validation.owner.tests"],
+        "bounded_integration": ["bounded.validation.owner"]
+      }
+    },
+    {
+      "id": "web-source",
+      "include": ["apps/dsa-web/src/**"],
+      "owners": {
+        "direct_owner": ["direct.web.lint", "direct.web.related"],
+        "bounded_integration": ["bounded.web.typecheck"],
+        "complete_domain": ["complete.frontend.domain"],
+        "browser_owned": ["browser.web.smoke"]
+      }
+    },
+    {
+      "id": "web-locale",
+      "include": ["apps/dsa-web/src/**/*locale*", "apps/dsa-web/src/i18n/**", "apps/dsa-web/src/contexts/UiLanguageContext.tsx"],
+      "owners": {
+        "bounded_integration": ["bounded.web.locale"],
+        "browser_owned": ["browser.locale.route"]
+      }
+    },
+    {
+      "id": "web-browser-specs",
+      "include": ["apps/dsa-web/e2e/**"],
+      "owners": {
+        "direct_owner": ["direct.web.lint"],
+        "bounded_integration": ["bounded.web.typecheck"],
+        "complete_domain": ["complete.frontend.domain"],
+        "browser_owned": ["browser.changed.specs"]
+      }
+    },
+    {
+      "id": "web-project",
+      "include": ["apps/dsa-web/**"],
+      "owners": {
+        "direct_owner": ["direct.tooling.identity"],
+        "bounded_integration": ["bounded.web.typecheck"],
+        "complete_domain": ["complete.frontend.domain"]
+      }
+    },
+    {
+      "id": "desktop-project",
+      "include": ["apps/dsa-desktop/**"],
+      "owners": {
+        "direct_owner": ["direct.tooling.identity"],
+        "bounded_integration": ["bounded.desktop.build"],
+        "complete_domain": ["complete.desktop.domain"]
+      }
+    },
+    {
+      "id": "canonical-docs",
+      "include": ["DESIGN.md", "LICENSE", "README.md", "docs/**"],
+      "owners": {
+        "direct_owner": ["direct.docs.whitespace"],
+        "bounded_integration": ["bounded.docs.manual"],
+        "complete_domain": ["complete.docs.domain"]
+      }
+    },
+    {
+      "id": "ai-governance",
+      "include": [".claude/**", ".github/**", "AGENTS.md", "CLAUDE.md"],
+      "owners": {
+        "direct_owner": ["direct.docs.whitespace"],
+        "bounded_integration": ["bounded.docs.ai_assets", "bounded.docs.manual"],
+        "complete_domain": ["complete.docs.domain"]
+      }
+    },
+    {
+      "id": "docker-tooling",
+      "include": [".dockerignore", "docker/**"],
+      "owners": {
+        "direct_owner": ["direct.tooling.identity"],
+        "bounded_integration": ["bounded.tooling.focused"],
+        "complete_domain": ["complete.tooling.domain"]
+      }
+    },
+    {
+      "id": "rust-shadow",
+      "include": ["rust/**"],
+      "owners": {
+        "direct_owner": ["direct.tooling.identity"],
+        "bounded_integration": ["bounded.rust.tests"],
+        "complete_domain": ["complete.rust.domain"]
+      }
+    },
+    {
+      "id": "tracked-assets",
+      "include": ["sources/**"],
+      "owners": {
+        "direct_owner": ["direct.assets.identity"],
+        "bounded_integration": ["bounded.tooling.focused"],
+        "complete_domain": ["complete.tooling.domain"]
+      }
+    },
+    {
+      "id": "report-templates",
+      "include": ["templates/**"],
+      "owners": {
+        "direct_owner": ["direct.tooling.identity"],
+        "bounded_integration": ["bounded.backend.focused"],
+        "complete_domain": ["complete.backend.non_network"]
+      }
+    },
+    {
+      "id": "root-tooling",
+      "include": [
+        ".env.example",
+        ".gitattributes",
+        ".gitignore",
+        "litellm_config.example.yaml",
+        "pyproject.toml",
+        "requirements-dev.txt",
+        "requirements.txt",
+        "setup.cfg",
+        "skills-lock.json"
+      ],
+      "owners": {
+        "direct_owner": ["direct.tooling.identity"],
+        "bounded_integration": ["bounded.tooling.focused"],
+        "complete_domain": ["complete.tooling.domain"]
+      }
+    },
+    {
+      "id": "protected-owner-manifest",
+      "include": ["validation/validation_owners.json"],
+      "protected": true,
+      "reason": "owner_manifest_changes_validation_authority",
+      "owners": {
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.owner_manifest.review", "milestone.protected.review"],
+        "release": ["release.owner_manifest.approval", "release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
+      "id": "protected-existing-gate-domain-baseline",
+      "include": [
+        "api/**",
+        "apps/dsa-web/src/api/**",
+        "apps/dsa-web/src/services/auth*",
+        "apps/dsa-web/src/services/auth*/**",
+        "apps/dsa-web/src/stores/auth*",
+        "apps/dsa-web/src/stores/auth*/**",
+        "data_provider/**",
+        "src/**",
+        "**/migrations/**"
+      ],
+      "protected": true,
+      "reason": "existing_gate_protected_domain_baseline_no_downgrade",
+      "owners": {
+        "complete_domain": ["complete.backend.non_network"],
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
+      "id": "protected-existing-gate-full-baseline",
+      "include": [
+        ".dockerignore",
+        ".env.example",
+        ".gitattributes",
+        ".github/**",
+        ".gitignore",
+        "LICENSE",
+        "apps/dsa-desktop/**",
+        "docker/**",
+        "patch/**",
+        "rust/**",
+        "sources/**",
+        "strategies/**",
+        "templates/**",
+        "test.sh",
+        "test_env.py"
+      ],
+      "protected": true,
+      "reason": "existing_gate_unknown_full_gate_baseline_no_downgrade",
+      "owners": {
+        "complete_domain": ["complete.repository.validation"],
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
+      "id": "protected-provider",
+      "include": ["data_provider/**", "src/providers/**", "**/*provider*"],
+      "protected": true,
+      "reason": "provider_fallback_freshness_cache_source_authority_or_external_network",
+      "owners": {
+        "complete_domain": ["complete.provider.contracts"],
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
+      "id": "protected-scanner",
+      "include": ["**/*scanner*"],
+      "protected": true,
+      "reason": "scanner_score_selection_sort_threshold_or_live_fallback_semantics",
+      "owners": {
+        "complete_domain": ["complete.scanner.contracts"],
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
+      "id": "protected-backtest",
+      "include": ["**/*backtest*", "rust/rule-backtest-shadow-cli/**"],
+      "protected": true,
+      "reason": "backtest_fill_cost_metric_benchmark_parameter_universe_or_stored_result_semantics",
+      "owners": {
+        "complete_domain": ["complete.backtest.contracts"],
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
+      "id": "protected-portfolio",
+      "include": ["**/*portfolio*"],
+      "protected": true,
+      "reason": "portfolio_accounting_cash_holdings_trade_pnl_fx_cost_basis_or_ledger_semantics",
+      "owners": {
+        "complete_domain": ["complete.portfolio.contracts"],
+        "browser_owned": ["browser.portfolio.contract"],
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
+      "id": "protected-auth-security",
+      "include": ["**/*auth*", "**/*cors*", "**/*csrf*", "**/*security*", "**/*session*", "api/middlewares/**"],
+      "protected": true,
+      "reason": "auth_rbac_security_session_cookie_csrf_cors_token_password_mfa_or_admin_protection",
+      "owners": {
+        "complete_domain": ["complete.auth.contracts"],
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
+      "id": "protected-schema-contract",
+      "include": ["api/v1/schemas/**", "src/contracts/**", "src/schemas/**", "**/*contract*"],
+      "protected": true,
+      "reason": "shared_schema_or_contract_boundary",
+      "owners": {
+        "complete_domain": ["complete.schema_contracts"],
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
+      "id": "protected-database-migration",
+      "include": ["**/migrations/**", "**/*migration*", "**/*schema_bootstrap*", "src/postgres*"],
+      "protected": true,
+      "reason": "database_schema_migration_or_persistence_bootstrap",
+      "owners": {
+        "complete_domain": ["complete.database.contracts"],
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
+      "id": "protected-root-config-lockfile",
+      "include": [
+        ".env.example",
+        "*.lock",
+        "**/*-lock.json",
+        "**/*.lock",
+        "**/Cargo.lock",
+        "**/package-lock.json",
+        "**/pnpm-lock.yaml",
+        "**/pyproject.toml",
+        "**/requirements*.txt",
+        "**/setup.py",
+        "**/yarn.lock",
+        "setup.cfg",
+        "skills-lock.json"
+      ],
+      "protected": true,
+      "reason": "root_config_dependency_environment_or_lockfile",
+      "owners": {
+        "complete_domain": ["complete.root_config.review"],
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
+      "id": "protected-workflow",
+      "include": [".github/workflows/**"],
+      "protected": true,
+      "reason": "ci_or_release_workflow",
+      "owners": {
+        "complete_domain": ["complete.workflow.review"],
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
+      "id": "protected-global-setup",
+      "include": [
+        "api/app.py",
+        "api/v1/router.py",
+        "apps/dsa-web/package.json",
+        "apps/dsa-web/playwright.config.ts",
+        "apps/dsa-web/src/App.tsx",
+        "apps/dsa-web/src/main.tsx",
+        "apps/dsa-web/src/setupTests.ts",
+        "apps/dsa-web/tsconfig*.json",
+        "apps/dsa-web/vite.config.ts",
+        "apps/dsa-web/vitest.config.ts",
+        "main.py",
+        "server.py"
+      ],
+      "protected": true,
+      "reason": "global_application_or_validation_setup",
+      "owners": {
+        "complete_domain": ["complete.root_config.review"],
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
+      "id": "protected-broker-order",
+      "include": ["**/*broker*", "**/*ibkr*", "**/*order*"],
+      "protected": true,
+      "reason": "broker_order_execution_trade_or_position_action_semantics",
+      "owners": {
+        "complete_domain": ["complete.broker.contracts"],
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
+      "id": "protected-external-network",
+      "include": ["bot/**", "**/*http*", "**/*network*"],
+      "protected": true,
+      "reason": "external_network_notification_or_remote_side_effect_boundary",
+      "owners": {
+        "complete_domain": ["complete.external_network.contracts"],
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    }
+  ]
+}
