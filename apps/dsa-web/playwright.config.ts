@@ -1,4 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
 
 const explicitPortEnv = 'DSA_WEB_PLAYWRIGHT_PORT';
 const resolvedPortEnv = 'DSA_WEB_PLAYWRIGHT_RESOLVED_PORT';
@@ -56,12 +58,22 @@ const reuseExistingServer = process.env.DSA_WEB_PLAYWRIGHT_REUSE === '1' && !pro
 const baseURL = process.env.DSA_WEB_PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${previewPort}`;
 const outputDir = process.env.PLAYWRIGHT_OUTPUT_DIR || 'test-results';
 const usesExternalServer = process.env.DSA_WEB_PLAYWRIGHT_EXTERNAL_SERVER === '1';
+const prebuiltArtifact = process.env.DSA_WEB_PLAYWRIGHT_ARTIFACT;
 const reporter = process.env.PLAYWRIGHT_HTML_REPORT
   ? ([
       ['list'],
       ['html', { outputFolder: process.env.PLAYWRIGHT_HTML_REPORT, open: 'never' }],
     ] as const)
   : 'list';
+
+if (prebuiltArtifact) {
+  execFileSync(process.env.PYTHON || 'python', [
+    path.resolve(process.cwd(), '../../scripts/web_build_artifact.py'),
+    'verify',
+    '--repo-root', path.resolve(process.cwd(), '../..'),
+    '--artifact', path.resolve(prebuiltArtifact),
+  ], { stdio: 'inherit' });
+}
 
 export default defineConfig({
   testDir: './e2e',
@@ -71,7 +83,9 @@ export default defineConfig({
   reporter,
   ...(usesExternalServer ? {} : {
     webServer: {
-      command: `npm run build && npm run preview -- --host 127.0.0.1 --port ${previewPort}`,
+      command: prebuiltArtifact
+        ? `npm run preview -- --host 127.0.0.1 --port ${previewPort}`
+        : `npm run build && npm run preview -- --host 127.0.0.1 --port ${previewPort}`,
       port: previewPort,
       reuseExistingServer,
       timeout: 180_000,

@@ -696,6 +696,31 @@ def test_run_harness_rejects_existing_port_owner_without_starting_runtime(monkey
     assert Path(evidence["evidencePath"]).is_file()
 
 
+def test_run_harness_fails_closed_for_invalid_prebuilt_web_artifact(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(harness, "validate_source", lambda _repo_root, _expected_sha: _valid_source())
+    monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
+    monkeypatch.setattr(
+        harness,
+        "verify_web_build_artifact",
+        lambda *_args: type("Result", (), {"ok": False, "payload": {}, "error_codes": ["artifact_asset_mismatch"], "warning_codes": []})(),
+    )
+    monkeypatch.setattr(harness, "ensure_frontend_dependencies", lambda *_args: pytest.fail("artifact mode must not bootstrap dependencies"))
+    monkeypatch.setattr(harness, "run_frontend_build", lambda *_args: pytest.fail("artifact mode must not rebuild"))
+
+    exit_code, evidence = harness.run_harness(
+        repo_root=tmp_path,
+        expected_sha="45b6965d",
+        host="127.0.0.1",
+        port=8000,
+        evidence_dir=tmp_path / "output" / "runtime-verification",
+        web_artifact=tmp_path / "static" / ".wolfystock-web-build-artifact.json",
+    )
+
+    assert exit_code == 1
+    assert evidence["failure"] == "prebuilt_web_artifact_failed"
+    assert evidence["frontendDependencyBootstrap"]["action"] == "verified_prebuilt_artifact"
+
+
 def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(monkeypatch, tmp_path: Path) -> None:
     _write_static(tmp_path)
     fake_process = _FakeProcess()

@@ -159,6 +159,12 @@ def verify_frontend_static_build(**kwargs: Any) -> Any:
     return _verify_frontend_static_build(**kwargs)
 
 
+def verify_web_build_artifact(repo_root: Path, artifact_path: Path, expected_sha: str | None) -> Any:
+    from scripts.web_build_artifact import verify_artifact
+
+    return verify_artifact(repo_root, artifact_path, expected_sha=expected_sha)
+
+
 def verify_generated_artifact_hygiene(repo_root: Path) -> list[str]:
     from scripts.uat_fresh_build_verifier import verify_generated_artifact_hygiene as _verify_generated_artifact_hygiene
 
@@ -1349,6 +1355,7 @@ def run_harness(
     port: int,
     evidence_dir: Path,
     skip_build: bool = False,
+    web_artifact: Path | None = None,
     prepare_uat_accounts: bool = False,
     stop_runtime_after: bool = False,
     readiness_timeout_seconds: float = DEFAULT_READINESS_TIMEOUT_SECONDS,
@@ -1392,7 +1399,30 @@ def run_harness(
         evidence["run"]["evidencePath"] = evidence["evidencePath"]
         return EXIT_FAILED, evidence
 
-    dependency_bootstrap = ensure_frontend_dependencies(repo_root)
+    artifact_result = None
+    if web_artifact is not None:
+        artifact_result = verify_web_build_artifact(repo_root, web_artifact, expected_sha)
+        dependency_bootstrap = {
+            "action": "verified_prebuilt_artifact",
+            "required": False,
+            "skipReason": "prebuilt_artifact_contract",
+            "installCommand": None,
+            "exitStatus": None,
+            "artifactPath": str(web_artifact),
+            "reasonCodes": list(artifact_result.error_codes),
+        }
+        if not artifact_result.ok:
+            evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
+            evidence["run"] = build_run_identity(run_context=run_context, repo_root=repo_root, source=source, pid=None, cwd=str(repo_root), port=port)
+            evidence["runtimeLog"] = build_runtime_log(run_context)
+            evidence["frontendDependencyBootstrap"] = dependency_bootstrap
+            evidence["webArtifact"] = _verification_dict(artifact_result)
+            evidence["failure"] = "prebuilt_web_artifact_failed"
+            evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
+            evidence["run"]["evidencePath"] = evidence["evidencePath"]
+            return EXIT_FAILED, evidence
+    else:
+        dependency_bootstrap = ensure_frontend_dependencies(repo_root)
     if dependency_bootstrap.get("action") == "failed":
         evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
         evidence["run"] = build_run_identity(
@@ -1410,7 +1440,7 @@ def run_harness(
         evidence["run"]["evidencePath"] = evidence["evidencePath"]
         return EXIT_FAILED, evidence
 
-    if not skip_build:
+    if not skip_build and web_artifact is None:
         build_exit = run_frontend_build(repo_root)
         if build_exit != 0:
             evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
@@ -1559,6 +1589,7 @@ def run_harness(
                 "directHttpHealth": readiness,
                 "directHttpHtml": direct_http,
                 "frontend": asset_identity,
+                "webArtifact": _verification_dict(artifact_result) if artifact_result else None,
                 "providerIsolation": expected_provider_isolation(),
                 "cryptoRealtimeIsolation": {"env": "CRYPTO_REALTIME_ENABLED=false", "productionDefaultChanged": False},
                 "uatAccountPreparation": uat_accounts
@@ -1625,6 +1656,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="Local bind port.")
     parser.add_argument("--evidence-dir", type=Path, default=DEFAULT_EVIDENCE_DIR, help="Evidence output directory.")
     parser.add_argument("--skip-build", action="store_true", help="Use only for diagnostics; default rebuilds frontend.")
+    parser.add_argument("--web-artifact", type=Path, default=None, help="Verified immutable Web artifact; skips dependency bootstrap and frontend rebuild.")
     parser.add_argument(
         "--prepare-uat-accounts",
         action="store_true",
@@ -1708,6 +1740,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         port=args.port,
         evidence_dir=evidence_dir,
         skip_build=bool(args.skip_build),
+        web_artifact=args.web_artifact,
         prepare_uat_accounts=bool(args.prepare_uat_accounts),
         stop_runtime_after=bool(args.stop_runtime_after),
         readiness_timeout_seconds=float(args.readiness_timeout),
