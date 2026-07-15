@@ -13,7 +13,6 @@ import {
   resolveCurrentConsumerRoute,
 } from '../coreProductRoutes';
 import { setAdminSurfaceMode } from '../../../hooks/useProductSurface';
-import { useStockPoolStore } from '../../../stores/stockPoolStore';
 
 const { languageState, mockLogout, mockHardRedirect, useAuthMock } = vi.hoisted(() => ({
   languageState: { value: 'zh' as 'zh' | 'en' },
@@ -56,7 +55,6 @@ beforeAll(() => {
 
 afterEach(() => {
   window.innerWidth = 1024;
-  window.dispatchEvent(new Event('resize'));
   document.body.style.overflow = '';
 });
 
@@ -102,7 +100,6 @@ describe('Shell', () => {
     setAdminSurfaceMode('user');
     window.sessionStorage.clear();
     window.localStorage.clear();
-    useStockPoolStore.getState().resetDashboardState();
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
