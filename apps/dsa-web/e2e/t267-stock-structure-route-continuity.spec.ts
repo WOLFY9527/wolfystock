@@ -301,9 +301,17 @@ async function expectStockIdentity(page: Page, symbol: string) {
 test.describe('T267 stock structure route continuity', () => {
   test('keeps ticker identity through direct entry, refresh, locale entry, and SPA navigation without passive-read mutations', async ({ page }) => {
     const errors: string[] = [];
+    const warnings: string[] = [];
+    const echartsMessages: string[] = [];
     page.on('console', (message) => {
-      if (message.type() === 'error' && !message.text().includes('[ECharts]')) {
+      if (message.text().includes('[ECharts]')) {
+        echartsMessages.push(`${message.type()}: ${message.text()}`);
+      }
+      if (message.type() === 'error') {
         errors.push(message.text());
+      }
+      if (message.type() === 'warning') {
+        warnings.push(message.text());
       }
     });
     page.on('pageerror', (error) => errors.push(error.message));
@@ -344,6 +352,10 @@ test.describe('T267 stock structure route continuity', () => {
       'evidence',
       'options-structure',
     ]));
-    expect(errors).toEqual([]);
+    expect({ errors, warnings, echartsMessages }).toEqual({
+      errors: [],
+      warnings: [],
+      echartsMessages: [],
+    });
   });
 });

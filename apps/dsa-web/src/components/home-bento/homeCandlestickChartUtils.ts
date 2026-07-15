@@ -93,8 +93,9 @@ type BuildHomeCandlestickChartOptionArgs = {
 const HOME_CHART_GRID_SAFE_MARGIN = {
   left: '2%',
   right: '5%',
-  containLabel: true,
-} satisfies Pick<GridComponentOption, 'left' | 'right' | 'containLabel'>;
+  outerBoundsMode: 'same',
+  outerBoundsContain: 'axisLabel',
+} satisfies Pick<GridComponentOption, 'left' | 'right' | 'outerBoundsMode' | 'outerBoundsContain'>;
 
 const viewportSize = () => ({
   width: typeof window !== 'undefined'
@@ -407,13 +408,11 @@ const resolveHomeCandlestickGrid = (): GridComponentOption[] => [
     ...HOME_CHART_GRID_SAFE_MARGIN,
     top: '19%',
     height: '56%',
-    outerBoundsMode: 'none',
   },
   {
     ...HOME_CHART_GRID_SAFE_MARGIN,
     top: '77%',
     height: '12%',
-    outerBoundsMode: 'none',
   },
 ];
 

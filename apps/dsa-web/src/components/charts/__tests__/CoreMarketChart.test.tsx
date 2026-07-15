@@ -246,14 +246,17 @@ describe('CoreMarketChart', () => {
       'v5',
       { renderer: 'canvas' },
     );
-    expect(echartsTestDouble.instance.setOption).toHaveBeenCalledWith(
-      expect.objectContaining({
-        grid: expect.arrayContaining([
-          expect.objectContaining({ outerBoundsMode: 'none' }),
-        ]),
-      }),
-      { notMerge: true, lazyUpdate: true },
-    );
+    const [chartOption, setOptionOpts] = echartsTestDouble.instance.setOption.mock.calls[0];
+    expect(chartOption).toEqual(expect.objectContaining({
+      grid: expect.arrayContaining([
+        expect.objectContaining({
+          outerBoundsMode: 'same',
+          outerBoundsContain: 'axisLabel',
+        }),
+      ]),
+    }));
+    expect(chartOption.grid.every((grid: object) => !('containLabel' in grid))).toBe(true);
+    expect(setOptionOpts).toEqual({ notMerge: true, lazyUpdate: true });
 
     window.dispatchEvent(new Event('resize'));
     expect(echartsTestDouble.instance.resize).toHaveBeenCalledTimes(2);

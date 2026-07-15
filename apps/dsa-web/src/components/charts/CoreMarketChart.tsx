@@ -263,11 +263,11 @@ function buildChartOption({
   const xLabelInterval = Math.max(0, Math.ceil(points.length / (compact ? 4 : 8)) - 1);
   const grids: GridComponentOption[] = hasVolume
     ? [
-        { left: '2%', right: '5%', top: compact ? '12%' : '10%', height: compact ? '60%' : '58%', containLabel: true, outerBoundsMode: 'none' },
-        { left: '2%', right: '5%', top: compact ? '78%' : '76%', height: compact ? '11%' : '12%', containLabel: true, outerBoundsMode: 'none' },
+        { left: '2%', right: '5%', top: compact ? '12%' : '10%', height: compact ? '60%' : '58%', outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' },
+        { left: '2%', right: '5%', top: compact ? '78%' : '76%', height: compact ? '11%' : '12%', outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' },
       ]
     : [
-        { left: '2%', right: '5%', top: compact ? '12%' : '10%', bottom: compact ? '18%' : '16%', containLabel: true, outerBoundsMode: 'none' },
+        { left: '2%', right: '5%', top: compact ? '12%' : '10%', bottom: compact ? '18%' : '16%', outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' },
       ];
   const xAxis = hasVolume
     ? [
