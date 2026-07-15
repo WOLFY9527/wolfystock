@@ -16,11 +16,11 @@ def calculate_market_stats(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
     df = df.copy()
 
     # Keep the provider payload aliases and their precedence unchanged.
-    code_col = next((c for c in ['代码', '股票代码', 'ts_code','stock_code'] if c in df.columns), None)
-    name_col = next((c for c in ['名称', '股票名称','name','name'] if c in df.columns), None)
-    close_col = next((c for c in ['最新价', '最新价', 'close','lastPrice'] if c in df.columns), None)
-    pre_close_col = next((c for c in ['昨收', '昨日收盘', 'pre_close','lastClose'] if c in df.columns), None)
-    amount_col = next((c for c in ['成交额', '成交额', 'amount','amount'] if c in df.columns), None)
+    code_col = next((c for c in ['代码', '股票代码', 'ts_code', 'stock_code'] if c in df.columns), None)
+    name_col = next((c for c in ['名称', '股票名称', 'name', 'name'] if c in df.columns), None)
+    close_col = next((c for c in ['最新价', '最新价', 'close', 'lastPrice'] if c in df.columns), None)
+    pre_close_col = next((c for c in ['昨收', '昨日收盘', 'pre_close', 'lastClose'] if c in df.columns), None)
+    amount_col = next((c for c in ['成交额', '成交额', 'amount', 'amount'] if c in df.columns), None)
 
     limit_up_count = 0
     limit_down_count = 0
