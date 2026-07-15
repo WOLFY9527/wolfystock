@@ -7,6 +7,8 @@ import {
   GridComponent,
   TooltipComponent,
 } from 'echarts/components';
+// @ts-expect-error ECharts ships the official v5 compatibility theme without declarations.
+import 'echarts/theme/v5';
 import type { ECharts, SetOptionOpts } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import {
@@ -289,7 +291,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
     if (!host || !option || size.width <= 0 || size.height <= 0) {
       return undefined;
     }
-    const instance = chartRef.current ?? echarts.init(host, undefined, { renderer: 'canvas' });
+    const instance = chartRef.current ?? echarts.init(host, 'v5', { renderer: 'canvas' });
     chartRef.current = instance;
     const setOpts: SetOptionOpts = { notMerge: true, lazyUpdate: true };
     instance.setOption(option, setOpts);

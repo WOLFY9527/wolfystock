@@ -3,6 +3,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CoreMarketChart, type CoreMarketChartPoint } from '../CoreMarketChart';
 import { PREFERS_REDUCED_MOTION_QUERY } from '../../../utils/motionPreference';
 
+const echartsTestDouble = vi.hoisted(() => {
+  const instance = {
+    setOption: vi.fn(),
+    resize: vi.fn(),
+    dispose: vi.fn(),
+  };
+  return {
+    init: vi.fn(() => instance),
+    use: vi.fn(),
+    instance,
+  };
+});
+
+vi.mock('echarts/core', () => ({
+  init: echartsTestDouble.init,
+  use: echartsTestDouble.use,
+  graphic: { LinearGradient: vi.fn() },
+}));
+
 const buildOhlcvPoints = (count: number): CoreMarketChartPoint[] => (
   Array.from({ length: count }, (_, index) => {
     const close = 100 + index * 0.8;
@@ -37,6 +56,10 @@ function installMatchMedia(matches: boolean) {
 describe('CoreMarketChart', () => {
   beforeEach(() => {
     installMatchMedia(false);
+    echartsTestDouble.init.mockClear();
+    echartsTestDouble.instance.setOption.mockClear();
+    echartsTestDouble.instance.resize.mockClear();
+    echartsTestDouble.instance.dispose.mockClear();
   });
 
   afterEach(() => {
@@ -198,5 +221,49 @@ describe('CoreMarketChart', () => {
     expect(within(chart).getByTestId('core-market-chart-frame')).toBeInTheDocument();
     expect(within(chart).getByTestId('core-market-echarts-node')).toHaveAttribute('role', 'img');
     expect(within(chart).queryByText(/provider_missing|data_disabled|sourceClass|local_bounded_us_parquet_universe|noExternalCalls|providerCallsEnabled|contractVersion/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps the v5 chart theme and lifecycle behavior across resize and remount', () => {
+    const props = {
+      testId: 'stock-history-core-chart',
+      chartKind: 'stock-history',
+      title: 'AAPL price history',
+      points: buildOhlcvPoints(12),
+      language: 'en' as const,
+      statusLabel: 'Available',
+      sourceLabel: 'Test source',
+      freshnessLabel: 'Current',
+      rangeLabel: '12 bars',
+      emptyTitle: 'Unavailable',
+      emptyDetail: 'No chart data',
+      showVolume: true,
+    };
+
+    const firstMount = render(<CoreMarketChart {...props} />);
+
+    expect(echartsTestDouble.init).toHaveBeenLastCalledWith(
+      expect.any(HTMLElement),
+      'v5',
+      { renderer: 'canvas' },
+    );
+    expect(echartsTestDouble.instance.setOption).toHaveBeenCalledWith(
+      expect.objectContaining({
+        grid: expect.arrayContaining([
+          expect.objectContaining({ outerBoundsMode: 'none' }),
+        ]),
+      }),
+      { notMerge: true, lazyUpdate: true },
+    );
+
+    window.dispatchEvent(new Event('resize'));
+    expect(echartsTestDouble.instance.resize).toHaveBeenCalledTimes(2);
+
+    firstMount.unmount();
+    expect(echartsTestDouble.instance.dispose).toHaveBeenCalledTimes(1);
+
+    const secondMount = render(<CoreMarketChart {...props} />);
+    expect(echartsTestDouble.init).toHaveBeenCalledTimes(2);
+    secondMount.unmount();
+    expect(echartsTestDouble.instance.dispose).toHaveBeenCalledTimes(2);
   });
 });

@@ -7,6 +7,8 @@ import {
   GridComponent,
   TooltipComponent,
 } from 'echarts/components';
+// @ts-expect-error ECharts ships the official v5 compatibility theme without declarations.
+import 'echarts/theme/v5';
 import type {
   DataZoomComponentOption,
   GridComponentOption,
@@ -261,11 +263,11 @@ function buildChartOption({
   const xLabelInterval = Math.max(0, Math.ceil(points.length / (compact ? 4 : 8)) - 1);
   const grids: GridComponentOption[] = hasVolume
     ? [
-        { left: '2%', right: '5%', top: compact ? '12%' : '10%', height: compact ? '60%' : '58%', containLabel: true },
-        { left: '2%', right: '5%', top: compact ? '78%' : '76%', height: compact ? '11%' : '12%', containLabel: true },
+        { left: '2%', right: '5%', top: compact ? '12%' : '10%', height: compact ? '60%' : '58%', containLabel: true, outerBoundsMode: 'none' },
+        { left: '2%', right: '5%', top: compact ? '78%' : '76%', height: compact ? '11%' : '12%', containLabel: true, outerBoundsMode: 'none' },
       ]
     : [
-        { left: '2%', right: '5%', top: compact ? '12%' : '10%', bottom: compact ? '18%' : '16%', containLabel: true },
+        { left: '2%', right: '5%', top: compact ? '12%' : '10%', bottom: compact ? '18%' : '16%', containLabel: true, outerBoundsMode: 'none' },
       ];
   const xAxis = hasVolume
     ? [
@@ -554,7 +556,7 @@ export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
   useEffect(() => {
     const host = chartNodeRef.current;
     if (!host || !option) return undefined;
-    const instance = chartRef.current ?? echarts.init(host, undefined, { renderer: 'canvas' });
+    const instance = chartRef.current ?? echarts.init(host, 'v5', { renderer: 'canvas' });
     chartRef.current = instance;
     const setOpts: SetOptionOpts = { notMerge: true, lazyUpdate: true };
     instance.setOption(option, setOpts);

@@ -407,11 +407,13 @@ const resolveHomeCandlestickGrid = (): GridComponentOption[] => [
     ...HOME_CHART_GRID_SAFE_MARGIN,
     top: '19%',
     height: '56%',
+    outerBoundsMode: 'none',
   },
   {
     ...HOME_CHART_GRID_SAFE_MARGIN,
     top: '77%',
     height: '12%',
+    outerBoundsMode: 'none',
   },
 ];
 

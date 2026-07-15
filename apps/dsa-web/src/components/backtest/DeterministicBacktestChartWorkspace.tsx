@@ -9,6 +9,8 @@ import {
   TooltipComponent,
   DataZoomComponent,
 } from 'echarts/components';
+// @ts-expect-error ECharts ships the official v5 compatibility theme without declarations.
+import 'echarts/theme/v5';
 import type { BarSeriesOption, LineSeriesOption } from 'echarts/charts';
 import type {
   GridComponentOption,
@@ -133,9 +135,9 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
       animation: false,
       backgroundColor: 'transparent',
       grid: [
-        { left: 64, right: 20, top: 20, height: '42%' },
-        { left: 64, right: 20, top: '49%', height: '18%' },
-        { left: 64, right: 20, top: '73%', height: '18%' },
+        { left: 64, right: 20, top: 20, height: '42%', outerBoundsMode: 'none' },
+        { left: 64, right: 20, top: '49%', height: '18%', outerBoundsMode: 'none' },
+        { left: 64, right: 20, top: '73%', height: '18%', outerBoundsMode: 'none' },
       ],
       tooltip: {
         trigger: 'axis',
@@ -336,7 +338,7 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
   useEffect(() => {
     const host = containerRef.current;
     if (!host || width <= 0 || height <= 0 || host.clientWidth <= 0 || host.clientHeight <= 0) return undefined;
-    const instance = chartRef.current ?? echarts.init(containerRef.current, undefined, { renderer: 'canvas' });
+    const instance = chartRef.current ?? echarts.init(containerRef.current, 'v5', { renderer: 'canvas' });
     chartRef.current = instance;
     const setOpts: SetOptionOpts = { notMerge: true, lazyUpdate: true };
     instance.setOption(option, setOpts);
