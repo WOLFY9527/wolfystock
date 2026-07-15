@@ -94,9 +94,10 @@ def _write_static(root: Path, *, asset_name: str = "index-CKPdXr8Q.js") -> None:
     (static / "index.html").write_text(
         f'<html><title>WolfyStock</title><script type="module" src="/assets/{asset_name}"></script></html>',
         encoding="utf-8",
+        newline="\n",
     )
-    (assets / asset_name).write_text("console.log('ok');\n", encoding="utf-8")
-    (assets / "index-CSS123.css").write_text("body{color:#111}\n", encoding="utf-8")
+    (assets / asset_name).write_text("console.log('ok');\n", encoding="utf-8", newline="\n")
+    (assets / "index-CSS123.css").write_text("body{color:#111}\n", encoding="utf-8", newline="\n")
 
 
 def _local_build(asset_name: str = "index-CKPdXr8Q.js") -> VerificationResult:
