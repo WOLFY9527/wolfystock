@@ -7,7 +7,7 @@ import { AccessGatePage } from './components/access/AccessGatePage';
 import { ConsumerProtectedFrame } from './components/layout/ConsumerWorkspaceShell';
 import { Shell } from './components/layout/Shell';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { useI18n } from './contexts/UiLanguageContext';
+import { UiLanguageRouteSynchronizer, useI18n } from './contexts/UiLanguageContext';
 import { useProductSurface } from './hooks/useProductSurface';
 import type { UiLanguage } from './i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from './utils/localeRouting';
@@ -492,7 +492,7 @@ const AppShellRoute: React.FC = () => {
 export const AppContent: React.FC = () => {
   const location = useLocation();
   const { authEnabled, loggedIn, isLoading, loadError, refreshStatus, setupState } = useAuth();
-  const { language, setLanguage, t } = useI18n();
+  const { language, t } = useI18n();
   const bootStartedAt = useRef<number>(0);
   const [showBootSplash, setShowBootSplash] = useState(true);
   const [bootSplashFading, setBootSplashFading] = useState(false);
@@ -503,12 +503,6 @@ export const AppContent: React.FC = () => {
   const localizedHomePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
   const postAuthRedirectPath = getPostAuthRedirectTarget(location.search, localizedHomePath);
   const guestHomeElement = loggedIn ? <Navigate to={localizedHomePath} replace /> : <GuestHomePage />;
-
-  useEffect(() => {
-    if (routeLocale) {
-      setLanguage(routeLocale);
-    }
-  }, [routeLocale, setLanguage]);
 
   useEffect(() => {
     if (bootStartedAt.current === 0) {
@@ -729,6 +723,7 @@ export const AppContent: React.FC = () => {
 
   return (
     <>
+      <UiLanguageRouteSynchronizer />
       {content}
       {showBootSplash ? (
         <BrandedLoadingScreen

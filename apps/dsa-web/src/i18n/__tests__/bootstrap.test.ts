@@ -33,6 +33,17 @@ describe('i18n root bootstrap', () => {
     expect(getActiveUiLanguage()).toBe('en');
   });
 
+  it('keeps the Chinese route locale ahead of persisted English before the first render', async () => {
+    window.history.replaceState({}, '', '/zh/guest');
+    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'en');
+
+    await initializeUiLanguageForFirstRender();
+
+    expect(document.documentElement.lang).toBe('zh');
+    expect(translate('zh', 'nav.home')).toBe('首页');
+    expect(getActiveUiLanguage()).toBe('zh');
+  });
+
   it('does not call the root renderer until i18n initialization settles', async () => {
     const initialization = createDeferred<'zh' | 'en'>();
     let rendered = false;

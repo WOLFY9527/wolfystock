@@ -53,7 +53,23 @@ vi.mock('../hooks/useProductSurface', () => ({
 
 vi.mock('../contexts/UiLanguageContext', async () => {
   const { translate } = await vi.importActual<typeof import('../i18n/core')>('../i18n/core');
+  const { useLayoutEffect } = await vi.importActual<typeof import('react')>('react');
+  const { useLocation } = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+
+  function UiLanguageRouteSynchronizer() {
+    const { pathname } = useLocation();
+    useLayoutEffect(() => {
+      if (pathname === '/en' || pathname.startsWith('/en/')) {
+        languageState.value = 'en';
+      } else if (pathname === '/zh' || pathname.startsWith('/zh/')) {
+        languageState.value = 'zh';
+      }
+    }, [pathname]);
+    return null;
+  }
+
   return {
+    UiLanguageRouteSynchronizer,
     useI18n: () => ({
       language: languageState.value,
       setLanguage: (language: 'zh' | 'en') => {
