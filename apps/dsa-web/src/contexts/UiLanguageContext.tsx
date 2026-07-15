@@ -1,8 +1,10 @@
 /* eslint-disable react-refresh/only-export-components */
 import type React from 'react';
-import { createContext, use, useEffect, useState } from 'react';
+import { createContext, use, useCallback, useEffect, useRef, useState } from 'react';
 import {
+  activateLocaleCatalog,
   getStoredUiLanguage,
+  loadLocaleCatalog,
   normalizeUiLanguage,
   setStoredUiLanguage,
   translate,
@@ -55,25 +57,35 @@ const UiLanguageContext = createContext<UiLanguageContextValue>(defaultContextVa
 
 export const UiLanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<UiLanguage>(() => resolveInitialLanguage());
+  const latestLanguageRequest = useRef(0);
 
   useEffect(() => {
     setStoredUiLanguage(language);
     document.documentElement.lang = normalizeUiLanguage(language);
   }, [language]);
 
-  const setLanguage = (nextLanguage: UiLanguage) => {
+  const commitLanguage = useCallback(async (nextLanguage: UiLanguage) => {
     const normalized = normalizeUiLanguage(nextLanguage);
+    const requestId = latestLanguageRequest.current + 1;
+    latestLanguageRequest.current = requestId;
+
+    const catalog = await loadLocaleCatalog(normalized);
+    if (latestLanguageRequest.current !== requestId) {
+      return;
+    }
+
+    activateLocaleCatalog(normalized, catalog);
     syncCurrentPathToLanguage(normalized);
     setLanguageState(normalized);
-  };
+  }, []);
 
-  const toggleLanguage = () => {
-    setLanguageState((current) => {
-      const nextLanguage = current === 'zh' ? 'en' : 'zh';
-      syncCurrentPathToLanguage(nextLanguage);
-      return nextLanguage;
-    });
-  };
+  const setLanguage = useCallback((nextLanguage: UiLanguage) => {
+    void commitLanguage(nextLanguage);
+  }, [commitLanguage]);
+
+  const toggleLanguage = useCallback(() => {
+    void commitLanguage(language === 'zh' ? 'en' : 'zh');
+  }, [commitLanguage, language]);
 
   const t = (key: string, vars?: TranslateVars) => translate(language, key, vars);
 
