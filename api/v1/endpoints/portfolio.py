@@ -56,7 +56,7 @@ from api.v1.schemas.portfolio import (
 )
 from src.services.fx_rate_service import default_fx_rate_service
 from src.repositories.portfolio_repo import PortfolioRepository
-from src.services.portfolio_import_service import PortfolioImportService
+from src.services.portfolio_import_service import PortfolioIbkrImportError, PortfolioImportService
 from src.services.portfolio_ibkr_sync_service import PortfolioIbkrSyncError, PortfolioIbkrSyncService
 from src.services.portfolio_risk_service import PortfolioRiskService
 from src.services.portfolio_scenario_risk import PortfolioScenarioRiskService
@@ -1414,10 +1414,11 @@ def _raw_sync_request_value(value: Optional[str], *, handle_prefix: str) -> Opti
     return text
 
 
-def _import_bad_request() -> HTTPException:
+def _import_bad_request(exc: Optional[Exception] = None) -> HTTPException:
+    error = exc.code if isinstance(exc, PortfolioIbkrImportError) else "validation_error"
     return safe_api_error(
         status_code=400,
-        error="validation_error",
+        error=error,
         message=IMPORT_VALIDATION_ERROR_MESSAGE,
     )
 
@@ -2424,7 +2425,7 @@ def parse_broker_import(
         parsed = importer.parse_import_file(broker=broker, content=content)
         return _build_import_parse_response(parsed)
     except ValueError as exc:
-        raise _import_bad_request() from exc
+        raise _import_bad_request(exc) from exc
     except Exception as exc:
         raise _import_internal_error("Parse broker import failed", exc) from exc
 
@@ -2474,7 +2475,7 @@ def commit_broker_import(
     except PortfolioConflictError as exc:
         raise _import_conflict_error() from exc
     except ValueError as exc:
-        raise _import_bad_request() from exc
+        raise _import_bad_request(exc) from exc
     except Exception as exc:
         raise _import_internal_error("Commit broker import failed", exc) from exc
 
@@ -2496,7 +2497,7 @@ def parse_csv_import(
         parsed = importer.parse_trade_csv(broker=broker, content=content)
         return _build_import_parse_response(parsed)
     except ValueError as exc:
-        raise _import_bad_request() from exc
+        raise _import_bad_request(exc) from exc
     except Exception as exc:
         raise _import_internal_error("Parse CSV import failed", exc) from exc
 
@@ -2544,7 +2545,7 @@ def commit_csv_import(
     except PortfolioConflictError as exc:
         raise _import_conflict_error() from exc
     except ValueError as exc:
-        raise _import_bad_request() from exc
+        raise _import_bad_request(exc) from exc
     except Exception as exc:
         raise _import_internal_error("Commit CSV import failed", exc) from exc
 

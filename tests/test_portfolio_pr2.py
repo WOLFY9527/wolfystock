@@ -384,6 +384,14 @@ class PortfolioPr2TestCase(unittest.TestCase):
     def test_ibkr_flex_parse_and_commit_with_repeat_import_protection(self) -> None:
         account = self.service.create_account(name="Global", broker="IBKR", market="us", base_currency="USD")
         aid = account["id"]
+        self.service.repo.save_fx_rate(
+            from_currency="HKD",
+            to_currency="USD",
+            rate_date=date(2026, 1, 1),
+            rate=0.128,
+            source="unit-test",
+            is_stale=False,
+        )
 
         parsed = self.import_service.parse_import_file(
             broker="ibkr",
@@ -438,6 +446,148 @@ class PortfolioPr2TestCase(unittest.TestCase):
         self.assertTrue(repeat["duplicate_import"])
         self.assertEqual(repeat["inserted_count"], 0)
         self.assertEqual(repeat["cash_inserted_count"], 0)
+
+    def test_ibkr_flex_preview_classifies_statement_and_record_currency_issues(self) -> None:
+        account = self.service.create_account(name="Currency Preview", broker="IBKR", market="us", base_currency="USD")
+        xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements><FlexStatement accountId="U-CURRENCY">
+  <Trades>
+    <Trade assetCategory="STK" symbol="AAPL" exchange="NASDAQ" tradeDate="2026-01-03" buySell="BUY" quantity="1" tradePrice="10" ibExecID="MISSING"/>
+    <Trade assetCategory="STK" symbol="MSFT" exchange="NASDAQ" currency="EUR" tradeDate="2026-01-04" buySell="BUY" quantity="1" tradePrice="20" ibExecID="NO-FX"/>
+  </Trades>
+  <CashTransactions><CashTransaction reportDate="2026-01-05" currency="US D" amount="5" description="Malformed"/></CashTransactions>
+  <CorporateActions><CorporateAction assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="XYZ" reportDate="2026-01-06" description="2 for 1 split" ratio="2:1"/></CorporateActions>
+  <OpenPositions><OpenPosition assetCategory="STK" symbol="GOOG" exchange="NASDAQ" reportDate="2026-01-31" position="1" costBasisPrice="30"/></OpenPositions>
+</FlexStatement></FlexStatements>"""
+
+        parsed = self.import_service.parse_import_file(broker="ibkr", content=xml)
+        preview = self.import_service.commit_import_records(
+            account_id=account["id"],
+            broker="ibkr",
+            parsed_payload=parsed,
+            dry_run=True,
+        )
+
+        issues = {(item["scope"], item["reason"]) for item in preview["currency_issues"]}
+        self.assertIn(("statement", "currency_missing"), issues)
+        self.assertIn(("trade", "currency_missing"), issues)
+        self.assertIn(("cash", "currency_malformed"), issues)
+        self.assertIn(("corporate_action", "currency_unknown"), issues)
+        self.assertIn(("trade", "currency_operationally_unsupported"), issues)
+        self.assertIn(("open_position", "currency_missing"), issues)
+        self.assertFalse(preview["requires_confirmation"])
+        self.assertEqual(
+            self.service.list_broker_connections(portfolio_account_id=account["id"]),
+            [],
+        )
+
+        statement_cases = [
+            ("US D", "currency_malformed"),
+            ("XYZ", "currency_unknown"),
+            ("EUR", "currency_operationally_unsupported"),
+        ]
+        for statement_currency, expected_reason in statement_cases:
+            with self.subTest(statement_currency=statement_currency):
+                statement_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements><FlexStatement accountId="U-STATEMENT" currency="{statement_currency}" toDate="2026-01-31">
+  <Trades><Trade assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" tradeDate="2026-01-03" buySell="BUY" quantity="1" tradePrice="10" ibExecID="STATEMENT-{statement_currency}"/></Trades>
+</FlexStatement></FlexStatements>""".encode("utf-8")
+                statement_parsed = self.import_service.parse_import_file(
+                    broker="ibkr",
+                    content=statement_xml,
+                )
+                statement_preview = self.import_service.commit_import_records(
+                    account_id=account["id"],
+                    broker="ibkr",
+                    parsed_payload=statement_parsed,
+                    dry_run=True,
+                )
+                self.assertIn(
+                    ("statement", expected_reason),
+                    {
+                        (item["scope"], item["reason"])
+                        for item in statement_preview["currency_issues"]
+                    },
+                )
+
+        missing_record_xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements><FlexStatement accountId="U-MISSING-RECORDS" currency="USD" toDate="2026-01-31">
+  <CashTransactions><CashTransaction reportDate="2026-01-05" amount="5" description="Missing"/></CashTransactions>
+  <CorporateActions><CorporateAction assetCategory="STK" symbol="AAPL" exchange="NASDAQ" reportDate="2026-01-06" description="2 for 1 split" ratio="2:1"/></CorporateActions>
+  <OpenPositions><OpenPosition assetCategory="STK" symbol="MSFT" exchange="NASDAQ" reportDate="2026-01-31" position="2" costBasisPrice="20"/></OpenPositions>
+</FlexStatement></FlexStatements>"""
+        missing_parsed = self.import_service.parse_import_file(
+            broker="ibkr",
+            content=missing_record_xml,
+        )
+        missing_preview = self.import_service.commit_import_records(
+            account_id=account["id"],
+            broker="ibkr",
+            parsed_payload=missing_parsed,
+            dry_run=True,
+        )
+        missing_scopes = {
+            item["scope"]
+            for item in missing_preview["currency_issues"]
+            if item["reason"] == "currency_missing"
+        }
+        self.assertTrue({"cash", "corporate_action", "open_position"}.issubset(missing_scopes))
+
+    def test_ibkr_flex_currency_gate_is_all_or_nothing_and_corrected_retry_is_idempotent(self) -> None:
+        account = self.service.create_account(name="Currency Gate", broker="IBKR", market="global", base_currency="USD")
+        invalid_xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements><FlexStatement accountId="U-GATE" currency="USD" fromDate="2026-01-01" toDate="2026-01-31">
+  <Trades><Trade assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" tradeDate="2026-01-03" buySell="BUY" quantity="1" tradePrice="10" ibExecID="GATE-1"/></Trades>
+  <CashTransactions><CashTransaction reportDate="2026-01-05" currency="XYZ" amount="5" description="Invalid"/></CashTransactions>
+  <CorporateActions><CorporateAction assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" reportDate="2026-01-06" description="2 for 1 split" ratio="2:1"/></CorporateActions>
+</FlexStatement></FlexStatements>"""
+        invalid = self.import_service.parse_import_file(broker="ibkr", content=invalid_xml)
+
+        with self.assertRaisesRegex(ValueError, "ibkr_currency_invalid"):
+            self.import_service.commit_import_records(
+                account_id=account["id"],
+                broker="ibkr",
+                parsed_payload=invalid,
+            )
+
+        self.assertEqual(self.service.list_trade_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_cash_ledger_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_broker_connections(portfolio_account_id=account["id"]), [])
+
+        no_fx_xml = invalid_xml.replace(b'currency="XYZ"', b'currency="EUR"')
+        no_fx = self.import_service.parse_import_file(broker="ibkr", content=no_fx_xml)
+        with self.assertRaisesRegex(ValueError, "ibkr_fx_unavailable"):
+            self.import_service.commit_import_records(
+                account_id=account["id"],
+                broker="ibkr",
+                parsed_payload=no_fx,
+            )
+        self.assertEqual(self.service.list_trade_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_cash_ledger_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_broker_connections(portfolio_account_id=account["id"]), [])
+
+        corrected_xml = invalid_xml.replace(b'currency="XYZ"', b'currency="USD"')
+        corrected = self.import_service.parse_import_file(broker="ibkr", content=corrected_xml)
+        first = self.import_service.commit_import_records(
+            account_id=account["id"],
+            broker="ibkr",
+            parsed_payload=corrected,
+        )
+        repeat = self.import_service.commit_import_records(
+            account_id=account["id"],
+            broker="ibkr",
+            parsed_payload=corrected,
+        )
+
+        self.assertEqual(first["inserted_count"], 1)
+        self.assertEqual(first["cash_inserted_count"], 1)
+        self.assertEqual(first["corporate_action_inserted_count"], 1)
+        self.assertTrue(repeat["duplicate_import"])
+        self.assertEqual(self.service.list_trade_events(account_id=account["id"], page=1, page_size=20)["total"], 1)
+        self.assertEqual(self.service.list_cash_ledger_events(account_id=account["id"], page=1, page_size=20)["total"], 1)
+        self.assertEqual(self.service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)["total"], 1)
 
     def test_ibkr_open_positions_seed_when_trades_absent(self) -> None:
         account = self.service.create_account(name="Global", broker="IBKR", market="us", base_currency="USD")

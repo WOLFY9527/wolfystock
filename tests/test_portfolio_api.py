@@ -1334,6 +1334,33 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(after_connections.status_code, 200)
         self.assertEqual(after_connections.json()["connections"], [])
 
+    def test_ibkr_import_currency_rejection_uses_safe_structured_error(self) -> None:
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Currency Reject", "broker": "IBKR", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        account_id = account_resp.json()["id"]
+        xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements><FlexStatement accountId="U-SAFE-ERROR" currency="USD">
+  <CashTransactions><CashTransaction reportDate="2026-01-05" currency="XYZ" amount="5" description="Invalid"/></CashTransactions>
+</FlexStatement></FlexStatements>"""
+
+        response = self.client.post(
+            "/api/v1/portfolio/imports/commit",
+            data={"account_id": str(account_id), "broker": "ibkr", "dry_run": "false"},
+            files={"file": ("ibkr-flex.xml", xml, "application/xml")},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertEqual(payload.get("error"), "ibkr_currency_invalid")
+        self.assertEqual(payload.get("code"), "ibkr_currency_invalid")
+        self.assertEqual(payload.get("message"), SAFE_IMPORT_VALIDATION_MESSAGE)
+        response_text = self._json_text(response)
+        self.assertNotIn("XYZ", response_text)
+        self.assertNotIn("U-SAFE-ERROR", response_text)
+
     @patch("api.v1.endpoints.portfolio.PortfolioIbkrSyncService.sync_read_only_account_state")
     def test_ibkr_sync_endpoint_contract(self, sync_mock: MagicMock) -> None:
         account_resp = self.client.post(

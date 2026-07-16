@@ -13,6 +13,10 @@ from urllib.parse import urlparse, urlunparse
 
 import requests
 
+from src.services.portfolio_ibkr_currency import (
+    IbkrCurrencyStatus,
+    classify_ibkr_currency,
+)
 from src.services.portfolio_import_service import IBKR_BROKER
 from src.services.portfolio_service import PortfolioConflictError, PortfolioService
 from src.utils.symbol_normalization import canonical_stock_code
@@ -268,23 +272,28 @@ class PortfolioIbkrSyncService:
         remote_accounts = client.list_accounts()
         remote_account = self._select_remote_account(remote_accounts, broker_account_ref=remote_account_hint)
         remote_account_ref = self._extract_remote_account_ref(remote_account)
-        connection, used_existing_connection = self._resolve_or_create_connection(
+        self._validate_connection_mapping(
             account_id=account_id,
-            existing_connection=existing_connection,
             remote_account_ref=remote_account_ref,
-            sync_defaults=sync_defaults,
         )
+        connection: Optional[Dict[str, Any]] = None
+        used_existing_connection = False
 
         try:
             summary = client.get_account_summary(remote_account_ref)
             ledger = client.get_account_ledger(remote_account_ref)
             positions = client.list_positions(remote_account_ref)
             normalized = self._normalize_ibkr_sync_payload(
-                account=account,
                 remote_account=remote_account,
                 summary=summary,
                 ledger=ledger,
                 positions=positions,
+            )
+            connection, used_existing_connection = self._resolve_or_create_connection(
+                account_id=account_id,
+                existing_connection=existing_connection,
+                remote_account_ref=remote_account_ref,
+                sync_defaults=sync_defaults,
             )
             self._apply_account_alignment(
                 account_id=account_id,
@@ -330,24 +339,26 @@ class PortfolioIbkrSyncService:
                 },
             ) or connection
         except PortfolioConflictError as exc:
-            self._mark_connection_sync_error(
-                connection=connection,
-                sync_defaults=sync_defaults,
-                remote_account_ref=remote_account_ref,
-                exc=exc,
-            )
+            if connection is not None:
+                self._mark_connection_sync_error(
+                    connection=connection,
+                    sync_defaults=sync_defaults,
+                    remote_account_ref=remote_account_ref,
+                    exc=exc,
+                )
             raise PortfolioIbkrSyncError(
                 code="ibkr_account_mapping_conflict",
                 message="当前 IBKR 账户映射与已有持仓账户绑定冲突，请确认 broker account ref 是否已经绑定到另一账户。",
                 status_code=409,
             ) from exc
         except Exception as exc:
-            self._mark_connection_sync_error(
-                connection=connection,
-                sync_defaults=sync_defaults,
-                remote_account_ref=remote_account_ref,
-                exc=exc,
-            )
+            if connection is not None:
+                self._mark_connection_sync_error(
+                    connection=connection,
+                    sync_defaults=sync_defaults,
+                    remote_account_ref=remote_account_ref,
+                    exc=exc,
+                )
             raise
         return {
             "account_id": int(account_id),
@@ -543,10 +554,21 @@ class PortfolioIbkrSyncService:
         )
         return created, False
 
+    def _validate_connection_mapping(self, *, account_id: int, remote_account_ref: str) -> None:
+        linked = self.portfolio_service.get_broker_connection_by_ref(
+            broker_type=IBKR_BROKER,
+            broker_account_ref=remote_account_ref,
+        )
+        if linked is not None and int(linked["portfolio_account_id"]) != int(account_id):
+            raise PortfolioIbkrSyncError(
+                code="ibkr_account_mapping_conflict",
+                message="该 broker account ref 已经绑定到当前用户的另一持仓账户，请先确认账户映射再同步。",
+                status_code=409,
+            )
+
     def _normalize_ibkr_sync_payload(
         self,
         *,
-        account: Dict[str, Any],
         remote_account: Dict[str, Any],
         summary: Dict[str, Any],
         ledger: Dict[str, Any],
@@ -554,11 +576,9 @@ class PortfolioIbkrSyncService:
     ) -> Dict[str, Any]:
         synced_at = datetime.now()
         snapshot_date = synced_at.date()
-        base_currency = self._normalize_currency(
-            remote_account.get("currency")
-            or self._summary_text(summary, "currency")
-            or account.get("base_currency")
-            or "USD"
+        base_currency = self._resolve_broker_base_currency(
+            remote_currency=remote_account.get("currency"),
+            summary_currency=self._extract_summary_currency_evidence(summary),
         )
 
         cash_rows, cash_total_base, cash_fx_stale = self._normalize_ledger_balances(
@@ -654,14 +674,15 @@ class PortfolioIbkrSyncService:
             if str(currency_key or "").strip().upper() == "BASE":
                 base_fallback_amount = float(raw_amount)
                 continue
-            currency = self._normalize_currency(currency_key)
+            currency = self._require_ibkr_currency(currency_key, scope="ledger")
             if currency == base_currency:
                 explicit_base_present = True
-            amount_base, stale, _ = self.portfolio_service.convert_amount(
+            amount_base, stale = self._convert_required_amount(
                 amount=float(raw_amount),
                 from_currency=currency,
                 to_currency=base_currency,
                 as_of_date=as_of_date,
+                scope="ledger",
             )
             rows.append(
                 {
@@ -732,7 +753,7 @@ class PortfolioIbkrSyncService:
                 warnings.append("Skipped IBKR position with missing symbol")
                 continue
 
-            currency = self._normalize_currency(item.get("currency") or self._default_currency_for_market(market))
+            currency = self._require_ibkr_currency(item.get("currency"), scope="position")
             avg_cost = self._to_float(item.get("avgCost")) or self._to_float(item.get("avgPrice")) or 0.0
             last_price = self._to_float(item.get("mktPrice")) or self._to_float(item.get("marketPrice")) or 0.0
             market_value_local = self._to_float(item.get("mktValue")) or self._to_float(item.get("marketValue"))
@@ -742,17 +763,19 @@ class PortfolioIbkrSyncService:
                 last_price = float(market_value_local) / float(quantity)
             unrealized_local = self._to_float(item.get("unrealizedPnl")) or self._to_float(item.get("upl")) or 0.0
 
-            market_value_base, stale_mv, _ = self.portfolio_service.convert_amount(
+            market_value_base, stale_mv = self._convert_required_amount(
                 amount=float(market_value_local),
                 from_currency=currency,
                 to_currency=base_currency,
                 as_of_date=as_of_date,
+                scope="position_market_value",
             )
-            unrealized_base, stale_upnl, _ = self.portfolio_service.convert_amount(
+            unrealized_base, stale_upnl = self._convert_required_amount(
                 amount=float(unrealized_local),
                 from_currency=currency,
                 to_currency=base_currency,
                 as_of_date=as_of_date,
+                scope="position_unrealized_pnl",
             )
             rows.append(
                 {
@@ -797,7 +820,7 @@ class PortfolioIbkrSyncService:
         current_broker = str(account.get("broker") or "").strip()
         if not current_broker:
             updates["broker"] = "IBKR"
-        current_base_currency = self._normalize_currency(account.get("base_currency") or "CNY")
+        current_base_currency = str(account.get("base_currency") or "").strip().upper()
         if current_base_currency != base_currency:
             updates["base_currency"] = base_currency
 
@@ -975,18 +998,6 @@ class PortfolioIbkrSyncService:
                 return canonical_stock_code(text)
         return canonical_stock_code(text)
 
-    @staticmethod
-    def _summary_text(summary: Dict[str, Any], key: str) -> Optional[str]:
-        block = summary.get(key)
-        if isinstance(block, dict):
-            for candidate in ("currency", "text", "value"):
-                value = block.get(candidate)
-                if value is not None and str(value).strip():
-                    return str(value).strip()
-        if block is not None and str(block).strip():
-            return str(block).strip()
-        return None
-
     def _summary_amount(self, summary: Dict[str, Any], *keys: str) -> Optional[float]:
         for key in keys:
             block = summary.get(key)
@@ -1037,13 +1048,106 @@ class PortfolioIbkrSyncService:
 
     @staticmethod
     def _normalize_currency(value: Any) -> str:
-        currency = str(value or "").strip().upper()
-        if not currency:
+        return PortfolioIbkrSyncService._require_ibkr_currency(value, scope="payload")
+
+    @staticmethod
+    def _require_ibkr_currency(value: Any, *, scope: str) -> str:
+        classification = classify_ibkr_currency(value)
+        if classification.status == IbkrCurrencyStatus.VALID and classification.code:
+            return classification.code
+        error_codes = {
+            IbkrCurrencyStatus.MISSING: "ibkr_currency_missing",
+            IbkrCurrencyStatus.MALFORMED: "ibkr_currency_malformed",
+            IbkrCurrencyStatus.UNKNOWN: "ibkr_currency_unknown",
+            IbkrCurrencyStatus.OPERATIONALLY_UNSUPPORTED: "ibkr_currency_unsupported",
+        }
+        raise PortfolioIbkrSyncError(
+            code=error_codes[classification.status],
+            message=f"IBKR {scope} currency 无法被当前组合安全识别，已拒绝整次同步。",
+        )
+
+    def _resolve_broker_base_currency(
+        self,
+        *,
+        remote_currency: Any,
+        summary_currency: Any,
+    ) -> str:
+        remote = classify_ibkr_currency(remote_currency)
+        if remote.status == IbkrCurrencyStatus.VALID and remote.code:
+            summary = classify_ibkr_currency(summary_currency)
+            if (
+                summary.status == IbkrCurrencyStatus.VALID
+                and summary.code
+                and summary.code != remote.code
+            ):
+                raise PortfolioIbkrSyncError(
+                    code="ibkr_currency_conflict",
+                    message="IBKR account 与 summary 返回了冲突的 base currency，已拒绝整次同步。",
+                )
+            return remote.code
+        if remote.status != IbkrCurrencyStatus.MISSING:
+            return self._require_ibkr_currency(remote_currency, scope="account base")
+        return self._require_ibkr_currency(summary_currency, scope="account summary base")
+
+    def _extract_summary_currency_evidence(self, summary: Dict[str, Any]) -> Optional[str]:
+        raw_evidence: List[Any] = []
+        if "currency" in summary:
+            top_level = summary.get("currency")
+            if isinstance(top_level, dict):
+                for key in ("currency", "text", "value"):
+                    if key in top_level:
+                        raw_evidence.append(top_level.get(key))
+                        break
+            else:
+                raw_evidence.append(top_level)
+
+        for key in (
+            "totalcashvalue",
+            "settledcash",
+            "stockmarketvalue",
+            "netstockmarketvalue",
+            "netliquidation",
+            "realizedpnl",
+            "unrealizedpnl",
+        ):
+            block = summary.get(key)
+            if isinstance(block, dict) and "currency" in block:
+                raw_evidence.append(block.get("currency"))
+
+        if not raw_evidence:
+            return None
+        currencies = {
+            self._require_ibkr_currency(value, scope="account summary base")
+            for value in raw_evidence
+        }
+        if len(currencies) != 1:
             raise PortfolioIbkrSyncError(
-                code="ibkr_payload_unsupported",
-                message="IBKR 返回了缺少 currency 的关键字段，当前版本无法安全同步该 payload。",
+                code="ibkr_currency_conflict",
+                message="IBKR summary 返回了冲突的 base currency evidence，已拒绝整次同步。",
             )
-        return currency[:8]
+        return next(iter(currencies))
+
+    def _convert_required_amount(
+        self,
+        *,
+        amount: float,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+        scope: str,
+    ) -> tuple[float, bool]:
+        converted, stale, source = self.portfolio_service.convert_amount(
+            amount=amount,
+            from_currency=from_currency,
+            to_currency=to_currency,
+            as_of_date=as_of_date,
+        )
+        if source == "fallback_1_to_1":
+            raise PortfolioIbkrSyncError(
+                code="ibkr_fx_unavailable",
+                message=f"IBKR {scope} 所需 FX 无 direct/inverse 证据，已拒绝整次同步。",
+            )
+        return float(converted), bool(stale)
 
     def _mark_connection_sync_error(
         self,
@@ -1071,11 +1175,3 @@ class PortfolioIbkrSyncService:
             )
         except Exception as mark_exc:  # pragma: no cover - defensive path
             logger.warning("Failed to persist IBKR sync error metadata: %s", mark_exc, exc_info=True)
-
-    @staticmethod
-    def _default_currency_for_market(market: str) -> str:
-        if market == "hk":
-            return "HKD"
-        if market == "us":
-            return "USD"
-        return "CNY"

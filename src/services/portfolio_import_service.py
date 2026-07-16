@@ -15,6 +15,11 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 
 from src.repositories.portfolio_repo import PortfolioRepository
+from src.services.portfolio_ibkr_currency import (
+    IbkrCurrencyClassification,
+    IbkrCurrencyStatus,
+    classify_ibkr_currency,
+)
 from src.services.portfolio_service import (
     PortfolioBusyError,
     PortfolioConflictError,
@@ -33,6 +38,16 @@ IBKR_BROKER_ALIASES: Tuple[str, ...] = (
 )
 IBKR_FILE_EXTENSIONS: Tuple[str, ...] = ("xml",)
 CSV_FILE_EXTENSIONS: Tuple[str, ...] = ("csv",)
+
+
+class PortfolioIbkrImportError(ValueError):
+    """Structured IBKR import rejection raised before persistence starts."""
+
+    def __init__(self, *, code: str, message: str, issues: List[Dict[str, Any]]) -> None:
+        self.code = str(code)
+        self.issues = list(issues)
+        super().__init__(f"{self.code}: {message}")
+
 
 @dataclass(frozen=True)
 class CsvParserSpec:
@@ -282,13 +297,16 @@ class PortfolioImportService:
             if item.get("symbol") and not item.get("market")
         ][:20]
         result["currency_issues"] = [
+            *list(parsed_payload.get("currency_issues", [])),
             *[
                 {
+                    "scope": "trade",
                     "row": item.get("_source_line_number") or item.get("source_line_number"),
                     "symbol": item.get("symbol"),
                     "currency": item.get("currency"),
                     "account_base_currency": base_currency,
                     "reason": "currency_missing" if not item.get("currency") else "cross_currency_record",
+                    "fatal": not bool(item.get("currency")),
                     "recovery_action": "Confirm settlement currency and FX availability.",
                 }
                 for item in trade_records
@@ -297,10 +315,12 @@ class PortfolioImportService:
             ],
             *[
                 {
+                    "scope": "cash",
                     "row": None,
                     "currency": item.get("currency"),
                     "account_base_currency": base_currency,
                     "reason": "cash_currency_missing" if not item.get("currency") else "cross_currency_cash",
+                    "fatal": not bool(item.get("currency")),
                     "recovery_action": "Confirm cash currency and FX availability.",
                 }
                 for item in cash_entries
@@ -308,6 +328,12 @@ class PortfolioImportService:
                 or (base_currency and str(item.get("currency") or "").upper() != base_currency)
             ],
         ][:20]
+        has_fatal_currency_issue = any(
+            item.get("fatal") for item in result["currency_issues"]
+        )
+        result["requires_confirmation"] = (
+            bool(result.get("requires_confirmation")) and not has_fatal_currency_issue
+        )
         result["account_mapping"] = {
             "account_id": account.get("id"),
             "account_name": account.get("name"),
@@ -496,6 +522,28 @@ class PortfolioImportService:
         metadata = dict(parsed_payload.get("metadata", {}))
         account = self._require_import_account(account_id)
 
+        currency_issues = self._collect_ibkr_commit_currency_issues(
+            account=account,
+            parsed_payload=parsed_payload,
+            trade_records=trade_records,
+            cash_entries=cash_entries,
+            corporate_actions=corporate_actions,
+        )
+        preview_payload = dict(parsed_payload)
+        preview_payload["currency_issues"] = currency_issues
+        fatal_currency_issues = [item for item in currency_issues if item.get("fatal")]
+        if fatal_currency_issues and not dry_run:
+            code = (
+                "ibkr_fx_unavailable"
+                if all(item.get("reason") == "currency_operationally_unsupported" for item in fatal_currency_issues)
+                else "ibkr_currency_invalid"
+            )
+            raise PortfolioIbkrImportError(
+                code=code,
+                message="IBKR Flex currency validation failed before persistence.",
+                issues=fatal_currency_issues,
+            )
+
         connection = self._resolve_import_broker_connection(
             account_id=account_id,
             broker_connection_id=broker_connection_id,
@@ -534,7 +582,7 @@ class PortfolioImportService:
                 result,
                 account=account,
                 broker=IBKR_BROKER,
-                parsed_payload=parsed_payload,
+                parsed_payload=preview_payload,
                 broker_connection_id=broker_connection_id,
             )
             return result
@@ -603,7 +651,7 @@ class PortfolioImportService:
             result,
             account=account,
             broker=IBKR_BROKER,
-            parsed_payload=parsed_payload,
+            parsed_payload=preview_payload,
             broker_connection_id=broker_connection_id,
         )
         return result
@@ -789,7 +837,22 @@ class PortfolioImportService:
             raise ValueError("Unsupported IBKR Flex XML: FlexStatement node not found")
 
         broker_account_ref = self._pick_attr(statement, "accountId", "account", "accountNumber")
-        base_currency = (self._pick_attr(statement, "currency", "baseCurrency", "baseCurrencyCode") or "").upper() or None
+        raw_base_currency = self._pick_attr(statement, "currency", "baseCurrency", "baseCurrencyCode")
+        base_classification = classify_ibkr_currency(raw_base_currency)
+        base_currency = (
+            base_classification.code
+            if base_classification.status == IbkrCurrencyStatus.VALID
+            else None
+        )
+        currency_issues: List[Dict[str, Any]] = []
+        if base_classification.status != IbkrCurrencyStatus.VALID:
+            currency_issues.append(
+                self._ibkr_currency_issue(
+                    scope="statement",
+                    classification=base_classification,
+                    fatal=False,
+                )
+            )
         statement_from = self._normalize_optional_date(
             self._pick_attr(statement, "fromDate", "periodStart", "startDate")
         )
@@ -798,28 +861,24 @@ class PortfolioImportService:
         )
 
         trade_records, trade_skipped, trade_errors = self._parse_ibkr_trade_records(statement)
-        cash_entries, cash_skipped, cash_errors = self._parse_ibkr_cash_entries(statement, base_currency=base_currency)
-        corporate_actions, corp_skipped, corp_errors = self._parse_ibkr_corporate_actions(
-            statement,
-            base_currency=base_currency,
-        )
+        cash_entries, cash_skipped, cash_errors = self._parse_ibkr_cash_entries(statement)
+        corporate_actions, corp_skipped, corp_errors = self._parse_ibkr_corporate_actions(statement)
         warnings: List[str] = []
 
         open_position_records: List[Dict[str, Any]] = []
+        ignored_open_position_records: List[Dict[str, Any]] = []
         open_position_count = 0
         if not trade_records:
             open_position_records, open_position_count, position_warnings = self._parse_ibkr_open_position_seed_records(
                 statement,
-                base_currency=base_currency,
                 statement_to=statement_to,
                 broker_account_ref=broker_account_ref,
             )
             trade_records.extend(open_position_records)
             warnings.extend(position_warnings)
         else:
-            _, open_position_count, position_warnings = self._parse_ibkr_open_position_seed_records(
+            ignored_open_position_records, open_position_count, position_warnings = self._parse_ibkr_open_position_seed_records(
                 statement,
-                base_currency=base_currency,
                 statement_to=statement_to,
                 broker_account_ref=broker_account_ref,
             )
@@ -829,8 +888,35 @@ class PortfolioImportService:
                 )
             warnings.extend(position_warnings)
 
-        errors = trade_errors + cash_errors + corp_errors
-        skipped_count = trade_skipped + cash_skipped + corp_skipped
+        trade_records, trade_currency_issues = self._filter_ibkr_currency_records(
+            trade_records,
+            scope="trade",
+        )
+        cash_entries, cash_currency_issues = self._filter_ibkr_currency_records(
+            cash_entries,
+            scope="cash",
+        )
+        corporate_actions, corp_currency_issues = self._filter_ibkr_currency_records(
+            corporate_actions,
+            scope="corporate_action",
+        )
+        _, ignored_open_position_currency_issues = self._filter_ibkr_currency_records(
+            ignored_open_position_records,
+            scope="open_position",
+        )
+        record_currency_issues = [
+            *trade_currency_issues,
+            *cash_currency_issues,
+            *corp_currency_issues,
+            *ignored_open_position_currency_issues,
+        ]
+        currency_issues.extend(record_currency_issues)
+
+        errors = trade_errors + cash_errors + corp_errors + [
+            f"ibkr_currency_invalid: {item['scope']} row={item.get('row')} reason={item['reason']}"
+            for item in record_currency_issues
+        ]
+        skipped_count = trade_skipped + cash_skipped + corp_skipped + len(record_currency_issues)
         suggested_connection_name = (
             f"IBKR {broker_account_ref}"[:64]
             if broker_account_ref
@@ -857,6 +943,7 @@ class PortfolioImportService:
             "cash_entries": cash_entries,
             "corporate_action_count": len(corporate_actions),
             "corporate_actions": corporate_actions,
+            "currency_issues": currency_issues,
             "warnings": warnings[:20],
             "metadata": {
                 "file_format": "ibkr_flex_xml",
@@ -873,6 +960,170 @@ class PortfolioImportService:
             },
             "errors": errors[:20],
         }
+
+    @staticmethod
+    def _ibkr_currency_issue(
+        *,
+        scope: str,
+        classification: IbkrCurrencyClassification,
+        fatal: bool,
+        row: Optional[int] = None,
+        account_base_currency: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        reason = f"currency_{classification.status.value}"
+        return {
+            "scope": scope,
+            "row": row,
+            "currency": classification.code,
+            "account_base_currency": account_base_currency,
+            "reason": reason,
+            "fatal": bool(fatal),
+            "recovery_action": "Provide an explicit canonical currency and required direct/inverse FX evidence.",
+        }
+
+    def _filter_ibkr_currency_records(
+        self,
+        records: List[Dict[str, Any]],
+        *,
+        scope: str,
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        accepted: List[Dict[str, Any]] = []
+        issues: List[Dict[str, Any]] = []
+        for index, item in enumerate(records):
+            classification = classify_ibkr_currency(item.get("currency"))
+            issue_scope = str(item.get("_ibkr_currency_scope") or scope)
+            if classification.status != IbkrCurrencyStatus.VALID or not classification.code:
+                issues.append(
+                    self._ibkr_currency_issue(
+                        scope=issue_scope,
+                        classification=classification,
+                        fatal=True,
+                        row=item.get("_source_line_number") or index + 1,
+                    )
+                )
+                continue
+            normalized = dict(item)
+            normalized["currency"] = classification.code
+            if scope == "trade":
+                normalized["dedup_hash"] = self._build_dedup_hash(normalized)
+            accepted.append(normalized)
+        return accepted, issues
+
+    def _collect_ibkr_commit_currency_issues(
+        self,
+        *,
+        account: Dict[str, Any],
+        parsed_payload: Dict[str, Any],
+        trade_records: List[Dict[str, Any]],
+        cash_entries: List[Dict[str, Any]],
+        corporate_actions: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        issues = [dict(item) for item in list(parsed_payload.get("currency_issues", []))]
+        account_classification = classify_ibkr_currency(account.get("base_currency"))
+        if account_classification.status != IbkrCurrencyStatus.VALID or not account_classification.code:
+            issues.append(
+                self._ibkr_currency_issue(
+                    scope="account",
+                    classification=account_classification,
+                    fatal=True,
+                )
+            )
+            return self._dedupe_ibkr_currency_issues(issues)
+        account_base = account_classification.code
+
+        metadata = dict(parsed_payload.get("metadata", {}))
+        statement_classification = classify_ibkr_currency(metadata.get("base_currency"))
+        if statement_classification.status == IbkrCurrencyStatus.VALID and statement_classification.code:
+            statement_date = self._parse_date(metadata.get("statement_to")) or date.today()
+            if not self._has_required_ibkr_fx(
+                currency=statement_classification.code,
+                account_base=account_base,
+                as_of_date=statement_date,
+            ):
+                issues.append(
+                    self._ibkr_currency_issue(
+                        scope="statement",
+                        classification=classify_ibkr_currency(
+                            statement_classification.code,
+                            operationally_supported=False,
+                        ),
+                        fatal=False,
+                        account_base_currency=account_base,
+                    )
+                )
+
+        record_groups = (
+            ("trade", trade_records, "trade_date"),
+            ("cash", cash_entries, "event_date"),
+            ("corporate_action", corporate_actions, "effective_date"),
+        )
+        for scope, records, date_key in record_groups:
+            for index, item in enumerate(records):
+                classification = classify_ibkr_currency(item.get("currency"))
+                if classification.status != IbkrCurrencyStatus.VALID or not classification.code:
+                    issues.append(
+                        self._ibkr_currency_issue(
+                            scope=scope,
+                            classification=classification,
+                            fatal=True,
+                            row=item.get("_source_line_number") or index + 1,
+                            account_base_currency=account_base,
+                        )
+                    )
+                    continue
+                event_date = self._parse_date(item.get(date_key)) or date.today()
+                if self._has_required_ibkr_fx(
+                    currency=classification.code,
+                    account_base=account_base,
+                    as_of_date=event_date,
+                ):
+                    continue
+                issues.append(
+                    self._ibkr_currency_issue(
+                        scope=scope,
+                        classification=classify_ibkr_currency(
+                            classification.code,
+                            operationally_supported=False,
+                        ),
+                        fatal=True,
+                        row=item.get("_source_line_number") or index + 1,
+                        account_base_currency=account_base,
+                    )
+                )
+        return self._dedupe_ibkr_currency_issues(issues)
+
+    def _has_required_ibkr_fx(
+        self,
+        *,
+        currency: str,
+        account_base: str,
+        as_of_date: date,
+    ) -> bool:
+        _, _, source = self.portfolio_service.convert_amount(
+            amount=1.0,
+            from_currency=currency,
+            to_currency=account_base,
+            as_of_date=as_of_date,
+        )
+        return source != "fallback_1_to_1"
+
+    @staticmethod
+    def _dedupe_ibkr_currency_issues(issues: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        unique: List[Dict[str, Any]] = []
+        seen: set[Tuple[Any, ...]] = set()
+        for issue in issues:
+            key = (
+                issue.get("scope"),
+                issue.get("row"),
+                issue.get("currency"),
+                issue.get("reason"),
+                bool(issue.get("fatal")),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(issue)
+        return unique[:20]
 
     def _normalize_broker(self, value: str) -> str:
         broker = (value or "").strip().lower()
@@ -1116,18 +1367,13 @@ class PortfolioImportService:
     def _parse_ibkr_cash_entries(
         self,
         statement: ET.Element,
-        *,
-        base_currency: Optional[str],
     ) -> Tuple[List[Dict[str, Any]], int, List[str]]:
         entries: List[Dict[str, Any]] = []
         skipped = 0
         errors: List[str] = []
         for idx, element in enumerate(self._iter_by_local_name(statement, "CashTransaction")):
             try:
-                entry = self._normalize_ibkr_cash_entry(
-                    element=element,
-                    base_currency=base_currency,
-                )
+                entry = self._normalize_ibkr_cash_entry(element=element)
                 if entry is None:
                     skipped += 1
                     continue
@@ -1140,18 +1386,13 @@ class PortfolioImportService:
     def _parse_ibkr_corporate_actions(
         self,
         statement: ET.Element,
-        *,
-        base_currency: Optional[str],
     ) -> Tuple[List[Dict[str, Any]], int, List[str]]:
         actions: List[Dict[str, Any]] = []
         skipped = 0
         errors: List[str] = []
         for idx, element in enumerate(self._iter_by_local_name(statement, "CorporateAction")):
             try:
-                action = self._normalize_ibkr_corporate_action(
-                    element=element,
-                    base_currency=base_currency,
-                )
+                action = self._normalize_ibkr_corporate_action(element=element)
                 if action is None:
                     skipped += 1
                     continue
@@ -1165,7 +1406,6 @@ class PortfolioImportService:
         self,
         statement: ET.Element,
         *,
-        base_currency: Optional[str],
         statement_to: Optional[str],
         broker_account_ref: Optional[str],
     ) -> Tuple[List[Dict[str, Any]], int, List[str]]:
@@ -1178,7 +1418,6 @@ class PortfolioImportService:
                 record = self._normalize_ibkr_open_position_record(
                     element=element,
                     source_index=idx,
-                    base_currency=base_currency,
                     statement_to=statement_to,
                     broker_account_ref=broker_account_ref,
                 )
@@ -1219,10 +1458,7 @@ class PortfolioImportService:
             self._pick_attr(element, "exchange", "listingExchange", "primaryExchange"),
             symbol=symbol,
         )
-        currency = (
-            self._pick_attr(element, "currency", "currencyPrimary", "fxCurrency")
-            or self._default_currency_for_market(market)
-        )
+        currency = self._pick_attr(element, "currency", "currencyPrimary", "fxCurrency")
         fee = abs(self._parse_float(self._pick_attr(element, "ibCommission", "commission")) or 0.0)
         tax = abs(self._parse_float(self._pick_attr(element, "taxes", "tax", "salesTax")) or 0.0)
         trade_uid = self._pick_attr(element, "ibExecID", "executionId", "tradeID", "transactionID", "orderID")
@@ -1230,7 +1466,7 @@ class PortfolioImportService:
             "trade_date": trade_date_obj,
             "symbol": symbol,
             "market": market,
-            "currency": str(currency).upper(),
+            "currency": str(currency).upper() if currency is not None else None,
             "side": side,
             "quantity": abs(float(quantity_raw)),
             "price": float(price),
@@ -1247,7 +1483,6 @@ class PortfolioImportService:
         self,
         *,
         element: ET.Element,
-        base_currency: Optional[str],
     ) -> Optional[Dict[str, Any]]:
         event_date_obj = self._parse_date(
             self._pick_attr(element, "reportDate", "settleDate", "dateTime", "date")
@@ -1257,11 +1492,7 @@ class PortfolioImportService:
         amount = self._parse_float(self._pick_attr(element, "amount", "amountLocal", "amountBase"))
         if amount is None or abs(amount) <= 0:
             return None
-        currency = (
-            self._pick_attr(element, "currency", "currencyPrimary")
-            or base_currency
-            or "USD"
-        )
+        currency = self._pick_attr(element, "currency", "currencyPrimary")
         description = (
             self._pick_attr(element, "description", "type", "activityDescription")
             or "ibkr_flex_cash"
@@ -1270,7 +1501,7 @@ class PortfolioImportService:
             "event_date": event_date_obj,
             "direction": "in" if float(amount) > 0 else "out",
             "amount": abs(float(amount)),
-            "currency": str(currency).upper(),
+            "currency": str(currency).upper() if currency is not None else None,
             "note": description[:255],
         }
 
@@ -1278,7 +1509,6 @@ class PortfolioImportService:
         self,
         *,
         element: ET.Element,
-        base_currency: Optional[str],
     ) -> Optional[Dict[str, Any]]:
         description = (self._pick_attr(element, "description", "type", "actionDescription") or "").strip()
         if "split" not in description.lower():
@@ -1301,16 +1531,12 @@ class PortfolioImportService:
             self._pick_attr(element, "exchange", "listingExchange", "primaryExchange"),
             symbol=symbol,
         )
-        currency = (
-            self._pick_attr(element, "currency", "currencyPrimary")
-            or base_currency
-            or self._default_currency_for_market(market)
-        )
+        currency = self._pick_attr(element, "currency", "currencyPrimary")
         return {
             "effective_date": effective_date_obj,
             "symbol": symbol,
             "market": market,
-            "currency": str(currency).upper(),
+            "currency": str(currency).upper() if currency is not None else None,
             "action_type": "split_adjustment",
             "split_ratio": float(split_ratio),
             "note": description[:255] or "ibkr_flex_split",
@@ -1321,7 +1547,6 @@ class PortfolioImportService:
         *,
         element: ET.Element,
         source_index: int,
-        base_currency: Optional[str],
         statement_to: Optional[str],
         broker_account_ref: Optional[str],
     ) -> Optional[Dict[str, Any]]:
@@ -1351,17 +1576,13 @@ class PortfolioImportService:
             self._pick_attr(element, "exchange", "listingExchange", "primaryExchange"),
             symbol=symbol,
         )
-        currency = (
-            self._pick_attr(element, "currency", "currencyPrimary")
-            or base_currency
-            or self._default_currency_for_market(market)
-        )
+        currency = self._pick_attr(element, "currency", "currencyPrimary")
         trade_uid = f"ibkr-open:{broker_account_ref or 'unknown'}:{symbol}:{trade_date_obj.isoformat()}"
         record = {
             "trade_date": trade_date_obj,
             "symbol": symbol,
             "market": market,
-            "currency": str(currency).upper(),
+            "currency": str(currency).upper() if currency is not None else None,
             "side": "buy",
             "quantity": abs(float(quantity)),
             "price": float(price),
@@ -1370,6 +1591,7 @@ class PortfolioImportService:
             "trade_uid": trade_uid,
             "note": "ibkr_flex_open_position_seed",
             "_source_line_number": source_index + 1,
+            "_ibkr_currency_scope": "open_position",
         }
         record["dedup_hash"] = self._build_dedup_hash(record)
         return record
@@ -1397,14 +1619,6 @@ class PortfolioImportService:
         if re.fullmatch(r"[A-Z][A-Z0-9.\-]*", symbol):
             return "us"
         return "cn"
-
-    @staticmethod
-    def _default_currency_for_market(market: str) -> str:
-        if market == "hk":
-            return "HKD"
-        if market == "us":
-            return "USD"
-        return "CNY"
 
     @staticmethod
     def _parse_split_ratio(value: Any) -> Optional[float]:
