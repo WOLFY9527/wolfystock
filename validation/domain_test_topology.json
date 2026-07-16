@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7786,
-      "sha256": "1905aedc7d04c4f9ff86ec1f0535c22d994477394256b147c28fc67d2ffc9a29"
+      "count": 7813,
+      "sha256": "6d896eef16b03dc227d2de98f6667a3040b32feaac3aca1e81de78dc885d3752"
     },
     "tests": [
       {
@@ -5964,6 +5964,11 @@
         "baseline": false
       },
       {
+        "id": "tests/api/test_watchlist_research_overlay_endpoint.py::WatchlistResearchOverlayEndpointTestCase::test_corrupt_scanner_candidate_evidence_blocks_watchlist_research_projection",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
         "id": "tests/api/test_watchlist_research_overlay_endpoint.py::WatchlistResearchOverlayEndpointTestCase::test_research_overlay_endpoint_is_owner_scoped_and_read_only",
         "domain": "provider_external_network",
         "baseline": true
@@ -5974,12 +5979,62 @@
         "baseline": true
       },
       {
+        "id": "tests/architecture/test_boundary_debt_manifest.py::test_boundary_debt_manifest_is_canonical_and_reproduces_current_main",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_boundary_debt_manifest.py::test_boundary_debt_manifest_validation_rejects_noncanonical_payloads",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_boundary_debt_manifest.py::test_boundary_debt_reduction_requires_removing_the_manifest_entry",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_direct_storage_debt.py::test_direct_storage_consumers_match_the_debt_manifest",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_direct_storage_debt.py::test_direct_storage_guard_rejects_an_injected_consumer",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
         "id": "tests/architecture/test_protected_semantics_architecture.py::test_protected_semantics_matrix_is_complete_and_canonical",
         "domain": "api_schema_contracts",
         "baseline": false
       },
       {
         "id": "tests/architecture/test_protected_semantics_architecture.py::test_protected_semantics_reuse_collected_owner_nodes",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_provider_heavy_debt.py::test_provider_heavy_construction_points_match_the_debt_manifest",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_provider_heavy_debt.py::test_provider_heavy_guard_rejects_a_new_call_in_existing_debt",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_provider_heavy_debt.py::test_provider_heavy_guard_rejects_an_injected_construction_point",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_service_api_schema_debt.py::test_service_to_api_schema_edges_match_the_debt_manifest",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_service_api_schema_debt.py::test_service_to_api_schema_guard_rejects_an_injected_reverse_edge",
         "domain": "api_schema_contracts",
         "baseline": false
       },
@@ -23354,6 +23409,21 @@
         "baseline": true
       },
       {
+        "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_corrupt_candidate_evidence_blocks_projection_without_changing_rank_score_or_lineage",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_corrupt_run_diagnostics_blocks_completed_projection_with_bounded_issue",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_corrupt_run_summary_blocks_history_and_detail_without_reordering_shortlist",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
         "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_crypto_mining_theme_diagnostics_return_full_candidate_universe",
         "domain": "scanner",
         "baseline": true
@@ -27709,6 +27779,41 @@
         "baseline": true
       },
       {
+        "id": "tests/test_persisted_json_integrity.py::test_decode_persisted_json_preserves_storage_states[None-dict-null_payload-None]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_persisted_json_integrity.py::test_decode_persisted_json_preserves_storage_states[[]-dict-incompatible_shape-None]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_persisted_json_integrity.py::test_decode_persisted_json_preserves_storage_states[[]-list-valid_empty-expected_value2]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_persisted_json_integrity.py::test_decode_persisted_json_preserves_storage_states[{\"value\": 0}-dict-valid_value-expected_value3]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_persisted_json_integrity.py::test_decode_persisted_json_preserves_storage_states[{-dict-malformed-None]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_persisted_json_integrity.py::test_decode_persisted_json_preserves_storage_states[{}-dict-valid_empty-expected_value1]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_persisted_json_integrity.py::test_decode_persisted_json_reports_semantic_validation_failure",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
         "id": "tests/test_personal_summary_service.py::test_contract_serializes_portfolio_and_watchlist_summary",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -28864,6 +28969,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_authoritative_zero_cached_snapshot_remains_usable",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_backdated_trade_write_invalidates_future_cache",
         "domain": "portfolio_broker",
         "baseline": true
@@ -28892,6 +29002,11 @@
         "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_corporate_actions_dividend_and_split",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_corrupt_or_incompatible_cached_snapshot_payload_recomputes_without_scalar_synthesis",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_delete_buy_trade_soft_void_removes_active_holding",
@@ -33509,6 +33624,16 @@
         "baseline": true
       },
       {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_corrupt_or_incompatible_summary_fails_closed_without_legacy_metrics",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_corrupt_warnings_are_not_exposed_as_authoritative_empty_list",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_custom_benchmark_context_uses_stored_rows_without_provider_or_market_cache",
         "domain": "backtest",
         "baseline": true
@@ -33777,6 +33902,11 @@
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_normalize_rsi_threshold_strategy_spec",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_null_legacy_summary_remains_explicitly_legacy_derived",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_parse_chinese_periodic_amount_instruction_into_structured_draft",
@@ -34192,6 +34322,11 @@
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_unknown_indicator_identifier_fails_explicitly",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_valid_empty_equity_curve_remains_authoritative_empty_artifact",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_rule_backtest_support_bundle_e2e.py::RuleBacktestSupportBundleE2ETestCase::test_support_bundle_e2e_insufficient_history_export_surface_is_sanitized",

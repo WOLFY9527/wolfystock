@@ -10247,12 +10247,7 @@ class MarketOverviewService:
         score_contribution_allowed = bool(not item.get("excluded") and float(item.get("confidenceWeight") or 0.0) > 0)
         observation_missing = extract_authoritative_market_time(item).observed_at is None
 
-        if observation_missing:
-            source_authority_allowed = False
-            score_contribution_allowed = False
-            source_authority_reason = MARKET_OVERVIEW_OBSERVATION_METADATA_MISSING_REASON
-            route_rejected_reason_codes = ["observation_metadata_missing"]
-        elif item.get("sourceAuthorityAllowed") is False or item.get("scoreContributionAllowed") is False:
+        if item.get("sourceAuthorityAllowed") is False or item.get("scoreContributionAllowed") is False:
             source_authority_allowed = False
             score_contribution_allowed = False
             source_authority_reason = str(
@@ -10288,6 +10283,13 @@ class MarketOverviewService:
                     route_snapshot.get("reasonCodes", {}).get(provider_key)
                     or ("provider_not_eligible_for_scoring_route",)
                 )
+
+        if observation_missing:
+            source_authority_allowed = False
+            score_contribution_allowed = False
+            if source_authority_reason is None:
+                source_authority_reason = MARKET_OVERVIEW_OBSERVATION_METADATA_MISSING_REASON
+                route_rejected_reason_codes = ["observation_metadata_missing"]
 
         normalized = {
             **item,
