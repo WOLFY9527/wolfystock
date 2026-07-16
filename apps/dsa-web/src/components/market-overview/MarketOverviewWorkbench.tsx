@@ -561,7 +561,7 @@ function buildMarketTrendPoints(item: MarketOverviewItem): CoreMarketChartPoint[
   const trend = Array.isArray(item.trend) ? item.trend.filter((value) => Number.isFinite(value)) : [];
   return trend.map((value, index) => ({
     date: `T-${String(index + 1).padStart(2, '0')}`,
-    label: index === trend.length - 1 ? (item.asOf || item.updatedAt || item.lastSuccessfulAt || item.symbol) : `T-${index + 1}`,
+    label: index === trend.length - 1 ? (item.asOf || item.symbol) : `T-${index + 1}`,
     close: value,
   }));
 }
@@ -1263,7 +1263,6 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
   directionalSummary: MarketDirectionalSummary;
   decisionSemantics?: MarketOverviewDecisionSemanticsView;
   dataState: MarketOverviewDataStateStripView;
-  localSnapshotSavedAt?: string;
 }): string {
   const {
     activeCategoryLabel,
@@ -1277,7 +1276,6 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
     directionalSummary,
     decisionSemantics,
     dataState,
-    localSnapshotSavedAt,
   } = params;
   const heroEvidence = heroAnchors.slice(0, 3).map((anchor) => {
     const displayLabel = anchor.item
@@ -1360,7 +1358,7 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
     evidenceGaps: dataGaps,
     dataFreshness: {
       label: freshnessLabel,
-      asOf: temperature.asOf || briefing.asOf || temperature.updatedAt || briefing.updatedAt || localSnapshotSavedAt,
+      asOf: temperature.asOf || briefing.asOf,
       notes: [
         dataState.updatedAtLabel ? `Last local snapshot: ${dataState.updatedAtLabel}` : '',
         dataState.needsRefresh ? 'Refresh may be needed before using this as a stronger research read.' : '',
@@ -3408,7 +3406,6 @@ function useMarketOverviewWorkbenchModel({
     directionalSummary: directionalSummaryView,
     decisionSemantics: decisionSemanticsView,
     dataState: dataStateView,
-    localSnapshotSavedAt,
   });
   const clipboardWriteText = typeof navigator === 'undefined'
     ? null

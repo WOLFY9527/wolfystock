@@ -27,6 +27,7 @@ class MarketOverviewTickFlowBreadthProvider:
 
     def fetch_snapshot(self) -> Dict[str, Any]:
         fetcher = self._get_fetcher()
+        attempted_at = self._now_iso()
         try:
             stats = fetcher.get_market_stats()
         except Exception as exc:
@@ -48,13 +49,15 @@ class MarketOverviewTickFlowBreadthProvider:
 
         adv_ratio = round((advancers / total) * 100.0, 1)
         effect = int(round(adv_ratio))
-        updated_at = self._now_iso()
+        received_at = self._now_iso()
         return {
             "source": _TICKFLOW_SOURCE,
             "sourceLabel": _TICKFLOW_SOURCE_LABEL,
             "sourceType": _TICKFLOW_SOURCE_TYPE,
-            "updatedAt": updated_at,
-            "asOf": updated_at,
+            "attemptedAt": attempted_at,
+            "updatedAt": received_at,
+            "asOf": None,
+            "providerTimestampAvailable": False,
             "advancers": advancers,
             "decliners": decliners,
             "limitUp": limit_up,

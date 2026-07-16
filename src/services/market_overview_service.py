@@ -98,6 +98,12 @@ from src.services.market_overview_yfinance_transport import (
     fetch_yfinance_quote_history_frame,
     fetch_yfinance_spy_atr_history_frame,
 )
+from src.services.market_observation_time import (
+    MISSING as OBSERVATION_TIME_MISSING,
+    authoritative_market_watermark,
+    extract_authoritative_market_time,
+    provider_epoch_to_iso,
+)
 from src.services.market_cache import MARKET_CACHE_TTLS, REFRESH_WARNING, market_cache
 from src.services.market_intelligence_trust_gate import (
     evaluate_market_intelligence_trust,
@@ -1410,9 +1416,12 @@ class MarketOverviewService:
             )
             market_regime_synthesis = self._build_market_regime_synthesis_payload(inputs)
             liquidity_impulse_synthesis = self._build_liquidity_impulse_synthesis_payload(inputs)
+            generated_at = _now_iso()
             payload = {
                 "source": source,
-                "updatedAt": _now_iso(),
+                "updatedAt": generated_at,
+                "generatedAt": generated_at,
+                "asOf": self._market_temperature_input_watermark(inputs),
                 "scores": scores,
                 "marketRegimeSynthesis": market_regime_synthesis,
                 "marketDecisionSemantics": self._build_market_decision_semantics_payload(
@@ -1475,9 +1484,12 @@ class MarketOverviewService:
             )
             market_regime_synthesis = self._build_market_regime_synthesis_payload(inputs)
             liquidity_impulse_synthesis = self._build_liquidity_impulse_synthesis_payload(inputs)
+            generated_at = _now_iso()
             payload = {
                 "source": "fallback",
-                "updatedAt": _now_iso(),
+                "updatedAt": generated_at,
+                "generatedAt": generated_at,
+                "asOf": None,
                 "scores": self._insufficient_market_temperature_scores(),
                 "marketRegimeSynthesis": market_regime_synthesis,
                 "marketDecisionSemantics": self._build_market_decision_semantics_payload(
@@ -1619,9 +1631,12 @@ class MarketOverviewService:
                 source = "fallback"
             real_inputs = self._real_market_temperature_inputs(inputs)
             scores = self._compute_market_temperature_scores(real_inputs) if briefing_trust["isReliable"] else self._insufficient_market_temperature_scores()
+            generated_at = _now_iso()
             payload = {
                 "source": source,
-                "updatedAt": _now_iso(),
+                "updatedAt": generated_at,
+                "generatedAt": generated_at,
+                "asOf": self._market_temperature_input_watermark(inputs),
                 "items": self._build_market_briefing_items(real_inputs if briefing_trust["isReliable"] else inputs, scores, source, briefing_trust),
                 "sourceAuthorityDiagnostics": self._build_market_briefing_source_authority_diagnostics(inputs),
                 **briefing_trust,
@@ -1644,9 +1659,12 @@ class MarketOverviewService:
                 self._summarize_market_temperature_confidence(inputs),
             )
             scores = self._insufficient_market_temperature_scores()
+            generated_at = _now_iso()
             return {
                 "source": "fallback",
-                "updatedAt": _now_iso(),
+                "updatedAt": generated_at,
+                "generatedAt": generated_at,
+                "asOf": None,
                 "items": self._build_market_briefing_items(inputs, scores, "fallback", trust),
                 "sourceAuthorityDiagnostics": self._build_market_briefing_source_authority_diagnostics(inputs),
                 "warning": "当前真实数据不足，暂不生成强市场判断。",
@@ -3297,11 +3315,18 @@ class MarketOverviewService:
             )
 
         primary = accepted_records[0]
-        as_of = primary.get("asOf") or primary.get("updatedAt")
+        as_of = extract_authoritative_market_time(primary).observed_at
+        if as_of is None:
+            return self._rejected_coinbase_venue_observation_sidecar(
+                snapshot=snapshot,
+                reason=MARKET_OVERVIEW_OBSERVATION_INVALID_METADATA_REASON,
+                reason_codes=("observation_metadata_missing",),
+                raw_payload=primary,
+            )
         freshness = str(primary.get("freshness") or "").strip().lower()
         if not freshness:
             freshness = get_freshness_status(
-                as_of or primary.get("updatedAt"),
+                as_of,
                 "crypto",
                 COINBASE_PUBLIC_PROVIDER_ID,
                 False,
@@ -3505,8 +3530,8 @@ class MarketOverviewService:
                 "trustLevel": "weak",
                 "observationOnly": True,
                 "scoreContributionAllowed": False,
-                "freshness": freshness,
-                "asOf": attempted_at,
+                "freshness": "unavailable",
+                "asOf": None,
                 "updatedAt": attempted_at,
                 "providerTimestampAvailable": False,
             })
@@ -3553,7 +3578,7 @@ class MarketOverviewService:
             "trustLevel": "weak",
             "observationOnly": True,
             "scoreContributionAllowed": False,
-            "asOf": attempted_at,
+            "asOf": None,
             "updatedAt": attempted_at,
             "attemptedAt": attempted_at,
             "coverageCount": 0,
@@ -3599,13 +3624,28 @@ class MarketOverviewService:
         degradation_reason = "partial_coverage" if missing_symbols else None
         coverage = {
             **base,
-            "freshness": records[0]["freshness"],
+            "freshness": "unavailable",
             "coverageCount": len(matched_symbols),
             "matchedCanonicalSymbols": matched_symbols,
             "missingExpectedSymbols": missing_symbols,
             "partialCoverageReason": degradation_reason,
             "degradationReason": degradation_reason,
         }
+        timestamp_authority_claimed = any(
+            record.get("providerTimestampAvailable") is False
+            and (
+                bool(str(record.get("asOf") or "").strip())
+                or str(record.get("freshness") or "").strip().lower()
+                in {"live", "fresh", "delayed", "cached"}
+            )
+            for record in records
+        )
+        if timestamp_authority_claimed:
+            return self._rejected_akshare_cn_index_observation_coverage(
+                coverage,
+                reason=MARKET_OVERVIEW_OBSERVATION_AUTHORITY_REJECTED_REASON,
+                reason_codes=("live_authority_claim",),
+            )
         return self._guard_akshare_cn_index_observation_coverage(coverage)
 
     def _guard_akshare_cn_index_observation_coverage(self, coverage: Dict[str, Any]) -> Dict[str, Any]:
@@ -3661,7 +3701,7 @@ class MarketOverviewService:
             "trustLevel": "weak",
             "observationOnly": True,
             "scoreContributionAllowed": False,
-            "asOf": coverage.get("asOf") or attempted_at,
+            "asOf": None,
             "updatedAt": coverage.get("updatedAt") or attempted_at,
             "attemptedAt": attempted_at,
             "freshness": "unavailable",
@@ -3688,10 +3728,10 @@ class MarketOverviewService:
                 raise RuntimeError("market provider unavailable")
             if not self._is_storable_market_snapshot(payload):
                 raise RuntimeError("market provider returned no usable data")
-            snapshot_payload = copy.deepcopy(payload)
+            snapshot_payload = self._stamp_observation_time_authority(copy.deepcopy(payload))
             self._market_data_cache[cache_key] = snapshot_payload
             self._save_persistent_snapshot(cache_key, snapshot_payload)
-            return payload
+            return snapshot_payload
 
         def fallback() -> Dict[str, Any]:
             cached = self._market_data_cache.get(cache_key)
@@ -3712,6 +3752,21 @@ class MarketOverviewService:
             cold_start_timeout_seconds=self.MARKET_COLD_START_TIMEOUT_SECONDS,
         )
         return self._align_official_macro_runtime_payload(cache_key, payload)
+
+    @classmethod
+    def _stamp_observation_time_authority(cls, payload: Dict[str, Any]) -> Dict[str, Any]:
+        observation = extract_authoritative_market_time(payload)
+        payload["asOf"] = observation.observed_at
+        payload["observationTimeSource"] = observation.source
+        items = payload.get("items")
+        if isinstance(items, list):
+            payload["items"] = [
+                cls._stamp_observation_time_authority(dict(item))
+                if isinstance(item, dict)
+                else item
+                for item in items
+            ]
+        return payload
 
     def _align_official_macro_runtime_payload(self, cache_key: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         if cache_key not in {"macro", "rates", "volatility"}:
@@ -4495,13 +4550,14 @@ class MarketOverviewService:
         payload = self._normalize_sentiment_snapshot_payload(cache_key, payload)
         if not self._is_storable_market_snapshot(payload):
             return None
-        freshness_evidence = payload.get("sourceFreshnessEvidence")
-        evidence_as_of = (
-            freshness_evidence.get("asOf")
-            if isinstance(freshness_evidence, dict)
-            else None
-        )
-        observation_as_of = payload.get("asOf") or payload.get("as_of") or evidence_as_of
+        observation_as_of = self._legacy_snapshot_observation_time(payload)
+        if observation_as_of is None:
+            legacy_items = [item for item in payload.get("items", []) if isinstance(item, dict)]
+            validated_items = [
+                {**item, "asOf": self._legacy_snapshot_observation_time(item)}
+                for item in legacy_items
+            ]
+            observation_as_of = authoritative_market_watermark(validated_items).observed_at
         last_successful_at = payload.get("lastSuccessfulAt") or observation_as_of or row.get("updated_at")
         snapshot_was_fallback = bool(
             payload.get("isFallback")
@@ -4512,6 +4568,11 @@ class MarketOverviewService:
         payload["lastSuccessfulAt"] = last_successful_at
         payload["updatedAt"] = payload.get("updatedAt") or row.get("updated_at")
         payload["asOf"] = observation_as_of
+        payload["observationTimeSource"] = (
+            payload.get("observationTimeSource")
+            if observation_as_of is not None
+            else OBSERVATION_TIME_MISSING
+        )
         payload["sourceLabel"] = payload.get("sourceLabel") or "Snapshot"
         payload["source"] = payload.get("source") or "cached"
         items = payload.get("items")
@@ -4553,6 +4614,46 @@ class MarketOverviewService:
         payload["warning"] = "数据源刷新失败，当前显示最近成功快照"
         return payload
 
+    @staticmethod
+    def _legacy_snapshot_observation_time(value: Mapping[str, Any]) -> Optional[str]:
+        if value.get("providerTimestampAvailable") is False:
+            return None
+        if value.get("isFallback") or value.get("isUnavailable"):
+            return None
+        source = str(value.get("source") or "").strip().lower()
+        if source in {"fallback", "mock", "synthetic", "unavailable", "missing"}:
+            return None
+        marker = str(value.get("observationTimeSource") or "").strip().lower()
+        if marker in {"provider_timestamp", "provider_effective_date"}:
+            return extract_authoritative_market_time(value).observed_at
+        historically_fabricated = {
+            "akshare",
+            "alternative_me",
+            "binance",
+            "cnn",
+            "computed",
+            "mixed",
+            "tickflow",
+        }
+        if source in historically_fabricated:
+            return None
+        historically_authoritative = {
+            "fred",
+            "polygon_us_grouped_daily",
+            "sina",
+            "treasury",
+            "yahoo",
+            "yfinance",
+            "yfinance_proxy",
+        }
+        if source not in historically_authoritative:
+            return None
+        freshness_evidence = value.get("sourceFreshnessEvidence")
+        observation = extract_authoritative_market_time(value)
+        if observation.observed_at is None and isinstance(freshness_evidence, Mapping):
+            observation = extract_authoritative_market_time(freshness_evidence)
+        return observation.observed_at
+
     def _persistent_snapshot_freshness(
         self,
         cache_key: str,
@@ -4568,8 +4669,6 @@ class MarketOverviewService:
             else None
         )
         as_of = value.get("asOf") or value.get("as_of") or evidence_as_of
-        if as_of is None and panel is not None:
-            as_of = panel.get("asOf")
         source = str(value.get("source") or (panel or {}).get("source") or "")
         source_type = str(value.get("sourceType") or (panel or {}).get("sourceType") or "")
         if source.lower() in {"", "cached"} and not is_fallback:
@@ -4657,12 +4756,11 @@ class MarketOverviewService:
             panel=panel,
         )
         item_payload = dict(item)
-        item_evidence = item_payload.get("sourceFreshnessEvidence")
-        item_payload["asOf"] = (
-            item_payload.get("asOf")
-            or item_payload.get("as_of")
-            or (item_evidence.get("asOf") if isinstance(item_evidence, dict) else None)
-            or panel.get("asOf")
+        item_payload["asOf"] = self._legacy_snapshot_observation_time(item_payload)
+        item_payload["observationTimeSource"] = (
+            item_payload.get("observationTimeSource")
+            if item_payload["asOf"] is not None
+            else OBSERVATION_TIME_MISSING
         )
         return self._apply_persistent_snapshot_freshness(item_payload, freshness)
 
@@ -4677,7 +4775,7 @@ class MarketOverviewService:
             "items": [],
             "last_update": updated_at,
             "updatedAt": updated_at,
-            "asOf": updated_at,
+            "asOf": None,
             "error": None,
             "fallback_used": True,
             "fallbackUsed": True,
@@ -4706,7 +4804,7 @@ class MarketOverviewService:
             "items": spot_items + self._crypto_funding_unavailable_items(updated_at) + self._crypto_unavailable_context_items(updated_at),
             "last_update": updated_at,
             "updatedAt": updated_at,
-            "asOf": updated_at,
+            "asOf": None,
             "error": "crypto provider unavailable",
             "fallback_used": True,
             "fallbackUsed": True,
@@ -4920,7 +5018,7 @@ class MarketOverviewService:
             {
                 "source": source,
                 "sourceLabel": payload.get("sourceLabel") or self._source_label(source),
-                "asOf": payload.get("asOf") or payload.get("updatedAt") or payload.get("last_update") or payload.get("last_refresh_at"),
+                "asOf": extract_authoritative_market_time(payload).observed_at,
                 "freshness": payload.get("freshness"),
                 "isFallback": bool(payload.get("isFallback")),
                 "isStale": bool(payload.get("isStale")),
@@ -4972,6 +5070,11 @@ class MarketOverviewService:
         evidence.update(score_gate_meta)
         if evidence.get("observationOnly") is None:
             evidence["observationOnly"] = bool(normalized_provider_snapshot.get("observationOnly"))
+        if evidence.get("isPartial") and evidence.get("degradationReason") in {
+            "fallback_source",
+            "delayed_source",
+        }:
+            evidence["degradationReason"] = "partial_coverage"
         evidence["scoreReliabilityAllowed"] = self._evidence_snapshot_score_reliability_allowed(payload, evidence)
         evidence["reasonFamilies"] = self._evidence_snapshot_reason_families(evidence, payload)
         return evidence
@@ -5770,15 +5873,29 @@ class MarketOverviewService:
         source = str(payload.get("source") or ("fallback" if payload.get("fallbackUsed") or payload.get("fallback_used") else "mixed"))
         is_fallback = bool(payload.get("isFallback") or source.lower() in {"fallback", "mock"})
         updated_at = payload.get("updatedAt") or payload.get("last_update") or payload.get("last_refresh_at") or _now_iso()
-        if payload.get("isFromSnapshot"):
+        observation = extract_authoritative_market_time(payload)
+        if observation.observed_at is None:
             freshness_evidence = payload.get("sourceFreshnessEvidence")
-            as_of = payload.get("asOf") or payload.get("as_of") or (
-                freshness_evidence.get("asOf")
-                if isinstance(freshness_evidence, dict)
-                else None
+            observation = extract_authoritative_market_time(
+                freshness_evidence if isinstance(freshness_evidence, dict) else None
             )
-        else:
-            as_of = payload.get("asOf") or payload.get("last_update") or payload.get("last_refresh_at") or updated_at
+        raw_items = [item for item in payload.get("items", []) if isinstance(item, dict)]
+        eligible_items = [
+            item
+            for item in raw_items
+            if _has_valid_market_value(item)
+            and not item.get("isFallback")
+            and not item.get("fallbackUsed")
+            and not item.get("isUnavailable")
+            and str(item.get("source") or "").lower() not in {"fallback", "mock", "synthetic", "unavailable"}
+        ]
+        if observation.observed_at is None and eligible_items:
+            observation = authoritative_market_watermark(eligible_items)
+        missing_item_observation = any(
+            extract_authoritative_market_time(item).observed_at is None
+            for item in eligible_items
+        )
+        as_of = observation.observed_at
         freshness = get_freshness_status(as_of, category, source, is_fallback, source_type=payload.get("sourceType") or "")
         preserved_freshness = self._preserved_freshness_meta(payload)
         if not preserved_freshness and payload.get("isPartial"):
@@ -5790,7 +5907,11 @@ class MarketOverviewService:
                 "isUnavailable": bool(payload.get("isUnavailable")),
                 "warning": payload.get("warning"),
             }
-        if preserved_freshness:
+        preserved_state = str(preserved_freshness.get("freshness") or "").lower()
+        if preserved_freshness and (
+            as_of is not None
+            or preserved_state in {"fallback", "mock", "stale", "unavailable", "error", "partial"}
+        ):
             freshness = self._apply_preserved_freshness(freshness, preserved_freshness)
         raw_error = payload.get("refreshError") or payload.get("lastError") or payload.get("error")
         if payload.get("isFromSnapshot"):
@@ -5847,10 +5968,16 @@ class MarketOverviewService:
             "sourceType": payload.get("sourceType") or reliability.get("sourceType"),
             "updatedAt": updated_at,
             "asOf": as_of,
+            "observationTimeSource": observation.source,
             "freshness": normalized_freshness,
-            "isFallback": freshness["isFallback"],
+            "isFallback": bool(is_fallback or freshness["isFallback"]),
             "isStale": bool(payload.get("isStale") or freshness.get("isStale") or normalized_freshness == "stale"),
-            "isPartial": bool(payload.get("isPartial") or preserved_freshness.get("isPartial") or item_partial),
+            "isPartial": bool(
+                payload.get("isPartial")
+                or preserved_freshness.get("isPartial")
+                or item_partial
+                or missing_item_observation
+            ),
             "isUnavailable": bool(
                 payload.get("isUnavailable")
                 or preserved_freshness.get("isUnavailable")
@@ -5859,7 +5986,7 @@ class MarketOverviewService:
             "isProxy": proxy_source,
             "delayMinutes": freshness["delayMinutes"],
             "warning": payload.get("warning") or (REFRESH_WARNING if payload.get("lastError") else None) or freshness["warning"],
-            "fallbackUsed": bool(payload.get("fallbackUsed") or freshness["isFallback"]),
+            "fallbackUsed": bool(payload.get("fallbackUsed") or is_fallback or freshness["isFallback"]),
             "isRefreshing": bool(payload.get("isRefreshing")),
             "lastError": _compact_error_summary(payload.get("lastError")),
             "refreshError": _compact_error_summary(payload.get("refreshError") or payload.get("lastError")),
@@ -5878,6 +6005,11 @@ class MarketOverviewService:
                 normalized_payload.get("scoreAuthorityEligible")
                 and self._score_authority_eligible(normalized_payload, proxy_source)
             )
+        if as_of is None or missing_item_observation:
+            normalized_payload["scoreAuthorityEligible"] = False
+            normalized_payload["sourceAuthorityAllowed"] = False
+            normalized_payload["scoreContributionAllowed"] = False
+            normalized_payload["observationOnly"] = True
         if normalized_payload.get("authorityGrant") is None:
             normalized_payload["authorityGrant"] = bool(normalized_payload.get("scoreAuthorityEligible"))
         if normalized_payload.get("decisionGrade") is None:
@@ -6235,15 +6367,13 @@ class MarketOverviewService:
     def _with_item_meta(self, item: Dict[str, Any], category: str, panel: Dict[str, Any]) -> Dict[str, Any]:
         source = str(item.get("source") or panel.get("source") or "mixed")
         is_fallback = bool(item.get("isFallback") or item.get("fallbackUsed") or source.lower() in {"fallback", "mock"})
-        if item.get("isFromSnapshot") or panel.get("isFromSnapshot"):
+        observation = extract_authoritative_market_time(item)
+        if observation.observed_at is None:
             freshness_evidence = item.get("sourceFreshnessEvidence")
-            as_of = item.get("asOf") or item.get("as_of") or (
-                freshness_evidence.get("asOf")
-                if isinstance(freshness_evidence, dict)
-                else None
-            ) or panel.get("asOf")
-        else:
-            as_of = item.get("asOf") or item.get("last_update") or item.get("updatedAt") or panel.get("asOf") or panel.get("updatedAt")
+            observation = extract_authoritative_market_time(
+                freshness_evidence if isinstance(freshness_evidence, dict) else None
+            )
+        as_of = observation.observed_at
         updated_at = item.get("updatedAt") or panel.get("updatedAt") or _now_iso()
         official_series_id = (
             item.get("officialOverlaySeriesId")
@@ -6260,7 +6390,11 @@ class MarketOverviewService:
             official_observation_date=item.get("officialObservationDate") or item.get("officialAsOf"),
         )
         preserved_freshness = self._preserved_freshness_meta(item)
-        if preserved_freshness:
+        preserved_state = str(preserved_freshness.get("freshness") or "").lower()
+        if preserved_freshness and (
+            as_of is not None
+            or preserved_state in {"fallback", "mock", "stale", "unavailable", "error", "partial"}
+        ):
             freshness = self._apply_preserved_freshness(freshness, preserved_freshness)
         if item.get("isFromSnapshot") or panel.get("isFromSnapshot"):
             snapshot_freshness = str(item.get("freshness") or panel.get("freshness") or "").lower()
@@ -6296,6 +6430,7 @@ class MarketOverviewService:
             "sourceType": item.get("sourceType") or reliability.get("sourceType"),
             "updatedAt": updated_at,
             "asOf": as_of,
+            "observationTimeSource": observation.source,
             "freshness": output_freshness,
             "isFallback": freshness["isFallback"],
             "isStale": bool(freshness.get("isStale") or normalized_freshness == "stale"),
@@ -6318,6 +6453,11 @@ class MarketOverviewService:
                 normalized.get("scoreAuthorityEligible")
                 and self._score_authority_eligible(normalized, proxy_source)
             )
+        if as_of is None:
+            normalized["scoreAuthorityEligible"] = False
+            normalized["sourceAuthorityAllowed"] = False
+            normalized["scoreContributionAllowed"] = False
+            normalized["observationOnly"] = True
         if normalized.get("authorityGrant") is None:
             normalized["authorityGrant"] = bool(normalized.get("scoreAuthorityEligible"))
         if normalized.get("decisionGrade") is None:
@@ -6462,10 +6602,14 @@ class MarketOverviewService:
                 "trend": item.get("trend") or [],
                 "hover_details": item.get("hover_details") or [],
                 "source": item.get("source") or snapshot.get("source"),
+                "updatedAt": item.get("updatedAt") or snapshot.get("last_update"),
+                "asOf": item.get("asOf"),
             })
         return {
             "panel_name": "MarketSentimentCard",
             "last_refresh_at": snapshot.get("last_update"),
+            "updatedAt": snapshot.get("last_update"),
+            "asOf": snapshot.get("asOf"),
             "status": "partial" if snapshot.get("isPartial") else "success",
             "error_message": snapshot.get("error"),
             "refreshError": snapshot.get("refreshError"),
@@ -6509,6 +6653,7 @@ class MarketOverviewService:
             missing_price = price is None
             trend = history_map.get(symbol) or ([] if missing_price else [price])
             week_change = self._percent_change(trend[0], trend[-1]) if len(trend) > 1 else None
+            as_of = provider_epoch_to_iso(row.get("closeTime"), milliseconds=True)
             item = {
                 "symbol": short_symbol,
                 "label": label,
@@ -6528,15 +6673,21 @@ class MarketOverviewService:
                 "unit": "USD",
                 "source": "binance",
                 "sourceType": "exchange_public",
-                "freshness": "live",
+                "freshness": "live" if as_of else "unavailable",
                 "last_update": last_update,
+                "updatedAt": last_update,
+                "asOf": as_of,
+                "providerTimestampAvailable": as_of is not None,
                 "error": None,
             }
-            if missing_price:
+            if missing_price or as_of is None:
                 item.update({
                     "freshness": "unavailable",
                     "isUnavailable": True,
-                    "unavailableReason": "missing_last_price",
+                    "unavailableReason": "missing_last_price" if missing_price else "missing_provider_timestamp",
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "observationOnly": True,
                 })
             items.append(item)
         funding_items = self._fetch_binance_funding_items(labels, last_update)
@@ -6547,9 +6698,14 @@ class MarketOverviewService:
             if item.get("symbol") not in funding_symbols
         ])
         items.extend(self._crypto_unavailable_context_items(last_update))
+        panel_observation = authoritative_market_watermark(
+            item for item in items if isinstance(item, dict)
+        )
         return {
             "items": items,
             "last_update": last_update,
+            "updatedAt": last_update,
+            "asOf": panel_observation.observed_at,
             "error": None,
             "fallback_used": False,
             "source": "binance",
@@ -6606,10 +6762,12 @@ class MarketOverviewService:
             row = fetch_binance_funding_row(futures_symbol)
             funding_rate = self._clean_number(row.get("lastFundingRate"))
         except Exception:
+            row = {}
             funding_rate = None
         if funding_rate is None:
             return None
         funding_percent = funding_rate * 100
+        as_of = provider_epoch_to_iso(row.get("time"), milliseconds=True)
         return {
             "symbol": f"{short_symbol}_FUNDING",
             "label": f"{short_symbol} Funding",
@@ -6624,8 +6782,16 @@ class MarketOverviewService:
             "unit": "%",
             "source": "binance",
             "sourceType": "exchange_public",
-            "freshness": "live",
+            "freshness": "live" if as_of else "unavailable",
             "last_update": last_update,
+            "updatedAt": last_update,
+            "asOf": as_of,
+            "providerTimestampAvailable": as_of is not None,
+            "isUnavailable": as_of is None,
+            "unavailableReason": None if as_of else "missing_provider_timestamp",
+            "sourceAuthorityAllowed": as_of is not None,
+            "scoreContributionAllowed": as_of is not None,
+            "observationOnly": as_of is None,
             "error": None,
         }
 
@@ -6671,6 +6837,9 @@ class MarketOverviewService:
         current_change_pct = self._percent_change(previous_day, current)
         trend = [round(value, 2) for value in values]
         last_update = _now_iso()
+        latest_observation = extract_authoritative_market_time(payload["history"][-1])
+        day_watermark = authoritative_market_watermark(payload["history"][-2:])
+        week_watermark = authoritative_market_watermark(payload["history"])
 
         items = [
             {
@@ -6688,6 +6857,8 @@ class MarketOverviewService:
                 "unit": "score",
                 "source": payload["source"],
                 "last_update": last_update,
+                "updatedAt": last_update,
+                "asOf": latest_observation.observed_at,
                 "error": None,
             },
             {
@@ -6702,6 +6873,8 @@ class MarketOverviewService:
                 "unit": "pts",
                 "source": payload["source"],
                 "last_update": last_update,
+                "updatedAt": last_update,
+                "asOf": day_watermark.observed_at,
                 "error": None,
             },
             {
@@ -6716,12 +6889,16 @@ class MarketOverviewService:
                 "unit": "pts",
                 "source": payload["source"],
                 "last_update": last_update,
+                "updatedAt": last_update,
+                "asOf": week_watermark.observed_at,
                 "error": None,
             },
         ]
         return {
             "items": items,
             "last_update": last_update,
+            "updatedAt": last_update,
+            "asOf": week_watermark.observed_at,
             "error": None,
             "refreshError": provider_error,
             "warning": "情绪指标部分可用，请结合来源与时效观察。" if provider_error else None,
@@ -6745,7 +6922,17 @@ class MarketOverviewService:
         for row in history_rows[-8:]:
             value = self._clean_number(row.get("score") if isinstance(row, dict) else None)
             if value is not None:
-                history.append({"value": value})
+                raw_time = row.get("timestamp") or row.get("x") or row.get("date")
+                if isinstance(raw_time, (int, float)) or str(raw_time or "").strip().isdigit():
+                    numeric = float(raw_time)
+                    as_of = provider_epoch_to_iso(numeric, milliseconds=abs(numeric) >= 100_000_000_000)
+                else:
+                    as_of = extract_authoritative_market_time(
+                        row,
+                        provider_timestamp_fields=("timestamp", "date"),
+                        provider_effective_date_fields=(),
+                    ).observed_at
+                history.append({"value": value, "asOf": as_of})
         if len(history) < 2:
             raise RuntimeError("CNN Fear & Greed history unavailable")
         return {"history": history, "source": "cnn"}
@@ -6761,7 +6948,16 @@ class MarketOverviewService:
         for row in reversed(rows):
             value = self._clean_number(row.get("value") if isinstance(row, dict) else None)
             if value is not None:
-                history.append({"value": value})
+                raw_time = row.get("timestamp") if isinstance(row, dict) else None
+                if isinstance(raw_time, (int, float)) or str(raw_time or "").strip().isdigit():
+                    as_of = provider_epoch_to_iso(raw_time, milliseconds=False)
+                else:
+                    as_of = extract_authoritative_market_time(
+                        row,
+                        provider_timestamp_fields=("timestamp",),
+                        provider_effective_date_fields=(),
+                    ).observed_at
+                history.append({"value": value, "asOf": as_of})
         if len(history) < 2:
             raise RuntimeError("Alternative Fear & Greed history unavailable")
         return {"history": history, "source": "alternative_me"}
@@ -6801,6 +6997,7 @@ class MarketOverviewService:
                 "change_pct": change_pct,
                 "risk_direction": "decreasing" if value >= 0 else "increasing",
                 "trend": quote.get("trend", []),
+                "asOf": quote.get("asOf"),
                 "source": "yfinance_proxy",
                 "sourceType": "unofficial_public_api",
                 "observationOnly": True,
@@ -6986,7 +7183,7 @@ class MarketOverviewService:
             "source": source,
             "sourceLabel": self._source_label(source),
             "updatedAt": updated_at,
-            "asOf": max((str(item.get("asOf") or "") for item in merged_items), default=updated_at) or updated_at,
+            "asOf": authoritative_market_watermark(merged_items).observed_at,
             "items": merged_items,
             "fallbackUsed": is_partial,
             "warning": FALLBACK_WARNING if is_partial else None,
@@ -7076,14 +7273,14 @@ class MarketOverviewService:
             "asOf": as_of,
         }
 
-    def _sina_as_of(self, trade_date: str, trade_time: str) -> str:
+    def _sina_as_of(self, trade_date: str, trade_time: str) -> Optional[str]:
         try:
             normalized_date = str(trade_date or "").strip().replace("/", "-")
             normalized_time = str(trade_time or "").strip()
             parsed = datetime.fromisoformat(f"{normalized_date}T{normalized_time}")
             return parsed.replace(tzinfo=CN_TZ).isoformat(timespec="seconds")
         except Exception:
-            return _now_iso()
+            return None
 
     def _fetch_cn_breadth_snapshot(self) -> Dict[str, Any]:
         snapshot = fetch_tickflow_cn_breadth_snapshot()
@@ -7091,7 +7288,7 @@ class MarketOverviewService:
         source_label = snapshot.get("sourceLabel") or self._source_label(source)
         source_type = snapshot.get("sourceType") or _infer_source_type(source)
         updated_at = str(snapshot.get("updatedAt") or _now_iso())
-        as_of = str(snapshot.get("asOf") or updated_at)
+        as_of = extract_authoritative_market_time(snapshot).observed_at
         adv_ratio = float(snapshot["advRatio"])
         explanation = self._cn_breadth_explanation(adv_ratio)
         detail = "TickFlow A-share market stats snapshot"
@@ -7102,6 +7299,8 @@ class MarketOverviewService:
             "sourceType": source_type,
             "updatedAt": updated_at,
             "asOf": as_of,
+            "attemptedAt": snapshot.get("attemptedAt"),
+            "providerTimestampAvailable": bool(snapshot.get("providerTimestampAvailable")),
             "fallbackUsed": False,
             "isFallback": False,
             "warning": None,
@@ -7119,10 +7318,16 @@ class MarketOverviewService:
     def _fetch_us_breadth_snapshot(self) -> Dict[str, Any]:
         polygon_activation = run_polygon_us_breadth_activation()
         authority_diagnostic = self._polygon_us_breadth_authority_diagnostic(polygon_activation)
+        polygon_observation = extract_authoritative_market_time(
+            polygon_activation,
+            provider_timestamp_fields=("asOf",),
+            provider_effective_date_fields=("observationDate",),
+        )
         if (
             polygon_activation.get("sourceAuthorityAllowed")
             and polygon_activation.get("scoreContributionAllowed")
             and polygon_activation.get("comparisonBasis") == "previous_close"
+            and polygon_observation.observed_at is not None
         ):
             return self._polygon_us_breadth_snapshot(polygon_activation, authority_diagnostic)
 
@@ -7154,23 +7359,30 @@ class MarketOverviewService:
                 "sourceLabel": "Yahoo Finance",
                 "sourceType": "unofficial_proxy",
                 "isFallback": False,
+                "asOf": quote.get("asOf"),
                 **representative_meta,
             })
         if not quote_items:
             return self._fallback_us_breadth_snapshot(authority_diagnostic=authority_diagnostic)
 
         sorted_by_change = sorted(quote_items, key=lambda item: float(item.get("changePercent") or 0), reverse=True)
+        proxy_as_of = authoritative_market_watermark(quote_items).observed_at
+        complete_quote_time = all(
+            extract_authoritative_market_time(item).observed_at is not None
+            for item in quote_items
+        )
+        derived_as_of = proxy_as_of if complete_quote_time else None
         sectors_up = sum(1 for item in quote_items if float(item.get("changePercent") or 0) > 0)
         sectors_down = sum(1 for item in quote_items if float(item.get("changePercent") or 0) < 0)
         strongest = sorted_by_change[0]
         weakest = sorted_by_change[-1]
         items = [
-            self._computed_metric_item("Sectors Up", "SECTORS_UP", sectors_up, "sectors", detail="Sector ETF proxy"),
-            self._computed_metric_item("Sectors Down", "SECTORS_DOWN", sectors_down, "sectors", detail="Sector ETF proxy"),
-            self._computed_metric_item(f"Strongest {strongest['symbol']}", "STRONGEST_SECTOR", strongest["changePercent"], "%", detail=str(strongest["label"])),
-            self._computed_metric_item(f"Weakest {weakest['symbol']}", "WEAKEST_SECTOR", weakest["changePercent"], "%", detail=str(weakest["label"])),
+            {**self._computed_metric_item("Sectors Up", "SECTORS_UP", sectors_up, "sectors", detail="Sector ETF proxy"), "asOf": derived_as_of},
+            {**self._computed_metric_item("Sectors Down", "SECTORS_DOWN", sectors_down, "sectors", detail="Sector ETF proxy"), "asOf": derived_as_of},
+            {**self._computed_metric_item(f"Strongest {strongest['symbol']}", "STRONGEST_SECTOR", strongest["changePercent"], "%", detail=str(strongest["label"])), "asOf": derived_as_of},
+            {**self._computed_metric_item(f"Weakest {weakest['symbol']}", "WEAKEST_SECTOR", weakest["changePercent"], "%", detail=str(weakest["label"])), "asOf": derived_as_of},
         ]
-        items.extend(self._us_relative_pressure_items())
+        items.extend({**item, "asOf": derived_as_of} for item in self._us_relative_pressure_items())
         items.extend(sorted_by_change)
 
         updated_at = _now_iso()
@@ -7179,7 +7391,7 @@ class MarketOverviewService:
             "sourceLabel": "Yahoo Finance",
             "sourceType": "unofficial_proxy",
             "updatedAt": updated_at,
-            "asOf": updated_at,
+            "asOf": proxy_as_of,
             "freshness": "delayed",
             "warning": (
                 "US breadth missing/unavailable: official or authorized breadth "
@@ -7196,7 +7408,7 @@ class MarketOverviewService:
                     **item,
                     **representative_meta,
                     "updatedAt": updated_at,
-                    "asOf": updated_at,
+                    "asOf": item.get("asOf"),
                     "source": item.get("source") or "computed",
                     "sourceLabel": item.get("sourceLabel") or "系统计算",
                     "sourceType": item.get("sourceType") or "unofficial_proxy",
@@ -7237,7 +7449,11 @@ class MarketOverviewService:
         authority_diagnostic: Mapping[str, Any],
     ) -> Dict[str, Any]:
         updated_at = _now_iso()
-        as_of = str(activation.get("asOf") or activation.get("observationDate") or updated_at)
+        as_of = extract_authoritative_market_time(
+            activation,
+            provider_timestamp_fields=("asOf",),
+            provider_effective_date_fields=("observationDate",),
+        ).observed_at
         fulfilled_metrics = list(activation.get("fulfilledMetrics") or [])
         missing_metrics = list(activation.get("missingMetrics") or [])
         reason_codes = list(activation.get("reasonCodes") or [])
@@ -7255,6 +7471,7 @@ class MarketOverviewService:
         score_contribution_allowed = bool(
             activation.get("scoreContributionAllowed")
             and activation.get("comparisonBasis") == "previous_close"
+            and as_of is not None
         )
         source_authority_allowed = bool(activation.get("sourceAuthorityAllowed") and score_contribution_allowed)
         broad_market_claim_allowed = bool(
@@ -7630,12 +7847,12 @@ class MarketOverviewService:
             else {}
         )
         updated_at = radar_payload.get("updatedAt") or radar_payload.get("generatedAt") or _now_iso()
-        as_of = (
-            radar_payload.get("asOf")
-            or quote_provider_metadata.get("asOf")
-            or observed_evidence_metadata.get("asOf")
-            or updated_at
-        )
+        observation = extract_authoritative_market_time(radar_payload)
+        if observation.observed_at is None:
+            observation = extract_authoritative_market_time(quote_provider_metadata)
+        if observation.observed_at is None:
+            observation = extract_authoritative_market_time(observed_evidence_metadata)
+        as_of = observation.observed_at
         payload_source = str(radar_payload.get("source") or "computed")
         payload_source_label = radar_payload.get("sourceLabel") or self._source_label(payload_source)
         payload_freshness = radar_payload.get("freshness")
@@ -7672,6 +7889,7 @@ class MarketOverviewService:
             )
             explanation = self._sector_rotation_theme_explanation(theme)
             trend = self._sector_rotation_theme_trend(theme, rotation_score, relative_strength_pct)
+            theme_as_of = extract_authoritative_market_time(theme).observed_at or as_of
             rotation_state_evidence = (
                 copy.deepcopy(theme.get("rotationStateEvidence"))
                 if isinstance(theme.get("rotationStateEvidence"), dict)
@@ -7681,7 +7899,7 @@ class MarketOverviewService:
                         "market": theme.get("market") or radar_payload.get("market") or "US",
                         "taxonomyVersion": "sector_rotation_taxonomy_v1",
                         "computedAt": theme.get("updatedAt") or updated_at,
-                        "asOf": theme.get("asOf") or as_of,
+                        "asOf": theme_as_of,
                     },
                 )
             )
@@ -7709,7 +7927,7 @@ class MarketOverviewService:
                 "sourceTier": theme.get("sourceTier"),
                 "trustLevel": theme.get("trustLevel"),
                 "updatedAt": theme.get("updatedAt") or updated_at,
-                "asOf": theme.get("asOf") or as_of,
+                "asOf": theme_as_of,
                 "freshness": theme.get("freshness") or payload_freshness,
                 "isFallback": bool(theme.get("isFallback") or payload_is_fallback),
                 "isStale": bool(theme.get("isStale") or payload_is_stale),
@@ -7737,7 +7955,7 @@ class MarketOverviewService:
                 "sourceFreshnessEvidence": {
                     "source": theme.get("source") or payload_source,
                     "sourceLabel": theme.get("sourceLabel") or payload_source_label,
-                    "asOf": theme.get("asOf") or as_of,
+                    "asOf": theme_as_of,
                     "freshness": theme.get("freshness") or payload_freshness,
                     "isFallback": bool(theme.get("isFallback") or payload_is_fallback),
                     "isStale": bool(theme.get("isStale") or payload_is_stale),
@@ -8959,7 +9177,8 @@ class MarketOverviewService:
         as_of: Optional[str] = None,
     ) -> Dict[str, Any]:
         source_id = series_id if ":" in series_id else f"fred:{series_id}"
-        resolved_as_of = as_of or _now_iso()
+        updated_at = _now_iso()
+        resolved_as_of = extract_authoritative_market_time({"asOf": as_of}).observed_at
         source_label = self._official_source_label(source_id)
         item: Dict[str, Any] = {
             "name": label,
@@ -8978,7 +9197,7 @@ class MarketOverviewService:
             "sourceType": "official_public",
             "sourceLabel": source_label,
             "asOf": resolved_as_of,
-            "updatedAt": resolved_as_of,
+            "updatedAt": updated_at,
             "isFallback": False,
             "isUnavailable": True,
             "warning": OFFICIAL_MACRO_UNAVAILABLE_WARNING,
@@ -9117,7 +9336,7 @@ class MarketOverviewService:
                 "sourceLabel": self._source_label("yfinance_proxy"),
                 "sourceType": "unofficial_proxy",
                 "updatedAt": updated_at,
-                "asOf": as_of or updated_at,
+                "asOf": as_of,
                 "isFallback": False,
                 "warning": None,
             })
@@ -9137,7 +9356,7 @@ class MarketOverviewService:
             "sourceLabel": self._source_label("mixed" if partial else "yfinance_proxy"),
             "sourceType": "unofficial_proxy",
             "updatedAt": updated_at,
-            "asOf": min(proxy_as_of_values) if proxy_as_of_values else updated_at,
+            "asOf": min(proxy_as_of_values) if proxy_as_of_values else None,
             "items": merged_items,
             "fallbackUsed": partial,
             "isFallback": False,
@@ -9198,7 +9417,7 @@ class MarketOverviewService:
                 "sourceLabel": self._source_label("yfinance_proxy"),
                 "sourceType": "unofficial_proxy",
                 "updatedAt": updated_at,
-                "asOf": as_of or updated_at,
+                "asOf": as_of,
                 "isFallback": False,
                 "warning": None,
             })
@@ -9218,7 +9437,7 @@ class MarketOverviewService:
             "sourceLabel": self._source_label("mixed" if partial else "yfinance_proxy"),
             "sourceType": "unofficial_proxy",
             "updatedAt": updated_at,
-            "asOf": min(proxy_as_of_values) if proxy_as_of_values else updated_at,
+            "asOf": min(proxy_as_of_values) if proxy_as_of_values else None,
             "items": merged_items,
             "fallbackUsed": False,
             "isFallback": False,
@@ -9260,7 +9479,7 @@ class MarketOverviewService:
             "sourceLabel": "未接入",
             "sourceType": "missing",
             "updatedAt": updated_at,
-            "asOf": updated_at,
+            "asOf": None,
             "freshness": "unavailable",
             "fallbackUsed": True,
             "isFallback": True,
@@ -9343,7 +9562,7 @@ class MarketOverviewService:
             "sourceLabel": "未接入",
             "sourceType": "missing",
             "updatedAt": updated_at,
-            "asOf": updated_at,
+            "asOf": None,
             "freshness": "unavailable",
             "fallbackUsed": True,
             "isFallback": True,
@@ -9386,7 +9605,7 @@ class MarketOverviewService:
         }
         source_freshness_evidence = {
             **source_meta,
-            "asOf": updated_at,
+            "asOf": None,
             "updatedAt": updated_at,
             "cacheOnly": True,
             "externalProviderCalls": False,
@@ -9412,7 +9631,7 @@ class MarketOverviewService:
                         if "CNY" in contract.expected_unit.upper()
                         else "HKD" if "HKD" in contract.expected_unit.upper() else None
                     ),
-                    "asOf": updated_at,
+                    "asOf": None,
                     "updatedAt": updated_at,
                     "reasonCodes": [reason],
                     "sourceFreshnessEvidence": dict(source_freshness_evidence),
@@ -9424,7 +9643,7 @@ class MarketOverviewService:
             "items": items,
             "last_update": updated_at,
             "updatedAt": updated_at,
-            "asOf": updated_at,
+            "asOf": None,
             "fulfilledMetrics": [],
             "missingMetrics": [contract.symbol for contract in list_cn_hk_flow_contracts()],
             "coverageRatio": 0.0,
@@ -9506,7 +9725,7 @@ class MarketOverviewService:
             "source": "fallback",
             "sourceLabel": "备用数据",
             "updatedAt": updated_at,
-            "asOf": updated_at,
+            "asOf": None,
             "fallbackUsed": True,
             "isFallback": True,
             "warning": FALLBACK_WARNING,
@@ -9523,7 +9742,7 @@ class MarketOverviewService:
                     "source": "fallback",
                     "sourceLabel": "备用数据",
                     "updatedAt": updated_at,
-                    "asOf": updated_at,
+                    "asOf": None,
                     "isFallback": True,
                     "warning": FALLBACK_WARNING,
                 }
@@ -9986,6 +10205,27 @@ class MarketOverviewService:
             "sourceType": meta.get("sourceType") or reliability.get("sourceType"),
         }
 
+    def _market_temperature_input_watermark(self, inputs: Mapping[str, Any]) -> Optional[str]:
+        authoritative_inputs: List[Mapping[str, Any]] = []
+        for key in ("indices", "breadth", "flows", "sectors", "rates", "fx", "futures", "sentiment", "crypto"):
+            panel = inputs.get(key)
+            if not isinstance(panel, Mapping):
+                continue
+            items = panel.get("items")
+            candidates = items if isinstance(items, list) and items else [panel]
+            for item in candidates:
+                if not isinstance(item, Mapping):
+                    continue
+                if item.get("sourceAuthorityAllowed") is False or item.get("scoreContributionAllowed") is False:
+                    continue
+                if item.get("excluded") or self._market_temperature_input_confidence(
+                    dict(item),
+                    self._category_for_cache_key(key),
+                ) <= 0:
+                    continue
+                authoritative_inputs.append(item)
+        return authoritative_market_watermark(authoritative_inputs).observed_at
+
     def _guard_market_temperature_score_input(
         self,
         item: Dict[str, Any],
@@ -10005,8 +10245,14 @@ class MarketOverviewService:
         source_authority_reason: Optional[str] = None
         route_rejected_reason_codes: List[str] = []
         score_contribution_allowed = bool(not item.get("excluded") and float(item.get("confidenceWeight") or 0.0) > 0)
+        observation_missing = extract_authoritative_market_time(item).observed_at is None
 
-        if item.get("sourceAuthorityAllowed") is False or item.get("scoreContributionAllowed") is False:
+        if observation_missing:
+            source_authority_allowed = False
+            score_contribution_allowed = False
+            source_authority_reason = MARKET_OVERVIEW_OBSERVATION_METADATA_MISSING_REASON
+            route_rejected_reason_codes = ["observation_metadata_missing"]
+        elif item.get("sourceAuthorityAllowed") is False or item.get("scoreContributionAllowed") is False:
             source_authority_allowed = False
             score_contribution_allowed = False
             source_authority_reason = str(
@@ -10052,7 +10298,7 @@ class MarketOverviewService:
             "routeRejectedReasonCodes": list(dict.fromkeys(route_rejected_reason_codes)),
             "sourceAuthorityRouter": route_snapshot,
         }
-        if source_authority_route_rejected:
+        if source_authority_route_rejected or observation_missing:
             normalized["isReliable"] = False
             normalized["excluded"] = True
             normalized["excludeReason"] = MARKET_TEMPERATURE_SOURCE_AUTHORITY_REJECTED_REASON
@@ -10772,7 +11018,7 @@ class MarketOverviewService:
             "source": "fallback",
             "sourceLabel": "备用数据",
             "updatedAt": updated_at,
-            "asOf": updated_at,
+            "asOf": None,
             "items": [self._mark_static_fallback_item(item, updated_at) for item in items],
             "fallbackUsed": True,
             "isFallback": True,
@@ -10826,7 +11072,7 @@ class MarketOverviewService:
             "source": "unavailable",
             "sourceLabel": "未接入",
             "updatedAt": updated_at,
-            "asOf": updated_at,
+            "asOf": None,
             "freshness": "fallback",
             "isFallback": True,
             "isUnavailable": True,
@@ -10846,7 +11092,7 @@ class MarketOverviewService:
             "source": "fallback",
             "sourceLabel": "备用数据",
             "updatedAt": updated_at,
-            "asOf": updated_at,
+            "asOf": None,
             "isFallback": True,
             "warning": FALLBACK_WARNING,
         }
@@ -10965,7 +11211,7 @@ class MarketOverviewService:
         payload["sourceLabel"] = self._source_label("yfinance")
         payload["sourceType"] = "unofficial_proxy"
         payload["updatedAt"] = updated_at
-        payload["asOf"] = min(as_of_values) if as_of_values else updated_at
+        payload["asOf"] = min(as_of_values) if as_of_values else None
         payload["fallbackUsed"] = any(bool(item.get("isFallback") or item.get("isUnavailable")) for item in items)
         if payload["fallbackUsed"]:
             payload["warning"] = "部分 Yahoo Finance 行情暂不可用"
@@ -10998,7 +11244,7 @@ class MarketOverviewService:
                 "sourceLabel": self._source_label("yfinance"),
                 "sourceType": "unofficial_proxy",
                 "updatedAt": updated_at,
-                "asOf": quote.get("asOf") or updated_at,
+                "asOf": quote.get("asOf"),
             })
         return items
 
@@ -11023,7 +11269,7 @@ class MarketOverviewService:
             "sourceLabel": self._source_label("yfinance_proxy"),
             "sourceType": "unofficial_proxy",
             "updatedAt": updated_at,
-            "asOf": quote.get("asOf") or updated_at,
+            "asOf": quote.get("asOf"),
             "proxyFor": symbol,
             "proxySymbol": "SPY",
             "proxyLabel": label,
@@ -11051,7 +11297,7 @@ class MarketOverviewService:
             "sourceLabel": self._source_label("yfinance"),
             "sourceType": "unofficial_proxy",
             "updatedAt": updated_at,
-            "asOf": updated_at,
+            "asOf": None,
             "freshness": "unavailable",
             "isUnavailable": True,
             "isFallback": False,
@@ -11161,7 +11407,7 @@ class MarketOverviewService:
             "panel_name": panel_name,
             "last_refresh_at": updated_at,
             "updatedAt": updated_at,
-            "asOf": updated_at,
+            "asOf": None,
             "status": "failure",
             "error_message": error_message,
             "warning": FALLBACK_WARNING,
@@ -11237,7 +11483,7 @@ class MarketOverviewService:
                 "source": "fallback",
                 "sourceLabel": self._source_label("fallback"),
                 "updatedAt": updated_at,
-                "asOf": updated_at,
+                "asOf": None,
                 "freshness": "fallback",
                 "isFallback": True,
                 "warning": FALLBACK_WARNING,

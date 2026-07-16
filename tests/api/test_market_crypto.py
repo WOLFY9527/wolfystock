@@ -138,7 +138,7 @@ class MarketCryptoApiTestCase(unittest.TestCase):
         self.assertLess(elapsed, 0.5)
         self.assertTrue(payload["items"])
         self.assertEqual(payload["freshness"], "unavailable")
-        self.assertFalse(payload["isFallback"])
+        self.assertTrue(payload["isFallback"])
         self.assertTrue(payload["fallbackUsed"])
         self.assertTrue(payload["isUnavailable"])
         self.assertTrue(payload["isRefreshing"])
@@ -178,8 +178,9 @@ class MarketCryptoApiTestCase(unittest.TestCase):
         service._market_cache.set(
             "crypto",
             {
-                "items": [{"symbol": "BTC", "price": 70000, "change": 1, "trend": [69000, 70000], "source": "binance", "last_update": old_time}],
+                "items": [{"symbol": "BTC", "price": 70000, "change": 1, "trend": [69000, 70000], "source": "binance", "last_update": old_time, "asOf": old_time}],
                 "last_update": old_time,
+                "asOf": old_time,
                 "source": "binance",
                 "fallback_used": False,
             },
@@ -192,8 +193,9 @@ class MarketCryptoApiTestCase(unittest.TestCase):
         def fetcher() -> dict:
             release_refresh.wait(2)
             return {
-                "items": [{"symbol": "BTC", "price": 72000, "change": 2, "trend": [70000, 72000], "source": "binance", "last_update": new_time}],
+                "items": [{"symbol": "BTC", "price": 72000, "change": 2, "trend": [70000, 72000], "source": "binance", "last_update": new_time, "asOf": new_time}],
                 "last_update": new_time,
+                "asOf": new_time,
                 "source": "binance",
                 "fallback_used": False,
             }
@@ -226,7 +228,7 @@ class MarketCryptoApiTestCase(unittest.TestCase):
         symbols = {item["symbol"] for item in payload["items"]}
         self.assertTrue({"BTC", "ETH", "BNB"}.issubset(symbols))
         self.assertEqual(payload["freshness"], "unavailable")
-        self.assertFalse(payload["isFallback"])
+        self.assertTrue(payload["isFallback"])
         self.assertTrue(payload["fallbackUsed"])
         self.assertTrue(payload["isUnavailable"])
         self.assertNotEqual(payload["freshness"], "live")
@@ -361,17 +363,18 @@ class MarketCryptoApiTestCase(unittest.TestCase):
 
     def test_get_crypto_service_owns_public_payload_after_binance_transport_calls(self) -> None:
         service = MarketOverviewService()
+        event_time = int(datetime.now(timezone.utc).timestamp() * 1000)
         ticker_rows = [
-            {"symbol": "BTCUSDT", "lastPrice": "70000", "priceChangePercent": "1.2", "quoteVolume": "2200000000", "highPrice": "71000", "lowPrice": "69000"},
-            {"symbol": "ETHUSDT", "lastPrice": "3500", "priceChangePercent": "0.4", "quoteVolume": "1200000000", "highPrice": "3550", "lowPrice": "3400"},
-            {"symbol": "SOLUSDT", "lastPrice": "155", "priceChangePercent": "2.4", "quoteVolume": "700000000", "highPrice": "160", "lowPrice": "150"},
-            {"symbol": "BNBUSDT", "lastPrice": "610", "priceChangePercent": "-0.2", "quoteVolume": "320000000", "highPrice": "618", "lowPrice": "604"},
+            {"symbol": "BTCUSDT", "lastPrice": "70000", "priceChangePercent": "1.2", "quoteVolume": "2200000000", "highPrice": "71000", "lowPrice": "69000", "closeTime": event_time},
+            {"symbol": "ETHUSDT", "lastPrice": "3500", "priceChangePercent": "0.4", "quoteVolume": "1200000000", "highPrice": "3550", "lowPrice": "3400", "closeTime": event_time},
+            {"symbol": "SOLUSDT", "lastPrice": "155", "priceChangePercent": "2.4", "quoteVolume": "700000000", "highPrice": "160", "lowPrice": "150", "closeTime": event_time},
+            {"symbol": "BNBUSDT", "lastPrice": "610", "priceChangePercent": "-0.2", "quoteVolume": "320000000", "highPrice": "618", "lowPrice": "604", "closeTime": event_time},
         ]
         funding_rows = {
-            "BTCUSDT": {"lastFundingRate": "0.00012"},
-            "ETHUSDT": {"lastFundingRate": "0.00008"},
-            "SOLUSDT": {"lastFundingRate": "-0.00005"},
-            "BNBUSDT": {"lastFundingRate": "0.00003"},
+            "BTCUSDT": {"lastFundingRate": "0.00012", "time": event_time},
+            "ETHUSDT": {"lastFundingRate": "0.00008", "time": event_time},
+            "SOLUSDT": {"lastFundingRate": "-0.00005", "time": event_time},
+            "BNBUSDT": {"lastFundingRate": "0.00003", "time": event_time},
         }
 
         def history_rows(symbol: str) -> list[list[str]]:

@@ -92,7 +92,7 @@ class MarketPersistenceSnapshotDTO:
 
     @property
     def effective_timestamp(self) -> datetime | None:
-        return _parse_datetime(self.as_of) or _parse_datetime(self.snapshot_created_at)
+        return _parse_datetime(self.as_of)
 
     @property
     def created_timestamp(self) -> datetime | None:
@@ -100,6 +100,8 @@ class MarketPersistenceSnapshotDTO:
 
     @property
     def is_excluded_from_trend_authority(self) -> bool:
+        if self.effective_timestamp is None:
+            return True
         if self.observation_only or not self.score_contribution_allowed:
             return True
         if self.is_fallback or self.is_unavailable or self.taxonomy_only:
@@ -409,7 +411,7 @@ def _is_better_window_candidate(
 
 
 def _bucket_key(snapshot: MarketPersistenceSnapshotDTO) -> str:
-    timestamp = snapshot.as_of or snapshot.snapshot_created_at
+    timestamp = snapshot.as_of or "missing-observation"
     return f"{snapshot.surface}|{snapshot.metric_key}|{timestamp}"
 
 

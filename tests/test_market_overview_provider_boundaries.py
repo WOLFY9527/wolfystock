@@ -365,6 +365,10 @@ def test_market_overview_tickflow_source_contract_stays_explicit_public_provider
     assert '_TICKFLOW_SOURCE = "tickflow"' in source_text
     assert '_TICKFLOW_SOURCE_LABEL = "TickFlow"' in source_text
     assert '_TICKFLOW_SOURCE_TYPE = "public_api"' in source_text
+    assert '"providerTimestampAvailable": False' in source_text
+    assert '"asOf": None' in source_text
+    assert '"attemptedAt": attempted_at' in source_text
+    assert '"updatedAt": received_at' in source_text
     assert provenance["sourceType"] == "public_proxy"
     assert provenance["sourceLabel"] == "TickFlow"
     assert provenance["sourceType"] != "cache_snapshot"

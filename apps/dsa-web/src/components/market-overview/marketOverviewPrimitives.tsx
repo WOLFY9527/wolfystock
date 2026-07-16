@@ -279,9 +279,10 @@ function metaText(meta?: Partial<MarketDataMeta>): string[] {
 }
 
 function compactMetaText(meta?: Partial<MarketDataMeta>): string {
-  return formatMarketOverviewTimestamp(meta?.asOf)
-    || formatMarketOverviewTimestamp(meta?.updatedAt)
-    || '';
+  const asOf = formatMarketOverviewTimestamp(meta?.asOf);
+  if (asOf) return asOf;
+  const updatedAt = formatMarketOverviewTimestamp(meta?.updatedAt);
+  return updatedAt ? `Update ${updatedAt}` : '';
 }
 
 function sortableTimestamp(value?: string | null): { time: number; label: string } | null {
@@ -299,7 +300,7 @@ function sortableTimestamp(value?: string | null): { time: number; label: string
 
 function evidenceTimestampWindow(panel?: MarketOverviewPanel, language: 'zh' | 'en' = 'zh'): string {
   const timestamps = (panel?.items || [])
-    .map((item) => sortableTimestamp(item.asOf || item.updatedAt))
+    .map((item) => sortableTimestamp(item.asOf))
     .filter((item): item is { time: number; label: string } => Boolean(item))
     .sort((left, right) => left.time - right.time);
   const uniqueLabels = Array.from(new Set(timestamps.map((item) => item.label)));

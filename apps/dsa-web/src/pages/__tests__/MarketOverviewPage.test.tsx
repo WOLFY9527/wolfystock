@@ -4204,6 +4204,29 @@ describe('MarketOverviewPage', () => {
     expect(await screen.findByText('已复制摘要')).toBeInTheDocument();
   });
 
+  it('does not use update or local snapshot time as evidence observation time', async () => {
+    vi.mocked(marketApi.getTemperature).mockResolvedValueOnce({
+      ...temperaturePayload(),
+      asOf: undefined,
+      updatedAt: '2026-07-16T10:00:00+08:00',
+    });
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce({
+      ...briefingPayload(),
+      asOf: undefined,
+      updatedAt: '2026-07-16T10:01:00+08:00',
+    });
+
+    render(createElement(MarketOverviewPage));
+
+    const exportButton = await screen.findByTestId('market-overview-export-summary');
+    fireEvent.click(exportButton);
+    await waitFor(() => expect(writeTextMock).toHaveBeenCalledTimes(1));
+    const copiedText = String(writeTextMock.mock.calls[0]?.[0] || '');
+    expect(copiedText).not.toContain('2026-07-16T10:00:00+08:00');
+    expect(copiedText).not.toContain('2026-07-16T10:01:00+08:00');
+    expect(copiedText).not.toContain('2026-05-04T10:15:00.000Z');
+  });
+
   it('shows a clear failure state when evidence snapshot copy fails', async () => {
     writeTextMock.mockRejectedValueOnce(new Error('clipboard denied'));
 
@@ -5419,6 +5442,46 @@ describe('MarketOverviewPage', () => {
     );
 
     expect(screen.getByTestId('market-overview-footer-meta')).toHaveTextContent('时间窗口 2026-04-29 09:30:00 - 2026-04-29 10:15:00');
+  });
+
+  it('ignores update-only rows when building the evidence observation window', () => {
+    render(
+      <UiLanguageProvider>
+        <MarketOverviewPanelFooter
+          panel={{
+            panelName: 'MixedFamilyPanel',
+            lastRefreshAt: '2026-04-29T11:00:00+08:00',
+            status: 'partial',
+            updatedAt: '2026-04-29T11:00:00+08:00',
+            asOf: '2026-04-29T10:15:00+08:00',
+            freshness: 'cached',
+            items: [
+              {
+                symbol: 'VIX',
+                label: 'VIX',
+                updatedAt: '2026-04-29T09:35:00+08:00',
+                asOf: '2026-04-29T09:30:00+08:00',
+              },
+              {
+                symbol: 'DXY',
+                label: 'DXY',
+                updatedAt: '2026-04-29T10:45:00+08:00',
+              },
+              {
+                symbol: 'US10Y',
+                label: 'US 10Y',
+                updatedAt: '2026-04-29T10:20:00+08:00',
+                asOf: '2026-04-29T10:15:00+08:00',
+              },
+            ],
+          }}
+        />
+      </UiLanguageProvider>,
+    );
+
+    const footer = screen.getByTestId('market-overview-footer-meta');
+    expect(footer).toHaveTextContent('时间窗口 2026-04-29 09:30:00 - 2026-04-29 10:15:00');
+    expect(footer).not.toHaveTextContent('10:45:00');
   });
 
   it('shows stale card data as expired data', async () => {

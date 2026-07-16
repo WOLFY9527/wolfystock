@@ -243,7 +243,8 @@ class MarketProviderOperationsService:
             "ttlSeconds": int(SUMMARY_CACHE_TTL_SECONDS),
             "key": key,
             "hit": hit,
-            "asOf": generated_at.isoformat(timespec="seconds"),
+            "asOf": None,
+            "cachedAt": generated_at.isoformat(timespec="seconds"),
             "cacheAgeMs": max(0, int((now_monotonic - stored_at_monotonic) * 1000)),
         }
 
@@ -342,14 +343,14 @@ class MarketProviderOperationsService:
         is_from_snapshot = bool(payload.get("isFromSnapshot") or (entry is None and snapshot))
         status = self._status(provider_health, payload, entry, freshness, is_fallback, is_stale, is_refreshing, is_from_snapshot)
         last_successful = self._safe_public_text(payload.get("lastSuccessfulAt") or payload.get("asOf") or (snapshot.get("as_of") if isinstance(snapshot, dict) else None))
-        as_of = self._safe_public_text(payload.get("asOf") or payload.get("last_update") or (snapshot.get("as_of") if isinstance(snapshot, dict) else None))
+        as_of = self._safe_public_text(payload.get("asOf") or (snapshot.get("as_of") if isinstance(snapshot, dict) else None))
         updated_at = self._safe_public_text(payload.get("updatedAt") or payload.get("last_update") or payload.get("last_refresh_at") or (snapshot.get("updated_at") if isinstance(snapshot, dict) else None))
-        last_successful_time = self._parse_time(last_successful or as_of or updated_at)
+        observation_time = self._parse_time(as_of)
         trust_evidence = self._trust_evidence_snapshot(
             panel=panel,
             payload=payload,
             generated_at=now,
-            as_of=last_successful_time,
+            as_of=observation_time,
             status=status,
             freshness=freshness,
             source=source,
@@ -371,7 +372,7 @@ class MarketProviderOperationsService:
             "asOf": as_of,
             "updatedAt": updated_at,
             "lastSuccessfulAt": last_successful,
-            "lastKnownGoodAgeMinutes": self._age_minutes(last_successful_time, now),
+            "lastKnownGoodAgeMinutes": self._age_minutes(observation_time, now),
             "latencyMs": self._number_or_none(provider_health.get("latencyMs") or payload.get("latencyMs")),
             "isFallback": is_fallback,
             "isStale": is_stale,

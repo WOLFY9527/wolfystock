@@ -11,6 +11,7 @@ import pytest
 
 from src.services.market_cache import market_cache
 from src.services.market_overview_service import MarketOverviewService
+from src.services.market_persistence_snapshot_store import normalize_persistence_snapshot
 from src.storage import DatabaseManager
 
 
@@ -320,7 +321,7 @@ def test_snapshot_reload_preserves_proxy_fallback_and_stale_semantics(
 
     assert loaded is not None
     assert loaded["snapshotId"] == f"indices:{source}"
-    assert loaded["asOf"] == observed_at
+    assert loaded["asOf"] == (None if source == "fallback" else observed_at)
     assert loaded["freshness"] == expected_freshness
     assert loaded["isStale"] is expected_stale
     assert loaded["items"][0]["freshness"] == expected_freshness
@@ -363,3 +364,19 @@ def test_missing_observation_time_round_trip_does_not_fabricate_as_of() -> None:
     assert loaded["items"][0].get("asOf") is None
     assert loaded["items"][0]["freshness"] == "stale"
     assert receipt_time not in {loaded.get("asOf"), loaded["items"][0].get("asOf")}
+
+    trend_snapshot = normalize_persistence_snapshot(
+        {
+            "surface": "market_overview",
+            "metricKey": "000001.SH",
+            "source": "sina",
+            "sourceType": "public_api",
+            "sourceTier": "public_api",
+            "freshness": "live",
+            "asOf": None,
+            "updatedAt": receipt_time,
+            "snapshotCreatedAt": receipt_time,
+        }
+    )
+    assert trend_snapshot.effective_timestamp is None
+    assert trend_snapshot.score_grade_eligible is False

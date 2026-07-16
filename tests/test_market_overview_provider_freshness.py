@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib
 from datetime import datetime, timedelta, timezone
 
 from api.deps import CurrentUser
@@ -127,6 +128,61 @@ def test_freshness_helper_normalizes_core_states_without_silent_upgrade() -> Non
     assert unavailable["isFallback"] is False
     assert proxy["freshness"] == "delayed"
     assert proxy["isProxy"] is True
+
+    observation_time = importlib.import_module("src.services.market_observation_time")
+    missing = observation_time.extract_authoritative_market_time(
+        {
+            "updatedAt": now.isoformat(),
+            "attemptedAt": now.isoformat(),
+            "receivedAt": now.isoformat(),
+            "generatedAt": now.isoformat(),
+            "cachedAt": now.isoformat(),
+            "persistedAt": now.isoformat(),
+        }
+    )
+    observed = observation_time.extract_authoritative_market_time(
+        {"observedAt": "2026-05-06T09:30:00+08:00"}
+    )
+    effective = observation_time.extract_authoritative_market_time(
+        {"observationDate": "2026-05-05"}
+    )
+    assert missing == (None, "missing")
+    assert observed == ("2026-05-06T09:30:00+08:00", "provider_timestamp")
+    assert effective == ("2026-05-05", "provider_effective_date")
+
+    service = MarketOverviewService()
+    panel = service._with_market_meta(
+        {
+            "source": "binance",
+            "sourceType": "exchange_public",
+            "updatedAt": now.isoformat(),
+            "items": [],
+        },
+        "crypto",
+    )
+    item = service._with_item_meta(
+        {
+            "symbol": "BTC",
+            "value": 100.0,
+            "source": "binance",
+            "sourceType": "exchange_public",
+            "updatedAt": now.isoformat(),
+        },
+        "crypto",
+        {**panel, "asOf": "2026-05-06T09:30:00+08:00"},
+    )
+    evidence = service._build_evidence_snapshot(panel, "crypto")
+    assert panel["updatedAt"] == now.isoformat()
+    assert panel["asOf"] is None
+    assert panel["freshness"] == "unavailable"
+    assert panel["providerFreshness"]["available"] is False
+    assert item["asOf"] is None
+    assert item["freshness"] == "unavailable"
+    assert item["sourceAuthorityAllowed"] is False
+    assert item["scoreContributionAllowed"] is False
+    assert evidence["asOf"] is None
+    assert service._sina_as_of("", "") is None
+    assert service._sina_as_of("not-a-date", "not-a-time") is None
 
 
 def test_market_meta_projects_consumer_safe_freshness_summary_and_specific_reason() -> None:
@@ -273,12 +329,16 @@ def test_crypto_fallback_contains_no_static_prices_or_fake_changes() -> None:
     assert payload["freshness"] == "unavailable"
     assert payload["isUnavailable"] is True
     assert payload["providerFreshness"]["state"] == "unavailable"
+    assert payload["updatedAt"]
+    assert payload["asOf"] is None
     for item in payload["items"]:
         assert item["source"] == "unavailable"
         assert item["sourceFreshnessEvidence"]["freshness"] == "unavailable"
         assert item["value"] is None
         assert item["price"] is None
         assert item["trend"] == []
+        assert item["updatedAt"]
+        assert item["asOf"] is None
 
 
 def test_cn_hk_flow_fallback_contains_no_static_flow_values_or_score_authority() -> None:
@@ -294,6 +354,8 @@ def test_cn_hk_flow_fallback_contains_no_static_flow_values_or_score_authority()
     assert payload["sourceAuthorityState"] == "unavailable"
     assert payload["scoreContributionAllowed"] is False
     assert payload["scoreAuthorityEligible"] is False
+    assert payload["updatedAt"]
+    assert payload["asOf"] is None
     for item in payload["items"]:
         assert item["source"] == "unavailable"
         assert item["sourceClass"] == "disabled_live_stub"
@@ -305,3 +367,5 @@ def test_cn_hk_flow_fallback_contains_no_static_flow_values_or_score_authority()
         assert item["changePercent"] is None
         assert item["sourceAuthorityAllowed"] is False
         assert item["scoreAuthorityEligible"] is False
+        assert item["updatedAt"]
+        assert item["asOf"] is None

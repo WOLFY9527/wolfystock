@@ -573,6 +573,10 @@ def test_sector_rotation_projection_preserves_authority_and_ranking_metadata() -
     )
 
     item = payload["items"][0]
+    assert payload["asOf"] == "2026-05-20T10:00:00+08:00"
+    assert payload["radarSnapshot"]["asOf"] == "2026-05-20T10:00:00+08:00"
+    assert item["asOf"] == "2026-05-20T10:00:00+08:00"
+    assert item["sourceFreshnessEvidence"]["asOf"] == "2026-05-20T10:00:00+08:00"
     assert item["sourceAuthorityAllowed"] is True
     assert item["sourceAuthorityReason"] is None
     assert item["scoreContributionAllowed"] is True

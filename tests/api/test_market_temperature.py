@@ -1939,21 +1939,22 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
 
     def test_official_public_inputs_count_as_reliable_temperature_sources(self) -> None:
         service = MarketOverviewService()
+        as_of = datetime.now(timezone.utc).isoformat(timespec="seconds")
         inputs = {
             "futures": {
                 "items": [
-                    {"symbol": "ES", "value": 5238, "changePercent": 0.2, "source": "yahoo", "freshness": "delayed", "isFallback": False},
-                    {"symbol": "NQ", "value": 18320, "changePercent": 0.4, "source": "yahoo", "freshness": "delayed", "isFallback": False},
+                    {"symbol": "ES", "value": 5238, "changePercent": 0.2, "source": "yahoo", "freshness": "delayed", "isFallback": False, "asOf": as_of},
+                    {"symbol": "NQ", "value": 18320, "changePercent": 0.4, "source": "yahoo", "freshness": "delayed", "isFallback": False, "asOf": as_of},
                 ]
             },
-            "sentiment": {"items": [{"symbol": "FGI", "value": 70, "source": "cnn", "freshness": "cached", "isFallback": False}]},
+            "sentiment": {"items": [{"symbol": "FGI", "value": 70, "source": "cnn", "freshness": "cached", "isFallback": False, "asOf": as_of}]},
             "rates": {
                 "items": [
-                    {"symbol": "US10Y", "value": 4.41, "changePercent": -0.9, "source": "treasury", "sourceType": "official_public", "freshness": "cached", "isFallback": False},
-                    {"symbol": "VIX", "value": 18.22, "changePercent": -4.66, "source": "fred", "sourceType": "official_public", "freshness": "cached", "isFallback": False},
+                    {"symbol": "US10Y", "value": 4.41, "changePercent": -0.9, "source": "treasury", "sourceType": "official_public", "freshness": "cached", "isFallback": False, "asOf": as_of},
+                    {"symbol": "VIX", "value": 18.22, "changePercent": -4.66, "source": "fred", "sourceType": "official_public", "freshness": "cached", "isFallback": False, "asOf": as_of},
                 ]
             },
-            "fx": {"items": [{"symbol": "DXY", "value": 104.2, "changePercent": -0.3, "source": "yahoo", "freshness": "delayed", "isFallback": False}]},
+            "fx": {"items": [{"symbol": "DXY", "value": 104.2, "changePercent": -0.3, "source": "yahoo", "freshness": "delayed", "isFallback": False, "asOf": as_of}]},
         }
 
         with patch.object(service, "_build_market_temperature_inputs", return_value=inputs):

@@ -247,3 +247,6 @@ def test_market_provider_operations_unknown_source_label_stays_empty() -> None:
 
     item = next(item for item in payload["items"] if item["cacheKey"] == "indices")
     assert item["sourceLabel"] is None
+    assert item["updatedAt"] == "2026-05-24T10:00:00+08:00"
+    assert item["asOf"] is None
+    assert item["lastKnownGoodAgeMinutes"] is None

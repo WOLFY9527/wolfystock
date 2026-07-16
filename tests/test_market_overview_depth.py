@@ -111,6 +111,7 @@ def _fresh_official_macro_dates() -> tuple[str, str]:
 
 def test_us_breadth_sector_proxy_returns_stable_shape_with_metadata() -> None:
     service = MarketOverviewService()
+    observed_at = datetime.now(ZoneInfo("America/New_York")).isoformat(timespec="seconds")
     quotes = {
         "XLK": {"value": 220.0, "change_pct": 1.8, "trend": [216.0, 220.0], "volume": 10_000_000},
         "XLF": {"value": 44.0, "change_pct": -0.4, "trend": [44.2, 44.0], "volume": 8_000_000},
@@ -120,6 +121,7 @@ def test_us_breadth_sector_proxy_returns_stable_shape_with_metadata() -> None:
         "QQQ": {"value": 460.0, "change_pct": 1.1, "trend": [454.0, 460.0], "volume": 45_000_000},
         "IWM": {"value": 210.0, "change_pct": -0.3, "trend": [211.0, 210.0], "volume": 22_000_000},
     }
+    quotes = {symbol: {**quote, "asOf": observed_at} for symbol, quote in quotes.items()}
 
     with (
         patch("src.services.market_overview_service.run_polygon_us_breadth_activation", return_value=_missing_us_breadth_activation()),
@@ -247,6 +249,7 @@ def test_us_breadth_configured_polygon_unavailable_preserves_provider_reason() -
     assert payload["sourceAuthorityReason"] == "polygon_unauthorized"
     assert payload["degradationReason"] == "polygon_unauthorized"
     assert payload["routeRejectedReasonCodes"] == ["polygon_unauthorized"]
+    assert payload["asOf"] is None
 
 
 def test_us_funds_flow_quote_proxy_is_labeled_as_proxy_and_non_authoritative() -> None:
@@ -278,6 +281,7 @@ def test_us_funds_flow_quote_proxy_is_labeled_as_proxy_and_non_authoritative() -
 
 def test_market_refresh_failure_serves_stale_snapshot_with_provider_health() -> None:
     service = MarketOverviewService()
+    observed_at = datetime.now(ZoneInfo("America/New_York")).isoformat(timespec="seconds")
     quotes = {
         "XLK": {"value": 220.0, "change_pct": 1.8, "trend": [216.0, 220.0], "volume": 10_000_000},
         "XLF": {"value": 44.0, "change_pct": -0.4, "trend": [44.2, 44.0], "volume": 8_000_000},
@@ -286,6 +290,7 @@ def test_market_refresh_failure_serves_stale_snapshot_with_provider_health() -> 
         "QQQ": {"value": 460.0, "change_pct": 1.1, "trend": [454.0, 460.0], "volume": 45_000_000},
         "IWM": {"value": 210.0, "change_pct": -0.3, "trend": [211.0, 210.0], "volume": 22_000_000},
     }
+    quotes = {symbol: {**quote, "asOf": observed_at} for symbol, quote in quotes.items()}
 
     with (
         patch("src.services.market_overview_service.run_polygon_us_breadth_activation", return_value=_missing_us_breadth_activation()),
@@ -443,18 +448,20 @@ def test_us_breadth_reuses_shared_yfinance_quotes_within_public_request() -> Non
 
 def test_crypto_snapshot_includes_sol_and_funding_when_binance_public_data_available() -> None:
     service = MarketOverviewService()
+    ticker_time = 1768435200000
+    funding_time = 1768435260000
 
     ticker_rows = [
-        {"symbol": "BTCUSDT", "lastPrice": "70000", "priceChangePercent": "1.2", "quoteVolume": "2200000000", "highPrice": "71000", "lowPrice": "69000"},
-        {"symbol": "ETHUSDT", "lastPrice": "3500", "priceChangePercent": "0.4", "quoteVolume": "1200000000", "highPrice": "3550", "lowPrice": "3400"},
-        {"symbol": "SOLUSDT", "lastPrice": "155", "priceChangePercent": "2.4", "quoteVolume": "700000000", "highPrice": "160", "lowPrice": "150"},
-        {"symbol": "BNBUSDT", "lastPrice": "610", "priceChangePercent": "-0.2", "quoteVolume": "320000000", "highPrice": "618", "lowPrice": "604"},
+        {"symbol": "BTCUSDT", "lastPrice": "70000", "priceChangePercent": "1.2", "quoteVolume": "2200000000", "highPrice": "71000", "lowPrice": "69000", "closeTime": ticker_time},
+        {"symbol": "ETHUSDT", "lastPrice": "3500", "priceChangePercent": "0.4", "quoteVolume": "1200000000", "highPrice": "3550", "lowPrice": "3400", "closeTime": ticker_time},
+        {"symbol": "SOLUSDT", "lastPrice": "155", "priceChangePercent": "2.4", "quoteVolume": "700000000", "highPrice": "160", "lowPrice": "150", "closeTime": ticker_time},
+        {"symbol": "BNBUSDT", "lastPrice": "610", "priceChangePercent": "-0.2", "quoteVolume": "320000000", "highPrice": "618", "lowPrice": "604", "closeTime": ticker_time},
     ]
     funding_rows = {
-        "BTCUSDT": {"lastFundingRate": "0.00012", "nextFundingTime": 1770000000000},
-        "ETHUSDT": {"lastFundingRate": "0.00008", "nextFundingTime": 1770000000000},
-        "SOLUSDT": {"lastFundingRate": "-0.00005", "nextFundingTime": 1770000000000},
-        "BNBUSDT": {"lastFundingRate": "0.00003", "nextFundingTime": 1770000000000},
+        "BTCUSDT": {"lastFundingRate": "0.00012", "time": funding_time},
+        "ETHUSDT": {"lastFundingRate": "0.00008", "time": funding_time},
+        "SOLUSDT": {"lastFundingRate": "-0.00005", "time": funding_time},
+        "BNBUSDT": {"lastFundingRate": "0.00003", "time": funding_time},
     }
 
     with (
@@ -469,6 +476,11 @@ def test_crypto_snapshot_includes_sol_and_funding_when_binance_public_data_avail
     assert payload["source"] == "binance"
     assert payload["items"][0]["source"] == "binance"
     assert any("Quote volume" in detail for item in payload["items"] for detail in item.get("hover_details", []))
+    expected_ticker_time = datetime.fromtimestamp(ticker_time / 1000, ZoneInfo("UTC")).isoformat()
+    expected_funding_time = datetime.fromtimestamp(funding_time / 1000, ZoneInfo("UTC")).isoformat()
+    assert payload["asOf"] == expected_ticker_time
+    assert next(item for item in payload["items"] if item["symbol"] == "BTC")["asOf"] == expected_ticker_time
+    assert next(item for item in payload["items"] if item["symbol"] == "BTC_FUNDING")["asOf"] == expected_funding_time
 
 
 def test_crypto_snapshot_fetches_kline_histories_with_bounded_parallelism() -> None:
@@ -568,6 +580,12 @@ def test_crypto_snapshot_marks_missing_funding_as_temporarily_unavailable() -> N
     assert {item["symbol"] for item in funding_items} == {"BTC_FUNDING", "ETH_FUNDING", "SOL_FUNDING", "BNB_FUNDING"}
     assert all(item["source"] == "unavailable" for item in funding_items)
     assert all(item["freshness"] == "fallback" for item in funding_items)
+    normalized_panel = service._with_market_meta(payload, "crypto")
+    btc = service._with_item_meta(payload["items"][0], "crypto", normalized_panel)
+    assert normalized_panel["asOf"] is None
+    assert btc["asOf"] is None
+    assert btc["freshness"] == "unavailable"
+    assert btc["scoreContributionAllowed"] is False
 
 
 def test_crypto_depth_fallback_marks_liquidity_and_dominance_unavailable() -> None:

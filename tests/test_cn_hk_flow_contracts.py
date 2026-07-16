@@ -205,6 +205,16 @@ def test_authorized_cn_hk_connect_flow_snapshot_projects_diagnostic_contract() -
     assert northbound["proxyIdentity"] is None
     assert northbound["sourceConfidence"] == "limited"
 
+    update_only = _authorized_provider_payload(as_of=as_of)
+    update_only.pop("asOf")
+    update_only["updatedAt"] = as_of
+    with pytest.raises(CnHkFlowProviderUnavailable, match="malformed_payload"):
+        build_authorized_cn_hk_connect_flow_snapshot(update_only, now=now)
+
+    malformed_time = _authorized_provider_payload(as_of="not-a-market-time")
+    with pytest.raises(CnHkFlowProviderUnavailable, match="malformed_payload"):
+        build_authorized_cn_hk_connect_flow_snapshot(malformed_time, now=now)
+
 
 @pytest.mark.parametrize(
     ("payload", "expected_reason"),

@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
+from src.services.market_observation_time import normalize_authoritative_market_time
 from src.services.provider_unavailable_reason_buckets import (
     NO_PROVIDER_SELECTION_REASON_BUCKET_RULES,
     explicit_unavailable_reason_bucket,
@@ -290,10 +291,13 @@ def parse_mocked_cn_hk_flow_payload(payload: Any) -> tuple[ParsedCnHkFlowObserva
         unit = _text(raw_item.get("unit"))
         if unit and unit != contract.expected_unit:
             return build_unavailable_cn_hk_flow_observations("malformed_payload", as_of=as_of)
+        item_as_of = as_of or _extract_as_of(raw_item)
+        if item_as_of is None:
+            return build_unavailable_cn_hk_flow_observations("malformed_payload", as_of=None)
         parsed[symbol] = ParsedCnHkFlowObservation(
             symbol=symbol,
             value=value,
-            as_of=as_of or _extract_as_of(raw_item),
+            as_of=item_as_of,
             is_evidence=True,
         )
 
@@ -595,9 +599,9 @@ def _safe_reason_bucket(value: Any) -> str:
 def _extract_as_of(payload: Any) -> str | None:
     if not isinstance(payload, Mapping):
         return None
-    for key in ("as_of", "asOf", "updated_at", "updatedAt"):
+    for key in ("observed_at", "observedAt", "as_of", "asOf", "observationDate"):
         value = _text(payload.get(key))
-        if value:
+        if value and normalize_authoritative_market_time(value) is not None:
             return value
     return None
 

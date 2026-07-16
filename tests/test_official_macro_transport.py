@@ -717,6 +717,23 @@ def test_usd_pressure_live_smoke_fails_closed_on_malformed_observation_date() ->
     assert summary["maxAcceptedBusinessLagDays"] == 7
     assert "seriesLagDays" not in summary
 
+    missing_time = official_macro_transport._official_macro_smoke_freshness_status(
+        "UNPOLICIED",
+        official_macro_transport.MacroObservation(
+            symbol="UNPOLICIED",
+            value=1.0,
+            date=None,
+            as_of=None,
+            source_id="fred:UNPOLICIED",
+            source_type="official_public",
+            freshness_hint="daily",
+        ),
+        now=now,
+    )
+    assert missing_time["freshness"] == "unavailable"
+    assert missing_time["isUnavailable"] is True
+    assert missing_time["delayMinutes"] is None
+
 
 def test_usd_pressure_live_smoke_fails_closed_on_invalid_source_metadata() -> None:
     now = datetime(2026, 5, 22, 12, 0, tzinfo=timezone.utc)

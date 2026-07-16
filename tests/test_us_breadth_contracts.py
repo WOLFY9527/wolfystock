@@ -136,7 +136,8 @@ def test_get_us_breadth_contract_is_case_insensitive() -> None:
 
 
 def test_parse_mocked_us_breadth_fixture_returns_complete_contract_set() -> None:
-    observations = parse_mocked_us_breadth_payload(_load_json_fixture("valid_exchange_breadth_snapshot.json"))
+    fixture = _load_json_fixture("valid_exchange_breadth_snapshot.json")
+    observations = parse_mocked_us_breadth_payload(fixture)
 
     assert [item.symbol for item in observations] == list(US_BREADTH_SYMBOLS)
     assert all(item.is_evidence for item in observations)
@@ -192,6 +193,21 @@ def test_parse_mocked_us_breadth_fixture_returns_complete_contract_set() -> None
             "unavailableReason": None,
         },
     ]
+
+    update_only = dict(fixture)
+    update_only.pop("asOf", None)
+    update_only.pop("as_of", None)
+    update_only["updatedAt"] = "2026-05-14T09:30:00-04:00"
+    update_only_observations = parse_mocked_us_breadth_payload(update_only)
+    assert all(item.is_evidence is False for item in update_only_observations)
+    assert all(item.as_of is None for item in update_only_observations)
+
+    malformed_time = dict(fixture)
+    malformed_time.pop("as_of", None)
+    malformed_time["asOf"] = "not-a-market-time"
+    malformed_time_observations = parse_mocked_us_breadth_payload(malformed_time)
+    assert all(item.is_evidence is False for item in malformed_time_observations)
+    assert all(item.as_of is None for item in malformed_time_observations)
 
 
 def test_yfinance_sector_proxy_fixture_cannot_be_parsed_as_real_exchange_breadth() -> None:

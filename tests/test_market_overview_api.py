@@ -712,7 +712,14 @@ def test_market_overview_sentiment_returns_partial_when_secondary_provider_has_u
     ), patch.object(
         service,
         "_fetch_alternative_fear_greed_snapshot",
-        return_value={"history": [{"value": 22}, {"value": 24}, {"value": 35}], "source": "alternative_me"},
+        return_value={
+            "history": [
+                {"value": 22, "asOf": "2026-07-14T00:00:00+00:00"},
+                {"value": 24, "asOf": "2026-07-15T00:00:00+00:00"},
+                {"value": 35, "asOf": "2026-07-16T00:00:00+00:00"},
+            ],
+            "source": "alternative_me",
+        },
     ), patch("src.services.market_overview_service.ExecutionLogService", _ExecutionLogStub):
         payload = service.get_sentiment()
 
@@ -721,10 +728,18 @@ def test_market_overview_sentiment_returns_partial_when_secondary_provider_has_u
     assert payload["items"][0]["value"] == 35
     assert payload["source"] == "alternative_me"
     assert payload["sourceLabel"] == "Alternative.me"
-    assert payload["providerHealth"]["status"] == "partial"
+    assert payload["providerHealth"]["status"] == "stale"
     assert payload["refreshError"] == "数据源暂不可用"
     assert payload["warning"]
     assert payload["error_message"] is None
+    assert payload["asOf"] == "2026-07-14T00:00:00+00:00"
+    item_as_of = {item["symbol"]: item["asOf"] for item in payload["items"]}
+    assert item_as_of == {
+        "FGI": "2026-07-16T00:00:00+00:00",
+        "DAY1": "2026-07-15T00:00:00+00:00",
+        "DAY7": "2026-07-14T00:00:00+00:00",
+    }
+    assert payload["updatedAt"] != payload["asOf"]
 
 
 def test_market_overview_sentiment_returns_partial_for_stale_last_known_good_snapshot() -> None:

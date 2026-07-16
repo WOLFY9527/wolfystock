@@ -1194,9 +1194,30 @@ def _official_macro_smoke_freshness_status(
         current = current.replace(tzinfo=OFFICIAL_MACRO_CN_TZ)
     else:
         current = current.astimezone(OFFICIAL_MACRO_CN_TZ)
-    parsed_as_of = _official_macro_parse_market_time(point.as_of or point.date) or current
-    delay_minutes = max(0, int((current - parsed_as_of).total_seconds() // 60))
     policy = _official_macro_freshness_policy(series_id)
+    parsed_as_of = _official_macro_parse_market_time(point.as_of or point.date)
+    if parsed_as_of is None:
+        unavailable = {
+            "freshness": "unavailable",
+            "isFallback": False,
+            "isStale": False,
+            "isUnavailable": True,
+            "delayMinutes": None,
+            "warning": "数据观测时间不可用",
+        }
+        if policy:
+            unavailable.update(
+                {
+                    "freshnessPolicy": str(policy["freshnessPolicy"]),
+                    "calendarAssumption": str(policy["calendarAssumption"]),
+                    "maxAcceptedLagDays": int(policy["maxAcceptedLagDays"]),
+                    "maxAcceptedBusinessLagDays": int(policy["maxAcceptedBusinessLagDays"]),
+                    "freshnessDecision": "observation_time_unavailable",
+                    "staleReason": "official observation date missing or malformed",
+                }
+            )
+        return unavailable
+    delay_minutes = max(0, int((current - parsed_as_of).total_seconds() // 60))
     if not policy:
         days_old = (current.date() - parsed_as_of.date()).days
         freshness = "delayed" if days_old <= 3 else "stale"
@@ -1297,7 +1318,12 @@ def _official_macro_smoke_is_stale(
         freshness = _official_macro_smoke_freshness_status(series_id, point, now=now)
     except Exception:
         return True
-    return str(freshness.get("freshness") or "").strip().lower() == "stale"
+    return str(freshness.get("freshness") or "").strip().lower() not in {
+        "cached",
+        "delayed",
+        "fresh",
+        "live",
+    }
 
 
 def _official_macro_smoke_latest_point(points: Sequence[MacroObservation]) -> MacroObservation | None:

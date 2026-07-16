@@ -134,6 +134,18 @@ def test_repeated_cached_snapshot_with_same_as_of_cannot_count_as_multiple_windo
     assert [window.window for window in windows] == ["latest"]
     assert windows[0].snapshot.as_of == _iso(0)
 
+    missing_observation = normalize_persistence_snapshot(
+        {
+            **_snapshot(0),
+            "asOf": None,
+            "updatedAt": _iso(0),
+            "snapshotCreatedAt": _iso(0),
+        }
+    )
+    assert missing_observation.effective_timestamp is None
+    assert missing_observation.score_grade_eligible is False
+    assert select_persistence_snapshot_windows([missing_observation]) == ()
+
 
 def test_fallback_mock_static_synthetic_taxonomy_and_unavailable_snapshots_are_not_trend_authority() -> None:
     rejected = [
