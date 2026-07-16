@@ -7,6 +7,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from api.actor_projection import project_authenticated_audit_actor
 from api.deps import CurrentUser, get_current_user
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.user_alerts import (
@@ -69,17 +70,6 @@ def _dry_run_data_status(freshness_status: str) -> str:
     return "unavailable"
 
 
-def _actor(current_user: CurrentUser) -> dict:
-    return {
-        "user_id": current_user.user_id,
-        "username": current_user.username,
-        "display_name": current_user.display_name,
-        "role": "admin" if current_user.is_admin else "user",
-        "actor_type": "admin" if current_user.is_admin else "user",
-        "session_id": current_user.session_id,
-    }
-
-
 def _record_alert_audit(
     *,
     event_type: str,
@@ -104,7 +94,7 @@ def _record_alert_audit(
         ExecutionLogService().record_user_write_action(
             event_type=event_type,
             message=message,
-            actor=_actor(current_user),
+            actor=project_authenticated_audit_actor(current_user),
             domain="alert",
             target_type="alert_rule",
             target_id=rule_id,

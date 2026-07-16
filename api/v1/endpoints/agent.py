@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
+from api.actor_projection import project_authenticated_audit_actor
 from api.deps import CurrentUser, get_current_user, require_admin_capability
 from api.v1.errors import safe_api_error
 from api.v1.schemas.research_stock import AIStockResearchResponse
@@ -49,17 +50,6 @@ AGENT_VALIDATION_ERROR_MESSAGE = "AI research request could not be processed."
 AGENT_UNAVAILABLE_MESSAGE = "AI research is not available."
 AGENT_INTERNAL_ERROR_MESSAGE = "AI research is temporarily unavailable. Please retry later."
 
-def _actor(current_user: CurrentUser) -> dict:
-    return {
-        "user_id": current_user.user_id,
-        "username": current_user.username,
-        "display_name": current_user.display_name,
-        "role": "admin" if current_user.is_admin else "user",
-        "actor_type": "admin" if current_user.is_admin else "user",
-        "session_id": current_user.session_id,
-    }
-
-
 def _record_agent_audit(
     *,
     event_type: str,
@@ -72,7 +62,7 @@ def _record_agent_audit(
         ExecutionLogService().record_user_write_action(
             event_type=event_type,
             message=message,
-            actor=_actor(current_user),
+            actor=project_authenticated_audit_actor(current_user),
             domain="agent",
             target_type="agent_session",
             target_id=session_id,

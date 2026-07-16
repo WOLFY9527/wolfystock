@@ -12,6 +12,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 
+from api.actor_projection import project_authenticated_audit_actor
 from api.deps import CurrentUser, get_current_user
 from api.v1.consumer_safe_response import consumer_safe_json_response
 from api.v1.errors import safe_api_error, safe_error_identifier, safe_exception_message
@@ -1097,17 +1098,6 @@ def _get_portfolio_structure_review_service() -> PortfolioStructureReviewService
     return PortfolioStructureReviewService()
 
 
-def _actor(current_user: CurrentUser) -> dict:
-    return {
-        "user_id": current_user.user_id,
-        "username": current_user.username,
-        "display_name": current_user.display_name,
-        "role": "admin" if current_user.is_admin else "user",
-        "actor_type": "admin" if current_user.is_admin else "user",
-        "session_id": current_user.session_id,
-    }
-
-
 def _record_portfolio_audit(
     *,
     action: str,
@@ -1123,7 +1113,7 @@ def _record_portfolio_audit(
         ExecutionLogService().record_portfolio_event(
             action=action,
             message=message,
-            actor=_actor(current_user),
+            actor=project_authenticated_audit_actor(current_user),
             account_id=account_id,
             symbol=symbol,
             currency=currency,
@@ -1147,7 +1137,7 @@ def _record_user_write_audit(
         ExecutionLogService().record_user_write_action(
             event_type=event_type,
             message=message,
-            actor=_actor(current_user),
+            actor=project_authenticated_audit_actor(current_user),
             domain="portfolio",
             target_type=target_type,
             target_id=target_id,

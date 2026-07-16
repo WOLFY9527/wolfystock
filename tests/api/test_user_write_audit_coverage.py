@@ -12,6 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import src.auth as auth
@@ -21,6 +22,7 @@ from api.v1.endpoints import admin_logs
 from api.v1.endpoints import agent as agent_endpoint
 from api.v1.endpoints import portfolio as portfolio_endpoint
 from api.v1.endpoints import user_alerts as user_alerts_endpoint
+from api.v1.endpoints import watchlist as watchlist_endpoint
 from src.config import Config
 from src.storage import DatabaseManager
 
@@ -69,6 +71,7 @@ def _user(user_id: str = "user-1", username: str = "alice") -> CurrentUser:
         is_authenticated=True,
         transitional=False,
         auth_enabled=True,
+        session_id=f"session-{user_id}",
     )
 
 
@@ -123,8 +126,25 @@ class UserWriteAuditCoverageTestCase(unittest.TestCase):
             portfolio_endpoint.get_current_user,
             user_alerts_endpoint.get_current_user,
             agent_endpoint.get_current_user,
+            watchlist_endpoint.get_current_user,
         ):
             self.app.dependency_overrides[dependency] = lambda current_user=current_user: current_user
+
+    def _override_missing_current_user(self) -> None:
+        def missing_current_user() -> None:
+            raise HTTPException(
+                status_code=401,
+                detail={"error": "unauthorized", "message": "Login required"},
+            )
+
+        for dependency in (
+            get_current_user,
+            portfolio_endpoint.get_current_user,
+            user_alerts_endpoint.get_current_user,
+            agent_endpoint.get_current_user,
+            watchlist_endpoint.get_current_user,
+        ):
+            self.app.dependency_overrides[dependency] = missing_current_user
 
     def tearDown(self) -> None:
         self.app.dependency_overrides.clear()
@@ -172,6 +192,27 @@ class UserWriteAuditCoverageTestCase(unittest.TestCase):
             self.assertNotIn(marker, text)
         return text
 
+    def _assert_audit_actor_identity(
+        self,
+        task_id: str,
+        *,
+        username_retained: bool = False,
+    ) -> None:
+        rows, total = self.db.list_execution_log_sessions(task_id=task_id, limit=10)
+        self.assertEqual(total, 1)
+        meta = rows[0]["summary"]["meta"]
+        self.assertEqual(meta["actor_user_id"], "user-1")
+        self.assertEqual(meta["actor_role"], "user")
+        self.assertEqual(meta["actor_type"], "user")
+        if username_retained:
+            self.assertEqual(meta["actor_username"], "alice")
+            self.assertEqual(meta["actor_display"], "Alice")
+            self.assertEqual(meta["actor_session_id"], "session-user-1")
+        else:
+            self.assertIsNone(meta["actor_username"])
+            self.assertIsNone(meta["actor_display"])
+            self.assertIsNone(meta["actor_session_id"])
+
     def test_portfolio_account_write_is_visible_in_default_info_user_action_audit(self) -> None:
         response = self.client.post(
             "/api/v1/portfolio/accounts",
@@ -197,6 +238,7 @@ class UserWriteAuditCoverageTestCase(unittest.TestCase):
         self.assertEqual(sessions[0].readable_summary["log_level"], "INFO")
         self.assertEqual(sessions[0].readable_summary["log_category"], "user_action")
         self._assert_audit_safe("portfolio.account_created")
+        self._assert_audit_actor_identity("portfolio.account_created")
 
     def test_alert_rule_write_is_visible_in_default_info_user_action_audit(self) -> None:
         response = self.client.post(
@@ -222,6 +264,7 @@ class UserWriteAuditCoverageTestCase(unittest.TestCase):
         self.assertEqual(len(sessions), 1)
         self.assertEqual(sessions[0].readable_summary["log_level"], "INFO")
         self._assert_audit_safe("alert.rule_created")
+        self._assert_audit_actor_identity("alert.rule_created")
 
     def test_agent_chat_write_is_visible_in_default_info_user_action_audit(self) -> None:
         def _chat(*, message, session_id, context, owner_id):
@@ -256,6 +299,36 @@ class UserWriteAuditCoverageTestCase(unittest.TestCase):
         self.assertEqual(sessions[0].readable_summary["log_level"], "INFO")
         audit_text = self._assert_audit_safe("agent.request_created")
         self.assertNotIn(raw_agent_session_id, audit_text)
+        self._assert_audit_actor_identity("agent.request_created")
+
+    def test_watchlist_write_preserves_route_response_and_audit_actor_identity(self) -> None:
+        response = self.client.post(
+            "/api/v1/watchlist/items",
+            json={"symbol": "AAPL", "market": "us", "source": "scanner"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["symbol"], "AAPL")
+        self._assert_audit_actor_identity("portfolio:watchlist_add", username_retained=True)
+
+    def test_missing_current_user_cannot_reach_authenticated_actor_route(self) -> None:
+        self._override_missing_current_user()
+
+        response = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Denied", "broker": "Demo", "market": "us", "base_currency": "USD"},
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "unauthorized")
+        _, total = self.db.list_execution_log_sessions(task_id="portfolio.account_created", limit=10)
+        self.assertEqual(total, 0)
+
+    def test_ordinary_user_cannot_read_admin_audit_route(self) -> None:
+        response = self.client.get("/api/v1/admin/logs", params={"since": ""})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"], "admin_required")
 
     def test_existing_ownership_and_auth_boundaries_remain_unchanged(self) -> None:
         self._override_current_user(

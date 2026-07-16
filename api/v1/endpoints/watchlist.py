@@ -7,6 +7,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from api.actor_projection import project_authenticated_audit_actor
 from api.deps import CurrentUser, get_current_user
 from api.v1.errors import safe_api_error, safe_exception_message
 from api.v1.schemas.common import ErrorResponse
@@ -45,17 +46,6 @@ def service_refresh_running() -> bool:
     return WatchlistService.is_refresh_running()
 
 
-def _actor(current_user: CurrentUser) -> dict:
-    return {
-        "user_id": current_user.user_id,
-        "username": current_user.username,
-        "display_name": current_user.display_name,
-        "role": "admin" if current_user.is_admin else "user",
-        "actor_type": "admin" if current_user.is_admin else "user",
-        "session_id": current_user.session_id,
-    }
-
-
 def _record_audit(
     *,
     action: str,
@@ -67,7 +57,7 @@ def _record_audit(
         ExecutionLogService().record_portfolio_event(
             action=action,
             message=message,
-            actor=_actor(current_user),
+            actor=project_authenticated_audit_actor(current_user),
             account_id=None,
             symbol=item.get("symbol"),
             currency=None,
