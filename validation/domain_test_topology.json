@@ -59,10 +59,30 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7721,
-      "sha256": "3dc374f7d5a37b3cd738621a2dec20a6e6f19745895d7c7e0e0f14ad770fcf5b"
+      "count": 7741,
+      "sha256": "2a678294735a8212bd85c0509964be6d5703e1847735f05a4f874a9ab6e63d94"
     },
     "tests": [
+      {
+        "id": "tests/api/test_actor_projection.py::test_affected_endpoint_audit_recorders_share_one_projection",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_actor_projection.py::test_authenticated_audit_actor_projection_preserves_admin_identity",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_actor_projection.py::test_authenticated_audit_actor_projection_preserves_ordinary_current_user_fields",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_actor_projection.py::test_guest_public_and_admin_audit_actor_shapes_remain_distinct",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
       {
         "id": "tests/api/test_admin_cost_summary.py::AdminCostSummaryApiTestCase::test_area_filter_and_limit_are_bounded",
         "domain": "api_schema_contracts",
@@ -5924,9 +5944,24 @@
         "baseline": true
       },
       {
+        "id": "tests/api/test_user_write_audit_coverage.py::UserWriteAuditCoverageTestCase::test_missing_current_user_cannot_reach_authenticated_actor_route",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_user_write_audit_coverage.py::UserWriteAuditCoverageTestCase::test_ordinary_user_cannot_read_admin_audit_route",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
         "id": "tests/api/test_user_write_audit_coverage.py::UserWriteAuditCoverageTestCase::test_portfolio_account_write_is_visible_in_default_info_user_action_audit",
         "domain": "api_schema_contracts",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_user_write_audit_coverage.py::UserWriteAuditCoverageTestCase::test_watchlist_write_preserves_route_response_and_audit_actor_identity",
+        "domain": "api_schema_contracts",
+        "baseline": false
       },
       {
         "id": "tests/api/test_watchlist_research_overlay_endpoint.py::WatchlistResearchOverlayEndpointTestCase::test_research_overlay_endpoint_is_owner_scoped_and_read_only",
@@ -14817,6 +14852,21 @@
         "id": "tests/test_db_retention_preview_report.py::test_sqlite_preview_counts_only_aggregates_and_does_not_mutate_rows",
         "domain": "database_storage_migrations",
         "baseline": true
+      },
+      {
+        "id": "tests/test_domain_normalization_contracts.py::test_market_payload_classification_golden_parity",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_domain_normalization_contracts.py::test_official_series_alias_normalization_golden_parity",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_domain_normalization_contracts.py::test_scanner_context_normalization_golden_parity",
+        "domain": "api_schema_contracts",
+        "baseline": false
       },
       {
         "id": "tests/test_dotenv_loader.py::DotenvLoaderTestCase::test_load_dotenv_file_sets_values_without_parse_warning_directive",
@@ -26307,6 +26357,56 @@
         "id": "tests/test_options_authority_policy_parity.py::test_required_future_authority_evidence_includes_authority_policy_source_for_every_surface[iv_rank]",
         "domain": "auth_security",
         "baseline": true
+      },
+      {
+        "id": "tests/test_options_authority_sanitizers.py::test_four_operator_evidence_paths_preserve_golden_offline_sanitization",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_options_authority_sanitizers.py::test_options_authority_sanitizers_preserve_golden_mapping_sequence_date_and_flattening",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_options_authority_sanitizers.py::test_options_authority_sanitizers_preserve_golden_null_and_boolean_values[-None]",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_options_authority_sanitizers.py::test_options_authority_sanitizers_preserve_golden_null_and_boolean_values[0-False]",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_options_authority_sanitizers.py::test_options_authority_sanitizers_preserve_golden_null_and_boolean_values[2-True]",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_options_authority_sanitizers.py::test_options_authority_sanitizers_preserve_golden_null_and_boolean_values[None-None]",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_options_authority_sanitizers.py::test_options_authority_sanitizers_preserve_golden_null_and_boolean_values[True-True]",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_options_authority_sanitizers.py::test_options_authority_sanitizers_preserve_golden_null_and_boolean_values[disabled-False]",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_options_authority_sanitizers.py::test_options_authority_sanitizers_preserve_golden_null_and_boolean_values[enabled-True]",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_options_authority_sanitizers.py::test_options_authority_sanitizers_preserve_golden_null_and_boolean_values[unknown-None]",
+        "domain": "auth_security",
+        "baseline": false
       },
       {
         "id": "tests/test_options_data_quality_gates.py::test_complete_tradier_live_evidence_still_cannot_override_internal_observation_only_policy",
