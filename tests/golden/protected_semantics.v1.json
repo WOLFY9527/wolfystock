@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "t457-w1-protected-semantics-v1",
+  "cases": [
+    {
+      "id": "absence-vs-observed-zero",
+      "ownerNodes": [
+        "tests/test_portfolio_api_contract.py::PortfolioApiDiagnosticsContractTestCase::test_snapshot_readiness_exposes_missing_holdings_without_fake_metrics",
+        "tests/test_provider_market_stats.py::test_helper_preserves_numeric_zero_and_unavailable_amount_distinctions[0-0]"
+      ],
+      "expected": {
+        "missingReady": {"value": null, "state": "unknown"},
+        "missingUnavailable": {"value": null, "state": "unavailable"},
+        "unprovenZero": {"value": null, "state": "unknown"},
+        "observedZero": {"value": 0, "state": "observed_zero"},
+        "observedPositive": {"value": 2, "state": "observed_positive"},
+        "numeric": {"missing": null, "empty": null, "zero": 0.0, "neutral": 0.0}
+      }
+    },
+    {
+      "id": "operational-vs-observation-time",
+      "ownerNodes": [
+        "tests/test_market_persistence_snapshot_store.py::test_repeated_cached_snapshot_with_same_as_of_cannot_count_as_multiple_windows",
+        "tests/test_provider_types.py::TestProviderTypes::test_datetime_fields_serialize_as_iso_strings"
+      ],
+      "expected": {
+        "attemptedAt": "2026-07-16T01:29:00+00:00",
+        "generatedAt": "2026-07-16T01:30:00+00:00",
+        "cachedAt": "2026-07-16T01:31:00+00:00",
+        "persistedAt": "2026-07-16T01:32:00+00:00",
+        "observedAt": "2026-07-16T01:28:00+00:00",
+        "asOf": "2026-07-16T01:27:00+00:00",
+        "effectiveTimestamp": "2026-07-16T01:27:00+00:00",
+        "createdTimestamp": "2026-07-16T01:32:00+00:00"
+      }
+    },
+    {
+      "id": "broker-currency-and-fx-evidence",
+      "ownerNodes": [
+        "tests/test_portfolio_golden_contracts.py::test_portfolio_cash_fx_fixture_freezes_public_staleness_and_native_display_semantics",
+        "tests/test_quote_ohlcv_snapshot_lineage.py::test_quote_snapshot_contract_preserves_missing_field_summary_and_latest_read"
+      ],
+      "expected": {
+        "unknownBrokerCurrency": null,
+        "explicitBrokerCurrency": "USD",
+        "fxEvidence": {
+          "baseCurrency": "USD",
+          "quoteCurrency": "CNY",
+          "rate": 7.12,
+          "provider": "fixture_manual_rate",
+          "fetchedAt": "2026-05-10T16:00:00+08:00",
+          "cacheHit": true,
+          "stale": true,
+          "error": "fixture_stale_rate"
+        }
+      }
+    },
+    {
+      "id": "startup-failure-vs-static-degradation",
+      "ownerNodes": [
+        "tests/test_api_app_health.py::test_create_app_does_not_trigger_market_overview_providers_or_prewarm",
+        "tests/scripts/test_uat_fresh_build_verifier.py::test_verify_frontend_static_build_fails_closed_when_main_asset_is_missing"
+      ],
+      "expected": {
+        "staticAssetDegradation": {"appCreated": true, "frontendStaticMode": "unavailable"},
+        "startupFailure": {
+          "type": "RuntimeError",
+          "message": "CORS_ALLOW_ALL is not allowed in production"
+        }
+      }
+    },
+    {
+      "id": "frontend-contract-vs-placeholder",
+      "ownerNodes": [
+        "tests/test_homepage_cockpit_uat_readiness.py::test_cockpit_readiness_declares_sample_proxy_no_evidence_boundaries"
+      ],
+      "expected": {
+        "missingContract": "missing_contract",
+        "readyContract": "ready",
+        "plannedPlaceholder": {
+          "overallStatus": "review",
+          "evidenceBoundary": "placeholder",
+          "serializationReadiness": "ready",
+          "publicDisplayReadiness": "review",
+          "dataIntegrationReadiness": "not_wired_current_data"
+        }
+      }
+    },
+    {
+      "id": "stored-json-corruption-vs-empty-object",
+      "ownerNodes": [
+        "tests/test_quote_ohlcv_snapshot_lineage.py::test_repository_fails_closed_for_corrupt_persisted_rows[payload_patch0]"
+      ],
+      "expected": {
+        "authoritativeEmptyObject": {},
+        "invalidStoredJson": {
+          "type": "SnapshotLineageError",
+          "message": "quote/OHLCV snapshot payload is corrupt"
+        }
+      }
+    },
+    {
+      "id": "retryable-vs-terminal-failure",
+      "ownerNodes": [
+        "tests/test_provider_types.py::TestProviderTypes::test_timeout_exception_maps_to_timeout",
+        "tests/test_provider_http.py::TestProviderHttp::test_401_maps_to_unauthorized",
+        "tests/test_provider_types.py::TestProviderTypes::test_http_429_maps_to_rate_limited",
+        "tests/api/test_provider_fallback.py::test_quota_errors_do_not_retry_same_provider_repeatedly",
+        "tests/api/test_consumer_safe_error_envelope.py::test_validation_error_response_is_consumer_safe_for_body_query_and_path"
+      ],
+      "expected": {
+        "transient": {"reason": "timeout", "retryable": true},
+        "auth": {"reason": "unauthorized", "retryable": false},
+        "quota": {"reason": "rate_limited", "retryable": false},
+        "invalidInput": {"reason": "invalid_payload", "retryable": false}
+      }
+    }
+  ]
+}
