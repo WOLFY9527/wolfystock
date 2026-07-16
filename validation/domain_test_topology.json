@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7712,
-      "sha256": "49af95a3c11baf3d1c74146ce68b32dfb2b0a5e712400e1e742d50ff3618d160"
+      "count": 7721,
+      "sha256": "3dc374f7d5a37b3cd738621a2dec20a6e6f19745895d7c7e0e0f14ad770fcf5b"
     },
     "tests": [
       {
@@ -5937,6 +5937,51 @@
         "id": "tests/api/test_watchlist_research_overlay_endpoint.py::WatchlistResearchOverlayEndpointTestCase::test_research_overlay_endpoint_returns_legitimate_empty_state_for_empty_watchlist",
         "domain": "provider_external_network",
         "baseline": true
+      },
+      {
+        "id": "tests/architecture/test_protected_semantics_architecture.py::test_protected_semantics_matrix_is_complete_and_canonical",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_protected_semantics_architecture.py::test_protected_semantics_reuse_collected_owner_nodes",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_protected_semantics_contract.py::test_protected_semantics_match_current_owner_contract[absence-vs-observed-zero]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_protected_semantics_contract.py::test_protected_semantics_match_current_owner_contract[broker-currency-and-fx-evidence]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_protected_semantics_contract.py::test_protected_semantics_match_current_owner_contract[frontend-contract-vs-placeholder]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_protected_semantics_contract.py::test_protected_semantics_match_current_owner_contract[operational-vs-observation-time]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_protected_semantics_contract.py::test_protected_semantics_match_current_owner_contract[retryable-vs-terminal-failure]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_protected_semantics_contract.py::test_protected_semantics_match_current_owner_contract[startup-failure-vs-static-degradation]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_protected_semantics_contract.py::test_protected_semantics_match_current_owner_contract[stored-json-corruption-vs-empty-object]",
+        "domain": "api_schema_contracts",
+        "baseline": false
       },
       {
         "id": "tests/scripts/test_bootstrap_worktree.py::test_absolute_script_invocation_targets_the_current_linked_worktree",
