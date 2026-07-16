@@ -15,6 +15,7 @@
 """
 
 import logging
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, Union
@@ -57,18 +58,54 @@ def safe_float(val: Any, default: Optional[float] = None) -> Optional[float]:
             if val == "" or val == "-" or val == "--":
                 return default
         
-        # 处理 pandas/numpy NaN
-        # 使用 math.isnan 而不是 pd.isna，避免强制依赖 pandas
-        import math
-        try:
-            if math.isnan(float(val)):
-                return default
-        except (ValueError, TypeError):
-            pass
-        
-        return float(val)
+        # 处理 pandas/numpy NaN 和无穷值，避免把非有限数带入下游分析
+        numeric = float(val)
+        return numeric if math.isfinite(numeric) else default
     except (ValueError, TypeError):
         return default
+
+
+_MARKET_INDEX_METADATA_ALIASES = {
+    "source": ("source", "provider_id", "providerId", "provider"),
+    "observed_at": ("observed_at", "observedAt", "timestamp", "market_timestamp"),
+    "as_of": ("as_of", "asOf"),
+    "freshness": ("freshness",),
+    "provider_status": ("provider_status", "providerStatus", "status"),
+    "coverage": ("coverage",),
+    "is_partial": ("is_partial", "isPartial"),
+    "is_proxy": ("is_proxy", "isProxy"),
+    "is_synthetic": ("is_synthetic", "isSynthetic"),
+}
+
+
+def market_index_metadata(
+    payload: Any,
+    *,
+    default_source: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Normalize existing index provenance fields without inventing state."""
+
+    def first_present(aliases: tuple[str, ...]) -> Any:
+        for alias in aliases:
+            value = payload.get(alias) if hasattr(payload, "get") else None
+            if value is None:
+                continue
+            try:
+                if math.isnan(float(value)):
+                    continue
+            except (TypeError, ValueError):
+                pass
+            return value
+        return None
+
+    result: Dict[str, Any] = {}
+    for field_name, aliases in _MARKET_INDEX_METADATA_ALIASES.items():
+        value = first_present(aliases)
+        if field_name == "source" and (value is None or value == ""):
+            value = default_source
+        if value is not None:
+            result[field_name] = value
+    return result
 
 
 def safe_int(val: Any, default: Optional[int] = None) -> Optional[int]:

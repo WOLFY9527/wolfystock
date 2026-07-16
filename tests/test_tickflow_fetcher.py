@@ -89,6 +89,69 @@ def _quote(
     }
 
 
+def _main_index_quote_batches(first_quote=None):
+    quotes = [
+        first_quote
+        or _quote(
+            "000001.SH",
+            last_price=101.0,
+            prev_close=100.0,
+            amount=1e8,
+            change_pct=0.01,
+            change_amount=1.0,
+        ),
+        _quote(
+            "399001.SZ",
+            last_price=99.0,
+            prev_close=100.0,
+            amount=1e8,
+            change_pct=-0.01,
+            change_amount=-1.0,
+        ),
+        _quote(
+            "399006.SZ",
+            last_price=None,
+            prev_close=100.0,
+            amount=1e8,
+            change_pct=0.01,
+            change_amount=1.0,
+        ),
+        _quote(
+            "000688.SH",
+            last_price=100.0,
+            prev_close=None,
+            amount=1e8,
+            change_pct=0.01,
+        ),
+        _quote(
+            "000016.SH",
+            last_price=100.0,
+            prev_close=100.0,
+            amount=1e8,
+            change_amount=0.0,
+        ),
+        _quote(
+            "000300.SH",
+            last_price=0.0,
+            prev_close=0.0,
+            amount=0.0,
+            change_pct=0.0,
+            change_amount=0.0,
+            amplitude=0.0,
+        ),
+    ]
+    return {
+        (
+            "000001.SH",
+            "399001.SZ",
+            "399006.SZ",
+            "000688.SH",
+            "000016.SH",
+        ): quotes[:5],
+        ("000300.SH",): quotes[5:],
+    }
+
+
 class TestTickFlowFetcher(unittest.TestCase):
     def test_get_main_indices_maps_cn_quotes(self):
         fetcher = TickFlowFetcher(api_key="sk-test")
@@ -180,6 +243,74 @@ class TestTickFlowFetcher(unittest.TestCase):
         self.assertAlmostEqual(data[0]["change_pct"], 0.63)
         self.assertAlmostEqual(data[0]["amplitude"], 1.4)
         self.assertEqual(data[1]["code"], "399001")
+
+        batches = _main_index_quote_batches()
+        first = batches[
+            (
+                "000001.SH",
+                "399001.SZ",
+                "399006.SZ",
+                "000688.SH",
+                "000016.SH",
+            )
+        ][0]
+        first.update(
+            {
+                "source": "cached_fixture",
+                "observedAt": "2026-07-16T09:30:01+08:00",
+                "asOf": "2026-07-16T09:30:00+08:00",
+                "freshness": "cached",
+                "providerStatus": "partial",
+                "coverage": {"price": "available", "change": "partial"},
+                "isPartial": True,
+                "isProxy": True,
+                "isSynthetic": False,
+            }
+        )
+        fetcher = TickFlowFetcher(api_key="sk-test")
+        fetcher._client = _FakeClient(symbols_data=batches)
+
+        data = fetcher.get_main_indices(region="cn")
+
+        self.assertIsNotNone(data)
+        self.assertEqual(len(data), 6)
+        self.assertEqual((data[0]["current"], data[0]["change"], data[0]["change_pct"]), (101.0, 1.0, 1.0))
+        self.assertEqual((data[1]["current"], data[1]["change"], data[1]["change_pct"]), (99.0, -1.0, -1.0))
+        self.assertEqual(data[0]["source"], "cached_fixture")
+        self.assertEqual(data[0]["observed_at"], "2026-07-16T09:30:01+08:00")
+        self.assertEqual(data[0]["as_of"], "2026-07-16T09:30:00+08:00")
+        self.assertEqual(data[0]["freshness"], "cached")
+        self.assertEqual(data[0]["provider_status"], "partial")
+        self.assertEqual(data[0]["coverage"], {"price": "available", "change": "partial"})
+        self.assertTrue(data[0]["is_partial"])
+        self.assertTrue(data[0]["is_proxy"])
+        self.assertFalse(data[0]["is_synthetic"])
+        self.assertIsNone(data[2]["current"])
+        self.assertEqual(data[2]["source"], "tickflow")
+        self.assertIsNone(data[3]["change"])
+        self.assertIsNone(data[4]["change_pct"])
+        self.assertEqual((data[5]["current"], data[5]["change"], data[5]["change_pct"]), (0.0, 0.0, 0.0))
+        self.assertEqual(len(fetcher._client.quotes.calls), 2)
+
+        malformed = _quote(
+            "000001.SH",
+            last_price="bad",
+            prev_close=100.0,
+            amount=1e8,
+            change_pct="bad",
+            change_amount="bad",
+        )
+        fetcher = TickFlowFetcher(api_key="sk-test")
+        fetcher._client = _FakeClient(
+            symbols_data=_main_index_quote_batches(first_quote=malformed)
+        )
+
+        malformed_data = fetcher.get_main_indices(region="cn")
+
+        self.assertIsNotNone(malformed_data)
+        self.assertIsNone(malformed_data[0]["current"])
+        self.assertIsNone(malformed_data[0]["change"])
+        self.assertIsNone(malformed_data[0]["change_pct"])
 
     def test_get_main_indices_returns_none_for_non_cn_region(self):
         fetcher = TickFlowFetcher(api_key="sk-test")

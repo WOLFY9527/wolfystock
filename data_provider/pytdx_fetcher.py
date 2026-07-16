@@ -30,6 +30,7 @@ from tenacity import (
 )
 
 from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS, is_bse_code, _is_hk_market
+from .realtime_types import market_index_metadata, safe_float
 import os
 from src.contracts.source_confidence import evaluate_market_intelligence_trust
 from src.services.market_data_source_registry import project_source_provenance
@@ -445,8 +446,7 @@ class PytdxFetcher(BaseFetcher):
         
         # 计算涨跌幅（pytdx 不返回涨跌幅，需要自己计算）
         if 'pct_chg' not in df.columns and 'close' in df.columns:
-            df['pct_chg'] = df['close'].pct_change() * 100
-            df['pct_chg'] = df['pct_chg'].fillna(0).round(2)
+            df['pct_chg'] = (df['close'].pct_change(fill_method=None) * 100).round(2)
         
         # 添加股票代码列
         df['code'] = stock_code
@@ -524,19 +524,23 @@ class PytdxFetcher(BaseFetcher):
                 
                 if data and len(data) > 0:
                     quote = data[0]
-                    return {
+                    result = {
                         'code': stock_code,
                         'name': quote.get('name', ''),
-                        'price': quote.get('price', 0),
-                        'open': quote.get('open', 0),
-                        'high': quote.get('high', 0),
-                        'low': quote.get('low', 0),
-                        'pre_close': quote.get('last_close', 0),
-                        'volume': quote.get('vol', 0),
-                        'amount': quote.get('amount', 0),
-                        'bid_prices': [quote.get(f'bid{i}', 0) for i in range(1, 6)],
-                        'ask_prices': [quote.get(f'ask{i}', 0) for i in range(1, 6)],
+                        'price': safe_float(quote.get('price')),
+                        'open': safe_float(quote.get('open')),
+                        'high': safe_float(quote.get('high')),
+                        'low': safe_float(quote.get('low')),
+                        'pre_close': safe_float(quote.get('last_close')),
+                        'volume': safe_float(quote.get('vol')),
+                        'amount': safe_float(quote.get('amount')),
+                        'bid_prices': [safe_float(quote.get(f'bid{i}')) for i in range(1, 6)],
+                        'ask_prices': [safe_float(quote.get(f'ask{i}')) for i in range(1, 6)],
                     }
+                    result.update(
+                        market_index_metadata(quote, default_source="pytdx")
+                    )
+                    return result
         except Exception as e:
             logger.warning(f"Pytdx 获取实时行情失败 {stock_code}: {e}")
         

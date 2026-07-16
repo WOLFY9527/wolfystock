@@ -3,6 +3,12 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from types import SimpleNamespace
+
+import pandas as pd
+
+from data_provider.base import BaseFetcher
 from data_provider.pytdx_fetcher import PytdxFetcher
 from src.services.market_data_source_registry import project_source_provenance
 
@@ -155,3 +161,77 @@ def test_pytdx_source_provenance_stays_non_official() -> None:
     assert provenance["sourceType"] == "public_proxy"
     assert provenance["sourceLabel"] == "pytdx / 通达信"
     assert provenance["freshnessLabel"] == "延迟"
+
+    quote = {
+        "name": "fixture",
+        "price": None,
+        "open": "bad",
+        "high": 0.0,
+        "low": None,
+        "last_close": None,
+        "vol": 0.0,
+        "amount": None,
+        "bid1": None,
+        "ask1": 0.0,
+        "source": "cached_fixture",
+        "observedAt": "2026-07-16T09:30:01+08:00",
+        "asOf": "2026-07-16T09:30:00+08:00",
+        "freshness": "stale",
+        "providerStatus": "partial",
+        "coverage": {"price": "missing"},
+        "isPartial": True,
+        "isProxy": True,
+        "isSynthetic": False,
+    }
+
+    @contextmanager
+    def fake_session():
+        yield SimpleNamespace(get_security_quotes=lambda _symbols: [quote])
+
+    fetcher = PytdxFetcher(hosts=[])
+    fetcher._pytdx_session = fake_session
+
+    result = fetcher.get_realtime_quote("000001")
+
+    assert result is not None
+    assert result["price"] is None
+    assert result["open"] is None
+    assert result["high"] == 0.0
+    assert result["low"] is None
+    assert result["pre_close"] is None
+    assert result["volume"] == 0.0
+    assert result["amount"] is None
+    assert result["bid_prices"][0] is None
+    assert result["ask_prices"][0] == 0.0
+    assert result["source"] == "cached_fixture"
+    assert result["observed_at"] == "2026-07-16T09:30:01+08:00"
+    assert result["freshness"] == "stale"
+    assert "change" not in result
+    assert "change_pct" not in result
+
+    normalized = fetcher._normalize_data(
+        pd.DataFrame(
+            {
+                "datetime": pd.to_datetime(["2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16"]),
+                "open": [10.0, 10.0, 10.0, 10.0],
+                "high": [10.0, 10.0, 10.0, 10.0],
+                "low": [10.0, 10.0, 9.0, 9.0],
+                "close": [10.0, 10.0, 9.0, 10.0],
+                "vol": [1.0, 1.0, 1.0, 1.0],
+                "amount": [10.0, 10.0, 9.0, 10.0],
+            }
+        ),
+        "000001",
+    )
+    assert pd.isna(normalized.iloc[0]["pct_chg"])
+    assert normalized.iloc[1]["pct_chg"] == 0.0
+    assert normalized.iloc[2]["pct_chg"] == -10.0
+    assert normalized.iloc[3]["pct_chg"] == 11.11
+
+    @contextmanager
+    def unavailable_session():
+        yield SimpleNamespace(get_security_quotes=lambda _symbols: [])
+
+    fetcher._pytdx_session = unavailable_session
+    assert fetcher.get_realtime_quote("000001") is None
+    assert PytdxFetcher.get_main_indices is BaseFetcher.get_main_indices

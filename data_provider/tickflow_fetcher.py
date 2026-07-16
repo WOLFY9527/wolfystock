@@ -30,6 +30,7 @@ from .base import (
     is_st_stock,
     normalize_stock_code,
 )
+from .realtime_types import market_index_metadata, safe_float
 
 
 logger = logging.getLogger(__name__)
@@ -108,18 +109,9 @@ class TickFlowFetcher(BaseFetcher):
             "TickFlowFetcher P0 only supports market review endpoints"
         )
 
-    @staticmethod
-    def _safe_float(value: Any) -> Optional[float]:
-        if value in (None, "", "-"):
-            return None
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return None
-
     @classmethod
     def _ratio_to_percent(cls, value: Any) -> Optional[float]:
-        ratio = cls._safe_float(value)
+        ratio = safe_float(value)
         if ratio is None:
             return None
         return ratio * 100.0
@@ -207,33 +199,41 @@ class TickFlowFetcher(BaseFetcher):
                 continue
 
             ext = quote.get("ext") or {}
-            current = self._safe_float(quote.get("last_price")) or 0.0
-            prev_close = self._safe_float(quote.get("prev_close")) or 0.0
-            change = self._safe_float(ext.get("change_amount"))
-            if change is None:
-                change = current - prev_close if current or prev_close else 0.0
+            current = safe_float(quote.get("last_price"))
+            prev_close = safe_float(quote.get("prev_close"))
+            change = safe_float(ext.get("change_amount"))
+            if change is None and current is not None and prev_close is not None:
+                change = current - prev_close
             amplitude = self._ratio_to_percent(ext.get("amplitude"))
-            if amplitude is None and prev_close > 0:
-                high = self._safe_float(quote.get("high")) or 0.0
-                low = self._safe_float(quote.get("low")) or 0.0
+            high = safe_float(quote.get("high"))
+            low = safe_float(quote.get("low"))
+            if (
+                amplitude is None
+                and prev_close is not None
+                and prev_close > 0
+                and high is not None
+                and low is not None
+            ):
                 amplitude = (high - low) / prev_close * 100
 
-            results.append(
-                {
-                    "code": code,
-                    "name": name,
-                    "current": current,
-                    "change": change,
-                    "change_pct": self._ratio_to_percent(ext.get("change_pct")) or 0.0,
-                    "open": self._safe_float(quote.get("open")) or 0.0,
-                    "high": self._safe_float(quote.get("high")) or 0.0,
-                    "low": self._safe_float(quote.get("low")) or 0.0,
-                    "prev_close": prev_close,
-                    "volume": self._safe_float(quote.get("volume")) or 0.0,
-                    "amount": self._safe_float(quote.get("amount")) or 0.0,
-                    "amplitude": amplitude or 0.0,
-                }
+            result = {
+                "code": code,
+                "name": name,
+                "current": current,
+                "change": change,
+                "change_pct": self._ratio_to_percent(ext.get("change_pct")),
+                "open": safe_float(quote.get("open")),
+                "high": high,
+                "low": low,
+                "prev_close": prev_close,
+                "volume": safe_float(quote.get("volume")),
+                "amount": safe_float(quote.get("amount")),
+                "amplitude": amplitude,
+            }
+            result.update(
+                market_index_metadata(quote, default_source="tickflow")
             )
+            results.append(result)
 
         if len(results) != len(_CN_MAIN_INDEX_QUOTES):
             logger.warning(
@@ -297,13 +297,13 @@ class TickFlowFetcher(BaseFetcher):
             if not self._is_cn_equity_symbol(symbol):
                 continue
 
-            amount = self._safe_float(quote.get("amount"))
+            amount = safe_float(quote.get("amount"))
             if amount is not None and amount > 0:
                 stats["total_amount"] += amount / 1e8
 
             pure_code = normalize_stock_code(symbol)
-            last_price = self._safe_float(quote.get("last_price"))
-            prev_close = self._safe_float(quote.get("prev_close"))
+            last_price = safe_float(quote.get("last_price"))
+            prev_close = safe_float(quote.get("prev_close"))
 
             if last_price is None or prev_close is None or amount is None or amount <= 0:
                 continue

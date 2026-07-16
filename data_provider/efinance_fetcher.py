@@ -58,7 +58,7 @@ from .market_stats import calculate_market_stats
 from .realtime_types import (
     UnifiedRealtimeQuote, RealtimeSource,
     get_realtime_circuit_breaker,
-    safe_float, safe_int  # 使用统一的类型转换函数
+    market_index_metadata, safe_float, safe_int  # 使用统一的类型转换函数
 )
 
 
@@ -932,23 +932,34 @@ class EfinanceFetcher(BaseFetcher):
                 amt_col = '成交额' if '成交额' in df.columns else 'amount'
                 amp_col = '振幅' if '振幅' in df.columns else 'amplitude'
 
-                current = safe_float(item.get(price_col, 0))
-                change_amount = safe_float(item.get(chg_col, 0))
+                current = safe_float(item.get(price_col))
+                change_amount = safe_float(item.get(chg_col))
 
-                results.append({
+                result = {
                     'code': full_code,
                     'name': name,
                     'current': current,
                     'change': change_amount,
-                    'change_pct': safe_float(item.get(pct_col, 0)),
-                    'open': safe_float(item.get(open_col, 0)),
-                    'high': safe_float(item.get(high_col, 0)),
-                    'low': safe_float(item.get(low_col, 0)),
-                    'prev_close': current - change_amount if current or change_amount else 0,
-                    'volume': safe_float(item.get(vol_col, 0)),
-                    'amount': safe_float(item.get(amt_col, 0)),
-                    'amplitude': safe_float(item.get(amp_col, 0)),
-                })
+                    'change_pct': safe_float(item.get(pct_col)),
+                    'open': safe_float(item.get(open_col)),
+                    'high': safe_float(item.get(high_col)),
+                    'low': safe_float(item.get(low_col)),
+                    'prev_close': (
+                        current - change_amount
+                        if current is not None and change_amount is not None
+                        else None
+                    ),
+                    'volume': safe_float(item.get(vol_col)),
+                    'amount': safe_float(item.get(amt_col)),
+                    'amplitude': safe_float(item.get(amp_col)),
+                }
+                result.update(
+                    market_index_metadata(
+                        item,
+                        default_source=RealtimeSource.EFINANCE.value,
+                    )
+                )
+                results.append(result)
 
             if results:
                 logger.info(f"[efinance] 获取到 {len(results)} 个指数行情")

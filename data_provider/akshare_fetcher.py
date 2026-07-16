@@ -53,7 +53,7 @@ from .market_stats import calculate_market_stats
 from .realtime_types import (
     UnifiedRealtimeQuote, ChipDistribution, RealtimeSource,
     get_realtime_circuit_breaker, get_chip_circuit_breaker,
-    safe_float, safe_int  # 使用统一的类型转换函数
+    market_index_metadata, safe_float, safe_int  # 使用统一的类型转换函数
 )
 from .us_index_mapping import is_us_index_code, is_us_stock_code
 
@@ -1838,30 +1838,42 @@ class AkshareFetcher(BaseFetcher):
 
                     if not row.empty:
                         row = row.iloc[0]
-                        current = safe_float(row.get('最新价', 0))
-                        prev_close = safe_float(row.get('昨收', 0))
-                        high = safe_float(row.get('最高', 0))
-                        low = safe_float(row.get('最低', 0))
+                        current = safe_float(row.get('最新价'))
+                        prev_close = safe_float(row.get('昨收'))
+                        high = safe_float(row.get('最高'))
+                        low = safe_float(row.get('最低'))
 
                         # 计算振幅
-                        amplitude = 0.0
-                        if prev_close > 0:
+                        amplitude = None
+                        if (
+                            prev_close is not None
+                            and prev_close > 0
+                            and high is not None
+                            and low is not None
+                        ):
                             amplitude = (high - low) / prev_close * 100
 
-                        results.append({
+                        item = {
                             'code': code,
                             'name': name,
                             'current': current,
-                            'change': safe_float(row.get('涨跌额', 0)),
-                            'change_pct': safe_float(row.get('涨跌幅', 0)),
-                            'open': safe_float(row.get('今开', 0)),
+                            'change': safe_float(row.get('涨跌额')),
+                            'change_pct': safe_float(row.get('涨跌幅')),
+                            'open': safe_float(row.get('今开')),
                             'high': high,
                             'low': low,
                             'prev_close': prev_close,
-                            'volume': safe_float(row.get('成交量', 0)),
-                            'amount': safe_float(row.get('成交额', 0)),
+                            'volume': safe_float(row.get('成交量')),
+                            'amount': safe_float(row.get('成交额')),
                             'amplitude': amplitude,
-                        })
+                        }
+                        item.update(
+                            market_index_metadata(
+                                row,
+                                default_source=RealtimeSource.AKSHARE_SINA.value,
+                            )
+                        )
+                        results.append(item)
             return results
 
         except Exception as e:

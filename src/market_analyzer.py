@@ -11,6 +11,7 @@
 """
 
 import logging
+import math
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -32,16 +33,78 @@ class MarketIndex:
     """大盘指数数据"""
     code: str                    # 指数代码
     name: str                    # 指数名称
-    current: float = 0.0         # 当前点位
-    change: float = 0.0          # 涨跌点数
-    change_pct: float = 0.0      # 涨跌幅(%)
-    open: float = 0.0            # 开盘点位
-    high: float = 0.0            # 最高点位
-    low: float = 0.0             # 最低点位
-    prev_close: float = 0.0      # 昨收点位
-    volume: float = 0.0          # 成交量（手）
-    amount: float = 0.0          # 成交额（元）
-    amplitude: float = 0.0       # 振幅(%)
+    current: Optional[float] = None         # 当前点位
+    change: Optional[float] = None          # 涨跌点数
+    change_pct: Optional[float] = None      # 涨跌幅(%)
+    open: Optional[float] = None            # 开盘点位
+    high: Optional[float] = None            # 最高点位
+    low: Optional[float] = None             # 最低点位
+    prev_close: Optional[float] = None      # 昨收点位
+    volume: Optional[float] = None          # 成交量（手）
+    amount: Optional[float] = None          # 成交额（元）
+    amplitude: Optional[float] = None       # 振幅(%)
+    source: Optional[str] = None
+    observed_at: Optional[Any] = None
+    as_of: Optional[Any] = None
+    freshness: Optional[str] = None
+    provider_status: Optional[str] = None
+    coverage: Optional[Any] = None
+    is_partial: Optional[bool] = None
+    is_proxy: Optional[bool] = None
+    is_synthetic: Optional[bool] = None
+
+    @classmethod
+    def from_dict(cls, item: Dict[str, Any]) -> "MarketIndex":
+        """Normalize one provider row at the analysis ownership boundary."""
+
+        def numeric(field_name: str) -> Optional[float]:
+            value = item.get(field_name)
+            if isinstance(value, str):
+                value = value.strip()
+                if value in {"", "-", "--"}:
+                    return None
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                return None
+            return number if math.isfinite(number) else None
+
+        def metadata(*aliases: str) -> Any:
+            for alias in aliases:
+                value = item.get(alias)
+                if value is None:
+                    continue
+                try:
+                    if bool(pd.isna(value)):
+                        continue
+                except (TypeError, ValueError):
+                    pass
+                return value
+            return None
+
+        return cls(
+            code=str(item.get('code') or ''),
+            name=str(item.get('name') or ''),
+            current=numeric('current'),
+            change=numeric('change'),
+            change_pct=numeric('change_pct'),
+            open=numeric('open'),
+            high=numeric('high'),
+            low=numeric('low'),
+            prev_close=numeric('prev_close'),
+            volume=numeric('volume'),
+            amount=numeric('amount'),
+            amplitude=numeric('amplitude'),
+            source=metadata('source', 'provider_id', 'providerId', 'provider'),
+            observed_at=metadata('observed_at', 'observedAt', 'timestamp', 'market_timestamp'),
+            as_of=metadata('as_of', 'asOf'),
+            freshness=metadata('freshness'),
+            provider_status=metadata('provider_status', 'providerStatus', 'status'),
+            coverage=metadata('coverage'),
+            is_partial=metadata('is_partial', 'isPartial'),
+            is_proxy=metadata('is_proxy', 'isProxy'),
+            is_synthetic=metadata('is_synthetic', 'isSynthetic'),
+        )
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -53,9 +116,19 @@ class MarketIndex:
             'open': self.open,
             'high': self.high,
             'low': self.low,
+            'prev_close': self.prev_close,
             'volume': self.volume,
             'amount': self.amount,
             'amplitude': self.amplitude,
+            'source': self.source,
+            'observed_at': self.observed_at,
+            'as_of': self.as_of,
+            'freshness': self.freshness,
+            'provider_status': self.provider_status,
+            'coverage': self.coverage,
+            'is_partial': self.is_partial,
+            'is_proxy': self.is_proxy,
+            'is_synthetic': self.is_synthetic,
         }
 
 
@@ -146,21 +219,7 @@ class MarketAnalyzer:
 
             if data_list:
                 for item in data_list:
-                    index = MarketIndex(
-                        code=item['code'],
-                        name=item['name'],
-                        current=item['current'],
-                        change=item['change'],
-                        change_pct=item['change_pct'],
-                        open=item['open'],
-                        high=item['high'],
-                        low=item['low'],
-                        prev_close=item['prev_close'],
-                        volume=item['volume'],
-                        amount=item['amount'],
-                        amplitude=item['amplitude']
-                    )
-                    indices.append(index)
+                    indices.append(MarketIndex.from_dict(item))
 
             if not indices:
                 logger.warning("[大盘] 所有行情数据源失败，将依赖新闻搜索进行分析")
@@ -335,6 +394,21 @@ class MarketAnalyzer:
         ]
         return "\n".join(lines)
 
+    @staticmethod
+    def _format_index_number(value: Optional[float]) -> str:
+        return "N/A" if value is None else f"{value:.2f}"
+
+    @classmethod
+    def _format_index_summary(cls, index: MarketIndex, *, bold: bool = False) -> str:
+        label = f"**{index.name}**" if bold else index.name
+        current = cls._format_index_number(index.current)
+        if index.change_pct is None:
+            movement = "N/A"
+        else:
+            direction = "↑" if index.change_pct > 0 else "↓" if index.change_pct < 0 else ""
+            movement = f"{direction}{abs(index.change_pct):.2f}%"
+        return f"- {label}: {current} ({movement})"
+
     def _build_indices_block(self, overview: MarketOverview) -> str:
         """构建指数行情表格（不含振幅）"""
         if not overview.indices:
@@ -343,16 +417,22 @@ class MarketAnalyzer:
             "| 指数 | 最新 | 涨跌幅 | 成交额(亿) |",
             "|------|------|--------|-----------|"]
         for idx in overview.indices:
-            arrow = "🔴" if idx.change_pct < 0 else "🟢" if idx.change_pct > 0 else "⚪"
-            amount_raw = idx.amount or 0.0
-            if amount_raw == 0.0:
-                # Yahoo Finance 不提供成交额，显示 N/A 避免误解
-                amount_str = "N/A"
-            elif amount_raw > 1e6:
-                amount_str = f"{amount_raw / 1e8:.0f}"
+            if idx.change_pct is None:
+                movement = "N/A"
             else:
-                amount_str = f"{amount_raw:.0f}"
-            lines.append(f"| {idx.name} | {idx.current:.2f} | {arrow} {idx.change_pct:+.2f}% | {amount_str} |")
+                arrow = "🔴" if idx.change_pct < 0 else "🟢" if idx.change_pct > 0 else "⚪"
+                display_change_pct = 0.0 if idx.change_pct == 0 else idx.change_pct
+                movement = f"{arrow} {display_change_pct:+.2f}%"
+            if idx.amount is None:
+                amount_str = "N/A"
+            elif idx.amount > 1e6:
+                amount_str = f"{idx.amount / 1e8:.0f}"
+            else:
+                amount_str = f"{idx.amount:.0f}"
+            lines.append(
+                f"| {idx.name} | {self._format_index_number(idx.current)} | "
+                f"{movement} | {amount_str} |"
+            )
         return "\n".join(lines)
 
     def _build_sector_block(self, overview: MarketOverview) -> str:
@@ -375,10 +455,9 @@ class MarketAnalyzer:
     def _build_review_prompt(self, overview: MarketOverview, news: List) -> str:
         """构建复盘报告 Prompt"""
         # 指数行情信息（简洁格式，不用emoji）
-        indices_text = ""
-        for idx in overview.indices:
-            direction = "↑" if idx.change_pct > 0 else "↓" if idx.change_pct < 0 else "-"
-            indices_text += f"- {idx.name}: {idx.current:.2f} ({direction}{abs(idx.change_pct):.2f}%)\n"
+        indices_text = "".join(
+            f"{self._format_index_summary(idx)}\n" for idx in overview.indices
+        )
         
         # 板块信息
         top_sectors_text = ", ".join([f"{s['name']}({s['change_pct']:+.2f}%)" for s in overview.top_sectors[:3]])
@@ -430,21 +509,31 @@ Lagging: {bottom_sectors_text if bottom_sectors_text else "N/A"}"""
             else:
                 sector_block = "## 板块表现\n（美股暂无板块涨跌数据）"
 
-        data_no_indices_hint = (
-            "注意：由于行情数据获取失败，请主要根据【市场新闻】进行定性分析和总结，不要编造具体的指数点位。"
-            if not indices_text
-            else ""
-        )
+        if not indices_text:
+            data_no_indices_hint = (
+                "注意：由于行情数据获取失败，请主要根据【市场新闻】进行定性分析和总结，不要编造具体的指数点位。"
+            )
+        elif any(idx.change_pct is None for idx in overview.indices):
+            data_no_indices_hint = (
+                "注意：部分指数涨跌数据不可用，不要将缺失涨跌视为平盘，也不要据此推断整体市场方向。"
+            )
+        else:
+            data_no_indices_hint = ""
         indices_placeholder = indices_text if indices_text else ("No index data (API error)" if self.region == "us" else "暂无指数数据（接口异常）")
         news_placeholder = news_text if news_text else ("No relevant news" if self.region == "us" else "暂无相关新闻")
 
         # 美股场景使用英文提示语，便于生成更符合美股语境的报告
         if self.region == "us":
-            data_no_indices_hint_en = (
-                "Note: Market data fetch failed. Rely mainly on [Market News] for qualitative analysis. Do not invent index levels."
-                if not indices_text
-                else ""
-            )
+            if not indices_text:
+                data_no_indices_hint_en = (
+                    "Note: Market data fetch failed. Rely mainly on [Market News] for qualitative analysis. Do not invent index levels."
+                )
+            elif any(idx.change_pct is None for idx in overview.indices):
+                data_no_indices_hint_en = (
+                    "Note: Some index movements are unavailable. Do not treat missing moves as flat or infer aggregate direction from them."
+                )
+            else:
+                data_no_indices_hint_en = ""
             return f"""You are a professional US/A/H market analyst. Please produce a concise US market recap report based on the data below.
 
 [Requirements]
@@ -582,7 +671,11 @@ Output the report content directly, no extra commentary.
             ),
             None,
         )
-        if mood_index:
+        if mood_index is None or mood_index.change_pct is None:
+            market_mood = "数据不可用"
+        elif mood_index.change_pct == 0:
+            market_mood = "平盘"
+        else:
             if mood_index.change_pct > 1:
                 market_mood = "强势上涨"
             elif mood_index.change_pct > 0:
@@ -591,14 +684,12 @@ Output the report content directly, no extra commentary.
                 market_mood = "小幅下跌"
             else:
                 market_mood = "明显下跌"
-        else:
-            market_mood = "震荡整理"
         
         # 指数行情（简洁格式）
-        indices_text = ""
-        for idx in overview.indices[:4]:
-            direction = "↑" if idx.change_pct > 0 else "↓" if idx.change_pct < 0 else "-"
-            indices_text += f"- **{idx.name}**: {idx.current:.2f} ({direction}{abs(idx.change_pct):.2f}%)\n"
+        indices_text = "".join(
+            f"{self._format_index_summary(idx, bold=True)}\n"
+            for idx in overview.indices[:4]
+        )
         
         # 板块信息
         top_text = "、".join([s['name'] for s in overview.top_sectors[:3]])
@@ -686,7 +777,7 @@ if __name__ == "__main__":
     print(f"日期: {overview.date}")
     print(f"指数数量: {len(overview.indices)}")
     for idx in overview.indices:
-        print(f"  {idx.name}: {idx.current:.2f} ({idx.change_pct:+.2f}%)")
+        print(f"  {analyzer._format_index_summary(idx)[2:]}")
     print(f"上涨: {overview.up_count} | 下跌: {overview.down_count}")
     print(f"成交额: {overview.total_amount:.0f}亿")
     

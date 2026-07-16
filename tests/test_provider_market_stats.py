@@ -252,6 +252,24 @@ def test_akshare_facade_keeps_fetch_order_lineage_and_result(monkeypatch: pytest
         {"provider": "akshare", "capability": "market_stats", "route": "AkshareFetcher.get_market_stats"}
     ]
 
+    index_rows = _fetch_main_indices(
+        "akshare",
+        _index_frame("akshare", _index_rows()),
+        monkeypatch,
+    )
+    _assert_index_rows(index_rows, default_source="akshare_sina")
+
+    malformed_rows = _index_rows()
+    malformed_rows[0] = {"current": "bad", "change": "bad", "change_pct": "bad"}
+    malformed = _fetch_main_indices(
+        "akshare",
+        _index_frame("akshare", malformed_rows),
+        monkeypatch,
+    )
+    assert malformed is not None
+    assert (malformed[0]["current"], malformed[0]["change"], malformed[0]["change_pct"]) == (None, None, None)
+    assert not _fetch_main_indices("akshare", pd.DataFrame(), monkeypatch)
+
 
 def test_efinance_facade_keeps_fetch_cache_boundary_and_result(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
@@ -271,6 +289,24 @@ def test_efinance_facade_keeps_fetch_cache_boundary_and_result(monkeypatch: pyte
     assert result["down_count"] == 2
     assert calls == ["realtime"]
     assert efinance_module._realtime_cache["data"] is not None
+
+    index_rows = _fetch_main_indices(
+        "efinance",
+        _index_frame("efinance", _index_rows()),
+        monkeypatch,
+    )
+    _assert_index_rows(index_rows, default_source="efinance")
+
+    malformed_rows = _index_rows()
+    malformed_rows[0] = {"current": "bad", "change": "bad", "change_pct": "bad"}
+    malformed = _fetch_main_indices(
+        "efinance",
+        _index_frame("efinance", malformed_rows),
+        monkeypatch,
+    )
+    assert malformed is not None
+    assert (malformed[0]["current"], malformed[0]["change"], malformed[0]["change_pct"]) == (None, None, None)
+    assert not _fetch_main_indices("efinance", pd.DataFrame(), monkeypatch)
 
 
 def test_tushare_facade_keeps_fetch_scope_lineage_and_result(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -393,3 +429,127 @@ def test_helper_has_no_provider_selection_network_cache_or_retry_imports() -> No
         "src.services.uat_provider_isolation",
     )
     assert not {name for name in imported if name.startswith(forbidden_prefixes)}
+
+
+_INDEX_SPECS = (
+    ("sh000001", "000001", "上证指数"),
+    ("sz399001", "399001", "深证成指"),
+    ("sz399006", "399006", "创业板指"),
+    ("sh000688", "000688", "科创50"),
+    ("sh000016", "000016", "上证50"),
+    ("sh000300", "000300", "沪深300"),
+)
+
+_INDEX_METADATA = {
+    "source": "cached_fixture",
+    "observedAt": "2026-07-16T09:30:01+08:00",
+    "asOf": "2026-07-16T09:30:00+08:00",
+    "freshness": "cached",
+    "providerStatus": "partial",
+    "coverage": {"price": "available", "change": "partial"},
+    "isPartial": True,
+    "isProxy": True,
+    "isSynthetic": False,
+}
+
+
+def _index_rows() -> list[dict[str, object]]:
+    rows = [
+        {"current": 101.0, "change": 1.0, "change_pct": 1.0},
+        {"current": 99.0, "change": -1.0, "change_pct": -1.0},
+        {"current": None, "change": 1.0, "change_pct": 1.0},
+        {"current": 100.0, "change": None, "change_pct": 1.0},
+        {"current": 100.0, "change": 0.0, "change_pct": None},
+        {"current": 0.0, "change": 0.0, "change_pct": 0.0},
+    ]
+    rows[0].update(_INDEX_METADATA)
+    return rows
+
+
+def _index_frame(provider: str, rows: list[dict[str, object]]) -> pd.DataFrame:
+    records = []
+    for (sina_code, code, _name), row in zip(_INDEX_SPECS, rows):
+        if provider == "akshare":
+            record = {
+                "代码": sina_code,
+                "最新价": row.get("current"),
+                "涨跌额": row.get("change"),
+                "涨跌幅": row.get("change_pct"),
+                "今开": 100.0,
+                "最高": 102.0,
+                "最低": 99.0,
+                "昨收": 100.0,
+                "成交量": 1000.0,
+                "成交额": 1e8,
+            }
+        else:
+            record = {
+                "股票代码": code,
+                "最新价": row.get("current"),
+                "涨跌额": row.get("change"),
+                "涨跌幅": row.get("change_pct"),
+                "开盘": 100.0,
+                "最高": 102.0,
+                "最低": 99.0,
+                "成交量": 1000.0,
+                "成交额": 1e8,
+                "振幅": 3.0,
+            }
+        record.update({key: value for key, value in row.items() if key in _INDEX_METADATA})
+        records.append(record)
+    return pd.DataFrame(records)
+
+
+def _fetch_main_indices(
+    provider: str,
+    frame: pd.DataFrame,
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[dict[str, object]] | None:
+    if provider == "akshare":
+        fake_module = types.ModuleType("akshare")
+        fake_module.stock_zh_index_spot_sina = lambda: frame
+        fetcher = AkshareFetcher.__new__(AkshareFetcher)
+        _configure_fetcher(fetcher)
+        monkeypatch.setitem(sys.modules, "akshare", fake_module)
+        monkeypatch.setattr(
+            akshare_module,
+            "require_uat_provider_dispatch_allowed",
+            lambda **_kwargs: None,
+        )
+    else:
+        fake_module = types.ModuleType("efinance")
+        fake_module.stock = types.SimpleNamespace(get_realtime_quotes=lambda _scope: frame)
+        fetcher = EfinanceFetcher.__new__(EfinanceFetcher)
+        _configure_fetcher(fetcher)
+        monkeypatch.setitem(sys.modules, "efinance", fake_module)
+        monkeypatch.setattr(
+            efinance_module,
+            "_ef_call_with_timeout",
+            lambda function, *args: function(*args),
+        )
+    return fetcher.get_main_indices(region="cn")
+
+
+def _assert_index_rows(
+    result: list[dict[str, object]] | None,
+    *,
+    default_source: str,
+) -> None:
+    assert result is not None
+    assert len(result) == 6
+    assert (result[0]["current"], result[0]["change"], result[0]["change_pct"]) == (101.0, 1.0, 1.0)
+    assert (result[1]["current"], result[1]["change"], result[1]["change_pct"]) == (99.0, -1.0, -1.0)
+    assert result[0]["source"] == "cached_fixture"
+    assert result[0]["observed_at"] == _INDEX_METADATA["observedAt"]
+    assert result[0]["as_of"] == _INDEX_METADATA["asOf"]
+    assert result[0]["freshness"] == "cached"
+    assert result[0]["provider_status"] == "partial"
+    assert result[0]["coverage"] == _INDEX_METADATA["coverage"]
+    assert result[0]["is_partial"] is True
+    assert result[0]["is_proxy"] is True
+    assert result[0]["is_synthetic"] is False
+    assert result[2]["current"] is None
+    assert result[2]["source"] == default_source
+    assert result[3]["change"] is None
+    assert result[4]["change_pct"] is None
+    assert (result[5]["current"], result[5]["change"], result[5]["change_pct"]) == (0.0, 0.0, 0.0)
