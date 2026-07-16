@@ -12,7 +12,8 @@ FastAPI 应用工厂模块
 
 使用方式：
     from api.app import create_app
-    app = create_app()
+    from src.runtime.composition import RuntimeContainer
+    app = create_app(RuntimeContainer())
 """
 
 import mimetypes
@@ -41,9 +42,7 @@ from src.storage import get_db
 from src.auth import is_auth_enabled, is_production_mode
 from src.config import get_config
 from src.logging_config import ensure_runtime_file_logging
-from src.services.system_config_service import SystemConfigService
-from src.services.crypto_realtime_service import get_crypto_realtime_service, should_auto_start_crypto_realtime
-from src.services.task_queue import get_task_queue
+from src.runtime.composition import RuntimeContainer
 
 logger = logging.getLogger(__name__)
 
@@ -220,7 +219,7 @@ def _storage_readiness_check() -> Tuple[bool, Dict[str, Any]]:
 
 def _task_queue_readiness_check(app: FastAPI) -> Tuple[bool, Dict[str, Any], list[str]]:
     try:
-        queue = getattr(app.state, "task_queue", None) or get_task_queue()
+        queue = app.state.runtime_container.task_queue
         runtime = queue.get_runtime_status()
     except Exception:
         return False, {"status": "not_ready", "detail": "task queue check failed"}, []
@@ -256,7 +255,7 @@ def _readiness_payload(app: FastAPI) -> Tuple[int, Dict[str, Any]]:
     warnings: list[str] = []
     ready = True
 
-    system_config_ready = hasattr(app.state, "system_config_service")
+    system_config_ready = app.state.runtime_container.is_started
     checks["system_config"] = {
         "status": "ok" if system_config_ready else "not_ready",
         "detail": "SystemConfigService initialized" if system_config_ready else "SystemConfigService missing from app state",
@@ -278,38 +277,36 @@ def _readiness_payload(app: FastAPI) -> Tuple[int, Dict[str, Any]]:
 
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
-    """Initialize and release shared services for the app lifecycle."""
+    """Delegate the app lifecycle to its explicit runtime owner."""
+    runtime_container = app.state.runtime_container
     app.state.backend_runtime_started_at = _iso_now()
-    app.state.system_config_service = SystemConfigService()
-    app.state.task_queue = get_task_queue()
-    if should_auto_start_crypto_realtime():
-        app.state.crypto_realtime_service = get_crypto_realtime_service(auto_start=True)
-    runtime = app.state.task_queue.get_runtime_status()
-    if not runtime.get("topology_ok", True):
-        logger.warning("[App] Task queue topology warning: %s", runtime.get("warning"))
     try:
+        runtime_container.start()
+        runtime = runtime_container.task_queue.get_runtime_status()
+        if not runtime.get("topology_ok", True):
+            logger.warning("[App] Task queue topology warning: %s", runtime.get("warning"))
         yield
     finally:
-        if hasattr(app.state, "task_queue"):
-            app.state.task_queue.shutdown(wait=False, cancel_futures=True)
-            delattr(app.state, "task_queue")
-        if hasattr(app.state, "crypto_realtime_service"):
-            app.state.crypto_realtime_service.stop()
-            delattr(app.state, "crypto_realtime_service")
-        if hasattr(app.state, "system_config_service"):
-            delattr(app.state, "system_config_service")
+        runtime_container.close()
 
 
-def create_app(static_dir: Optional[Path] = None) -> FastAPI:
+def create_app(
+    container: RuntimeContainer | None = None,
+    static_dir: Optional[Path] = None,
+) -> FastAPI:
     """
     创建并配置 FastAPI 应用实例
     
     Args:
+        container: 应用生命周期拥有的运行时容器
         static_dir: 静态文件目录路径（可选，默认为项目根目录下的 static）
         
     Returns:
         配置完成的 FastAPI 应用实例
     """
+    if container is None:
+        container = RuntimeContainer()
+
     # 默认静态文件目录
     if static_dir is None:
         static_dir = Path(__file__).parent.parent / "static"
@@ -332,6 +329,7 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
         redoc_url=None,
         openapi_url=None,
     )
+    app.state.runtime_container = container
     app.state.frontend_static_dir = static_dir
     app.state.backend_runtime_started_at = _iso_now()
     
@@ -532,4 +530,4 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
 
 # 默认应用实例（供 uvicorn 直接使用）
 _ensure_api_runtime_file_logging_once()
-app = create_app()
+app = create_app(RuntimeContainer())

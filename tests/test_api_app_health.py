@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 import api.app as api_app
 from api.app import create_app
+from src.runtime.composition import RuntimeContainer
 
 
 class _SessionStub:
@@ -155,15 +156,16 @@ class ApiAppHealthTestCase(unittest.TestCase):
         queue = queue_stub or _QueueStub()
         db = db_stub or _DatabaseStub()
         service = object()
-        patches = [
-            patch("api.app.SystemConfigService", return_value=service),
-            patch("api.app.get_task_queue", return_value=queue),
-            patch("api.app.get_db", return_value=db),
-        ]
-        for item in patches:
-            item.start()
-            self.addCleanup(item.stop)
-        app = create_app(static_dir=static_dir)
+        db_patch = patch("api.app.get_db", return_value=db)
+        db_patch.start()
+        self.addCleanup(db_patch.stop)
+        container = RuntimeContainer(
+            system_config_service_factory=lambda: service,
+            task_queue_factory=lambda: queue,
+            crypto_realtime_service_factory=_forbidden_startup_call("crypto realtime service"),
+            should_start_crypto_realtime=lambda: False,
+        )
+        app = create_app(container, static_dir=static_dir)
         return app, queue, db
 
     def test_live_health_endpoint_reports_process_alive(self) -> None:
@@ -326,15 +328,13 @@ def test_lifespan_skips_crypto_realtime_startup_when_disabled(monkeypatch, tmp_p
     queue = _QueueStub()
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     monkeypatch.setenv("CRYPTO_REALTIME_ENABLED", "0")
-    monkeypatch.setattr(api_app, "SystemConfigService", lambda: object())
-    monkeypatch.setattr(api_app, "get_task_queue", lambda: queue)
-    monkeypatch.setattr(
-        api_app,
-        "get_crypto_realtime_service",
-        _forbidden_startup_call("crypto realtime service"),
+    container = RuntimeContainer(
+        system_config_service_factory=lambda: object(),
+        task_queue_factory=lambda: queue,
+        crypto_realtime_service_factory=_forbidden_startup_call("crypto realtime service"),
     )
 
-    app = api_app.create_app(static_dir=tmp_path)
+    app = api_app.create_app(container, static_dir=tmp_path)
 
     with TestClient(app) as client:
         response = client.get("/api/health/live")

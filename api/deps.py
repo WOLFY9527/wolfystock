@@ -94,11 +94,7 @@ def get_database_manager() -> DatabaseManager:
 
 def get_system_config_service(request: Request) -> SystemConfigService:
     """Get app-lifecycle shared SystemConfigService instance."""
-    service = getattr(request.app.state, "system_config_service", None)
-    if service is None:
-        service = SystemConfigService()
-        request.app.state.system_config_service = service
-    return service
+    return request.app.state.runtime_container.system_config_service
 
 
 def resolve_current_user(request: Request) -> CurrentUser | None:
