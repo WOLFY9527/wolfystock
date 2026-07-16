@@ -18,6 +18,7 @@ import pandas as pd
 from data_provider.base import DataFetcherManager
 from src.config import get_config
 from src.core.scanner_profile import ScannerMarketProfile, get_scanner_profile
+from src.core.scanner_skip_reason import normalize_scanner_skip_reason
 from src.core.scanner_theme_registry import ScannerTheme, get_scanner_theme
 from src.data.stock_mapping import STOCK_NAME_MAP
 from src.core.trading_calendar import MARKET_TIMEZONE, is_market_open
@@ -1967,41 +1968,6 @@ class MarketScannerService:
             candidate["_diagnostics"] = diagnostics
 
     @staticmethod
-    def _consumer_reason_bucket(
-        *,
-        status: str,
-        reason: Optional[str],
-        failed_rules: Sequence[str],
-        missing_fields: Sequence[str],
-    ) -> str:
-        tokens = " ".join(
-            str(item or "").strip().lower()
-            for item in [status, reason, *failed_rules, *missing_fields]
-            if str(item or "").strip()
-        )
-        if status == "selected":
-            return "selected"
-        if status == "data_failed" or "not_enough_history" in tokens or "missing price history" in tokens:
-            return "history_coverage"
-        if "history" in tokens and ("missing" in tokens or "insufficient" in tokens):
-            return "history_coverage"
-        if "below_score_threshold" in tokens:
-            return "score_fit"
-        if any(marker in tokens for marker in ("liquidity", "volume", "amount", "turnover")):
-            return "liquidity"
-        if "price" in tokens:
-            return "price_range"
-        if any(marker in tokens for marker in ("trend", "ma20", "ma60")):
-            return "trend_fit"
-        if "momentum" in tokens:
-            return "momentum_fit"
-        if any(marker in tokens for marker in ("unsupported_market", "benchmark_symbol_skipped", "duplicate_symbol")):
-            return "universe_scope"
-        if any(marker in tokens for marker in ("invalid_payload", "invalid", "payload")):
-            return "input_validation"
-        return "other"
-
-    @staticmethod
     def _consumer_freshness_category(value: Any, *, fallback: str = "unknown") -> str:
         freshness = str(value or "").strip().lower()
         if not freshness or freshness == "unknown":
@@ -2059,7 +2025,7 @@ class MarketScannerService:
         score = candidate.get("score")
         failed_rules = [str(item) for item in candidate.get("failed_rules") or []]
         missing_fields = [str(item) for item in candidate.get("missing_fields") or []]
-        reason_bucket = self._consumer_reason_bucket(
+        reason_bucket = normalize_scanner_skip_reason(
             status=status,
             reason=str(candidate.get("reason") or ""),
             failed_rules=failed_rules,

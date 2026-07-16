@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from src.core.scanner_skip_reason import normalize_scanner_skip_reason
+
 
 SCANNER_CONSUMER_DATA_QUALITY_LABELS = {"ready", "delayed", "cached", "partial", "no_evidence", "unavailable"}
 SCANNER_NO_ADVICE_LABEL = "Observation-only research context; not investment advice."
@@ -817,41 +819,6 @@ _SCANNER_CONSUMER_REASON_COPY: Dict[str, Dict[str, str]] = {
 }
 
 
-def _candidate_diagnostic_reason_bucket(
-    *,
-    status: str,
-    reason: Optional[str],
-    failed_rules: List[str],
-    missing_fields: List[str],
-) -> str:
-    tokens = " ".join(
-        str(item or "").strip().lower()
-        for item in [status, reason, *failed_rules, *missing_fields]
-        if str(item or "").strip()
-    )
-    if status == "selected":
-        return "selected"
-    if status == "data_failed" or "not_enough_history" in tokens or "missing price history" in tokens:
-        return "history_coverage"
-    if "history" in tokens and ("missing" in tokens or "insufficient" in tokens):
-        return "history_coverage"
-    if "below_score_threshold" in tokens:
-        return "score_fit"
-    if any(marker in tokens for marker in ("liquidity", "volume", "amount", "turnover")):
-        return "liquidity"
-    if "price" in tokens:
-        return "price_range"
-    if any(marker in tokens for marker in ("trend", "ma20", "ma60")):
-        return "trend_fit"
-    if "momentum" in tokens:
-        return "momentum_fit"
-    if any(marker in tokens for marker in ("unsupported_market", "benchmark_symbol_skipped", "duplicate_symbol")):
-        return "universe_scope"
-    if any(marker in tokens for marker in ("invalid_payload", "invalid", "payload")):
-        return "input_validation"
-    return "other"
-
-
 def _candidate_source_confidence_bucket(status: str, score: Optional[float], reason_bucket: str) -> str:
     if status == "data_failed" or reason_bucket == "history_coverage" or score is None:
         return "insufficient"
@@ -868,7 +835,7 @@ def _build_candidate_diagnostic_consumer_projection(
     failed_rules: List[str],
     missing_fields: List[str],
 ) -> Dict[str, Any]:
-    reason_bucket = _candidate_diagnostic_reason_bucket(
+    reason_bucket = normalize_scanner_skip_reason(
         status=status,
         reason=reason,
         failed_rules=failed_rules,

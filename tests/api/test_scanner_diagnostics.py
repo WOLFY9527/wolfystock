@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
 """Scanner diagnostics contract tests."""
 
+import pytest
+
+from api.v1.schemas import scanner as scanner_schema
+from src.core.scanner_skip_reason import normalize_scanner_skip_reason
 from src.repositories.stock_repo import StockRepository
+from src.services import market_scanner_service as scanner_service
 from src.services.market_scanner_service import MarketScannerService
 from src.storage import DatabaseManager
 from tests.test_market_scanner_service import FakeUsScannerDataManager, seed_crypto_miner_local_history
@@ -16,6 +21,143 @@ UNSAFE_CONSUMER_DIAGNOSTIC_TERMS = (
     "provider_payload",
     "raw_payload",
 )
+
+
+SCANNER_SKIP_REASON_CASES = (
+    pytest.param("selected", None, [], [], "selected", id="selected-status"),
+    pytest.param("data_failed", None, [], [], "history_coverage", id="data-failed-status"),
+    pytest.param("skipped", "missing price history", [], [], "history_coverage", id="missing-price-history"),
+    pytest.param("skipped", None, ["not_enough_history"], [], "history_coverage", id="not-enough-history"),
+    pytest.param("skipped", None, [], ["missing_history"], "history_coverage", id="missing-history-field"),
+    pytest.param("rejected", None, ["insufficient_history"], [], "history_coverage", id="insufficient-history"),
+    pytest.param("rejected", None, ["below_score_threshold"], [], "score_fit", id="score-threshold"),
+    pytest.param("rejected", None, ["below_liquidity_threshold"], [], "liquidity", id="liquidity"),
+    pytest.param("rejected", None, ["volume"], [], "liquidity", id="volume"),
+    pytest.param("rejected", None, ["amount"], [], "liquidity", id="amount"),
+    pytest.param("rejected", None, ["turnover"], [], "liquidity", id="turnover"),
+    pytest.param("rejected", "below price threshold", [], [], "price_range", id="price"),
+    pytest.param("rejected", None, ["below_trend_threshold"], [], "trend_fit", id="trend"),
+    pytest.param("rejected", None, ["ma20"], [], "trend_fit", id="ma20"),
+    pytest.param("rejected", None, ["ma60"], [], "trend_fit", id="ma60"),
+    pytest.param("rejected", None, ["below_ma20_or_ma60"], [], "trend_fit", id="ma-rules"),
+    pytest.param("rejected", None, ["below_momentum_threshold"], [], "momentum_fit", id="momentum"),
+    pytest.param("skipped", "unsupported_market", [], [], "universe_scope", id="unsupported-market"),
+    pytest.param("skipped", "benchmark_symbol_skipped", [], [], "universe_scope", id="benchmark-symbol"),
+    pytest.param("skipped", None, ["duplicate_symbol"], [], "universe_scope", id="duplicate-symbol"),
+    pytest.param("error", None, ["invalid_payload"], [], "input_validation", id="invalid-payload"),
+    pytest.param("error", "invalid", [], [], "input_validation", id="invalid"),
+    pytest.param("error", "payload", [], [], "input_validation", id="payload"),
+    pytest.param("skipped", "not_evaluated", [], [], "other", id="not-evaluated"),
+    pytest.param("evaluated", "evaluated", [], [], "other", id="evaluated"),
+    pytest.param("selected", "missing price history", [], [], "selected", id="ordering-selected-first"),
+    pytest.param(
+        "data_failed",
+        None,
+        ["below_score_threshold"],
+        [],
+        "history_coverage",
+        id="ordering-history-before-score",
+    ),
+    pytest.param(
+        "rejected",
+        "liquidity",
+        ["below_score_threshold"],
+        [],
+        "score_fit",
+        id="ordering-score-before-liquidity",
+    ),
+    pytest.param("rejected", "price", ["liquidity"], [], "liquidity", id="ordering-liquidity-before-price"),
+    pytest.param("rejected", "trend", ["price"], [], "price_range", id="ordering-price-before-trend"),
+    pytest.param("rejected", "momentum", ["trend"], [], "trend_fit", id="ordering-trend-before-momentum"),
+    pytest.param(
+        "rejected",
+        "unsupported_market",
+        ["momentum"],
+        [],
+        "momentum_fit",
+        id="ordering-momentum-before-universe",
+    ),
+    pytest.param(
+        "skipped",
+        "invalid_payload",
+        ["duplicate_symbol"],
+        [],
+        "universe_scope",
+        id="ordering-universe-before-input",
+    ),
+    pytest.param("", "", [], [], "other", id="empty"),
+    pytest.param(None, None, [], [], "other", id="null"),
+    pytest.param("skipped", {"unexpected": True}, [17, None], [{"bad": True}], "other", id="malformed"),
+    pytest.param("skipped", "unknown_reason", ["unknown_rule"], ["unknown.field"], "other", id="unknown"),
+    pytest.param("SELECTED", None, [], [], "other", id="status-case-sensitive"),
+)
+
+
+@pytest.mark.parametrize(
+    ("status", "reason", "failed_rules", "missing_fields", "expected"),
+    SCANNER_SKIP_REASON_CASES,
+)
+def test_scanner_skip_reason_normalizer_golden_parity(
+    status: object,
+    reason: object,
+    failed_rules: list[object],
+    missing_fields: list[object],
+    expected: str,
+) -> None:
+    assert normalize_scanner_skip_reason(
+        status=status,
+        reason=reason,
+        failed_rules=failed_rules,
+        missing_fields=missing_fields,
+    ) == expected
+
+
+def test_scanner_schema_and_service_share_authoritative_skip_reason_normalizer() -> None:
+    assert scanner_schema.normalize_scanner_skip_reason is normalize_scanner_skip_reason
+    assert scanner_service.normalize_scanner_skip_reason is normalize_scanner_skip_reason
+
+
+@pytest.mark.parametrize(
+    ("status", "reason", "failed_rules", "missing_fields", "expected"),
+    tuple(
+        case
+        for case in SCANNER_SKIP_REASON_CASES
+        if case.values[0] in {"selected", "rejected", "data_failed", "skipped", "error", "evaluated"}
+        and case.id != "malformed"
+    ),
+)
+def test_scanner_schema_and_service_skip_reason_projections_are_equal(
+    status: str,
+    reason: object,
+    failed_rules: list[object],
+    missing_fields: list[object],
+    expected: str,
+) -> None:
+    schema_payload = scanner_schema.ScannerCandidateDiagnosticsResponse(
+        symbol="TEST",
+        status=status,
+        score=None if status == "data_failed" else 50.0,
+        reason=reason,
+        failed_rules=failed_rules,
+        missing_fields=missing_fields,
+    ).model_dump()
+    service = object.__new__(MarketScannerService)
+    service_payload = service._build_candidate_consumer_projection(
+        {
+            "status": status,
+            "score": None if status == "data_failed" else 50.0,
+            "reason": reason,
+            "failed_rules": failed_rules,
+            "missing_fields": missing_fields,
+        }
+    )
+
+    assert schema_payload["consumerReasonBucket"] == expected
+    assert service_payload["consumerReasonBucket"] == expected
+    assert (
+        schema_payload["consumerDiagnostics"]["reasonBucket"]
+        == service_payload["consumerDiagnostics"]["reasonBucket"]
+    )
 
 
 def _assert_consumer_rejection_projection_is_safe(candidate: dict) -> None:
