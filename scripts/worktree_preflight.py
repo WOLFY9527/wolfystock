@@ -246,6 +246,35 @@ def tool_command(name: str) -> list[str]:
     raise PreflightError(f"unable to locate {name}; add it to PATH")
 
 
+def npm_platform() -> dict[str, str]:
+    result = run([*tool_command("node"), "-p", "JSON.stringify([process.platform, process.arch])"])
+    if result.returncode != 0:
+        raise PreflightError(f"unable to determine npm platform: {result.stderr.strip() or result.stdout.strip()}")
+    try:
+        os_name, cpu = json.loads(result.stdout)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise PreflightError("node did not return a valid npm platform") from exc
+    if not all(isinstance(value, str) and value for value in (os_name, cpu)):
+        raise PreflightError("node did not return a valid npm platform")
+    return {"os": os_name, "cpu": cpu}
+
+
+def platform_constraint_allows(value: object, current: str, field: str) -> bool:
+    if value is None:
+        return True
+    if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
+        raise PreflightError(f"lockfile package {field} constraint is invalid")
+    included = {item for item in value if not item.startswith("!")}
+    excluded = {item[1:] for item in value if item.startswith("!")}
+    return current not in excluded and (not included or current in included)
+
+
+def package_is_platform_compatible(entry: dict[str, Any], current: dict[str, str]) -> bool:
+    return platform_constraint_allows(entry.get("os"), current["os"], "os") and platform_constraint_allows(
+        entry.get("cpu"), current["cpu"], "cpu"
+    )
+
+
 def installed_npm_manifest(root: Path) -> dict[str, Any]:
     web = root / "apps/dsa-web"
     modules = web / "node_modules"
@@ -253,20 +282,31 @@ def installed_npm_manifest(root: Path) -> dict[str, Any]:
         raise PreflightError("canonical apps/dsa-web/node_modules is missing; run npm ci in the canonical worktree")
     lock = package_lock(root)
     package_entries = lock["packages"]
+    current_platform = npm_platform()
     installed: dict[str, str] = {}
     integrity: dict[str, str] = {}
     for lock_path, entry in sorted(package_entries.items()):
         if not lock_path.startswith("node_modules/") or not isinstance(entry, dict):
             continue
+        expected_version = entry.get("version")
+        if not isinstance(expected_version, str) or not expected_version:
+            raise PreflightError(f"lockfile package metadata is invalid: {lock_path}")
+        optional = entry.get("optional", False)
+        if not isinstance(optional, bool):
+            raise PreflightError(f"lockfile package optional metadata is invalid: {lock_path}")
+        compatible = package_is_platform_compatible(entry, current_platform)
         package_json = web / lock_path / "package.json"
         if not package_json.is_file():
+            if optional or not compatible:
+                continue
             raise PreflightError(f"installed npm package is missing: {lock_path}; run npm ci in the canonical worktree")
         try:
             installed_version = json.loads(package_json.read_text(encoding="utf-8"))["version"]
         except (json.JSONDecodeError, KeyError) as exc:
             raise PreflightError(f"installed npm package metadata is invalid: {lock_path}") from exc
-        expected_version = entry.get("version")
-        if expected_version and installed_version != expected_version:
+        if not isinstance(installed_version, str) or not installed_version:
+            raise PreflightError(f"installed npm package metadata is invalid: {lock_path}")
+        if installed_version != expected_version:
             raise PreflightError(
                 f"installed npm package version mismatch for {lock_path}: lockfile requires {expected_version}, installed {installed_version}; run npm ci in the canonical worktree"
             )
@@ -422,11 +462,12 @@ def bootstrap(mode: str) -> dict[str, Any]:
     env_link = external_env_link(root, canonical)
     if env_link:
         links.append(env_link)
+    for link in links:
+        if (link.destination.exists() or link.destination.is_symlink()) and not same_target(link.destination, link.source):
+            raise PreflightError(f"refusing to replace {link.label}: destination is not the qualified canonical dependency link")
     actions: list[str] = []
     for link in links:
         if link.destination.exists() or link.destination.is_symlink():
-            if not same_target(link.destination, link.source):
-                raise PreflightError(f"refusing to replace {link.label}: destination is not the qualified canonical dependency link")
             actions.append(f"{link.label} already linked")
         elif mode == "--check":
             actions.append(f"would link {link.label}")

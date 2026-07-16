@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -99,6 +100,51 @@ def run_bootstrap(
 
 def resolved(path: Path) -> Path:
     return path.resolve(strict=True)
+
+
+def add_lock_package(
+    canonical: Path,
+    lock_path: str,
+    *,
+    version: str = "1.0.0",
+    optional: bool = False,
+    os_constraints: list[str] | None = None,
+    cpu_constraints: list[str] | None = None,
+) -> None:
+    lock_path_file = canonical / "apps" / "dsa-web" / "package-lock.json"
+    lock = json.loads(lock_path_file.read_text(encoding="utf-8"))
+    entry: dict[str, object] = {"version": version, "integrity": "sha512-fixture"}
+    if optional:
+        entry["optional"] = True
+    if os_constraints is not None:
+        entry["os"] = os_constraints
+    if cpu_constraints is not None:
+        entry["cpu"] = cpu_constraints
+    lock["packages"][lock_path] = entry
+    lock_path_file.write_text(json.dumps(lock), encoding="utf-8")
+
+
+def write_installed_package(canonical: Path, lock_path: str, *, version: str = "1.0.0") -> None:
+    package_json = canonical / "apps" / "dsa-web" / lock_path / "package.json"
+    package_json.parent.mkdir(parents=True, exist_ok=True)
+    package_json.write_text(
+        json.dumps({"name": lock_path.removeprefix("node_modules/"), "version": version}),
+        encoding="utf-8",
+    )
+
+
+def installed_npm_manifest(
+    canonical: Path, monkeypatch: pytest.MonkeyPatch, *, os_name: str = "darwin", cpu: str = "arm64"
+) -> dict[str, object]:
+    import scripts.worktree_preflight as preflight
+
+    monkeypatch.setattr(preflight, "npm_platform", lambda: {"os": os_name, "cpu": cpu}, raising=False)
+    monkeypatch.setattr(
+        preflight,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, '{"dependencies":{}}', ""),
+    )
+    return preflight.installed_npm_manifest(canonical)
 
 
 def test_apply_discovers_canonical_main_worktree_and_creates_dependency_links(
@@ -322,9 +368,59 @@ def test_bootstrap_does_not_link_runtime_products(worktree_fixture: tuple[Path, 
 
 
 def test_rejects_stale_echarts_before_links_or_heavy_validation(
-    worktree_fixture: tuple[Path, Path],
+    worktree_fixture: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     canonical, linked = worktree_fixture
+    optional_foreign = "node_modules/@esbuild/aix-ppc64"
+    optional_current = "node_modules/optional-current-platform"
+    required_current = "node_modules/required-current-platform"
+    required_wrong_version = "node_modules/required-wrong-version"
+    required_invalid_metadata = "node_modules/required-invalid-metadata"
+
+    add_lock_package(
+        canonical,
+        optional_foreign,
+        version="0.27.2",
+        optional=True,
+        os_constraints=["aix"],
+        cpu_constraints=["ppc64"],
+    )
+    assert optional_foreign not in installed_npm_manifest(canonical, monkeypatch)["packages"]
+
+    add_lock_package(canonical, optional_current, optional=True, os_constraints=["darwin"], cpu_constraints=["arm64"])
+    assert optional_current not in installed_npm_manifest(canonical, monkeypatch)["packages"]
+
+    write_installed_package(canonical, optional_current)
+    manifest = installed_npm_manifest(canonical, monkeypatch)
+    assert manifest["packages"][optional_current] == "1.0.0"
+    assert manifest["integrity"][optional_current] == "sha512-fixture"
+
+    for lock_path, os_constraints, cpu_constraints in (
+        ("node_modules/incompatible-os", ["aix"], None),
+        ("node_modules/incompatible-cpu", None, ["ppc64"]),
+    ):
+        add_lock_package(canonical, lock_path, os_constraints=os_constraints, cpu_constraints=cpu_constraints)
+        assert lock_path not in installed_npm_manifest(canonical, monkeypatch)["packages"]
+
+    import scripts.worktree_preflight as preflight
+
+    add_lock_package(canonical, required_wrong_version)
+    write_installed_package(canonical, required_wrong_version, version="2.0.0")
+    with pytest.raises(preflight.PreflightError, match="lockfile requires 1.0.0, installed 2.0.0"):
+        installed_npm_manifest(canonical, monkeypatch)
+    write_installed_package(canonical, required_wrong_version)
+
+    add_lock_package(canonical, required_invalid_metadata)
+    invalid_package_json = canonical / "apps" / "dsa-web" / required_invalid_metadata / "package.json"
+    invalid_package_json.parent.mkdir(parents=True)
+    invalid_package_json.write_text('{"name":"required-invalid-metadata"}', encoding="utf-8")
+    with pytest.raises(preflight.PreflightError, match="installed npm package metadata is invalid"):
+        installed_npm_manifest(canonical, monkeypatch)
+
+    add_lock_package(canonical, required_current, os_constraints=["darwin"], cpu_constraints=["arm64"])
+    with pytest.raises(preflight.PreflightError, match=f"installed npm package is missing: {required_current}"):
+        installed_npm_manifest(canonical, monkeypatch)
+
     package_json = canonical / "apps" / "dsa-web" / "node_modules" / "echarts" / "package.json"
     package_json.write_text('{"name":"echarts","version":"5.6.0"}\n', encoding="utf-8")
 
@@ -437,17 +533,20 @@ def test_entrypoints_run_shared_core_in_isolated_mode() -> None:
     shell_flavor = preflight.detect_shell_flavor(executable=bash_executable, environ=env)
     posix_script = preflight.windows_to_posix_path(str(SCRIPT_PATH), shell_flavor=shell_flavor) if os.name == "nt" else str(SCRIPT_PATH)
     posix = subprocess.run(["bash", posix_script, "--check"], text=True, capture_output=True, env=env, check=False)
+    assert posix.returncode == 0, posix.stderr
+    assert "shared dependency reuse skipped" in posix.stdout
+    powershell_executable = shutil.which("pwsh")
+    if not powershell_executable:
+        return
     powershell = subprocess.run(
-        ["pwsh", "-NoProfile", "-File", str(POWERSHELL_PATH), "-Check"],
+        [powershell_executable, "-NoProfile", "-File", str(POWERSHELL_PATH), "-Check"],
         text=True,
         capture_output=True,
         env=env,
         check=False,
     )
 
-    assert posix.returncode == 0, posix.stderr
     assert powershell.returncode == 0, powershell.stderr
-    assert "shared dependency reuse skipped" in posix.stdout
     assert "shared dependency reuse skipped" in powershell.stdout
 
 
