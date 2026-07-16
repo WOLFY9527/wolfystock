@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7741,
-      "sha256": "2a678294735a8212bd85c0509964be6d5703e1847735f05a4f874a9ab6e63d94"
+      "count": 7760,
+      "sha256": "5d5ad2dfd1ba127230313b196402864d75b0c8f79fa20c995235a843b32c2687"
     },
     "tests": [
       {
@@ -20517,6 +20517,101 @@
         "id": "tests/test_macro_provider_readiness_contract.py::test_macro_readiness_states_are_derived_from_injected_series_statuses_without_values",
         "domain": "provider_external_network",
         "baseline": true
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_api_handle_observes_unexpected_exit_after_ready",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_main_returns_one_and_skips_bots_on_api_startup_failure[scheduler]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_main_returns_one_and_skips_bots_on_api_startup_failure[serve-only]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_main_returns_one_and_skips_bots_on_api_startup_failure[serve]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_main_stops_api_once_on_every_successful_exit[one-shot]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_main_stops_api_once_on_every_successful_exit[scheduler]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_main_stops_api_once_on_every_successful_exit[serve]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_main_stops_api_when_interrupted_during_bot_start",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_serve_only_fails_closed_when_api_start_is_suppressed",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_start_api_server_normalizes_runner_failure[bind]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_start_api_server_normalizes_runner_failure[import]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_start_api_server_normalizes_runner_failure[lifespan]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_start_api_server_normalizes_runner_failure[system-exit]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_start_api_server_normalizes_thread_start_failure",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_start_api_server_rejects_pre_start_normal_exit",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_start_api_server_timeout_stops_and_joins_runner",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_start_api_server_waits_for_server_started",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_startup_handshake_does_not_require_application_readiness",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_main_runtime_startup.py::test_static_asset_degradation_remains_nonfatal",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
       },
       {
         "id": "tests/test_manual_release_approval_evidence_check.py::test_go_or_launch_approved_wording_is_rejected",
