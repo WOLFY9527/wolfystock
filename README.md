@@ -92,6 +92,22 @@ npm run build
 - AI/docs governance: `python scripts/build_ai_project_manual.py --check` and
   `python scripts/check_ai_assets.py`.
 
+Backend pytest runs deny non-loopback socket access by default. The authoritative
+`scripts/ci_gate.sh` remains the LAND gate and now also verifies the explicit
+domain manifest. Shadow topology/parity commands are:
+
+```bash
+python scripts/domain_test_topology.py verify-all
+python scripts/domain_test_topology.py run-backend --output-dir output/domain-test-topology --retry-failures 1
+python scripts/domain_test_topology.py list-backend --domain auth_security
+python scripts/domain_test_topology.py list-network
+```
+
+Audited external-network tests are separately enumerable and never run in the
+standard offline/LAND tier. Running one requires all marker metadata plus both
+explicit CLI gates: `python -m pytest -m network --allow-test-network
+--network-audit <audit-id>`.
+
 Local UAT runtime (POSIX shell / Git Bash):
 
 ```bash

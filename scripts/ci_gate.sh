@@ -93,7 +93,7 @@ echo "[INFO] Provider-dependent test.sh warnings are treated as environment/prov
 run_step "test.sh code" ./test.sh code
 run_step "test.sh yfinance" ./test.sh yfinance
 
-run_step "offline test suite" "${PYTHON_BIN}" -m pytest -m "not network"
+run_step "offline test suite (outbound denied + domain parity)" "${PYTHON_BIN}" -m pytest --domain-topology-verify-full
 
 print_step "summary"
 echo "[PASS] backend-gate completed successfully"

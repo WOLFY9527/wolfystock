@@ -59,12 +59,12 @@
     "path": "scripts/build_ai_project_manual.py",
     "readsProductionDataPaths": false,
     "requiresApiKeys": false,
-    "sha256": "71001e1b197e87b633cf227179b5de4e3a411eeaaf69c3d8ea4e29f8fea0485f",
+    "sha256": "fb28a87b7094609c41e73f7565fec2aa3187f780728cd78e02960e2de5600e74",
     "version": 4
   },
   "includedSources": [
     {
-      "bytes": 5192,
+      "bytes": 5295,
       "categories": [
         "governance",
         "workflow"
@@ -72,23 +72,23 @@
       "lineCount": 103,
       "path": "AGENTS.md",
       "purpose": "repository AI-agent rules and hard safety boundaries",
-      "sha256": "c9a803ee079ad5f1eeca390b72d5ab6cc8b408ce2c080c4d77336d74bb9dc144",
+      "sha256": "b9365e2681542a39768c35b800cec2d7129ee25619ba84b637c7bea6491c9115",
       "title": "AGENTS.md"
     },
     {
-      "bytes": 5699,
+      "bytes": 6628,
       "categories": [
         "onboarding",
         "product"
       ],
-      "lineCount": 160,
+      "lineCount": 176,
       "path": "README.md",
       "purpose": "human product entrypoint and supported run commands",
-      "sha256": "bafe6ca124757314ac2e77189a5b6fcd99f34691e4d02eb9d148f3b1a43ec7b9",
+      "sha256": "994e12cdc14313c6b0f493b222b759b83d27d9e1659f3755c7a9c9c93b310ecf",
       "title": "WolfyStock"
     },
     {
-      "bytes": 738,
+      "bytes": 755,
       "categories": [
         "governance",
         "sources"
@@ -96,14 +96,14 @@
       "lineCount": 17,
       "path": "docs/DOCS_INDEX.md",
       "purpose": "tiny canonical documentation pointer",
-      "sha256": "2ea80605b35f2ee1bdcc17a74f7b53f31f6f15a5d912c0f3105a28ed95504281",
+      "sha256": "c42fdefe65806eb5d4ae7519f150019d5695cad6b16f4774df24ea15349019e7",
       "title": "WolfyStock Docs Index"
     }
   ],
   "outputs": {
     "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
     "manual": "docs/AI_PROJECT_MANUAL.md",
-    "manualSha256": "00ce5aef3256937111d45e6f4baee58ca50ea8ac4557a147215eb466cc07ee22"
+    "manualSha256": "924290ea2b21d104158339c17cf22a626e237dc1ac30ccae72949b7365f91a32"
   },
   "schemaVersion": 2,
   "sections": [
