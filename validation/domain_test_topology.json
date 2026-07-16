@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7822,
-      "sha256": "65e61d4ee84803031c7846110d2c2e25727e284b53edcddcf91a6509e2665b3b"
+      "count": 7840,
+      "sha256": "15ee6e0fb0f1adf47c4a501eaf80833490d9aca9bd3a725b96933211fa6a39de"
     },
     "tests": [
       {
@@ -6070,6 +6070,96 @@
       },
       {
         "id": "tests/contracts/test_protected_semantics_contract.py::test_protected_semantics_match_current_owner_contract[stored-json-corruption-vs-empty-object]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_adapters_reject_outer_fields_that_conflict_with_canonical_facts",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_cache_and_merge_preserve_identity_and_only_degrade_facts",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_existing_provenance_adapter_projects_facts_without_parallel_reclassification",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_legacy_adapter_does_not_invent_identity_from_source_name",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_legacy_policy_may_degrade_but_never_replace_canonical_facts[fixture-remains-distinct]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_legacy_policy_may_degrade_but_never_replace_canonical_facts[proxy-degrades-to-fallback]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_legacy_policy_may_degrade_but_never_replace_canonical_facts[synthetic-remains-distinct]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_legacy_policy_may_degrade_but_never_replace_canonical_facts[unavailable-remains-distinct]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_observation_times_are_explicit_and_unrelated_timestamps_are_rejected",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_provider_cache_api_round_trip_uses_canonical_facts_in_existing_adapter",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_proxy_synthetic_and_fixture_identities_remain_distinct",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_raw_availability_preserves_empty_zero_unavailable_and_missing[authoritative-empty]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_raw_availability_preserves_empty_zero_unavailable_and_missing[missing]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_raw_availability_preserves_empty_zero_unavailable_and_missing[observed-zero]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_raw_availability_preserves_empty_zero_unavailable_and_missing[unavailable]",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_shared_kernel_contains_no_domain_readiness_or_presentation_policy",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_source_identity_is_immutable_and_round_trips_without_alias_coercion",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/contracts/test_source_observation_facts.py::test_source_observation_fact_types_have_one_definition_in_allowed_scope",
         "domain": "api_schema_contracts",
         "baseline": false
       },
