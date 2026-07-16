@@ -12,6 +12,15 @@ const PROXY_INDICATOR_LABEL_MAP: Record<string, MarketOverviewDisplayLabel> = {
   'INDUSTRY BREADTH PROXY': { primary: '行业广度指标' },
 };
 
+const EN_PROXY_INDICATOR_LABEL_MAP: Record<string, MarketOverviewDisplayLabel> = {
+  'ETF FLOW PROXY': { primary: 'ETF flow indicator' },
+  'ETF 资金流指标': { primary: 'ETF flow indicator' },
+  'INSTITUTIONAL PRESSURE PROXY': { primary: 'Institutional pressure indicator' },
+  '机构压力指标': { primary: 'Institutional pressure indicator' },
+  'INDUSTRY BREADTH PROXY': { primary: 'Industry breadth indicator' },
+  '行业广度指标': { primary: 'Industry breadth indicator' },
+};
+
 const ZH_LABEL_MAP: Record<string, MarketOverviewDisplayLabel> = {
   ...PROXY_INDICATOR_LABEL_MAP,
   SPX: { primary: '标普500', secondary: 'SPX' },
@@ -85,7 +94,7 @@ const ZH_LABEL_MAP: Record<string, MarketOverviewDisplayLabel> = {
 };
 
 const EN_LABEL_MAP: Record<string, MarketOverviewDisplayLabel> = {
-  ...PROXY_INDICATOR_LABEL_MAP,
+  ...EN_PROXY_INDICATOR_LABEL_MAP,
   SPX: { primary: 'S&P 500', secondary: 'SPX' },
   '^GSPC': { primary: 'S&P 500', secondary: 'SPX' },
   'S&P 500': { primary: 'S&P 500', secondary: 'SPX' },

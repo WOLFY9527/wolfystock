@@ -87,6 +87,9 @@ function resolveAdminOpsRouteLabel(pathname: string, language: string): string |
 }
 
 function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, language: string): string {
+  if (pathname === '/guest' || pathname.startsWith('/guest/')) {
+    return language === 'en' ? 'Guest research' : '访客研究';
+  }
   const currentConsumerRoute = resolveCurrentConsumerRoute(pathname);
   if (currentConsumerRoute) {
     return t(currentConsumerRoute.labelKey);
@@ -607,15 +610,15 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
               />
             ) : (
               <div className="shell-mobile-strip" data-testid="shell-mobile-strip">
-                <Link to="/" className="shell-mobile-brand shell-brand-link" aria-label="WolfyStock">
-                  <span className="inline-flex min-w-0 items-center gap-3">
+                <div className="shell-mobile-identity">
+                  <Link to="/" className="shell-mobile-brand shell-brand-link" aria-label="WolfyStock">
                     <BrandLogo className="size-8" />
                     <span className={`shell-wordmark ${BRAND_WORDMARK_CLASSNAME}`}>WolfyStock</span>
+                  </Link>
+                  <span className="shell-mobile-active-route" data-testid="shell-mobile-active-route">
+                    {mobileRouteLabel}
                   </span>
-                </Link>
-                <span className="shell-mobile-active-route" data-testid="shell-mobile-active-route">
-                  {mobileRouteLabel}
-                </span>
+                </div>
                 <div className="shell-mobile-actions flex shrink-0 items-center gap-2" data-testid="shell-mobile-actions">
                   <button
                     type="button"

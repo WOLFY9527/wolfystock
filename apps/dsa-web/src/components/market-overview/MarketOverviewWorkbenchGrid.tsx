@@ -8,6 +8,7 @@ import {
 import { TerminalGrid } from '../terminal/TerminalPrimitives';
 import { MetaLabel, SectionTitle } from '../research/anatomy';
 import { cn } from '../../utils/cn';
+import { useI18n } from '../../contexts/UiLanguageContext';
 
 export type MarketOverviewContextHighlightView = {
   id: string;
@@ -58,6 +59,12 @@ const EXECUTIVE_COVERAGE_LABELS: Record<MarketOverviewExecutiveGroupView['covera
   real: '可用',
   mixed: '部分可用',
   fallback: '延迟可用',
+};
+
+const EXECUTIVE_COVERAGE_LABELS_EN: Record<MarketOverviewExecutiveGroupView['coverage'], string> = {
+  real: 'Available',
+  mixed: 'Partially available',
+  fallback: 'Delayed',
 };
 
 const RailSummaryBlock: React.FC<{
@@ -114,10 +121,10 @@ const ContextHighlightsRail: React.FC<{
 function isMeaningfulExecutiveGroup(group: MarketOverviewExecutiveGroupView): boolean {
   const value = String(group.valueText || '').trim();
   const change = String(group.changeText || '').trim();
-  if (!value || value === '待确认' || value === '—' || value === '--') {
+  if (!value || value === '待确认' || value === 'Pending confirmation' || value === '—' || value === '--') {
     return false;
   }
-  if (change === '待确认' && group.coverage === 'fallback') {
+  if ((change === '待确认' || change === 'Pending confirmation') && group.coverage === 'fallback') {
     // Delayed coverage with a real value still counts as useful evidence.
     return true;
   }
@@ -127,6 +134,8 @@ function isMeaningfulExecutiveGroup(group: MarketOverviewExecutiveGroupView): bo
 const ExecutiveSecondaryGroups: React.FC<{
   groups: MarketOverviewExecutiveGroupView[];
 }> = ({ groups }) => {
+  const { language } = useI18n();
+  const isEnglish = language === 'en';
   const meaningful = groups.filter(isMeaningfulExecutiveGroup);
   const density = meaningful.length >= 3 ? 'full' : meaningful.length >= 1 ? 'compact' : 'bounded-empty';
   const visible = density === 'full' ? groups : density === 'compact' ? meaningful : [];
@@ -138,9 +147,13 @@ const ExecutiveSecondaryGroups: React.FC<{
         data-module-density="bounded-empty"
         className="rounded-lg border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-2.5"
       >
-        <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">跨资产确认</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
+          {isEnglish ? 'Cross-asset confirmation' : '跨资产确认'}
+        </p>
         <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
-          区域与跨资产点位暂不可用；不扩展为四格空卡片墙。
+          {isEnglish
+            ? 'Regional and cross-asset values are unavailable; empty card grids are omitted.'
+            : '区域与跨资产点位暂不可用；不扩展为四格空卡片墙。'}
         </p>
         <ul className="mt-2 flex min-w-0 flex-wrap gap-2 text-[11px] text-[color:var(--wolfy-text-muted)]">
           {groups.map((group) => (
@@ -149,7 +162,7 @@ const ExecutiveSecondaryGroups: React.FC<{
               data-testid={`market-overview-secondary-group-${group.id}`}
               className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-2 py-1"
             >
-              {group.label} · 待确认
+              {group.label} · {isEnglish ? 'Pending confirmation' : '待确认'}
             </li>
           ))}
         </ul>
@@ -194,7 +207,7 @@ const ExecutiveSecondaryGroups: React.FC<{
                 className="px-1.5 text-[9px]"
               />
               <span className="font-mono text-[10px] uppercase text-[color:var(--wolfy-text-muted)]">
-                {EXECUTIVE_COVERAGE_LABELS[group.coverage]}
+                {(isEnglish ? EXECUTIVE_COVERAGE_LABELS_EN : EXECUTIVE_COVERAGE_LABELS)[group.coverage]}
               </span>
             </div>
           </div>
@@ -241,6 +254,8 @@ export const MarketOverviewWorkbenchGrid: React.FC<MarketOverviewWorkbenchGridPr
   executiveGroups,
   showExecutiveGroups,
 }) => {
+  const { language } = useI18n();
+  const isEnglish = language === 'en';
   const secondaryGroups = (evidenceGroups || []).filter((group) => group.tier === 'secondary' && group.rows.length > 0);
   const deepGroups = (evidenceGroups || []).filter((group) => group.tier === 'deep' && group.rows.length > 0);
   const hasStructuredGroups = secondaryGroups.length > 0 || deepGroups.length > 0;
@@ -288,9 +303,9 @@ export const MarketOverviewWorkbenchGrid: React.FC<MarketOverviewWorkbenchGridPr
                 {showExecutiveGroups ? (
                   <div className="flex min-w-0 flex-col gap-3">
                     <div className="flex min-w-0 flex-col gap-1">
-                      <MetaLabel>跨资产确认</MetaLabel>
+                      <MetaLabel>{isEnglish ? 'Cross-asset confirmation' : '跨资产确认'}</MetaLabel>
                       <SectionTitle as="h2" className="text-base">
-                        用区域与资产线索交叉核对
+                        {isEnglish ? 'Cross-check regional and asset signals' : '用区域与资产线索交叉核对'}
                       </SectionTitle>
                     </div>
                     <ExecutiveSecondaryGroups groups={executiveGroups} />

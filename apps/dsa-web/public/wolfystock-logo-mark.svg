@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title">
+  <title id="title">WolfyStock</title>
+  <circle cx="24" cy="24" r="20" fill="#f7f1e8" stroke="#4f715d" stroke-width="2"/>
+  <path d="M11 17l6.5 16L24 20l6.5 13L37 17" fill="none" stroke="#263b31" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.5"/>
+  <circle cx="37" cy="12" r="3" fill="#b8873b"/>
+</svg>

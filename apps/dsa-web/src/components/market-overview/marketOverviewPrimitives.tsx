@@ -28,6 +28,22 @@ const FRESHNESS_LABELS: Record<MarketDataFreshness, string> = {
   proxy: '代理数据',
 };
 
+const FRESHNESS_LABELS_EN: Record<MarketDataFreshness, string> = {
+  live: 'Live',
+  fresh: 'Live',
+  delayed: 'Delayed',
+  cached: 'Saved snapshot',
+  stale: 'May be delayed',
+  partial: 'Partially available',
+  fallback: 'Alternative snapshot',
+  mock: 'Example observation',
+  synthetic: 'Example observation',
+  error: 'Read error',
+  unavailable: 'Unavailable',
+  unknown: 'Pending confirmation',
+  proxy: 'Proxy data',
+};
+
 type MarketFreshnessBadgeKey = MarketProviderHealthStatus | 'delayed' | 'mock' | 'proxy';
 
 const STATUS_LABELS: Record<MarketFreshnessBadgeKey, string> = {
@@ -42,6 +58,20 @@ const STATUS_LABELS: Record<MarketFreshnessBadgeKey, string> = {
   unavailable: '暂不可用',
   error: '读取异常',
   refreshing: '更新中',
+};
+
+const STATUS_LABELS_EN: Record<MarketFreshnessBadgeKey, string> = {
+  live: 'Live',
+  cache: 'Saved snapshot',
+  delayed: 'Delayed',
+  stale: 'May be delayed',
+  fallback: 'Alternative snapshot',
+  mock: 'Example observation',
+  proxy: 'Proxy data',
+  partial: 'Partially available',
+  unavailable: 'Unavailable',
+  error: 'Read error',
+  refreshing: 'Updating',
 };
 
 const FRESHNESS_CLASSES: Record<MarketFreshnessBadgeKey, string> = {
@@ -221,13 +251,16 @@ function resolveFreshnessBadgeKey(freshness?: MarketDataFreshness, status?: Mark
 }
 
 export const DataFreshnessBadge: React.FC<{ freshness?: MarketDataFreshness; status?: MarketProviderHealthStatus; className?: string }> = ({ freshness, status, className }) => {
+  const { language } = useI18n();
   const resolved = resolveFreshnessBadgeKey(freshness, status);
+  const statusLabels = language === 'en' ? STATUS_LABELS_EN : STATUS_LABELS;
+  const freshnessLabels = language === 'en' ? FRESHNESS_LABELS_EN : FRESHNESS_LABELS;
   return (
     <span
       data-testid={`data-freshness-badge-${resolved}`}
       className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-none', FRESHNESS_CLASSES[resolved], className)}
     >
-      {STATUS_LABELS[resolved] || FRESHNESS_LABELS[freshness || 'unknown'] || FRESHNESS_LABELS.unavailable}
+      {statusLabels[resolved] || freshnessLabels[freshness || 'unknown'] || freshnessLabels.unavailable}
     </span>
   );
 };
@@ -264,7 +297,7 @@ function sortableTimestamp(value?: string | null): { time: number; label: string
   return { time, label };
 }
 
-function evidenceTimestampWindow(panel?: MarketOverviewPanel): string {
+function evidenceTimestampWindow(panel?: MarketOverviewPanel, language: 'zh' | 'en' = 'zh'): string {
   const timestamps = (panel?.items || [])
     .map((item) => sortableTimestamp(item.asOf || item.updatedAt))
     .filter((item): item is { time: number; label: string } => Boolean(item))
@@ -273,7 +306,7 @@ function evidenceTimestampWindow(panel?: MarketOverviewPanel): string {
   if (uniqueLabels.length < 2) {
     return '';
   }
-  return `时间窗口 ${uniqueLabels[0]} - ${uniqueLabels[uniqueLabels.length - 1]}`;
+  return `${language === 'en' ? 'Time window' : '时间窗口'} ${uniqueLabels[0]} - ${uniqueLabels[uniqueLabels.length - 1]}`;
 }
 
 function sanitizeConsumerDetails(details?: string[] | null): string[] {
@@ -349,7 +382,7 @@ export const MarketOverviewRefreshButton: React.FC<{
 );
 
 export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; sourceLabel?: string; meta?: Partial<MarketDataMeta> }> = ({ panel, sourceLabel, meta }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const resolvedMeta = meta || panel;
   const pendingLabel = t('marketOverviewPage.footer.pending');
   const fallbackUpdatedAt = panel?.lastRefreshAt
@@ -364,7 +397,7 @@ export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; 
   if (resolvedMeta?.isRefreshing) {
     details.push(t('marketOverviewPage.footer.refreshingSnapshot'));
   }
-  const timestampWindow = evidenceTimestampWindow(panel);
+  const timestampWindow = evidenceTimestampWindow(panel, language);
   if (timestampWindow) {
     details.unshift(timestampWindow);
   }

@@ -176,7 +176,8 @@ describe('GuestHomePage', () => {
     expect(await screen.findByTestId('home-research-console')).toBeInTheDocument();
     expect(screen.queryByTestId('guest-home-clean-search')).not.toBeInTheDocument();
     expect(screen.getByText('Apple Inc.')).toBeInTheDocument();
-    expect(screen.getByTestId('home-research-score-strip')).toHaveTextContent('7.2');
+    expect(screen.queryByTestId('home-research-score-strip')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-research-judgment-gate')).toHaveTextContent('可信度');
     expect(screen.queryByTestId('home-bento-decision-score-value')).not.toBeInTheDocument();
     expect(screen.getAllByText('趋势延续但需要等待更好的介入点。').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('guest-home-frosted-lock')).toHaveLength(2);

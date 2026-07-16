@@ -39,6 +39,10 @@ export const enCatalog = {
       language: 'Language',
     },
     marketOverviewPage: {
+      consumerJourney: {
+        dataBoundaryTitle: 'Data boundaries',
+        dataBoundarySummary: 'Availability, evidence coverage, and readiness details are collapsed.',
+      },
       header: {
         eyebrow: 'Cross-Market Monitor',
         title: 'Cross-Market Monitor',

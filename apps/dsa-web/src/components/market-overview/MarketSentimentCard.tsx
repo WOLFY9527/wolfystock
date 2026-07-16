@@ -48,7 +48,8 @@ export const MarketSentimentCard: React.FC<{
   refreshing?: boolean;
   onRefresh: () => void;
 }> = ({ panel, loading, refreshing = false, onRefresh }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const isEnglish = language === 'en';
   const sentimentLabels: Record<string, string> = {
     PUTCALL: t('marketOverviewPage.cards.sentiment.labels.putcall'),
     BULLBEAR: t('marketOverviewPage.cards.sentiment.labels.bullbear'),
@@ -88,9 +89,13 @@ export const MarketSentimentCard: React.FC<{
               variant={panel.isStale || panel.isFromSnapshot ? 'neutral' : 'caution'}
               className="px-2 py-1 text-[10px] font-semibold tracking-widest"
             >
-              {panel.isStale || panel.isFromSnapshot ? '最近快照' : '待刷新'}
+              {panel.isStale || panel.isFromSnapshot
+                ? (isEnglish ? 'Latest snapshot' : '最近快照')
+                : (isEnglish ? 'Refresh pending' : '待刷新')}
             </TerminalChip>
-            <span className="min-w-0 truncate text-[10px] text-[color:var(--wolfy-text-muted)]">刷新失败，保留最近快照</span>
+            <span className="min-w-0 truncate text-[10px] text-[color:var(--wolfy-text-muted)]">
+              {isEnglish ? 'Refresh failed; keeping the latest snapshot' : '刷新失败，保留最近快照'}
+            </span>
           </div>
         ) : null}
 
@@ -98,7 +103,9 @@ export const MarketSentimentCard: React.FC<{
           <div className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-2">
             <div className="flex min-w-0 items-center justify-between gap-3">
               <div className="min-w-0 flex items-baseline gap-2">
-                <p className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">情绪</p>
+                <p className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
+                  {isEnglish ? 'Sentiment' : '情绪'}
+                </p>
                 <p className="truncate font-mono text-lg font-bold leading-none text-[color:var(--wolfy-text-primary)]">{formatMetricValue(primary, 0)}</p>
                 <p className="truncate text-xs font-semibold text-[color:var(--wolfy-text-muted)]">{describeSentiment(primary.value, t)}</p>
               </div>
@@ -125,7 +132,7 @@ export const MarketSentimentCard: React.FC<{
             <div key={item.symbol} className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-2">
               <div className="flex items-start justify-between gap-3">
                 <p className="min-w-0 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
-                  {sentimentLabels[item.symbol] || item.label}
+                  {sentimentLabels[item.symbol] || (isEnglish && /[\u3400-\u9fff]/.test(item.label) ? 'Sentiment input' : item.label)}
                 </p>
                 <span className={cn('shrink-0 text-[11px] font-bold', getDirectionTone(item.riskDirection))}>
                   {formatChangeSummary(item, t('marketOverviewPage.direction.neutral'))}

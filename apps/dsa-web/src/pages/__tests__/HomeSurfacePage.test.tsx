@@ -1128,6 +1128,8 @@ describe('HomeSurfacePage', () => {
 
     renderSurface();
 
+    const supportingContext = await screen.findByTestId('home-supporting-context-disclosure');
+    fireEvent.click(within(supportingContext).getByText('补充研究语境'));
     const fundamentalsSummary = await screen.findByTestId('home-stock-fundamentals-summary');
     const symbolReadiness = await within(fundamentalsSummary).findByTestId('home-symbol-evidence-readiness');
     expect(await screen.findByText('Oracle Corporation')).toBeInTheDocument();
@@ -1237,10 +1239,10 @@ describe('HomeSurfacePage', () => {
 
     renderSurface();
 
+    const supportingContext = await screen.findByTestId('home-supporting-context-disclosure');
+    fireEvent.click(within(supportingContext).getByText('补充研究语境'));
     const fundamentalsSummary = await screen.findByTestId('home-stock-fundamentals-summary');
-    await waitFor(() =>
-      expect(fundamentalsSummary).toHaveTextContent(/已整理部分基本面摘要|正在整理受限基本面摘要/),
-    );
+    expect(fundamentalsSummary).toHaveTextContent('基本面摘要');
     await waitFor(() => expect(fundamentalsSummary).toHaveTextContent('待补充 4 项'));
     expect(fundamentalsSummary).toHaveTextContent('部分可用');
     expect(fundamentalsSummary).toHaveTextContent('待补充 4 项');
@@ -1266,7 +1268,6 @@ describe('HomeSurfacePage', () => {
     const conclusionConsole = screen.getByTestId('home-research-conclusion-console');
     const judgmentGate = screen.getByTestId('home-research-judgment-gate');
     const conclusionBlock = screen.getByTestId('home-research-current-conclusion');
-    const firstReadSummary = screen.getByTestId('home-research-first-read-summary');
     const quickActions = screen.getByTestId('home-research-quick-actions');
     const trustStrip = screen.getByTestId('home-research-trust-strip');
     const supportBlock = screen.getByTestId('home-research-support-factors');
@@ -1277,15 +1278,11 @@ describe('HomeSurfacePage', () => {
 
     expect(conclusionConsole).toHaveAttribute('data-first-screen-priority', 'conclusion-first');
     expect(conclusionConsole).toHaveAttribute('data-visual-role', 'conclusion-research-console');
-    expect(judgmentGate).toHaveTextContent(/仅观察|证据受限|可以形成研究判断/);
+    expect(judgmentGate).toHaveTextContent(/仅观察|证据不足|证据受限|可以形成研究判断/);
     expect(conclusionBlock).toHaveTextContent('当前结论');
-    expect(firstReadSummary).toHaveTextContent('研究状态');
-    expect(firstReadSummary).toHaveTextContent('数据边界');
-    expect(firstReadSummary).toHaveTextContent('下一步研究重点');
-    expect(firstReadSummary).toHaveTextContent('下一跳入口');
-    expect(quickActions).toHaveTextContent('结构面板');
-    expect(quickActions).toHaveTextContent('研究雷达');
-    expect(quickActions).toHaveTextContent('市场总览');
+    expect(screen.queryByTestId('home-research-first-read-summary')).not.toBeInTheDocument();
+    expect(quickActions).toHaveTextContent('打开结构面板');
+    expect(within(quickActions).getAllByRole('link')).toHaveLength(1);
     expect(trustStrip).not.toHaveAttribute('open');
     expect(screen.getByTestId('home-research-boundary-disclosure')).toHaveTextContent('查看研究边界');
     expect(conclusionConsole).not.toHaveTextContent(/^可信度 \/ 数据质量$/m);
@@ -1297,15 +1294,16 @@ describe('HomeSurfacePage', () => {
     expect(oldHeroRow).not.toBeInTheDocument();
     expect(screen.queryByText('投资立场')).not.toBeInTheDocument();
     expect(screen.queryByText('综合评分')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-research-score-strip')).toHaveTextContent('研究评分');
-    expect(screen.getByTestId('home-research-confidence-strip')).toHaveTextContent('可信度');
-    expect(screen.getByTestId('home-research-data-state-strip')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-research-score-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-research-confidence-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-research-data-state-strip')).not.toBeInTheDocument();
+    expect(conclusionConsole.querySelectorAll('[data-primary-information-block]')).toHaveLength(4);
     expect(screen.queryByTestId('home-bento-decision-score-value')).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('home-bento-dashboard')).toHaveTextContent('不构成投资建议'));
     expect(textContentWithoutObservationBoundary(screen.getByTestId('home-bento-dashboard'))).not.toMatch(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|目标价|止损|建仓|加仓|减仓|小仓试错|第二笔|buy recommendation|sell recommendation|trading recommendation|probe size|start light|add only|guaranteed|AI recommends you buy/i);
   });
 
-  it('keeps a single first-read summary zone ahead of the collapsed research boundary details', async () => {
+  it('keeps one trust line and one collapsed research boundary disclosure', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(stockEvidenceApi.getStockEvidence).mockResolvedValue(defaultStockEvidenceResponse);
 
@@ -1313,21 +1311,15 @@ describe('HomeSurfacePage', () => {
 
     await screen.findByText('Oracle Corporation');
 
-    const firstReadSummary = screen.getByRole('region', { name: /首读摘要|first-read summary/i });
+    const trustLine = screen.getByTestId('home-research-judgment-gate');
     const trustStrip = screen.getByTestId('home-research-trust-strip');
 
-    expect(within(firstReadSummary).getAllByText(/研究状态|Research state/i)).toHaveLength(1);
-    expect(within(firstReadSummary).getAllByText(/数据边界|Data boundary/i)).toHaveLength(1);
-    expect(within(firstReadSummary).getAllByText(/下一步研究重点|Next research focus/i)).toHaveLength(1);
-    expect(within(firstReadSummary).getAllByText(/下一跳入口|Where to click next/i)).toHaveLength(1);
-    expect(screen.getAllByText(/研究状态|Research state/i)).toHaveLength(1);
-    expect(screen.getAllByText(/数据边界|Data boundary/i)).toHaveLength(1);
-    expect(screen.getAllByText(/下一步研究重点|Next research focus/i)).toHaveLength(1);
+    expect(trustLine).toHaveTextContent(/可信度|Confidence/);
+    expect(screen.queryByTestId('home-research-first-read-summary')).not.toBeInTheDocument();
     expect(trustStrip).not.toHaveAttribute('open');
-    expect(firstReadSummary.compareDocumentPosition(trustStrip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(firstReadSummary).queryByText(/研究就绪度|Research readiness/i)).not.toBeInTheDocument();
-    expect(within(firstReadSummary).queryByText(/数据健康|Data health/i)).not.toBeInTheDocument();
-    expect(within(firstReadSummary).queryByText(/证据包摘要|Evidence packet/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-research-readiness-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-data-health-summary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-evidence-packet-strip')).not.toBeInTheDocument();
     expect(textContentWithoutObservationBoundary(screen.getByTestId('home-bento-dashboard'))).not.toMatch(HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN);
   });
 
@@ -3160,9 +3152,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('Key support factors')).toBeInTheDocument();
     expect(screen.getAllByText('Main risks / invalidation').length).toBeGreaterThan(0);
     expect(screen.getByText('Next watch point')).toBeInTheDocument();
-    expect(screen.getByText('Current action')).toBeInTheDocument();
     expect(screen.getByText('Main risk')).toBeInTheDocument();
-    expect(screen.getByText('Next step')).toBeInTheDocument();
     expect(screen.getAllByText('MA ALIGNMENT').length).toBeGreaterThan(0);
     expect(screen.getAllByText('2nd Expansion').length).toBeGreaterThan(0);
     expect(screen.getAllByText('RSI-14').length).toBeGreaterThan(0);

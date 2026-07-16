@@ -13,7 +13,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
   alt = 'WolfyStock logo',
 }) => (
   <img
-    src="/wolfystock-logo-mark.png"
+    src="/wolfystock-logo-mark.svg"
     alt={alt}
     className={cn('block shrink-0 object-contain', className)}
   />

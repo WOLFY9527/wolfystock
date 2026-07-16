@@ -37,6 +37,10 @@ export const zhCatalog = {
       language: '语言',
     },
     marketOverviewPage: {
+      consumerJourney: {
+        dataBoundaryTitle: '数据边界',
+        dataBoundarySummary: '可用性、证据覆盖与就绪度详情默认折叠。',
+      },
       header: {
         eyebrow: '跨市场监控台',
         title: '大市全景监控',

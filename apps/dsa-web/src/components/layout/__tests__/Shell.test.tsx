@@ -142,7 +142,7 @@ describe('Shell', () => {
     const brandLink = screen.getByRole('link', { name: 'WolfyStock' });
     expect(brandLink).toHaveAttribute('href', '/');
     const logo = within(brandLink).getByRole('img', { name: 'WolfyStock logo' });
-    expect(logo).toHaveAttribute('src', '/wolfystock-logo-mark.png');
+    expect(logo).toHaveAttribute('src', '/wolfystock-logo-mark.svg');
     expect(logo).not.toHaveClass('invert');
     const marketGroupButton = screen.getByRole('button', { name: translate('zh', 'nav.group.market') });
     expect(marketGroupButton).toHaveAttribute('aria-expanded', 'false');

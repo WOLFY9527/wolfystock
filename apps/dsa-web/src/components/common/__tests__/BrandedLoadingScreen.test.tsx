@@ -11,6 +11,6 @@ describe('BrandedLoadingScreen', () => {
     expect(screen.getByText('正在加载 WolfyStock 研究工作区...')).toBeInTheDocument();
     expect(screen.getByText('加载中...')).toBeInTheDocument();
     expect(screen.queryByText('INITIALIZING WOLFY AI CORE...')).not.toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'WolfyStock logo' })).toHaveAttribute('src', '/wolfystock-logo-mark.png');
+    expect(screen.getByRole('img', { name: 'WolfyStock logo' })).toHaveAttribute('src', '/wolfystock-logo-mark.svg');
   });
 });

@@ -32,7 +32,7 @@ import {
   type PanelState,
 } from '../components/market-overview/MarketOverviewWorkbench';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
-import { TerminalButton, TerminalChip, TerminalDisclosure } from '../components/terminal/TerminalPrimitives';
+import { TerminalButton, TerminalChip } from '../components/terminal/TerminalPrimitives';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { buildDataSourcesSetupHref, buildProviderOpsSetupHref } from '../utils/productSetupSurface';
@@ -393,12 +393,36 @@ function getPanelLoader(panelKey: PanelKey): (() => Promise<PanelState[PanelKey]
   }
 }
 
+function marketOverviewReadinessCopy(value: unknown, fallback: string): string {
+  const translated = String(value || '').trim()
+    .replace(/官方风险源/g, 'Official risk sources')
+    .replace(/来源待确认/g, 'Source pending')
+    .replace(/市场总览证据边界/g, 'Market overview evidence boundary')
+    .replace(/证据边界待确认/g, 'Evidence boundary pending')
+    .replace(/市场总览待补/g, 'Market overview pending')
+    .replace(/广度待补/g, 'Breadth pending')
+    .replace(/板块轮动待补/g, 'Sector rotation pending')
+    .replace(/风险状态待补/g, 'Risk state pending')
+    .replace(/继续观察现有证据。/g, 'Continue observing the returned evidence.')
+    .replace(/当前未返回市场总览证据矩阵，保持观察。/g, 'The market overview evidence matrix was not returned; keep the observation boundary.')
+    .replace(/跨资产驱动输入/g, 'Cross-asset driver inputs')
+    .replace(/跨资产驱动待补/g, 'Cross-asset drivers pending')
+    .replace(/仅展示已配置输入与缓存状态；未返回的驱动不做方向推断。/g, 'Shows only configured inputs and returned snapshot state; missing drivers do not imply direction.')
+    .replace(/可用/g, 'Available')
+    .replace(/待补/g, 'Pending')
+    .replace(/待确认/g, 'Pending confirmation');
+  return translated && !/[\u3400-\u9fff]/.test(translated) ? translated : fallback;
+}
+
 const OfficialRiskSourceReadinessStrip = ({
   readiness,
 }: {
   readiness?: OfficialRiskSourceReadiness | null;
 }) => {
+  const { language } = useI18n();
+  const isEnglish = language === 'en';
   const view = buildOfficialRiskSourceReadinessView(readiness);
+  const bundleLabel = isEnglish ? marketOverviewReadinessCopy(view.bundleLabel, 'Source readiness pending') : view.bundleLabel;
 
   return (
     <section
@@ -407,13 +431,15 @@ const OfficialRiskSourceReadinessStrip = ({
     >
       <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">官方风险源</p>
-          <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">{view.bundleLabel}</p>
+          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'Official risk sources' : '官方风险源'}</p>
+          <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">{bundleLabel}</p>
         </div>
         <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
-          <TerminalChip variant={view.bundleVariant}>{view.bundleLabel}</TerminalChip>
+          <TerminalChip variant={view.bundleVariant}>{bundleLabel}</TerminalChip>
           {view.chips.map((chip) => (
-            <TerminalChip key={chip.key} variant={chip.variant}>{chip.label}</TerminalChip>
+            <TerminalChip key={chip.key} variant={chip.variant}>
+              {isEnglish ? marketOverviewReadinessCopy(chip.label, 'Source pending') : chip.label}
+            </TerminalChip>
           ))}
         </div>
       </div>
@@ -426,7 +452,10 @@ const MarketOverviewEvidenceBoundaryStrip = ({
 }: {
   matrix?: ConsumerEvidenceReadinessMatrix | null;
 }) => {
+  const { language } = useI18n();
+  const isEnglish = language === 'en';
   const view = buildConsumerEvidenceBoundaryView(matrix);
+  const label = isEnglish ? marketOverviewReadinessCopy(view.label, 'Evidence boundary pending') : view.label;
 
   return (
     <section
@@ -435,18 +464,26 @@ const MarketOverviewEvidenceBoundaryStrip = ({
     >
       <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">市场总览证据边界</p>
-          <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">{view.label}</p>
+          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'Market overview evidence boundary' : '市场总览证据边界'}</p>
+          <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">{label}</p>
         </div>
         <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
-          <TerminalChip variant={view.variant}>{view.label}</TerminalChip>
+          <TerminalChip variant={view.variant}>{label}</TerminalChip>
           {view.chips.map((chip) => (
-            <TerminalChip key={chip.key} variant={chip.variant}>{chip.label}</TerminalChip>
+            <TerminalChip key={chip.key} variant={chip.variant}>
+              {isEnglish ? marketOverviewReadinessCopy(chip.label, 'Evidence pending') : chip.label}
+            </TerminalChip>
           ))}
         </div>
       </div>
-      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{view.nextEvidence}</p>
-      {view.note ? <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{view.note}</p> : null}
+      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+        {isEnglish ? marketOverviewReadinessCopy(view.nextEvidence, 'Continue observing the returned evidence.') : view.nextEvidence}
+      </p>
+      {view.note ? (
+        <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+          {isEnglish ? marketOverviewReadinessCopy(view.note, 'The evidence matrix was not returned; keep the observation boundary.') : view.note}
+        </p>
+      ) : null}
     </section>
   );
 };
@@ -456,7 +493,10 @@ const CrossAssetDriverReadinessStrip = ({
 }: {
   readiness?: CrossAssetDriverReadiness | null;
 }) => {
+  const { language } = useI18n();
+  const isEnglish = language === 'en';
   const view = buildCrossAssetDriverReadinessView(readiness);
+  const label = isEnglish ? marketOverviewReadinessCopy(view.label, 'Cross-asset drivers pending') : view.label;
 
   return (
     <section
@@ -465,18 +505,26 @@ const CrossAssetDriverReadinessStrip = ({
     >
       <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">跨资产驱动输入</p>
-          <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">{view.label}</p>
+          <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'Cross-asset driver inputs' : '跨资产驱动输入'}</p>
+          <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">{label}</p>
         </div>
         <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
-          <TerminalChip variant={view.variant}>{view.label}</TerminalChip>
+          <TerminalChip variant={view.variant}>{label}</TerminalChip>
           {view.chips.map((chip) => (
-            <TerminalChip key={chip.key} variant={chip.variant}>{chip.label}</TerminalChip>
+            <TerminalChip key={chip.key} variant={chip.variant}>
+              {isEnglish ? marketOverviewReadinessCopy(chip.label, 'Driver pending') : chip.label}
+            </TerminalChip>
           ))}
         </div>
       </div>
-      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{view.note}</p>
-      <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">仅展示已配置输入与缓存状态；未返回的驱动不做方向推断。</p>
+      <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+        {isEnglish ? marketOverviewReadinessCopy(view.note, 'Cross-asset driver evidence is pending.') : view.note}
+      </p>
+      <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+        {isEnglish
+          ? 'Shows only configured inputs and returned snapshot state; missing drivers do not imply direction.'
+          : '仅展示已配置输入与缓存状态；未返回的驱动不做方向推断。'}
+      </p>
     </section>
   );
 };
@@ -751,6 +799,15 @@ const MARKET_OVERVIEW_FAMILY_STATE_VARIANT: Record<MarketOverviewFamilyReadiness
   unavailable: 'danger',
 };
 
+const MARKET_OVERVIEW_FAMILY_STATE_LABEL: Record<MarketOverviewFamilyReadinessState, { zh: string; en: string }> = {
+  available: { zh: '可用', en: 'Available' },
+  missing: { zh: '待补', en: 'Missing' },
+  stale: { zh: '待更新', en: 'Stale' },
+  not_configured: { zh: '未配置', en: 'Not configured' },
+  insufficient_coverage: { zh: '覆盖不足', en: 'Insufficient coverage' },
+  unavailable: { zh: '暂不可用', en: 'Unavailable' },
+};
+
 function panelHasCurrentItems(panel?: MarketOverviewPanel | null): boolean {
   return Boolean(
     panel
@@ -899,7 +956,18 @@ const MarketOverviewReadinessEmptyPanel = ({
   families: MarketOverviewReadinessFamily[];
   showOperatorCue: boolean;
 }) => {
+  const { language } = useI18n();
+  const isEnglish = language === 'en';
   const allClosed = families.every((family) => family.state !== 'available');
+  const englishFamilyDetails: Record<string, string> = {
+    'market-index': 'Index, regional market, and futures inputs.',
+    'sector-rotation': 'Sector, theme, and rotation inputs.',
+    'market-breadth': 'Advance/decline, new-high/new-low, and breadth inputs.',
+    'macro-regime': 'Macro, rates, volatility, and market-state inputs.',
+    'cross-asset': 'Dollar, rates, commodity, credit, and other cross-asset drivers.',
+    'news-catalyst': 'News, catalyst, and market-state evidence boundaries.',
+    'historical-ohlcv': 'Historical OHLCV and returned snapshot coverage required by this page.',
+  };
 
   return (
     <section
@@ -910,23 +978,27 @@ const MarketOverviewReadinessEmptyPanel = ({
         <div className="min-w-0">
           <p className="text-[11px] font-medium text-amber-100/68">Market Overview readiness</p>
           <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">
-            {allClosed ? 'Market Overview 数据待补' : 'Market Overview 部分数据可用'}
+             {isEnglish
+               ? (allClosed ? 'Market Overview data pending' : 'Market Overview data partially available')
+               : (allClosed ? 'Market Overview 数据待补' : 'Market Overview 部分数据可用')}
           </p>
           <p className="mt-1 max-w-3xl text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
-            缺失的数据族保持关闭，不生成市场概览、图表分数、结论或建议；已返回的数据区块仍按原始证据展示。
+            {isEnglish
+              ? 'Missing data families stay closed and do not generate an overview, chart score, conclusion, or advice; returned evidence remains visible as received.'
+              : '缺失的数据族保持关闭，不生成市场概览、图表分数、结论或建议；已返回的数据区块仍按原始证据展示。'}
           </p>
         </div>
         {showOperatorCue ? (
           <div className="flex shrink-0 flex-wrap gap-2">
             <a className={MARKET_OVERVIEW_SETUP_ACTION_CLASS} href={buildProviderOpsSetupHref('market_overview')}>
-              查看数据状态
+              {isEnglish ? 'View data status' : '查看数据状态'}
             </a>
             <a className={MARKET_OVERVIEW_SETUP_ACTION_CLASS} href={buildDataSourcesSetupHref('market_overview')}>
-              前往数据设置
+              {isEnglish ? 'Open data settings' : '前往数据设置'}
             </a>
           </div>
         ) : (
-          <TerminalChip variant="neutral" className="shrink-0">仅显示可用证据</TerminalChip>
+          <TerminalChip variant="neutral" className="shrink-0">{isEnglish ? 'Returned evidence only' : '仅显示可用证据'}</TerminalChip>
         )}
       </div>
       {allClosed ? (
@@ -936,7 +1008,9 @@ const MarketOverviewReadinessEmptyPanel = ({
           className="mt-3 rounded-md border border-dashed border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-2.5"
         >
           <p className="text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
-            全部数据族暂不可用。下列边界保持关闭，不生成图表分数或结论。
+            {isEnglish
+              ? 'All data families are unavailable. These boundaries stay closed and do not generate chart scores or conclusions.'
+              : '全部数据族暂不可用。下列边界保持关闭，不生成图表分数或结论。'}
           </p>
           <ul className="mt-2 flex min-w-0 flex-wrap gap-1.5">
             {families.map((family) => (
@@ -946,7 +1020,7 @@ const MarketOverviewReadinessEmptyPanel = ({
               >
                 <span className="font-semibold text-[color:var(--wolfy-text-secondary)]">{family.label}</span>
                 <TerminalChip variant={MARKET_OVERVIEW_FAMILY_STATE_VARIANT[family.state]} className="shrink-0 text-[10px]">
-                  {family.state}
+                  {MARKET_OVERVIEW_FAMILY_STATE_LABEL[family.state][language]}
                 </TerminalChip>
               </li>
             ))}
@@ -959,10 +1033,12 @@ const MarketOverviewReadinessEmptyPanel = ({
               <div className="flex min-w-0 items-start justify-between gap-2">
                 <p className="min-w-0 text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)]">{family.label}</p>
                 <TerminalChip variant={MARKET_OVERVIEW_FAMILY_STATE_VARIANT[family.state]} className="shrink-0 text-[10px]">
-                  {family.state}
+                  {MARKET_OVERVIEW_FAMILY_STATE_LABEL[family.state][language]}
                 </TerminalChip>
               </div>
-              <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{family.detail}</p>
+              <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+                {isEnglish ? (englishFamilyDetails[family.key] || 'Evidence input boundary.') : family.detail}
+              </p>
             </div>
           ))}
         </div>
@@ -984,8 +1060,34 @@ const MarketRegimeReadinessSurface = ({
   error: string | null;
   onRetry: () => void;
 }) => {
+  const { language } = useI18n();
+  const isEnglish = language === 'en';
   const statusCounts = view?.statusCounts || [];
   const readinessItems = buildMarketRegimeReadinessItems(view, riskReadiness);
+  const zhLabels: Record<string, string> = {
+    breadth: '市场宽度',
+    'sector-leadership': '行业与板块轮动',
+    'volatility-risk': '波动与风险状态',
+    'options-structure': '期权结构输入',
+    'flows-positioning': '资金流与持仓线索',
+    'macro-cross-asset': '宏观与跨资产输入',
+  };
+  const zhDetails: Record<string, string> = {
+    breadth: '市场宽度输入的可用性边界。',
+    'sector-leadership': '行业与板块轮动输入的可用性边界。',
+    'volatility-risk': '波动与风险状态输入的可用性边界。',
+    'options-structure': '期权结构输入的可用性边界。',
+    'flows-positioning': '资金流与持仓输入的可用性边界。',
+    'macro-cross-asset': '宏观与跨资产输入的可用性边界。',
+  };
+  const statusLabels: Record<MarketRegimeReadinessStatus, { zh: string; en: string }> = {
+    available: { zh: '可用', en: 'Available' },
+    'missing provider': { zh: '数据源待补', en: 'Source pending' },
+    'entitlement required': { zh: '需要数据权限', en: 'Data access required' },
+    degraded: { zh: '部分可用', en: 'Partially available' },
+    stale: { zh: '待更新', en: 'Stale' },
+    'not available': { zh: '暂不可用', en: 'Unavailable' },
+  };
 
   return (
     <section
@@ -997,13 +1099,13 @@ const MarketRegimeReadinessSurface = ({
           <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">Market regime data readiness</p>
           <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">
             {loading
-              ? '正在加载市场状态数据'
+              ? (isEnglish ? 'Loading market-state data' : '正在加载市场状态数据')
               : error
-                ? '市场状态数据可用性暂不可用'
-                : '关键市场状态输入可用性'}
+                ? (isEnglish ? 'Market-state data availability is unavailable' : '市场状态数据可用性暂不可用')
+                : (isEnglish ? 'Key market-state input availability' : '关键市场状态输入可用性')}
           </p>
           <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
-            no fabricated regime score · no fake gamma or flow values
+            {isEnglish ? 'No fabricated market-state score or flow values' : '不生成虚构的市场状态分数或资金流数值'}
           </p>
         </div>
         <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
@@ -1022,10 +1124,10 @@ const MarketRegimeReadinessSurface = ({
       ) : error ? (
         <div data-testid="market-regime-readiness-error" className="mt-3 flex items-center justify-between gap-3 rounded-md border border-amber-300/20 bg-amber-400/8 px-3 py-2">
           <p className="min-w-0 text-xs leading-5 text-amber-100/80">
-            {error}
+            {isEnglish ? 'Market-state readiness could not be loaded.' : '市场状态可用性暂时无法加载。'}
           </p>
           <TerminalButton variant="compact" onClick={onRetry}>
-            重试
+            {isEnglish ? 'Retry' : '重试'}
           </TerminalButton>
         </div>
       ) : (
@@ -1038,14 +1140,20 @@ const MarketRegimeReadinessSurface = ({
             >
               <div className="flex min-w-0 items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{item.label}</p>
-                  <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">{item.status}</p>
+                  <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{isEnglish ? item.label : (zhLabels[item.key] || '市场输入')}</p>
+                  <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">{statusLabels[item.status][language]}</p>
                 </div>
-                <TerminalChip variant={item.variant}>{item.status}</TerminalChip>
+                <TerminalChip variant={item.variant}>{statusLabels[item.status][language]}</TerminalChip>
               </div>
-              <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{item.detail}</p>
+              <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+                {isEnglish
+                  ? (/[\u3400-\u9fff]/.test(item.detail) ? 'Returned readiness detail remains bounded by source availability.' : item.detail)
+                  : (zhDetails[item.key] || '市场输入的可用性边界。')}
+              </p>
               <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
-                {item.asOfLabel ? `${item.freshnessLabel} · as of ${item.asOfLabel}` : item.freshnessLabel}
+                {isEnglish
+                  ? (item.asOfLabel ? `${item.freshnessLabel} · as of ${item.asOfLabel}` : item.freshnessLabel)
+                  : (item.asOfLabel ? `数据日期 ${item.asOfLabel}` : '时效待确认')}
               </p>
             </section>
           ))}
@@ -1275,7 +1383,9 @@ const MarketRegimeReadModelSurface = ({
 };
 
 const MarketOverviewPage = () => {
+  const { t } = useI18n();
   const { isAdminMode, canReadProviders } = useProductSurface();
+  const [dataDiagnosticsOpen, setDataDiagnosticsOpen] = useState(false);
   const [initialLocalSnapshot] = useState(() => buildInitialPanelsFromLocalSnapshot());
   const [panels, setPanels] = useState<PanelState>(initialLocalSnapshot.panels);
   const [officialRiskSourceReadiness, setOfficialRiskSourceReadiness] = useState<OfficialRiskSourceReadiness | null>(null);
@@ -1687,12 +1797,22 @@ const MarketOverviewPage = () => {
           showAdminDiagnostics={isAdminMode && canReadProviders}
           onRefreshPanel={handleWorkbenchRefresh}
         />
-        <TerminalDisclosure
+        <details
           data-testid="market-overview-data-diagnostics-disclosure"
-          title="查看数据诊断"
-          summary="市场状态、证据覆盖和内部就绪度默认折叠"
-          className="bg-[color:var(--wolfy-surface-input)]"
+          className="group rounded-lg bg-[color:var(--wolfy-surface-input)] px-2.5 py-1.5"
+          onToggle={(event) => setDataDiagnosticsOpen(event.currentTarget.open)}
         >
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold text-[color:var(--wolfy-text-secondary)] marker:hidden">
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span>{t('marketOverviewPage.consumerJourney.dataBoundaryTitle')}</span>
+              <span className="text-[11px] font-normal text-[color:var(--wolfy-text-muted)]">
+                {t('marketOverviewPage.consumerJourney.dataBoundarySummary')}
+              </span>
+            </span>
+            <span aria-hidden="true">＋</span>
+          </summary>
+          {dataDiagnosticsOpen ? (
+            <div className="border-t border-[color:var(--wolfy-divider)] pb-2 pt-2">
           {hasUnavailableMarketOverviewFamily ? (
             <MarketOverviewReadinessEmptyPanel
               families={marketOverviewReadinessFamilies}
@@ -1721,7 +1841,9 @@ const MarketOverviewPage = () => {
               }}
             />
           </div>
-        </TerminalDisclosure>
+            </div>
+          ) : null}
+        </details>
       </ConsumerWorkspacePageShell>
     </ConsumerWorkspaceScope>
   );

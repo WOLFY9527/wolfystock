@@ -429,6 +429,37 @@ const CATEGORY_SECTION_META: Record<MarketOverviewTab, Record<string, MarketOver
   },
 };
 
+const CATEGORY_SECTION_META_EN: Record<MarketOverviewTab, Record<string, MarketOverviewSectionMeta>> = {
+  all: {
+    'all-hero': { eyebrow: 'Core indices', title: 'Start with broad market direction', detail: 'Use core global indices to assess whether risk appetite is moving together.' },
+    'all-modules-1': { eyebrow: 'Risk and funds', title: 'Check volatility, funds, and sentiment', detail: 'Confirm whether volatility and fund flows support the returned market direction.' },
+    'all-modules-2': { eyebrow: 'Rates and asset classes', title: 'Track rates, FX, and commodity pressure', detail: 'Assess whether macro constraints are beginning to pressure risk assets.' },
+    'all-modules-3': { eyebrow: 'Cross-market context', title: 'Add crypto and China/HK context', detail: 'Look for cross-asset divergence or regional separation.' },
+  },
+  us: {
+    'us-hero': { eyebrow: 'US benchmarks', title: 'Start with the four major indices', detail: 'Index direction comes before style and sector detail.' },
+    'us-modules-1': { eyebrow: 'Pressure and rates', title: 'Check whether volatility and rates are rising', detail: 'Improving risk appetite needs lower volatility and stable rates.' },
+    'us-modules-2': { eyebrow: 'Sentiment and breadth', title: 'Check whether participation is broadening', detail: 'Sentiment and breadth show whether only large weights are driving the move.' },
+    'us-modules-3': { eyebrow: 'Rotation and macro', title: 'Watch sector shifts and external constraints', detail: 'Stronger macro pressure can interrupt improving breadth.' },
+  },
+  cn: {
+    'cn-hero': { eyebrow: 'A/H core', title: 'Start with mainland and Hong Kong indices', detail: 'Index state sets the context for breadth and short-term sentiment.' },
+    'cn-modules-1': { eyebrow: 'Breadth and funds', title: 'Check whether participation is broadening', detail: 'Breadth and fund flow distinguish broad repair from concentrated leadership.' },
+    'cn-modules-2': { eyebrow: 'Rotation and short-term tone', title: 'Watch themes and short-term activity', detail: 'Use these signals to observe overheating or early repair.' },
+    'cn-modules-3': { eyebrow: 'External pressure', title: 'Add FX and external constraints', detail: 'CNH and external rate pressure can affect persistence.' },
+  },
+  global: {
+    'global-hero': { eyebrow: 'Rates lead', title: 'Start with global rate constraints', detail: 'Rates are a primary cross-asset pricing input.' },
+    'global-modules-1': { eyebrow: 'FX and commodities', title: 'Watch the dollar and physical assets', detail: 'The dollar, gold, and oil help frame safe-haven or reflation observations.' },
+    'global-modules-2': { eyebrow: 'Risk state', title: 'Add volatility and sentiment', detail: 'Check whether macro pricing has reached risk assets.' },
+  },
+  crypto: {
+    'crypto-hero': { eyebrow: 'Crypto core', title: 'Start with major crypto assets', detail: 'BTC and ETH frame whether the market is expanding risk or turning defensive.' },
+    'crypto-modules-1': { eyebrow: 'Momentum and liquidity', title: 'Check whether funds support the move', detail: 'Momentum persistence needs liquidity and funding-rate support.' },
+    'crypto-modules-2': { eyebrow: 'External pressure', title: 'Add macro and sentiment constraints', detail: 'Dollar, rates, and volatility pressure affect crypto risk capacity.' },
+  },
+};
+
 const MARKET_OVERVIEW_METRIC_REGISTRY: Record<MarketOverviewPulseMetricId, MetricRegistryEntry> = {
   SPX: { label: '标普500', symbols: ['SPX', '^GSPC', 'S&P 500'], panelKeys: ['indices'] },
   NDX: { label: '纳斯达克100', symbols: ['NDX', '^NDX', 'NASDAQ 100'], panelKeys: ['indices'] },
@@ -504,7 +535,8 @@ function marketTrendFreshnessLabel(item: MarketOverviewItem, language: 'zh' | 'e
 
 function marketTrendSourceLabel(item: MarketOverviewItem, language: 'zh' | 'en'): string {
   const label = String(item.sourceLabel || '').trim();
-  if (label && !/\b(provider_missing|data_disabled|sourceClass|local_bounded_us_parquet_universe|noExternalCalls|providerCallsEnabled|contractVersion)\b/i.test(label)) {
+  const unsafeSourceLabel = /\b(provider_missing|data_disabled|sourceClass|local_bounded_us_parquet_universe|noExternalCalls|providerCallsEnabled|contractVersion|feed|fixture|provider|source)\b/i;
+  if (label && !unsafeSourceLabel.test(label) && !(language === 'en' && /[\u3400-\u9fff]/.test(label))) {
     return label;
   }
   return language === 'en' ? 'Market data source pending' : '市场数据来源待确认';
@@ -546,9 +578,9 @@ function buildMarketTrendChartView(panels: PanelState, language: 'zh' | 'en'): M
     ? proxyLabel
     : (language === 'en' ? 'Official index item from the loaded market panel.' : '来自已加载市场面板的指数项目。');
   const latestLabel = typeof item.value === 'number' && Number.isFinite(item.value)
-    ? formatHeroValue(item.value)
+    ? formatHeroValue(item.value, language)
     : (language === 'en' ? 'Latest value pending' : '最新值待确认');
-  const changeText = formatHeroChange(item.changePct);
+  const changeText = formatHeroChange(item.changePct, language);
   const changeLabel = language === 'en' ? `Latest change ${changeText}` : `最新涨跌 ${changeText}`;
   return {
     item,
@@ -1071,8 +1103,8 @@ function buildVisualEvidencePoint(
   return {
     key: item.symbol,
     label: display.primary,
-    valueText: formatHeroValue(item.value),
-    changeText: formatHeroChange(item.changePct),
+    valueText: formatHeroValue(item.value, language),
+    changeText: formatHeroChange(item.changePct, language),
     toneClass: heroToneClass(item),
     sparkline: Array.isArray(item.trend) ? item.trend : [],
   };
@@ -1127,41 +1159,45 @@ function buildVisualEvidenceCards(params: {
   return [
     {
       id: 'core-trends',
-      eyebrow: '核心趋势',
-      title: activeCategory === 'cn' ? '核心指数迷你趋势' : activeCategory === 'crypto' ? '核心资产迷你趋势' : '核心市场迷你趋势',
-      summary: '只基于当前已加载点位展示短线轨迹，不扩展结论边界。',
-      unavailableCopy: '核心趋势图形证据缺失，当前保持观察。',
+      eyebrow: language === 'en' ? 'Core trends' : '核心趋势',
+      title: language === 'en'
+        ? (activeCategory === 'cn' ? 'Core index mini trends' : activeCategory === 'crypto' ? 'Core asset mini trends' : 'Core market mini trends')
+        : (activeCategory === 'cn' ? '核心指数迷你趋势' : activeCategory === 'crypto' ? '核心资产迷你趋势' : '核心市场迷你趋势'),
+      summary: language === 'en'
+        ? 'Shows short-term paths only from returned points without extending the conclusion boundary.'
+        : '只基于当前已加载点位展示短线轨迹，不扩展结论边界。',
+      unavailableCopy: language === 'en' ? 'Core trend chart evidence is unavailable; keep this as an observation.' : '核心趋势图形证据缺失，当前保持观察。',
       points: corePoints,
     },
     {
       id: 'risk-pressure',
-      eyebrow: '风险压力',
-      title: 'VIX / 风险压力',
-      summary: '优先展示波动、利率与美元压力；缺失时不补推断。',
-      unavailableCopy: '风险压力图形证据缺失，当前保持观察。',
+      eyebrow: language === 'en' ? 'Risk pressure' : '风险压力',
+      title: language === 'en' ? 'VIX / risk pressure' : 'VIX / 风险压力',
+      summary: language === 'en' ? 'Prioritizes returned volatility, rates, and dollar pressure without inferring missing inputs.' : '优先展示波动、利率与美元压力；缺失时不补推断。',
+      unavailableCopy: language === 'en' ? 'Risk-pressure chart evidence is unavailable; keep this as an observation.' : '风险压力图形证据缺失，当前保持观察。',
       points: riskPoints,
     },
     {
       id: 'flow-rotation',
-      eyebrow: '资金与轮动',
-      title: 'ETF / 行业 / 资金流',
-      summary: '仅展示现有资金与行业线索，避免将观察信号提升为判断。',
-      unavailableCopy: '资金与轮动图形证据缺失，当前保持观察。',
+      eyebrow: language === 'en' ? 'Funds and rotation' : '资金与轮动',
+      title: language === 'en' ? 'ETF / sector / fund flow' : 'ETF / 行业 / 资金流',
+      summary: language === 'en' ? 'Shows only returned fund and sector signals without promoting an observation into a decision.' : '仅展示现有资金与行业线索，避免将观察信号提升为判断。',
+      unavailableCopy: language === 'en' ? 'Fund-flow and rotation chart evidence is unavailable; keep this as an observation.' : '资金与轮动图形证据缺失，当前保持观察。',
       points: flowPoints,
     },
   ];
 }
 
-function formatHeroValue(value: number | null | undefined): string {
+function formatHeroValue(value: number | null | undefined, language: 'zh' | 'en' = 'zh'): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return '待确认';
+    return language === 'en' ? 'Pending confirmation' : '待确认';
   }
   return getCachedNumberFormat(Math.abs(value) >= 100 ? 2 : 3).format(value);
 }
 
-function formatHeroChange(value: number | null | undefined): string {
+function formatHeroChange(value: number | null | undefined, language: 'zh' | 'en' = 'zh'): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return '待确认';
+    return language === 'en' ? 'Pending confirmation' : '待确认';
   }
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
 }
@@ -1209,7 +1245,7 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
       : { primary: anchor.label, secondary: anchor.key };
     return {
       label: displayLabel.primary,
-      meta: `${formatHeroValue(anchor.item?.value)} (${formatHeroChange(anchor.item?.changePct)})`,
+      meta: `${formatHeroValue(anchor.item?.value, language)} (${formatHeroChange(anchor.item?.changePct, language)})`,
     };
   });
   const briefingEvidence = briefing.items.slice(0, 2).map((item) => ({
@@ -1754,7 +1790,7 @@ function buildMarketRegimeSynthesisView(
     confidenceCapValueText,
     evidenceFamilies: evidenceFamilies.slice(0, 5).map((family) => ({
       key: family.key,
-      label: marketOverviewConsumerSemanticsText(family.label, language === 'en' ? 'Evidence family' : '证据家族'),
+      label: marketOverviewConsumerSemanticsText(family.label, language === 'en' ? 'Evidence family' : '证据家族', language),
       stateLabel: regimeResearchFamilyStateLabel(family.state, language),
       stateVariant: regimeResearchFamilyStateVariant(family.state),
       summary: [
@@ -1771,7 +1807,7 @@ function buildMarketRegimeSynthesisView(
     researchNextSteps: researchNextSteps.slice(0, 3).map((step) => ({
       key: step.key,
       label: regimeResearchNextStepLabel(step.key, language),
-      meta: marketOverviewConsumerSemanticsText(step.detail, language === 'en' ? 'Continue evidence review.' : '继续复核证据。'),
+      meta: marketOverviewConsumerSemanticsText(step.detail, language === 'en' ? 'Continue evidence review.' : '继续复核证据。', language),
     })),
     notInvestmentAdvice: Boolean(synthesis.notInvestmentAdvice),
   };
@@ -1788,20 +1824,20 @@ function buildMarketOverviewRegimeSummaryView(
   const toLineItems = (items: Array<{ key: string; label: string; detail: string }>): MarketOverviewDecisionSemanticsLineView[] => (
     items.map((item, index) => ({
       key: item.key,
-      label: marketOverviewConsumerSemanticsText(item.label, `${language === 'en' ? 'Observation' : '观察'} ${index + 1}`),
-      meta: marketOverviewConsumerSemanticsText(item.detail),
+      label: marketOverviewConsumerSemanticsText(item.label, `${language === 'en' ? 'Observation' : '观察'} ${index + 1}`, language),
+      meta: marketOverviewConsumerSemanticsText(item.detail, '', language),
     }))
   );
 
   return {
-    title: marketOverviewConsumerSemanticsText(summary.title, language === 'en' ? 'Market state pending' : '市场状态待确认'),
-    label: marketOverviewConsumerSemanticsText(summary.label, language === 'en' ? 'OBSERVATION_ONLY' : '仅供观察'),
+    title: marketOverviewConsumerSemanticsText(summary.title, language === 'en' ? 'Market state pending' : '市场状态待确认', language),
+    label: marketOverviewConsumerSemanticsText(summary.label, language === 'en' ? 'OBSERVATION_ONLY' : '仅供观察', language),
     confidenceLabel: language === 'en' ? 'Confidence' : '置信度',
     confidenceValueText: [
       regimeConfidenceLabel(summary.confidence?.label, summary.confidence?.value),
       formatPercent(summary.confidence?.value),
     ].filter(Boolean).join(' · '),
-    explanation: marketOverviewConsumerSemanticsText(summary.explanation, language === 'en' ? 'Data boundary pending confirmation.' : '数据边界待确认。'),
+    explanation: marketOverviewConsumerSemanticsText(summary.explanation, language === 'en' ? 'Data boundary pending confirmation.' : '数据边界待确认。', language),
     drivers: toLineItems(summary.drivers),
     blockers: toLineItems(summary.blockers),
     contradictions: toLineItems(summary.contradictions),
@@ -1816,21 +1852,21 @@ function marketDecisionSemanticsText(value: unknown): string {
 const MARKET_OVERVIEW_CONSUMER_UNSAFE_PATTERN = /\b(?:REAL|MIXED|FALLBACK|REGIME|ALTERNATIVE\.?ME|YFINANCE|CBOE|BINANCE|Yahoo Finance|Binance Futures|provider|sourceTier|sourceLabel|reasonCode|diagnosticOnly|scoreContributionAllowed|sourceAuthorityAllowed|authorityGrant|raw|debug|backend|cache|schema|synthetic|mock|proxy|fallback)\b|market_regime_synthesis|Conflicts With Primary Regime|ETF flow proxy|Institutional pressure proxy|Industry breadth proxy/i;
 const MARKET_OVERVIEW_INTERNAL_TOKEN_PATTERN = /^[a-z0-9]+(?:_[a-z0-9]+)+$/i;
 
-function marketOverviewConsumerSemanticsText(value: unknown, fallback = ''): string {
+function marketOverviewConsumerSemanticsText(value: unknown, fallback = '', language: 'zh' | 'en' = 'zh'): string {
   const text = marketDecisionSemanticsText(value).trim();
   if (!text) {
     return fallback;
   }
   if (MARKET_OVERVIEW_INTERNAL_TOKEN_PATTERN.test(text)) {
-    const reasonLabel = marketIntelligenceReasonLabel(text, 'zh');
-    return reasonLabel === '数据边界待确认' ? fallback : reasonLabel;
+    const reasonLabel = marketIntelligenceReasonLabel(text, language);
+    return reasonLabel === '数据边界待确认' || reasonLabel === 'Data boundary pending' ? fallback : reasonLabel;
   }
   const projected = text
-    .replace(/market_regime_synthesis/gi, '市场状态')
-    .replace(/Conflicts With Primary Regime/gi, '反向信号')
-    .replace(/ETF flow proxy/gi, 'ETF 资金流指标')
-    .replace(/Institutional pressure proxy/gi, '机构压力指标')
-    .replace(/Industry breadth proxy/gi, '行业广度指标')
+    .replace(/market_regime_synthesis/gi, language === 'en' ? 'Market state' : '市场状态')
+    .replace(/Conflicts With Primary Regime/gi, language === 'en' ? 'Counter signal' : '反向信号')
+    .replace(/ETF flow proxy/gi, language === 'en' ? 'ETF flow indicator' : 'ETF 资金流指标')
+    .replace(/Institutional pressure proxy/gi, language === 'en' ? 'Institutional pressure indicator' : '机构压力指标')
+    .replace(/Industry breadth proxy/gi, language === 'en' ? 'Industry breadth indicator' : '行业广度指标')
     .replace(/\bREAL\b/g, 'AVAILABLE')
     .replace(/\bMIXED\b/g, 'PARTIAL')
     .replace(/\bFALLBACK\b/g, 'DELAYED')
@@ -1840,7 +1876,7 @@ function marketOverviewConsumerSemanticsText(value: unknown, fallback = ''): str
     .replace(/\bproxy\b/gi, 'partial data')
     .replace(/\bprovider\b/gi, 'data')
     .trim();
-  if (!projected || MARKET_OVERVIEW_CONSUMER_UNSAFE_PATTERN.test(projected)) {
+  if (!projected || MARKET_OVERVIEW_CONSUMER_UNSAFE_PATTERN.test(projected) || (language === 'en' && /[\u3400-\u9fff]/.test(projected))) {
     return fallback;
   }
   return projected;
@@ -1903,6 +1939,7 @@ function marketDecisionSemanticsLine(
   item: MarketDecisionSemanticsItem,
   index: number,
   fallbackPrefix: string,
+  language: 'zh' | 'en',
 ): MarketOverviewDecisionSemanticsLineView {
   const rawLabel = (
     marketDecisionSemanticsText(item.label)
@@ -1913,11 +1950,11 @@ function marketDecisionSemanticsLine(
     || marketDecisionSemanticsText(item.key)
     || `${fallbackPrefix} ${index + 1}`
   );
-  const label = marketOverviewConsumerSemanticsText(rawLabel, `${fallbackPrefix} ${index + 1}`);
+  const label = marketOverviewConsumerSemanticsText(rawLabel, `${fallbackPrefix} ${index + 1}`, language);
   const meta = [
     item.reason || item.reasonCode ? marketIntelligenceReasonLabel(marketDecisionSemanticsText(item.reason || item.reasonCode)) : '',
-    marketOverviewConsumerSemanticsText(item.surface),
-    marketDecisionSemanticsText(item.label) ? marketOverviewConsumerSemanticsText(item.detail) : '',
+    marketOverviewConsumerSemanticsText(item.surface, '', language),
+    marketDecisionSemanticsText(item.label) ? marketOverviewConsumerSemanticsText(item.detail, '', language) : '',
   ].filter(Boolean).join(' · ');
   return {
     key: `${fallbackPrefix}-${marketDecisionSemanticsText(item.key) || label}-${index}`,
@@ -2024,11 +2061,11 @@ function buildMarketDecisionSemanticsView(
     exposureBiasLabel: marketDecisionExposureLabel(semantics.exposureBias, language),
     insufficient: semantics.posture === 'data_insufficient' || semantics.postureConfidence.label === 'insufficient',
     capReasons: semantics.postureConfidence.capReasons,
-    styleTilts: semantics.styleTilts.map((item, index) => marketDecisionSemanticsLine(item, index, 'style')),
-    confirmationSignals: semantics.confirmationSignals.map((item, index) => marketDecisionSemanticsLine(item, index, 'confirm')),
-    invalidationTriggers: semantics.invalidationTriggers.map((item, index) => marketDecisionSemanticsLine(item, index, 'invalidate')),
-    counterEvidence: semantics.counterEvidence.map((item, index) => marketDecisionSemanticsLine(item, index, 'counter')),
-    dataGaps: semantics.dataGaps.map((item, index) => marketDecisionSemanticsLine(item, index, 'gap')),
+    styleTilts: semantics.styleTilts.map((item, index) => marketDecisionSemanticsLine(item, index, 'style', language)),
+    confirmationSignals: semantics.confirmationSignals.map((item, index) => marketDecisionSemanticsLine(item, index, 'confirm', language)),
+    invalidationTriggers: semantics.invalidationTriggers.map((item, index) => marketDecisionSemanticsLine(item, index, 'invalidate', language)),
+    counterEvidence: semantics.counterEvidence.map((item, index) => marketDecisionSemanticsLine(item, index, 'counter', language)),
+    dataGaps: semantics.dataGaps.map((item, index) => marketDecisionSemanticsLine(item, index, 'gap', language)),
     directionReadiness: buildMarketDirectionReadinessView(semantics.directionReadiness, language),
     claimBoundaries: semantics.claimBoundaries.map((item, index) => marketDecisionBoundaryLine(item, index, language)),
     notInvestmentAdvice: semantics.notInvestmentAdvice,
@@ -2253,11 +2290,31 @@ function summarizeTopLevelDataStatus(params: {
   };
 }
 
-function formatTopLevelDataStatus(status: TopLevelDataStatus): string {
+function formatTopLevelDataStatus(status: TopLevelDataStatus, language: 'zh' | 'en' = 'zh'): string {
+  if (language === 'en') {
+    const headline: Record<TopLevelDataStatusKind, string> = {
+      refreshing: 'Updating market data',
+      delayedAvailable: 'Data available: latest returned data used',
+      proxyPartialAvailable: 'Partial data available',
+      mixedDataAvailable: 'Mixed data available',
+      fallbackOnlyUnavailable: 'Market data unavailable',
+    };
+    return status.hasMissingPanels ? `${headline[status.kind]} · Some data is unavailable` : headline[status.kind];
+  }
   return status.detail ? `${status.headline} · ${status.detail}` : status.headline;
 }
 
-function explainTopLevelDataStatus(status: TopLevelDataStatus): string {
+function explainTopLevelDataStatus(status: TopLevelDataStatus, language: 'zh' | 'en' = 'zh'): string {
+  if (language === 'en') {
+    const explanations: Record<TopLevelDataStatusKind, string> = {
+      refreshing: 'The current evidence is being updated; keep the observation boundary until the returned state changes.',
+      fallbackOnlyUnavailable: 'No usable market evidence was returned; no conclusion is inferred.',
+      mixedDataAvailable: 'Use only returned evidence; missing inputs remain unavailable.',
+      proxyPartialAvailable: 'Proxy or partial evidence remains explicitly bounded and is not treated as official data.',
+      delayedAvailable: 'The latest returned data may be delayed and is not presented as fresh.',
+    };
+    return explanations[status.kind];
+  }
   switch (status.kind) {
     case 'refreshing':
       return `${getConsumerDataStateEntry('maintenance').explanation}${getConsumerDataStateEntry('maintenance').nextStep}`;
@@ -2663,19 +2720,25 @@ function useMarketOverviewWorkbenchModel({
     <div className="flex h-full min-h-0 flex-col gap-2">
       <div className="flex items-center justify-end">
         <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-2 py-0.5 text-[10px] font-semibold uppercase text-[color:var(--wolfy-text-muted)]">
-          {cryptoRealtimeStatus === 'live' ? '实时' : cryptoRealtimeStatus === 'reconnecting' ? '重连中' : '最近快照'}
+          {cryptoRealtimeStatus === 'live'
+            ? (language === 'en' ? 'Live' : '实时')
+            : cryptoRealtimeStatus === 'reconnecting'
+              ? (language === 'en' ? 'Reconnecting' : '重连中')
+              : (language === 'en' ? 'Latest snapshot' : '最近快照')}
         </span>
       </div>
       {cryptoRealtimeStatus === 'reconnecting' ? (
         <div className="rounded-lg border border-amber-300/20 bg-amber-400/8 px-3 py-2 text-xs text-amber-100/80">
-          实时连接断开，显示最近快照
+          {language === 'en' ? 'Live connection interrupted; showing the latest snapshot.' : '实时连接断开，显示最近快照'}
         </div>
       ) : null}
       <div className="min-h-0 flex-1">
         <MarketOverviewCard
           title={t('marketOverviewPage.cards.crypto.title')}
           eyebrow={t('marketOverviewPage.cards.crypto.eyebrow')}
-          description={MARKET_OVERVIEW_CRYPTO_CONSUMER_DESCRIPTION}
+          description={language === 'en'
+            ? 'Track returned BTC, ETH, and BNB prices, 24-hour changes, and 7-day paths; use the latest available snapshot when live data is unavailable.'
+            : MARKET_OVERVIEW_CRYPTO_CONSUMER_DESCRIPTION}
           sourceLabel={t('marketOverviewPage.cards.crypto.source')}
           panel={panels.crypto}
           loading={loading && !panels.crypto}
@@ -3110,10 +3173,10 @@ function useMarketOverviewWorkbenchModel({
       ? { ...row, columns: 1 as const }
       : { ...row, columns: Math.min(row.columns, modules.length) as MarketOverviewRowColumns };
     const children = modules.map((moduleId, moduleIndex) => renderModule(moduleId, rowIndex * 10 + moduleIndex, row.tier));
-    const sectionMeta = CATEGORY_SECTION_META[activeCategory][row.id] || {
-      eyebrow: '市场分组',
-      title: '市场分组',
-      detail: '按主题查看当前市场状态。',
+    const sectionMeta = (language === 'en' ? CATEGORY_SECTION_META_EN : CATEGORY_SECTION_META)[activeCategory][row.id] || {
+      eyebrow: language === 'en' ? 'Market group' : '市场分组',
+      title: language === 'en' ? 'Market group' : '市场分组',
+      detail: language === 'en' ? 'Review the returned market state by theme.' : '按主题查看当前市场状态。',
     };
     return (
       <MarketOverviewSection
@@ -3204,10 +3267,16 @@ function useMarketOverviewWorkbenchModel({
   };
   const temperatureSummary: MarketOverviewTemperatureSummaryView = {
     reliable: decisionReliable,
-    valueText: decisionReliable ? formatNumber(panels.temperature.scores.overall.value, 0) : '暂不判定',
+    valueText: decisionReliable ? formatNumber(panels.temperature.scores.overall.value, 0) : (language === 'en' ? 'Not assessed' : '暂不判定'),
     toneClass: decisionReliable ? scoreTone(panels.temperature.scores.overall) : 'text-[color:var(--wolfy-text-muted)]',
-    label: decisionReliable ? panels.temperature.scores.overall.label : disabledLabel,
-    confidenceLabel: confidenceLabel(panels.temperature.confidence),
+    label: marketOverviewConsumerSemanticsText(
+      decisionReliable ? panels.temperature.scores.overall.label : disabledLabel,
+      language === 'en' ? 'Market state pending' : '市场状态待确认',
+      language,
+    ),
+    confidenceLabel: language === 'en'
+      ? marketOverviewConsumerSemanticsText(confidenceLabel(panels.temperature.confidence), 'Limited', language)
+      : confidenceLabel(panels.temperature.confidence),
     reliableInputCount: panels.temperature.reliableInputCount ?? 0,
     fallbackInputCount: panels.temperature.fallbackInputCount ?? 0,
     excludedInputCount: panels.temperature.excludedInputCount ?? 0,
@@ -3245,10 +3314,18 @@ function useMarketOverviewWorkbenchModel({
       });
   };
   const briefingSummary: MarketOverviewBriefingSummaryView = {
-    confidenceLabel: confidenceLabel(panels.briefing.confidence),
+    confidenceLabel: language === 'en'
+      ? marketOverviewConsumerSemanticsText(confidenceLabel(panels.briefing.confidence), 'Limited', language)
+      : confidenceLabel(panels.briefing.confidence),
     toneClass: panels.briefing.isReliable === false || panels.briefing.isFallback ? 'text-[color:var(--state-warning-text)]' : 'text-[color:var(--wolfy-text-primary)]',
-    leadMessage: panels.briefing.items[0]?.message || panels.briefing.warning || '暂无简报',
-    warning: panels.briefing.warning || undefined,
+    leadMessage: marketOverviewConsumerSemanticsText(
+      panels.briefing.items[0]?.message || panels.briefing.warning,
+      language === 'en' ? 'No briefing returned' : '暂无简报',
+      language,
+    ),
+    warning: panels.briefing.warning
+      ? marketOverviewConsumerSemanticsText(panels.briefing.warning, language === 'en' ? 'Briefing evidence is limited.' : '简报证据有限。', language)
+      : undefined,
   };
   const heroAnchorViews = heroAnchors.map<MarketOverviewHeroAnchorView>((anchor) => {
     const displayLabel = anchor.item
@@ -3258,35 +3335,53 @@ function useMarketOverviewWorkbenchModel({
       key: anchor.key,
       primaryLabel: displayLabel.primary,
       secondaryLabel: displayLabel.secondary,
-      valueText: formatHeroValue(anchor.item?.value),
-      changeText: formatHeroChange(anchor.item?.changePct),
+      valueText: formatHeroValue(anchor.item?.value, language),
+      changeText: formatHeroChange(anchor.item?.changePct, language),
       changeToneClass: heroToneClass(anchor.item),
     };
   });
   const watchMetricLabels = MARKET_OVERVIEW_SIGNAL_WATCH[activeCategory]
     .slice(0, 3)
-    .map((metricId) => findMetricItem(panels, metricId)?.label || metricId)
+    .map((metricId) => {
+      const item = findMetricItem(panels, metricId);
+      return item ? resolveMarketOverviewDisplayLabel(item, language).primary : metricId;
+    })
     .join(' · ');
+  const contextCopy = (value: unknown, fallback: string) => (
+    marketOverviewConsumerSemanticsText(value, fallback, language)
+  );
   const contextHighlights: MarketOverviewContextHighlightView[] = [
     {
       id: 'top-risk',
-      eyebrow: '当前风险',
-      title: decisionSemanticsView?.counterEvidence[0]?.label || directionalSummaryView.blockingDrivers[0] || '暂无突出反证',
-      detail: decisionSemanticsView?.counterEvidence[0]?.meta || directionalSummaryView.blockingTitle,
+      eyebrow: language === 'en' ? 'Current risk' : '当前风险',
+      title: contextCopy(
+        decisionSemanticsView?.counterEvidence[0]?.label || directionalSummaryView.blockingDrivers[0],
+        language === 'en' ? 'No prominent counter-evidence returned' : '暂无突出反证',
+      ),
+      detail: contextCopy(
+        decisionSemanticsView?.counterEvidence[0]?.meta || directionalSummaryView.blockingTitle,
+        language === 'en' ? 'No primary risk limitation was returned.' : '暂无主要风险限制。',
+      ),
     },
     {
       id: 'next-watch',
-      eyebrow: '下一观察',
-      title: decisionSemanticsView?.invalidationTriggers[0]?.label || directionalSummaryView.watchItems[0] || '等待下一项确认信号',
-      detail: decisionSemanticsView?.invalidationTriggers[0]?.meta || watchMetricLabels || directionalSummaryView.watchTitle,
+      eyebrow: language === 'en' ? 'Next watch' : '下一观察',
+      title: contextCopy(
+        decisionSemanticsView?.invalidationTriggers[0]?.label || directionalSummaryView.watchItems[0],
+        language === 'en' ? 'Waiting for the next confirmation signal' : '等待下一项确认信号',
+      ),
+      detail: contextCopy(
+        decisionSemanticsView?.invalidationTriggers[0]?.meta || watchMetricLabels || directionalSummaryView.watchTitle,
+        language === 'en' ? 'Review the next returned market signal.' : '复核下一项返回的市场信号。',
+      ),
     },
     {
       id: 'data-status',
-      eyebrow: '数据状态',
-      title: formatTopLevelDataStatus(topLevelDataStatus),
+      eyebrow: language === 'en' ? 'Data status' : '数据状态',
+      title: formatTopLevelDataStatus(topLevelDataStatus, language),
       detail: dataStateView.updatedAtLabel
-        ? `最近更新：${dataStateView.updatedAtLabel}`
-        : explainTopLevelDataStatus(topLevelDataStatus),
+        ? `${language === 'en' ? 'Last updated' : '最近更新'}：${dataStateView.updatedAtLabel}`
+        : explainTopLevelDataStatus(topLevelDataStatus, language),
     },
   ];
   const executiveGroups: MarketOverviewExecutiveGroupView[] = [
@@ -3300,8 +3395,8 @@ function useMarketOverviewWorkbenchModel({
       id: group.id,
       label: group.label,
       focus: group.focus,
-      valueText: formatHeroValue(group.item?.value),
-      changeText: formatHeroChange(group.item?.changePct),
+      valueText: formatHeroValue(group.item?.value, language),
+      changeText: formatHeroChange(group.item?.changePct, language),
       changeToneClass: heroToneClass(group.item),
       freshness: getCardMeta(panels, group.cardKey as CardKey).freshness as MarketOverviewPanel['freshness'],
       coverage,
@@ -3315,10 +3410,10 @@ function useMarketOverviewWorkbenchModel({
     if (row.tier === 'hero') {
       return;
     }
-    const sectionMeta = CATEGORY_SECTION_META[activeCategory][row.id] || {
-      eyebrow: '市场证据',
-      title: '分组证据',
-      detail: '按主题查看当前市场证据。',
+    const sectionMeta = (language === 'en' ? CATEGORY_SECTION_META_EN : CATEGORY_SECTION_META)[activeCategory][row.id] || {
+      eyebrow: language === 'en' ? 'Market evidence' : '市场证据',
+      title: language === 'en' ? 'Grouped evidence' : '分组证据',
+      detail: language === 'en' ? 'Review the returned market evidence by theme.' : '按主题查看当前市场证据。',
     };
     const node = renderPlannedRow(row, index, { nestedInEvidenceGroup: true });
     if (!node) {
@@ -3452,36 +3547,54 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
         data-market-research-flow="primary-market-path"
         data-market-journey-step="main-path"
         aria-label={primaryPathLabel}
-        className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] xl:items-stretch"
+        className="flex min-w-0 flex-col gap-3"
       >
-        <div className="min-w-0" data-testid="market-overview-dominant-path">
+        <div
+          id="market-overview-primary-chart"
+          className="min-w-0 scroll-mt-20"
+          data-testid="market-overview-dominant-path"
+          data-primary-information-block="visualization"
+        >
           <MarketOverviewCoreTrendChart view={marketTrendChartView} language={language} />
         </div>
-        <section
-          data-testid="market-overview-hero-lane"
-          data-card-tier="hero"
-          data-evidence-group-role="regime-breadth"
-          data-market-journey-step="key-metrics"
-          className="flex min-w-0 flex-col gap-4"
-        >
-          {heroRows}
-        </section>
+        <details className="group market-overview-asset-disclosure border-t border-[color:var(--wolfy-divider)]" data-testid="market-overview-primary-evidence-disclosure">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-xs font-semibold text-[color:var(--wolfy-text-secondary)] marker:hidden">
+            <span>{language === 'en' ? 'Primary breadth and funds evidence' : '主要广度与资金证据'}</span>
+            <span aria-hidden="true">＋</span>
+          </summary>
+          <section
+            data-testid="market-overview-hero-lane"
+            data-card-tier="hero"
+            data-evidence-group-role="regime-breadth"
+            data-market-journey-step="key-metrics"
+            className="flex min-w-0 flex-col gap-4 pb-3"
+          >
+            {heroRows}
+          </section>
+        </details>
       </section>
-      <Suspense fallback={<MarketOverviewWorkbenchGridFallback language={language} />}>
-        <LazyMarketOverviewWorkbenchGrid
-          secondaryRows={secondaryRows}
-          deepRows={deepRows}
-          evidenceGroups={evidenceGroups}
-          showDeepSection={showDeepSection}
-          showContextRail={showContextRail}
-          contextHighlights={contextHighlights}
-          executiveGroups={executiveGroups}
-          showExecutiveGroups={showExecutiveGroups}
-        />
-      </Suspense>
-      {/* After observation → path → metrics → drivers → data state */}
-      <MarketOverviewResearchHandoff locale={language === 'en' ? 'en' : 'zh'} />
-      <MarketOverviewVisualEvidenceStrip cards={visualEvidenceCards} />
+      <details className="group market-overview-deep-evidence-disclosure border-t border-[color:var(--wolfy-divider)]" data-testid="market-overview-deep-evidence-disclosure">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between text-sm font-semibold text-[color:var(--wolfy-text-primary)] marker:hidden">
+          <span>{language === 'en' ? 'Asset classes, source boundaries, and secondary evidence' : '资产类别、来源边界与次级证据'}</span>
+          <span className="text-[color:var(--wolfy-text-muted)]" aria-hidden="true">＋</span>
+        </summary>
+        <div className="space-y-4 pb-4">
+          <Suspense fallback={<MarketOverviewWorkbenchGridFallback language={language} />}>
+            <LazyMarketOverviewWorkbenchGrid
+              secondaryRows={secondaryRows}
+              deepRows={deepRows}
+              evidenceGroups={evidenceGroups}
+              showDeepSection={showDeepSection}
+              showContextRail={showContextRail}
+              contextHighlights={contextHighlights}
+              executiveGroups={executiveGroups}
+              showExecutiveGroups={showExecutiveGroups}
+            />
+          </Suspense>
+          <MarketOverviewResearchHandoff locale={language === 'en' ? 'en' : 'zh'} />
+          <MarketOverviewVisualEvidenceStrip cards={visualEvidenceCards} locale={language} />
+        </div>
+      </details>
     </div>
   );
 };

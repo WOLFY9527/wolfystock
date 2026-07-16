@@ -405,7 +405,7 @@ export function buildConsumerResearchReadinessView(
   const state = readiness?.readinessState || 'observe_only';
   return {
     state,
-    verdictLabel: sanitizeHumanReason(readiness?.verdictLabel) || localizedStateLabel(state, locale),
+    verdictLabel: localizedStateLabel(state, locale),
     tone: toneForState(state),
     summaryLine: summarizeReadiness(readiness, locale),
     chips: uniqueStrings([
