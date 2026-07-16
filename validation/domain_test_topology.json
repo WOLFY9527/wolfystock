@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7813,
-      "sha256": "6d896eef16b03dc227d2de98f6667a3040b32feaac3aca1e81de78dc885d3752"
+      "count": 7822,
+      "sha256": "65e61d4ee84803031c7846110d2c2e25727e284b53edcddcf91a6509e2665b3b"
     },
     "tests": [
       {
@@ -34437,6 +34437,51 @@
         "id": "tests/test_rule_backtest_universe_service.py::RuleBacktestUniverseServiceTestCase::test_universe_metric_leaders_are_bounded_and_sorted",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_runtime_settings.py::test_runtime_settings_inventory_preserves_all_344_names",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_runtime_settings.py::test_runtime_settings_is_deeply_immutable_and_diagnostics_are_secret_safe",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_runtime_settings.py::test_runtime_settings_preserves_complete_default_value_and_type_contract",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_runtime_settings.py::test_runtime_settings_preserves_env_file_provenance_after_startup_preload",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_runtime_settings.py::test_runtime_settings_preserves_process_over_file_over_default_precedence",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_runtime_settings.py::test_runtime_settings_preserves_profile_matrix_and_environment_overrides",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_runtime_settings.py::test_runtime_settings_records_absolute_env_file_identity",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_runtime_settings.py::test_runtime_settings_records_alias_origin_when_values_agree",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_runtime_settings.py::test_runtime_settings_reports_bounded_alias_conflicts_without_changing_precedence",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
       },
       {
         "id": "tests/test_scanner_ai_service.py::ScannerAiInterpretationServiceTestCase::test_duplicate_candidate_observed_uses_stable_safe_hash",
