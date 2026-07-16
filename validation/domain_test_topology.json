@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7760,
-      "sha256": "5d5ad2dfd1ba127230313b196402864d75b0c8f79fa20c995235a843b32c2687"
+      "count": 7777,
+      "sha256": "ca654ae177cf5e43be83f14b5557d1a4baa0ad2c4906ed2f862a6d7640a536b3"
     },
     "tests": [
       {
@@ -18824,6 +18824,36 @@
         "baseline": true
       },
       {
+        "id": "tests/test_image_stock_extractor_litellm.py::test_vision_auth_failure_stops_after_one_attempt_without_sleep",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_image_stock_extractor_litellm.py::test_vision_bad_request_or_unsupported_payload_stops_after_one_attempt",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_image_stock_extractor_litellm.py::test_vision_connection_failure_can_rotate_existing_keys_without_changing_model_order",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_image_stock_extractor_litellm.py::test_vision_quota_failure_stops_after_one_attempt_without_sleep",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_image_stock_extractor_litellm.py::test_vision_terminal_failure_preserves_existing_public_exception_contract",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_image_stock_extractor_litellm.py::test_vision_timeout_retries_three_times_with_existing_1_and_2_second_delays",
+        "domain": "market",
+        "baseline": false
+      },
+      {
         "id": "tests/test_import_parser.py::TestParseImportFromBytesCsv::test_parses_csv_chinese_column_names",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -25314,6 +25344,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_official_macro_transport.py::test_fed_liquidity_smoke_429_stops_each_series_after_one_attempt_and_fails_closed",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
         "id": "tests/test_official_macro_transport.py::test_fetch_fred_observation_points_falls_back_to_system_ca_when_certifi_missing",
         "domain": "provider_external_network",
         "baseline": true
@@ -25434,6 +25469,26 @@
         "baseline": true
       },
       {
+        "id": "tests/test_official_macro_transport.py::test_official_macro_smoke_401_stops_each_series_after_one_attempt_and_fails_closed",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_official_macro_transport.py::test_official_macro_smoke_invalid_metadata_is_not_re_requested",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_official_macro_transport.py::test_official_macro_smoke_stale_series_is_not_re_requested",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_official_macro_transport.py::test_official_macro_smoke_timeout_retries_within_existing_budget",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
         "id": "tests/test_official_macro_transport.py::test_official_macro_transport_observations_remain_official_but_non_live",
         "domain": "provider_external_network",
         "baseline": true
@@ -25547,6 +25602,11 @@
         "id": "tests/test_official_macro_transport.py::test_usd_pressure_live_smoke_reports_bounded_official_series_successfully",
         "domain": "provider_external_network",
         "baseline": true
+      },
+      {
+        "id": "tests/test_official_macro_transport.py::test_usd_pressure_smoke_parse_error_stops_after_one_attempt_and_fails_closed",
+        "domain": "provider_external_network",
+        "baseline": false
       },
       {
         "id": "tests/test_offline_network_policy.py::test_audited_network_marker_requires_double_explicit_opt_in",
@@ -31142,6 +31202,31 @@
         "id": "tests/test_provider_types.py::TestProviderTypes::test_to_dict_is_json_serializable",
         "domain": "provider_external_network",
         "baseline": true
+      },
+      {
+        "id": "tests/test_provider_types.py::test_retry_disposition_counts_only_transport_availability_failures_toward_circuit",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_types.py::test_retry_disposition_retries_timeout_connection_and_5xx_same_target",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_types.py::test_retry_disposition_separates_fallback_permission_from_same_target_retry",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_types.py::test_retry_disposition_stops_401_403_429_same_target",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_types.py::test_retry_disposition_stops_invalid_input_unsupported_payload_and_contract_failures",
+        "domain": "provider_external_network",
+        "baseline": false
       },
       {
         "id": "tests/test_provider_usage_ledger.py::test_ledger_bounded_ring_buffer_drops_old_events",
