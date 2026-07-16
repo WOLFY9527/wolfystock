@@ -654,6 +654,48 @@ def _infer_source_type(source: str, explicit: Any = None) -> str:
     return SOURCE_TYPE_BY_SOURCE.get(source.lower(), "public_api" if source else "")
 
 
+def classify_market_payload_availability(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    """Normalize market fallback and availability signals without changing consumers."""
+    source = str(payload.get("source") or "").lower()
+    source_label = str(payload.get("sourceLabel") or "").lower()
+    freshness = str(payload.get("freshness") or "").lower()
+    source_type = _infer_source_type(source, payload.get("sourceType"))
+    items = [item for item in payload.get("items", []) if isinstance(item, dict)]
+    degraded_item_count = sum(
+        1
+        for item in items
+        if item.get("isFallback")
+        or item.get("fallbackUsed")
+        or item.get("isUnavailable")
+        or str(item.get("source") or "").lower() in {"fallback", "mock", "unavailable"}
+        or str(item.get("freshness") or "").lower() in {"fallback", "mock", "unavailable", "error"}
+    )
+    fallback_signaled = bool(
+        payload.get("isFallback")
+        or payload.get("fallbackUsed")
+        or payload.get("fallback_used")
+        or freshness in {"fallback", "mock"}
+        or any(token in source or token in source_label for token in FALLBACK_SOURCE_TOKENS)
+        or source_type == "computed_from_fallback"
+    )
+    fallback_only = bool(
+        payload.get("isFallback")
+        or source in {"fallback", "mock", "unavailable"}
+        or freshness in {"fallback", "mock"}
+        or (items and degraded_item_count == len(items))
+    )
+    return {
+        "source": source,
+        "sourceType": source_type,
+        "freshness": freshness,
+        "fallbackSignaled": fallback_signaled,
+        "fallbackOnly": fallback_only,
+        "itemCount": len(items),
+        "degradedItemCount": degraded_item_count,
+        "availableItemCount": len(items) - degraded_item_count,
+    }
+
+
 def classify_market_payload_reliability(payload: Dict[str, Any], category: str = "") -> Dict[str, Any]:
     """Classify market payload/item trust consistently for coverage and scoring."""
     items = payload.get("items") if isinstance(payload.get("items"), list) else []
@@ -683,20 +725,17 @@ def classify_market_payload_reliability(payload: Dict[str, Any], category: str =
             "fallbackItemCount": fallback_count,
         }
 
-    source = str(payload.get("source") or "").lower()
-    source_label = str(payload.get("sourceLabel") or "").lower()
-    freshness = str(payload.get("freshness") or "").lower()
-    source_type = _infer_source_type(source, payload.get("sourceType"))
+    availability = classify_market_payload_availability(payload)
+    freshness = str(availability["freshness"])
+    source_type = str(availability["sourceType"])
     has_error = bool(payload.get("error") or payload.get("lastError"))
-    is_fallback = bool(payload.get("isFallback") or payload.get("fallbackUsed") or payload.get("fallback_used"))
-    fallback_source = any(token in source or token in source_label for token in FALLBACK_SOURCE_TOKENS)
     has_value = _has_valid_market_value(payload)
 
     if has_error and not has_value:
         return {"kind": "error", "isReliable": False, "excluded": True, "excludeReason": "error", "confidenceWeight": 0.0, "sourceType": source_type}
     if freshness == "stale" or payload.get("isStale"):
         return {"kind": "stale", "isReliable": False, "excluded": True, "excludeReason": "stale", "confidenceWeight": 0.0, "sourceType": source_type}
-    if freshness in {"fallback", "mock"} or is_fallback or fallback_source or source_type == "computed_from_fallback":
+    if availability["fallbackSignaled"]:
         return {"kind": "fallback", "isReliable": False, "excluded": True, "excludeReason": "fallback", "confidenceWeight": 0.0, "sourceType": source_type}
     if not has_value:
         return {"kind": "error", "isReliable": False, "excluded": True, "excludeReason": "no_value", "confidenceWeight": 0.0, "sourceType": source_type}
@@ -4426,21 +4465,7 @@ class MarketOverviewService:
         return bool(has_items or has_value)
 
     def _is_fallback_only_market_snapshot(self, payload: Dict[str, Any]) -> bool:
-        source = str(payload.get("source") or "").lower()
-        freshness = str(payload.get("freshness") or "").lower()
-        if payload.get("isFallback") or source in {"fallback", "mock", "unavailable"} or freshness in {"fallback", "mock"}:
-            return True
-        items = [item for item in payload.get("items", []) if isinstance(item, dict)]
-        if not items:
-            return False
-        return all(
-            item.get("isFallback")
-            or item.get("fallbackUsed")
-            or item.get("isUnavailable")
-            or str(item.get("source") or "").lower() in {"fallback", "mock", "unavailable"}
-            or str(item.get("freshness") or "").lower() in {"fallback", "mock", "unavailable", "error"}
-            for item in items
-        )
+        return bool(classify_market_payload_availability(payload)["fallbackOnly"])
 
     def _save_persistent_snapshot(self, cache_key: str, payload: Dict[str, Any]) -> None:
         try:
@@ -4782,36 +4807,30 @@ class MarketOverviewService:
             self._quote_request_memo = None
 
     def _provider_health_status(self, payload: Dict[str, Any]) -> str:
-        source = str(payload.get("source") or "").lower()
-        freshness = str(payload.get("freshness") or "").lower()
-        items = [item for item in payload.get("items", []) if isinstance(item, dict)]
-        fallback_items = [
-            item for item in items
-            if item.get("isFallback")
-            or item.get("fallbackUsed")
-            or item.get("isUnavailable")
-            or str(item.get("source") or "").lower() in {"fallback", "mock", "unavailable"}
-            or str(item.get("freshness") or "").lower() in {"fallback", "mock", "unavailable", "error"}
-        ]
-        real_items = [item for item in items if item not in fallback_items]
+        availability = classify_market_payload_availability(payload)
+        source = str(availability["source"])
+        freshness = str(availability["freshness"])
+        item_count = int(availability["itemCount"])
+        degraded_item_count = int(availability["degradedItemCount"])
+        available_item_count = int(availability["availableItemCount"])
         has_error = bool(payload.get("lastError") or payload.get("refreshError") or payload.get("error"))
-        if payload.get("isUnavailable") or source == "unavailable" or (not items and freshness in {"fallback", "unavailable", "error"}):
+        if payload.get("isUnavailable") or source == "unavailable" or (not item_count and freshness in {"fallback", "unavailable", "error"}):
             return "unavailable"
         if payload.get("isRefreshing") and (payload.get("lastError") or payload.get("refreshError")) and (payload.get("isStale") or payload.get("isFromSnapshot")):
             return "stale"
         if payload.get("isRefreshing"):
             return "refreshing"
-        if has_error and (payload.get("isStale") or payload.get("isFromSnapshot")) and items:
+        if has_error and (payload.get("isStale") or payload.get("isFromSnapshot")) and item_count:
             return "stale"
-        if has_error and not items:
+        if has_error and not item_count:
             return "error"
         if payload.get("isFallback") or freshness in {"fallback", "mock"} or source in {"fallback", "mock"}:
             return "fallback"
-        if has_error and items:
+        if has_error and item_count:
             return "partial"
-        if real_items and fallback_items:
+        if available_item_count and degraded_item_count:
             return "partial"
-        if payload.get("fallbackUsed") and real_items:
+        if payload.get("fallbackUsed") and available_item_count:
             return "partial"
         if payload.get("isPartial") or freshness == "partial":
             return "partial"

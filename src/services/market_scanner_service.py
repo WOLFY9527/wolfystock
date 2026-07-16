@@ -27,7 +27,10 @@ from src.repositories.scanner_repo import ScannerRepository
 from src.repositories.stock_repo import StockRepository
 from src.contracts.source_confidence import coerce_source_confidence_contract
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
-from src.services.market_scanner_context_adapter import adapt_scanner_topdown_context_diagnostics
+from src.services.market_scanner_context_adapter import (
+    adapt_scanner_topdown_context_diagnostics,
+    normalize_scanner_context_inputs,
+)
 from src.services.market_scanner_candidate_evidence import (
     build_scanner_candidate_evidence_frame,
     build_scanner_candidate_research_readiness,
@@ -4296,57 +4299,6 @@ class MarketScannerService:
         }
 
     @staticmethod
-    def _resolve_scanner_context_inputs(diagnostics: Dict[str, Any]) -> Dict[str, Any]:
-        market_context = _context_mapping(
-            diagnostics.get("market_temperature")
-            or diagnostics.get("marketTemperature")
-            or diagnostics.get("market_overview")
-            or diagnostics.get("marketOverview")
-            or diagnostics.get("market_context")
-            or diagnostics.get("marketContext")
-        )
-        liquidity_context = _context_mapping(
-            diagnostics.get("liquidity_context")
-            or diagnostics.get("liquidityContext")
-            or diagnostics.get("liquidity_monitor")
-            or diagnostics.get("liquidityMonitor")
-        )
-        rotation_context = _context_mapping(
-            diagnostics.get("rotation_context")
-            or diagnostics.get("rotationContext")
-            or diagnostics.get("rotation_radar")
-            or diagnostics.get("rotationRadar")
-        )
-        regime = _context_mapping(market_context.get("marketRegimeSynthesis") or market_context.get("regimeSummary"))
-        liquidity = _context_mapping(
-            market_context.get("capitalFlowSignal")
-            or market_context.get("liquidityFrame")
-            or market_context.get("liquidityImpulseSynthesis")
-            or liquidity_context.get("capitalFlowSignal")
-            or liquidity_context.get("liquidityImpulseSynthesis")
-        )
-        rotation_families = _context_items(
-            market_context.get("rotationFamilyRollup")
-            or rotation_context.get("rotationFamilyRollup")
-            or rotation_context.get("families")
-        )
-        explicit_readiness = _context_mapping(
-            diagnostics.get("researchReadiness")
-            or diagnostics.get("research_readiness")
-            or market_context.get("researchReadiness")
-            or market_context.get("marketReadiness")
-        )
-        return {
-            "market_context": market_context,
-            "liquidity_context": liquidity_context,
-            "rotation_context": rotation_context,
-            "market_regime": regime,
-            "liquidity_frame": liquidity,
-            "rotation_families": rotation_families,
-            "explicit_readiness": explicit_readiness,
-        }
-
-    @staticmethod
     def _context_authority_allowed(*values: Mapping[str, Any]) -> bool:
         for value in values:
             payload = _context_mapping(value)
@@ -4544,7 +4496,7 @@ class MarketScannerService:
             market=market,
             universe_selection=universe_selection,
         )
-        inputs = self._resolve_scanner_context_inputs(diagnostics)
+        inputs = normalize_scanner_context_inputs(diagnostics)
         explicit = inputs["explicit_readiness"]
         if explicit.get("readinessState"):
             return {
@@ -4675,7 +4627,7 @@ class MarketScannerService:
         return "mixed"
 
     def _build_scanner_macro_regime(self, diagnostics: Dict[str, Any]) -> Dict[str, Any]:
-        inputs = self._resolve_scanner_context_inputs(diagnostics)
+        inputs = normalize_scanner_context_inputs(diagnostics)
         market_context = inputs["market_context"]
         regime = inputs["market_regime"]
         confidence_value = _context_float(regime.get("confidence") or _context_mapping(regime.get("confidence")).get("value"))
@@ -4721,7 +4673,7 @@ class MarketScannerService:
         }
 
     def _build_scanner_liquidity_frame(self, diagnostics: Dict[str, Any]) -> Dict[str, Any]:
-        inputs = self._resolve_scanner_context_inputs(diagnostics)
+        inputs = normalize_scanner_context_inputs(diagnostics)
         market_context = inputs["market_context"]
         liquidity = inputs["liquidity_frame"]
         contradictions = _context_items(liquidity.get("contradictionCodes")) if liquidity else []
@@ -4769,7 +4721,7 @@ class MarketScannerService:
         }
 
     def _build_scanner_theme_frame(self, diagnostics: Dict[str, Any]) -> Dict[str, Any]:
-        inputs = self._resolve_scanner_context_inputs(diagnostics)
+        inputs = normalize_scanner_context_inputs(diagnostics)
         families = inputs["rotation_families"]
         market_context = inputs["market_context"]
         themes: List[Dict[str, Any]] = []

@@ -557,80 +557,67 @@ def build_official_cn_money_market_cache_bundle(
     }
 
 
-def official_fed_liquidity_series_id(row: Mapping[str, Any]) -> str | None:
-    """Resolve a Fed liquidity row to its official FRED series id."""
-    explicit = _text(
+def normalize_official_series_aliases(row: Mapping[str, Any]) -> tuple[str, ...]:
+    """Return normalized official-series aliases in authoritative field order."""
+    aliases: list[str] = []
+    explicit = (
         row.get("officialSeriesId")
         or row.get("official_series_id")
         or row.get("seriesId")
         or row.get("series_id")
         or row.get("sourceId")
         or row.get("source_id")
-    ).upper()
-    for series_id in OFFICIAL_FED_LIQUIDITY_REQUIRED_SERIES:
-        if explicit == series_id or explicit.endswith(f":{series_id}") or series_id in explicit.split(":"):
+    )
+    symbol = row.get("symbol") or row.get("key")
+    for raw_value in (explicit, symbol):
+        value = _text(raw_value).upper().replace("-", "_").replace(" ", "_")
+        if not value:
+            continue
+        alias = value.rsplit(":", 1)[-1]
+        if alias not in aliases:
+            aliases.append(alias)
+    return tuple(aliases)
+
+
+def official_fed_liquidity_series_id(row: Mapping[str, Any]) -> str | None:
+    """Resolve a Fed liquidity row to its official FRED series id."""
+    for alias in normalize_official_series_aliases(row):
+        if alias in OFFICIAL_FED_LIQUIDITY_REQUIRED_SERIES:
+            return alias
+        series_id = OFFICIAL_FED_LIQUIDITY_SYMBOL_TO_SERIES_ID.get(alias)
+        if series_id:
             return series_id
-    symbol = _text(row.get("symbol") or row.get("key")).upper()
-    return OFFICIAL_FED_LIQUIDITY_SYMBOL_TO_SERIES_ID.get(symbol)
+    return None
 
 
 def official_usd_pressure_series_id(row: Mapping[str, Any]) -> str | None:
     """Resolve a USD pressure row to its official FRED series id."""
-    explicit = _text(
-        row.get("officialSeriesId")
-        or row.get("official_series_id")
-        or row.get("seriesId")
-        or row.get("series_id")
-        or row.get("sourceId")
-        or row.get("source_id")
-    ).upper()
-    for series_id in OFFICIAL_USD_PRESSURE_REQUIRED_SERIES:
-        if explicit == series_id or explicit.endswith(f":{series_id}") or series_id in explicit.split(":"):
+    for alias in normalize_official_series_aliases(row):
+        if alias in OFFICIAL_USD_PRESSURE_REQUIRED_SERIES:
+            return alias
+        series_id = OFFICIAL_USD_PRESSURE_SYMBOL_TO_SERIES_ID.get(alias)
+        if series_id:
             return series_id
-    symbol = _text(row.get("symbol") or row.get("key")).upper()
-    return OFFICIAL_USD_PRESSURE_SYMBOL_TO_SERIES_ID.get(symbol)
+    return None
 
 
 def official_us_rates_series_id(row: Mapping[str, Any]) -> str | None:
     """Resolve a US rates row to its normalized official series id."""
-    explicit = _text(
-        row.get("officialSeriesId")
-        or row.get("official_series_id")
-        or row.get("seriesId")
-        or row.get("series_id")
-        or row.get("sourceId")
-        or row.get("source_id")
-        or row.get("symbol")
-        or row.get("key")
-    ).upper()
-    normalized_explicit = explicit.replace("-", "_").replace(" ", "_")
-    if ":" in normalized_explicit:
-        normalized_explicit = normalized_explicit.rsplit(":", 1)[-1]
-    series_id = OFFICIAL_US_RATES_ALIAS_TO_SERIES_ID.get(normalized_explicit)
-    if series_id:
-        return series_id
-    symbol = _text(row.get("symbol") or row.get("key")).upper()
-    return OFFICIAL_US_RATES_SYMBOL_TO_SERIES_ID.get(symbol)
+    for alias in normalize_official_series_aliases(row):
+        series_id = OFFICIAL_US_RATES_ALIAS_TO_SERIES_ID.get(alias) or OFFICIAL_US_RATES_SYMBOL_TO_SERIES_ID.get(alias)
+        if series_id:
+            return series_id
+    return None
 
 
 def official_cn_money_market_series_id(row: Mapping[str, Any]) -> str | None:
     """Resolve a CN money-market row to its normalized official series id."""
-    explicit = _text(
-        row.get("officialSeriesId")
-        or row.get("official_series_id")
-        or row.get("seriesId")
-        or row.get("series_id")
-        or row.get("sourceId")
-        or row.get("source_id")
-        or row.get("symbol")
-        or row.get("key")
-    ).upper()
-    normalized = OFFICIAL_CN_MONEY_MARKET_ALIAS_TO_SERIES_ID.get(
-        explicit.replace("-", "_").replace(" ", "_"),
-        explicit.replace("-", "_").replace(" ", "_"),
-    )
     valid_series = set(OFFICIAL_CN_MONEY_MARKET_REQUIRED_SERIES) | set(OFFICIAL_CN_MONEY_MARKET_CONTEXT_SERIES)
-    return normalized if normalized in valid_series else None
+    for alias in normalize_official_series_aliases(row):
+        normalized = OFFICIAL_CN_MONEY_MARKET_ALIAS_TO_SERIES_ID.get(alias, alias)
+        if normalized in valid_series:
+            return normalized
+    return None
 
 
 def _build_official_macro_readiness_bundle(

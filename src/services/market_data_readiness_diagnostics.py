@@ -19,6 +19,7 @@ from src.services.official_macro_liquidity_cache_contracts import (
     OFFICIAL_US_RATES_REQUIRED_SERIES,
     build_official_fed_liquidity_cache_bundle,
     build_official_us_rates_cache_bundle,
+    normalize_official_series_aliases,
 )
 from src.services.historical_ohlcv_cache_preflight import build_historical_ohlcv_cache_preflight
 from src.services.akshare_cn_ohlcv_cache import build_akshare_cn_ohlcv_runtime_status
@@ -1142,20 +1143,8 @@ def _latest_from_rows(rows: Optional[Sequence[Mapping[str, Any]]], key: str) -> 
 
 
 def _row_series_id(row: Mapping[str, Any]) -> str:
-    raw = (
-        row.get("officialSeriesId")
-        or row.get("official_series_id")
-        or row.get("seriesId")
-        or row.get("series_id")
-        or row.get("sourceId")
-        or row.get("source_id")
-        or row.get("symbol")
-        or row.get("key")
-    )
-    text = _safe_text(raw)
-    if ":" in text:
-        text = text.rsplit(":", 1)[-1]
-    return text.upper()
+    aliases = normalize_official_series_aliases(row)
+    return aliases[0] if aliases else ""
 
 
 def _row_freshness(row: Mapping[str, Any]) -> str:

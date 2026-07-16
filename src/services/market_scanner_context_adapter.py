@@ -43,6 +43,55 @@ LiquidityContextReader = Callable[[], Optional[Mapping[str, Any]]]
 RotationContextReader = Callable[[str], Optional[Mapping[str, Any]]]
 
 
+def normalize_scanner_context_inputs(diagnostics: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    """Project scanner context aliases into one cache- and provider-inert contract."""
+    payload = dict(diagnostics or {})
+    market_context = _mapping(
+        payload.get("market_temperature")
+        or payload.get("marketTemperature")
+        or payload.get("market_overview")
+        or payload.get("marketOverview")
+        or payload.get("market_context")
+        or payload.get("marketContext")
+    )
+    liquidity_context = _mapping(
+        payload.get("liquidity_context")
+        or payload.get("liquidityContext")
+        or payload.get("liquidity_monitor")
+        or payload.get("liquidityMonitor")
+    )
+    rotation_context = _mapping(
+        payload.get("rotation_context")
+        or payload.get("rotationContext")
+        or payload.get("rotation_radar")
+        or payload.get("rotationRadar")
+    )
+    return {
+        "market_context": market_context,
+        "liquidity_context": liquidity_context,
+        "rotation_context": rotation_context,
+        "market_regime": _mapping(market_context.get("marketRegimeSynthesis") or market_context.get("regimeSummary")),
+        "liquidity_frame": _mapping(
+            market_context.get("capitalFlowSignal")
+            or market_context.get("liquidityFrame")
+            or market_context.get("liquidityImpulseSynthesis")
+            or liquidity_context.get("capitalFlowSignal")
+            or liquidity_context.get("liquidityImpulseSynthesis")
+        ),
+        "rotation_families": _sequence(
+            market_context.get("rotationFamilyRollup")
+            or rotation_context.get("rotationFamilyRollup")
+            or rotation_context.get("families")
+        ),
+        "explicit_readiness": _mapping(
+            payload.get("researchReadiness")
+            or payload.get("research_readiness")
+            or market_context.get("researchReadiness")
+            or market_context.get("marketReadiness")
+        ),
+    }
+
+
 def adapt_scanner_topdown_context_diagnostics(
     diagnostics: Optional[Mapping[str, Any]],
     *,
@@ -54,26 +103,10 @@ def adapt_scanner_topdown_context_diagnostics(
     """Additive-only top-down metadata merge for scanner diagnostics."""
 
     merged = copy.deepcopy(dict(diagnostics or {}))
-    market_context = _mapping(
-        merged.get("market_temperature")
-        or merged.get("marketTemperature")
-        or merged.get("market_overview")
-        or merged.get("marketOverview")
-        or merged.get("market_context")
-        or merged.get("marketContext")
-    )
-    liquidity_context = _mapping(
-        merged.get("liquidity_context")
-        or merged.get("liquidityContext")
-        or merged.get("liquidity_monitor")
-        or merged.get("liquidityMonitor")
-    )
-    rotation_context = _mapping(
-        merged.get("rotation_context")
-        or merged.get("rotationContext")
-        or merged.get("rotation_radar")
-        or merged.get("rotationRadar")
-    )
+    inputs = normalize_scanner_context_inputs(merged)
+    market_context = inputs["market_context"]
+    liquidity_context = inputs["liquidity_context"]
+    rotation_context = inputs["rotation_context"]
 
     if not _has_market_context(market_context):
         market_reader = read_market_temperature or _read_cached_market_temperature_context
