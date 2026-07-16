@@ -4,6 +4,9 @@ import * as i18n from '../core';
 type LocaleLoaderApi = {
   loadLocaleCatalog?: (language: 'zh' | 'en') => Promise<unknown>;
   activateLocaleCatalog?: (language: 'zh' | 'en', catalog: unknown) => void;
+  createCachedLocaleCatalogLoader?: (
+    loaders: Record<'zh' | 'en', () => Promise<unknown>>,
+  ) => (language: 'zh' | 'en') => Promise<unknown>;
 };
 
 describe('locale catalog loading', () => {
@@ -26,5 +29,31 @@ describe('locale catalog loading', () => {
 
     expect(i18n.translate('zh', 'nav.home')).toBe('首页');
     expect(i18n.getActiveUiLanguage()).toBe('zh');
+  });
+
+  it('retries a locale bundle after a transient loading failure', async () => {
+    const createCachedLocaleCatalogLoader = (i18n as LocaleLoaderApi).createCachedLocaleCatalogLoader;
+
+    expect(createCachedLocaleCatalogLoader).toBeTypeOf('function');
+    if (!createCachedLocaleCatalogLoader) {
+      return;
+    }
+
+    const expectedCatalog = { nav: { home: 'Home' } };
+    let englishAttempts = 0;
+    const loadCatalog = createCachedLocaleCatalogLoader({
+      zh: async () => ({ nav: { home: '首页' } }),
+      en: async () => {
+        englishAttempts += 1;
+        if (englishAttempts === 1) {
+          throw new Error('transient locale chunk failure');
+        }
+        return expectedCatalog;
+      },
+    });
+
+    await expect(loadCatalog('en')).rejects.toThrow('transient locale chunk failure');
+    await expect(loadCatalog('en')).resolves.toBe(expectedCatalog);
+    expect(englishAttempts).toBe(2);
   });
 });

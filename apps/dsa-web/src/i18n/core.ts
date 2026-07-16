@@ -19,7 +19,6 @@ const testCatalogs: Record<UiLanguage, LocaleCatalog> | null = import.meta.env.M
   }
   : null;
 
-const loadedCatalogs = new Map<UiLanguage, Promise<LocaleCatalog>>();
 let activeLanguage: UiLanguage | null = null;
 let activeCatalog: LocaleCatalog | null = null;
 
@@ -57,17 +56,28 @@ export function setStoredUiLanguage(language: UiLanguage): void {
   window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, language);
 }
 
-export function loadLocaleCatalog(language: UiLanguage): Promise<LocaleCatalog> {
-  const normalized = normalizeUiLanguage(language);
-  const existing = loadedCatalogs.get(normalized);
-  if (existing) {
-    return existing;
-  }
+export function createCachedLocaleCatalogLoader(loaders: Record<UiLanguage, CatalogLoader>) {
+  const loadedCatalogs = new Map<UiLanguage, Promise<LocaleCatalog>>();
 
-  const catalog = catalogLoaders[normalized]();
-  loadedCatalogs.set(normalized, catalog);
-  return catalog;
+  return (language: UiLanguage): Promise<LocaleCatalog> => {
+    const normalized = normalizeUiLanguage(language);
+    const existing = loadedCatalogs.get(normalized);
+    if (existing) {
+      return existing;
+    }
+
+    const catalog = loaders[normalized]().catch((error: unknown) => {
+      if (loadedCatalogs.get(normalized) === catalog) {
+        loadedCatalogs.delete(normalized);
+      }
+      throw error;
+    });
+    loadedCatalogs.set(normalized, catalog);
+    return catalog;
+  };
 }
+
+export const loadLocaleCatalog = createCachedLocaleCatalogLoader(catalogLoaders);
 
 export function activateLocaleCatalog(language: UiLanguage, catalog: LocaleCatalog): void {
   activeLanguage = normalizeUiLanguage(language);
