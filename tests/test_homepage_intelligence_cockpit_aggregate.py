@@ -125,7 +125,8 @@ def test_homepage_intelligence_bundle_exposes_public_safe_cockpit_aggregate() ->
 
     cockpit = payload["intelligenceCockpit"]
     assert cockpit["schemaVersion"] == "homepage_intelligence_cockpit_v1"
-    assert cockpit["status"] == "ready"
+    assert payload["status"] == "no_evidence"
+    assert cockpit["status"] == "no_evidence"
     assert cockpit["asOf"] == payload["asOf"]
     assert cockpit["sampleOnly"] is True
     assert cockpit["sectionOrder"] == list(EXPECTED_COCKPIT_SECTION_KEYS)
@@ -146,7 +147,7 @@ def test_homepage_intelligence_bundle_exposes_public_safe_cockpit_aggregate() ->
             "evidenceQuality",
             "payload",
         }
-        assert section["status"] in {"ready", "partial", "no_evidence", "unavailable"}
+        assert section["status"] == "no_evidence"
         assert section["asOf"]
         assert section["summary"]
         assert isinstance(section["payload"], dict)
@@ -172,3 +173,27 @@ def test_homepage_intelligence_cockpit_aggregate_is_deterministic_and_public_saf
     serialized = _safe_serialized_text(first)
     leaked_text = [marker for marker in FORBIDDEN_TEXT_MARKERS if marker.lower() in serialized]
     assert leaked_text == []
+
+
+def test_homepage_intelligence_fixture_bundle_fails_closed_on_readiness_truth() -> None:
+    payload = HomepageIntelligenceService().build_bundle()
+
+    assert payload["sampleOnly"] is True
+    assert payload["status"] == "no_evidence"
+    assert payload["capabilities"]["dataQuality"]["available"] is False
+    assert payload["capabilities"]["dataQuality"]["status"] != "ready"
+    assert payload["cockpitModules"]["status"] == "no_evidence"
+    assert all(module["status"] == "no_evidence" for module in payload["cockpitModules"]["modules"])
+    assert all(
+        quality["state"] != "ready" and quality["label"] != "正常"
+        for module in payload["cockpitModules"]["modules"]
+        for quality in (module["dataQuality"], module["evidenceQuality"])
+    )
+    demo_serialized = json.dumps(payload["demo"], ensure_ascii=False).lower()
+    for optimistic_marker in ("\"ready\"", "normal", "healthy", "正常", "健康"):
+        assert optimistic_marker not in demo_serialized
+    assert '"available": true' not in demo_serialized
+    assert all(
+        scenario["sampleData"] is True and scenario["demoPayload"] is True
+        for scenario in payload["demo"]["scenarios"].values()
+    )

@@ -155,7 +155,7 @@ class HomepageIntelligenceService:
         intelligence_cockpit = self._build_intelligence_cockpit(cockpit_modules)
 
         response = HomepageIntelligenceResponse(
-            status="ready",
+            status="no_evidence",
             scope="homepage_ui_uat_metadata",
             asOf=HOMEPAGE_INTELLIGENCE_DEFAULT_AS_OF,
             sampleOnly=True,
@@ -166,8 +166,10 @@ class HomepageIntelligenceService:
             demo=HomepageIntelligenceDemoBundle(
                 defaultScenario=HOMEPAGE_INTELLIGENCE_DEFAULT_SCENARIO,
                 scenarios={
-                    HAPPY_PATH: deepcopy(demo_payloads[HAPPY_PATH]),
-                    DEGRADED_EXAMPLE: deepcopy(demo_payloads[DEGRADED_EXAMPLE]),
+                    HAPPY_PATH: self._project_demo_fixture(deepcopy(demo_payloads[HAPPY_PATH])),
+                    DEGRADED_EXAMPLE: self._project_demo_fixture(
+                        deepcopy(demo_payloads[DEGRADED_EXAMPLE])
+                    ),
                 },
             ),
             intelligenceCockpit=intelligence_cockpit,
@@ -218,7 +220,7 @@ class HomepageIntelligenceService:
         ]
         aggregate = HomepageCockpitModulesAggregate(
             schemaVersion=HOMEPAGE_COCKPIT_MODULES_SCHEMA_VERSION,
-            status="ready",
+            status="no_evidence",
             asOf=HOMEPAGE_INTELLIGENCE_DEFAULT_AS_OF,
             sampleOnly=True,
             moduleCount=len(modules),
@@ -236,7 +238,7 @@ class HomepageIntelligenceService:
         ]
         aggregate = HomepageIntelligenceCockpitAggregate(
             schemaVersion=HOMEPAGE_INTELLIGENCE_COCKPIT_SCHEMA_VERSION,
-            status="ready",
+            status="no_evidence",
             asOf=HOMEPAGE_INTELLIGENCE_DEFAULT_AS_OF,
             sampleOnly=True,
             sectionCount=len(sections),
@@ -267,11 +269,11 @@ class HomepageIntelligenceService:
                 }
             )
         return {
-            "status": self._bounded_status(payload.get("status")),
+            "status": "no_evidence",
             "asOf": HOMEPAGE_INTELLIGENCE_DEFAULT_AS_OF,
             "sampleOnly": True,
             "sections": sections,
-            "dataQuality": self._project_quality(payload.get("dataQuality")),
+            "dataQuality": self._project_quality(payload.get("dataQuality"), state="no_evidence"),
             "noAdviceDisclosure": "仅供首页区块布局验收观察，不构成个性化建议。",
         }
 
@@ -329,11 +331,11 @@ class HomepageIntelligenceService:
         return HomepageCockpitModule(
             key=key,
             label=label,
-            status=self._section_status(payload),
+            status="no_evidence",
             asOf=str(payload["asOf"]),
             summary=self._section_summary(payload, label=label),
-            dataQuality=self._project_quality(payload.get("dataQuality")),
-            evidenceQuality=self._project_quality(payload.get("evidenceQuality")),
+            dataQuality=self._project_quality(payload.get("dataQuality"), state="no_evidence"),
+            evidenceQuality=self._project_quality(payload.get("evidenceQuality"), state="no_evidence"),
             sampleOnly=True,
             observationOnly=True,
             noLiveAvailabilityClaim=True,
@@ -365,25 +367,51 @@ class HomepageIntelligenceService:
             payload=snapshot,
         )
 
+    def _project_demo_fixture(self, value: Any, *, key: str = "") -> Any:
+        if isinstance(value, dict):
+            return {
+                item_key: self._project_demo_fixture(
+                    item,
+                    key="section_state" if key == "sections" else str(item_key),
+                )
+                for item_key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [self._project_demo_fixture(item, key=key) for item in value]
+        if key == "available" and isinstance(value, bool):
+            return False
+        if not isinstance(value, str):
+            return value
+
+        normalized_key = key.lower()
+        state_keys = {
+            "status",
+            "state",
+            "dataquality",
+            "evidencestatus",
+            "sourcestatus",
+            "researchstatus",
+            "symbolstatus",
+            "movementstatus",
+            "relativestrengthstatus",
+            "volumestatus",
+            "riskstatus",
+            "concentrationstatus",
+            "freshness",
+        }
+        is_state = normalized_key in state_keys or normalized_key.endswith("status") or key == "section_state"
+        if is_state and value.lower() in {"ready", "available", "normal", "healthy", "正常", "健康", "fresh"}:
+            return "no_evidence"
+        return value.replace("正常", "未核验").replace("healthy", "unverified").replace(
+            "normal", "unverified"
+        )
+
     def _json_payload(self, value: Any) -> dict[str, Any]:
         if hasattr(value, "model_dump"):
             return value.model_dump(mode="json")
         if isinstance(value, dict):
             return deepcopy(value)
         return dict(value)
-
-    def _section_status(self, payload: dict[str, Any]) -> str:
-        data_quality = payload.get("dataQuality") if isinstance(payload.get("dataQuality"), dict) else {}
-        evidence_quality = (
-            payload.get("evidenceQuality") if isinstance(payload.get("evidenceQuality"), dict) else {}
-        )
-        return self._bounded_status(
-            payload.get("status")
-            or data_quality.get("state")
-            or data_quality.get("status")
-            or evidence_quality.get("state")
-            or evidence_quality.get("status")
-        )
 
     def _section_summary(self, payload: dict[str, Any], *, label: str) -> str:
         for key in (
@@ -411,7 +439,7 @@ class HomepageIntelligenceService:
         payload = snapshot.model_dump(mode="json") if hasattr(snapshot, "model_dump") else dict(snapshot)
         return {
             "schemaVersion": payload.get("schemaVersion", "homepage_capabilities_v1"),
-            "status": payload.get("status", "ready"),
+            "status": self._bounded_status(payload.get("status")),
             "sections": [
                 {
                     "key": str(section.get("key", ""))[:40],
@@ -444,9 +472,11 @@ class HomepageIntelligenceService:
                 }
             },
             "dataQuality": {
-                "status": dict(payload.get("dataQuality", {})).get("status", "ready"),
-                "label": dict(payload.get("dataQuality", {})).get("label", "正常"),
-                "available": bool(dict(payload.get("dataQuality", {})).get("available", True)),
+                "status": self._bounded_status(dict(payload.get("dataQuality", {})).get("status")),
+                "label": str(
+                    dict(payload.get("dataQuality", {})).get("label") or "暂无证据"
+                )[:40],
+                "available": False,
                 "description": self._metadata_text(
                     dict(payload.get("dataQuality", {})).get("description"),
                     fallback="首页能力状态已整理为公开元数据。",
@@ -486,11 +516,18 @@ class HomepageIntelligenceService:
             "noAdviceDisclosure": "仅供模块可用性与接入准备度观察，不构成个性化建议。",
         }
 
-    def _project_quality(self, value: Any) -> dict[str, str]:
+    def _project_quality(self, value: Any, *, state: str | None = None) -> dict[str, str]:
         payload = value if isinstance(value, dict) else {}
+        projected_state = self._bounded_status(payload.get("state") or payload.get("status"))
+        if state is not None:
+            projected_state = state
         return {
-            "state": self._bounded_status(payload.get("state") or payload.get("status")),
-            "label": str(payload.get("label") or "正常")[:40],
+            "state": projected_state,
+            "label": (
+                str(payload.get("label") or "暂无证据")[:40]
+                if state is None
+                else self._quality_label(projected_state)
+            ),
             "summary": self._metadata_text(
                 payload.get("summary") or payload.get("description"),
                 fallback="公开状态字段已整理为安全元数据。",
@@ -499,12 +536,20 @@ class HomepageIntelligenceService:
         }
 
     def _bounded_status(self, value: Any) -> str:
-        text = str(value or "ready")
-        return text if text in {"ready", "partial", "no_evidence", "unavailable"} else "partial"
+        text = str(value or "no_evidence")
+        return text if text in {"ready", "partial", "no_evidence", "unavailable"} else "no_evidence"
 
     def _bounded_availability(self, value: Any) -> str:
-        text = str(value or "ready")
-        return text if text in {"ready", "partial", "no_evidence", "unavailable"} else "partial"
+        text = str(value or "no_evidence")
+        return text if text in {"ready", "partial", "no_evidence", "unavailable"} else "no_evidence"
+
+    def _quality_label(self, state: str) -> str:
+        return {
+            "ready": "已核验",
+            "partial": "证据不完整",
+            "no_evidence": "暂无证据",
+            "unavailable": "暂不可用",
+        }[state]
 
     def _bounded_integration(self, value: Any) -> str:
         text = str(value or "standalone")

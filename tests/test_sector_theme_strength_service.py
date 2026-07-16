@@ -79,13 +79,14 @@ def test_build_summary_serializes_strongest_and_weakest_lists():
 
     payload = summary.model_dump(mode="json")
 
-    assert payload["status"] == "ready"
+    assert payload["status"] == "no_evidence"
     assert payload["asOf"] == "2026-06-14T09:30:00Z"
     assert [item["name"] for item in payload["strongest"]] == ["半导体", "AI Infra"]
     assert [item["name"] for item in payload["weakest"]] == ["公用事业"]
-    assert payload["leadership"]["status"] == "concentrated"
-    assert payload["diffusion"]["status"] == "diffusing"
-    assert payload["concentration"]["status"] == "concentrated"
+    assert payload["leadership"]["status"] == "no_evidence"
+    assert payload["diffusion"]["status"] == "no_evidence"
+    assert payload["concentration"]["status"] == "no_evidence"
+    assert payload["dataQuality"]["status"] == "no_evidence"
 
 
 def test_build_summary_defaults_to_safe_no_evidence_contract():
@@ -103,6 +104,111 @@ def test_build_summary_defaults_to_safe_no_evidence_contract():
     assert payload["dataQuality"]["status"] == "no_evidence"
     assert payload["noAdviceDisclosure"] == NO_ADVICE_DISCLOSURE
     assert "仅供观察" in payload["leadership"]["observation"]
+
+
+@pytest.mark.parametrize(
+    ("snapshot", "expected_status"),
+    [
+        (None, "no_evidence"),
+        (
+            {
+                "strongest": [
+                    {
+                        "name": "半导体",
+                        "category": "sector",
+                        "relativeStrength": 0.82,
+                        "breadth": 0.74,
+                    }
+                ]
+            },
+            "no_evidence",
+        ),
+        (
+            {
+                "status": "unavailable",
+                "dataQuality": {"status": "unavailable", "observation": "当前暂不可用。"},
+            },
+            "unavailable",
+        ),
+        (
+            {
+                "status": "ready",
+                "strongest": [
+                    {
+                        "name": "半导体",
+                        "category": "sector",
+                        "relativeStrength": 0.82,
+                        "breadth": 0.74,
+                        "dataQuality": {"status": "ready", "observation": "example/test data only"},
+                    }
+                ],
+                "dataQuality": {"status": "ready", "observation": "fixture sample data"},
+            },
+            "no_evidence",
+        ),
+        (
+            {
+                "status": "ready",
+                "leadership": {"observation": "仅供观察，尚未核验。"},
+                "dataQuality": {"status": "ready", "observation": "仅供观察"},
+            },
+            "no_evidence",
+        ),
+        (
+            {
+                "strongest": [
+                    {
+                        "name": "半导体",
+                        "category": "sector",
+                        "relativeStrength": 0.82,
+                        "breadth": 0.74,
+                        "diffusionStatus": "diffusing",
+                        "leadershipStatus": "stronger",
+                    }
+                ],
+                "leadership": {"status": "concentrated", "observation": "结构完整，但尚未显式核验。"},
+            },
+            "no_evidence",
+        ),
+        (
+            {
+                "status": "ready",
+                "strongest": [
+                    {
+                        "name": "半导体",
+                        "category": "sector",
+                        "relativeStrength": 0.82,
+                        "breadth": 0.74,
+                        "diffusionStatus": "diffusing",
+                        "leadershipStatus": "stronger",
+                        "dataQuality": {"status": "ready", "observation": "已核验的公开研究证据。"},
+                    }
+                ],
+                "dataQuality": {"status": "ready", "observation": "已核验的公开研究证据。"},
+            },
+            "ready",
+        ),
+    ],
+    ids=(
+        "not_checked",
+        "partial",
+        "unavailable",
+        "fixture",
+        "observation_only",
+        "real_shaped_unverified",
+        "explicitly_ready",
+    ),
+)
+def test_build_summary_projects_only_explicit_non_sample_ready_evidence(
+    snapshot: dict[str, object] | None,
+    expected_status: str,
+) -> None:
+    payload = SectorThemeStrengthService().build_summary(snapshot).model_dump(mode="json")
+
+    assert payload["status"] == expected_status
+    if expected_status != "ready":
+        assert payload["dataQuality"]["status"] != "ready"
+        assert "正常" not in json.dumps(payload, ensure_ascii=False)
 
 
 def test_statuses_are_bounded():

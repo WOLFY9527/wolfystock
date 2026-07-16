@@ -263,11 +263,12 @@ def test_homepage_intelligence_endpoint_returns_stable_top_level_shape() -> None
     assert ADDITIVE_TOP_LEVEL_KEYS <= set(payload)
     assert set(payload) == LEGACY_TOP_LEVEL_KEYS | ADDITIVE_TOP_LEVEL_KEYS
     assert payload["schemaVersion"] == "homepage_intelligence_v1"
-    assert payload["status"] in {"ready", "partial", "no_evidence", "unavailable"}
+    assert payload["status"] == "no_evidence"
     assert payload["scope"] == "homepage_ui_uat_metadata"
     assert payload["sampleOnly"] is True
     assert payload["asOf"] == "2026-06-14T09:30:00Z"
     assert payload["capabilities"]["schemaVersion"] == "homepage_capabilities_v1"
+    assert payload["capabilities"]["dataQuality"]["available"] is False
     assert payload["moduleManifest"]["asOf"] == "2026-06-14T09:30:00Z"
     assert payload["sessionStatus"]["asOf"] == "2026-06-14T09:30:00Z"
     assert set(payload["capabilities"]) == {
@@ -444,6 +445,7 @@ def test_homepage_intelligence_adds_layout_uat_and_projected_cockpit_modules() -
 
     cockpit_modules = payload["cockpitModules"]
     assert cockpit_modules["schemaVersion"] == "homepage_cockpit_modules_v1"
+    assert cockpit_modules["status"] == "no_evidence"
     assert cockpit_modules["asOf"] == payload["asOf"]
     assert cockpit_modules["sampleOnly"] is True
     assert cockpit_modules["moduleOrder"] == list(EXPECTED_COCKPIT_MODULE_KEYS)
@@ -466,6 +468,9 @@ def test_homepage_intelligence_adds_layout_uat_and_projected_cockpit_modules() -
         assert module["sampleOnly"] is True
         assert module["observationOnly"] is True
         assert module["noLiveAvailabilityClaim"] is True
+        assert module["status"] == "no_evidence"
+        assert module["dataQuality"]["state"] != "ready"
+        assert module["evidenceQuality"]["state"] != "ready"
 
 
 def test_homepage_cockpit_modules_do_not_expose_raw_or_internal_standalone_fields() -> None:
