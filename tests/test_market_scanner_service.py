@@ -39,7 +39,7 @@ from src.services.scanner_universe_lifecycle import (
     ScannerUniverseLifecycleStore,
     activate_scanner_universe_from_source,
 )
-from src.storage import DatabaseManager, MarketScannerRun
+from src.storage import DatabaseManager, MarketScannerCandidate, MarketScannerRun
 
 
 def _make_history(
@@ -1068,6 +1068,102 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         )
         self.assertIn("candidateSourceProvenanceFrame", detail["shortlist"][0])
         self.assertEqual(detail["shortlist"][0]["candidateSourceProvenanceFrame"]["contractVersion"], "source_provenance_v1")
+
+    def test_corrupt_run_summary_blocks_history_and_detail_without_reordering_shortlist(self) -> None:
+        stored = self._record_context_run(
+            market="cn",
+            profile="cn_preopen_v1",
+            diagnostics={"operation": {"request_source": "test"}},
+        )
+        expected_signature = [
+            (item["symbol"], item["rank"], item["score"])
+            for item in stored["shortlist"]
+        ]
+        with self.db.get_session() as session:
+            run = session.get(MarketScannerRun, stored["id"])
+            assert run is not None
+            run.summary_json = "{"
+            session.commit()
+
+        history_item = self.service.list_runs(market="cn")["items"][0]
+        detail = self.service.get_run_detail(stored["id"])
+
+        assert detail is not None
+        from api.v1.schemas.scanner import ScannerRunDetailResponse, ScannerRunHistoryItem
+
+        history_response = ScannerRunHistoryItem(**history_item)
+        detail_response = ScannerRunDetailResponse(**detail)
+        self.assertEqual(history_response.status, "unavailable")
+        self.assertEqual(detail_response.dataReadiness["storageIntegrity"]["state"], "blocked")
+        self.assertEqual(history_item["status"], "unavailable")
+        self.assertEqual(history_item["storage_integrity"]["state"], "blocked")
+        self.assertEqual(history_item["storage_integrity"]["issues"], [{"field": "summary_json", "state": "malformed"}])
+        self.assertEqual(detail["status"], "unavailable")
+        self.assertEqual(detail["dataReadiness"]["storageIntegrity"], detail["storage_integrity"])
+        self.assertEqual(
+            [(item["symbol"], item["rank"], item["score"]) for item in detail["shortlist"]],
+            expected_signature,
+        )
+        with self.assertRaisesRegex(ValueError, "Stored scanner run evidence is unavailable"):
+            self.service.update_run_operation_metadata(
+                stored["id"],
+                trigger_mode="manual",
+                watchlist_date="2026-06-03",
+                request_source="test",
+            )
+
+    def test_corrupt_run_diagnostics_blocks_completed_projection_with_bounded_issue(self) -> None:
+        stored = self._record_context_run(
+            market="cn",
+            profile="cn_preopen_v1",
+            diagnostics={"operation": {"request_source": "test"}},
+        )
+        with self.db.get_session() as session:
+            run = session.get(MarketScannerRun, stored["id"])
+            assert run is not None
+            run.diagnostics_json = "[]"
+            session.commit()
+
+        detail = self.service.get_run_detail(stored["id"])
+
+        assert detail is not None
+        self.assertEqual(detail["status"], "unavailable")
+        self.assertEqual(
+            detail["storage_integrity"]["issues"],
+            [{"field": "diagnostics_json", "state": "incompatible_shape"}],
+        )
+        self.assertEqual(detail["diagnostics"]["storageIntegrity"], detail["storage_integrity"])
+
+    def test_corrupt_candidate_evidence_blocks_projection_without_changing_rank_score_or_lineage(self) -> None:
+        stored = self._record_context_run(
+            market="cn",
+            profile="cn_preopen_v1",
+            diagnostics={"operation": {"request_source": "test"}},
+        )
+        original = stored["shortlist"][0]
+        with self.db.get_session() as session:
+            candidate = session.query(MarketScannerCandidate).filter_by(run_id=stored["id"]).order_by(MarketScannerCandidate.rank).first()
+            assert candidate is not None
+            candidate.diagnostics_json = "{"
+            session.commit()
+
+        history_item = self.service.list_runs(market="cn")["items"][0]
+        detail = self.service.get_run_detail(stored["id"])
+
+        assert detail is not None
+        candidate = detail["shortlist"][0]
+        self.assertEqual(history_item["status"], "unavailable")
+        self.assertEqual(detail["status"], "unavailable")
+        self.assertEqual((candidate["symbol"], candidate["rank"], candidate["score"]), (original["symbol"], original["rank"], original["score"]))
+        self.assertEqual(candidate["candidateResearchReadiness"]["readinessState"], "blocked")
+        self.assertEqual(
+            candidate["consumerDiagnostics"]["storageIntegrity"]["issues"],
+            [{"field": "diagnostics_json", "state": "malformed"}],
+        )
+        self.assertEqual(
+            candidate["candidateSourceProvenanceFrame"]["contractVersion"],
+            original["candidateSourceProvenanceFrame"]["contractVersion"],
+        )
 
     def test_run_scan_documents_cn_empty_after_universe_filters_before_score_gates(self) -> None:
         data_manager = FakeScannerDataManager()

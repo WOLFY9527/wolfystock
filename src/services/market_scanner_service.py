@@ -27,6 +27,7 @@ from src.repositories.scanner_repo import ScannerRepository
 from src.repositories.stock_repo import StockRepository
 from src.contracts.source_confidence import coerce_source_confidence_contract
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
+from src.services._persisted_json import PersistedJsonState, decode_persisted_json
 from src.services.market_scanner_context_adapter import (
     adapt_scanner_topdown_context_diagnostics,
     normalize_scanner_context_inputs,
@@ -359,13 +360,62 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def _json_load(value: Optional[str], fallback: Any) -> Any:
-    if not value:
-        return fallback
-    try:
-        return json.loads(value)
-    except Exception:
-        return fallback
+def _persisted_json_value(
+    raw: Optional[str],
+    *,
+    field: str,
+    expected_type: type,
+    empty_allowed: bool,
+) -> tuple[Any, List[Dict[str, str]]]:
+    result = decode_persisted_json(raw, expected_type=expected_type)
+    if result.is_valid and (empty_allowed or result.state is PersistedJsonState.VALID_VALUE):
+        return result.value, []
+    return expected_type(), [{"field": field, "state": result.state.value}]
+
+
+def _storage_integrity_payload(issues: List[Dict[str, str]]) -> Dict[str, Any]:
+    deduped: List[Dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for issue in issues:
+        key = (str(issue.get("field") or ""), str(issue.get("state") or ""))
+        if not all(key) or key in seen:
+            continue
+        seen.add(key)
+        deduped.append({"field": key[0], "state": key[1]})
+        if len(deduped) == 8:
+            break
+    return {
+        "state": "blocked",
+        "availability": "unavailable",
+        "reason": "stored_data_integrity_unavailable",
+        "issues": deduped,
+    }
+
+
+def _candidate_persisted_json_values(
+    candidate: MarketScannerCandidate,
+) -> tuple[Dict[str, Any], List[Dict[str, str]]]:
+    values: Dict[str, Any] = {}
+    issues: List[Dict[str, str]] = []
+    fields = (
+        ("diagnostics_json", dict, False),
+        ("reasons_json", list, True),
+        ("key_metrics_json", list, True),
+        ("feature_signals_json", list, True),
+        ("risk_notes_json", list, True),
+        ("watch_context_json", list, True),
+        ("boards_json", list, True),
+    )
+    for field, expected_type, empty_allowed in fields:
+        value, field_issues = _persisted_json_value(
+            getattr(candidate, field, None),
+            field=field,
+            expected_type=expected_type,
+            empty_allowed=empty_allowed,
+        )
+        values[field] = value
+        issues.extend(field_issues)
+    return values, issues
 
 
 def _format_pct(value: Optional[float], digits: int = 1) -> str:
@@ -5729,13 +5779,27 @@ class MarketScannerService:
             if isinstance(diagnostics, dict)
             else None
         )
-        universe_notes = _json_load(run.universe_notes_json, [])
-        scoring_notes = _json_load(run.scoring_notes_json, [])
+        universe_notes, universe_note_issues = _persisted_json_value(
+            run.universe_notes_json,
+            field="universe_notes_json",
+            expected_type=list,
+            empty_allowed=True,
+        )
+        scoring_notes, scoring_note_issues = _persisted_json_value(
+            run.scoring_notes_json,
+            field="scoring_notes_json",
+            expected_type=list,
+            empty_allowed=True,
+        )
         candidates = self.repo.get_candidates_for_run(run.id)
         review_bundle = self._get_run_review_bundle(run, candidates)
         shortlist = []
+        candidate_storage_issues: List[Dict[str, str]] = []
         for candidate in candidates:
             item = self._candidate_row_to_dict(candidate)
+            candidate_integrity = item.get("storage_integrity")
+            if isinstance(candidate_integrity, dict):
+                candidate_storage_issues.extend(list(candidate_integrity.get("issues") or []))
             item["appeared_in_recent_runs"] = self.repo.count_recent_symbol_mentions(
                 symbol=candidate.symbol,
                 market=run.market,
@@ -5773,12 +5837,33 @@ class MarketScannerService:
             summary=summary_payload,
             candidates=candidate_diagnostics,
         )
+        storage_issues = [
+            *list(metadata.get("_storage_integrity_issues") or []),
+            *universe_note_issues,
+            *scoring_note_issues,
+            *candidate_storage_issues,
+        ]
+        storage_integrity = _storage_integrity_payload(storage_issues) if storage_issues else None
+        if storage_integrity is not None:
+            readiness = diagnostics_payload.get("dataReadiness")
+            readiness = dict(readiness or {}) if isinstance(readiness, Mapping) else {}
+            readiness.update(
+                {
+                    "state": "blocked",
+                    "researchReady": False,
+                    "storageIntegrity": storage_integrity,
+                }
+            )
+            diagnostics_payload["dataReadiness"] = readiness
+            diagnostics_payload["storageIntegrity"] = storage_integrity
         scanner_context_frame = self._build_scanner_context_frame(
             market=run.market,
             run_id=int(run.id),
             diagnostics=diagnostics_payload,
             universe_selection=universe_selection,
         )
+        if storage_integrity is not None:
+            scanner_context_frame["storageIntegrity"] = storage_integrity
         self._attach_candidate_research_summaries(
             shortlist,
             scanner_context_frame=scanner_context_frame,
@@ -5793,7 +5878,7 @@ class MarketScannerService:
             "market": run.market,
             "profile": run.profile,
             "profile_label": summary.get("profile_label"),
-            "status": run.status,
+            "status": "unavailable" if storage_integrity is not None and run.status == "completed" else run.status,
             "run_at": run.run_at.isoformat() if run.run_at else None,
             "completed_at": run.completed_at.isoformat() if run.completed_at else None,
             "watchlist_date": metadata.get("watchlist_date"),
@@ -5825,7 +5910,11 @@ class MarketScannerService:
             "diagnostics": diagnostics_payload,
             "scannerContextFrame": scanner_context_frame,
             "notification": self._normalize_notification_result(diagnostics.get("notification")),
-            "failure_reason": self._extract_failure_reason(diagnostics),
+            "failure_reason": (
+                "Stored scanner evidence is unavailable."
+                if storage_integrity is not None
+                else self._extract_failure_reason(diagnostics)
+            ),
             "comparison_to_previous": self._build_watchlist_comparison(
                 run,
                 candidates,
@@ -5837,6 +5926,7 @@ class MarketScannerService:
             "selected": shortlist,
             "candidates": candidate_diagnostics,
             "shortlist": shortlist,
+            **({"storage_integrity": storage_integrity} if storage_integrity is not None else {}),
         }
 
     def get_run_detail(
@@ -6090,8 +6180,20 @@ class MarketScannerService:
         if run is None:
             return None
 
-        summary = _json_load(run.summary_json, {})
-        diagnostics = _json_load(run.diagnostics_json, {})
+        summary, summary_issues = _persisted_json_value(
+            run.summary_json,
+            field="summary_json",
+            expected_type=dict,
+            empty_allowed=False,
+        )
+        diagnostics, diagnostics_issues = _persisted_json_value(
+            run.diagnostics_json,
+            field="diagnostics_json",
+            expected_type=dict,
+            empty_allowed=False,
+        )
+        if summary_issues or diagnostics_issues:
+            raise ValueError("Stored scanner run evidence is unavailable.")
         operation = diagnostics.get("operation") if isinstance(diagnostics.get("operation"), dict) else {}
         operation.update(
             {
@@ -6270,13 +6372,24 @@ class MarketScannerService:
         self,
         run: MarketScannerRun,
     ) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
-        summary = _json_load(run.summary_json, {})
-        diagnostics = _json_load(run.diagnostics_json, {})
+        summary, summary_issues = _persisted_json_value(
+            run.summary_json,
+            field="summary_json",
+            expected_type=dict,
+            empty_allowed=False,
+        )
+        diagnostics, diagnostics_issues = _persisted_json_value(
+            run.diagnostics_json,
+            field="diagnostics_json",
+            expected_type=dict,
+            empty_allowed=False,
+        )
         operation = diagnostics.get("operation") if isinstance(diagnostics.get("operation"), dict) else {}
         metadata = {
             "watchlist_date": summary.get("watchlist_date") or operation.get("watchlist_date") or _market_date_string(run.market, run.run_at),
             "trigger_mode": summary.get("trigger_mode") or operation.get("trigger_mode") or "manual",
             "request_source": summary.get("request_source") or operation.get("request_source") or "unknown",
+            "_storage_integrity_issues": [*summary_issues, *diagnostics_issues],
         }
         return (
             summary if isinstance(summary, dict) else {},
@@ -6318,6 +6431,15 @@ class MarketScannerService:
             else None
         )
         candidates = self.repo.get_candidates_for_run(row.id)
+        candidate_storage_issues: List[Dict[str, str]] = []
+        for candidate in candidates:
+            _, issues = _candidate_persisted_json_values(candidate)
+            candidate_storage_issues.extend(issues)
+        storage_issues = [
+            *list(metadata.get("_storage_integrity_issues") or []),
+            *candidate_storage_issues,
+        ]
+        storage_integrity = _storage_integrity_payload(storage_issues) if storage_issues else None
         top_symbols = summary.get("shortlisted_codes")
         if not isinstance(top_symbols, list) or not top_symbols:
             top_symbols = [candidate.symbol for candidate in candidates[:3]]
@@ -6327,7 +6449,7 @@ class MarketScannerService:
             "market": row.market,
             "profile": row.profile,
             "profile_label": summary.get("profile_label"),
-            "status": row.status,
+            "status": "unavailable" if storage_integrity is not None and row.status == "completed" else row.status,
             "run_at": row.run_at.isoformat() if row.run_at else None,
             "completed_at": row.completed_at.isoformat() if row.completed_at else None,
             "watchlist_date": metadata.get("watchlist_date"),
@@ -6347,9 +6469,14 @@ class MarketScannerService:
             "rejected_symbols": universe_selection["rejected_symbols"],
             "top_symbols": [str(item) for item in top_symbols[:3]],
             "notification_status": notification.get("status"),
-            "failure_reason": self._extract_failure_reason(diagnostics),
+            "failure_reason": (
+                "Stored scanner evidence is unavailable."
+                if storage_integrity is not None
+                else self._extract_failure_reason(diagnostics)
+            ),
             "change_summary": self._default_comparison_summary(),
             "review_summary": self._default_review_summary(),
+            **({"storage_integrity": storage_integrity} if storage_integrity is not None else {}),
         }
 
     @staticmethod
@@ -8567,7 +8694,10 @@ class MarketScannerService:
         )
 
     def _candidate_row_to_dict(self, candidate: MarketScannerCandidate) -> Dict[str, Any]:
-        diagnostics = _json_load(candidate.diagnostics_json, {})
+        persisted_values, storage_issues = _candidate_persisted_json_values(candidate)
+        diagnostics = persisted_values["diagnostics_json"]
+        risk_notes = persisted_values["risk_notes_json"]
+        watch_context = persisted_values["watch_context_json"]
         explainability = dict(diagnostics.get("score_explainability") or {})
         final_score = explainability.get("final_score")
         raw_score = explainability.get("raw_score")
@@ -8581,14 +8711,14 @@ class MarketScannerService:
             "reason": candidate.reason_summary,
             "limitation": self._candidate_limitation(
                 {
-                    "risk_notes": _json_load(candidate.risk_notes_json, []),
-                    "watch_context": _json_load(candidate.watch_context_json, []),
+                    "risk_notes": risk_notes,
+                    "watch_context": watch_context,
                     "quote_available": dict(diagnostics.get("quote_context") or {}).get("available"),
                 },
                 diagnostics if isinstance(diagnostics, dict) else {},
             ),
             "nextCheck": self._candidate_next_check(
-                {"watch_context": _json_load(candidate.watch_context_json, [])}
+                {"watch_context": watch_context}
             ),
             "evidenceQuality": self._candidate_evidence_quality_label({}, diagnostics if isinstance(diagnostics, dict) else {}),
             "dataFreshness": self._candidate_data_freshness({}, diagnostics if isinstance(diagnostics, dict) else {}),
@@ -8597,12 +8727,12 @@ class MarketScannerService:
             "final_score": float(final_score) if final_score is not None else float(candidate.score),
             "quality_hint": candidate.quality_hint,
             "reason_summary": candidate.reason_summary,
-            "reasons": _json_load(candidate.reasons_json, []),
-            "key_metrics": _json_load(candidate.key_metrics_json, []),
-            "feature_signals": _json_load(candidate.feature_signals_json, []),
-            "risk_notes": _json_load(candidate.risk_notes_json, []),
-            "watch_context": _json_load(candidate.watch_context_json, []),
-            "boards": _json_load(candidate.boards_json, []),
+            "reasons": persisted_values["reasons_json"],
+            "key_metrics": persisted_values["key_metrics_json"],
+            "feature_signals": persisted_values["feature_signals_json"],
+            "risk_notes": risk_notes,
+            "watch_context": watch_context,
+            "boards": persisted_values["boards_json"],
             "appeared_in_recent_runs": 0,
             "last_trade_date": diagnostics.get("history", {}).get("latest_trade_date") or diagnostics.get("last_trade_date"),
             "ai_interpretation": self.ai_service.public_payload_from_diagnostics(diagnostics.get("ai_interpretation")),
@@ -8625,6 +8755,20 @@ class MarketScannerService:
             candidate_evidence_frame=payload["candidateEvidenceFrame"],
             candidate_research_readiness=payload["candidateResearchReadiness"],
         )
+        if storage_issues:
+            storage_integrity = _storage_integrity_payload(storage_issues)
+            payload["storage_integrity"] = storage_integrity
+            payload["consumerDiagnostics"]["storageIntegrity"] = storage_integrity
+            payload["candidateResearchReadiness"] = {
+                **dict(payload["candidateResearchReadiness"]),
+                "readinessState": "blocked",
+                "storageIntegrity": storage_integrity,
+            }
+            payload["candidateResearchSummaryFrame"] = {
+                **dict(payload["candidateResearchSummaryFrame"]),
+                "frameState": "blocked",
+                "storageIntegrity": storage_integrity,
+            }
         self._attach_candidate_source_provenance_frames([payload], scanner_context_frame=None)
         _attach_candidate_public_boundaries(payload)
         return payload

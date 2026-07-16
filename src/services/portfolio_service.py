@@ -20,6 +20,7 @@ from src.repositories.portfolio_repo import (
     PortfolioRepository,
 )
 from src.services.fx_rate_service import default_fx_rate_service
+from src.services._persisted_json import PersistedJsonState, decode_persisted_json
 from src.services.portfolio_risk_diagnostics import build_portfolio_risk_diagnostics
 from src.utils.symbol_normalization import canonical_stock_code
 from src.utils.security import sanitize_metadata
@@ -4167,7 +4168,20 @@ class PortfolioService:
             return None
 
         positions_cache = [self._cached_position_row_to_dict(row) for row in cached["positions"]]
-        payload_raw = self._parse_snapshot_payload(getattr(snapshot_row, "payload", None))
+        decoded_payload = decode_persisted_json(
+            getattr(snapshot_row, "payload", None),
+            expected_type=dict,
+            validator=lambda payload: self._cached_snapshot_payload_is_compatible(
+                payload,
+                account=account,
+                snapshot_row=snapshot_row,
+                as_of_date=as_of_date,
+                cost_method=cost_method,
+            ),
+        )
+        if not decoded_payload.is_valid or decoded_payload.state is PersistedJsonState.VALID_EMPTY:
+            return None
+        payload_raw = dict(decoded_payload.value)
         if positions_cache and self._snapshot_payload_missing_price_disclosure(payload_raw):
             return None
         latest_market_update = self.repo.get_latest_market_data_update(
@@ -4806,16 +4820,54 @@ class PortfolioService:
         }
 
     @staticmethod
-    def _parse_snapshot_payload(payload_raw: Optional[str]) -> Dict[str, Any]:
-        if not payload_raw:
-            return {}
+    def _parse_snapshot_payload(payload_raw: Optional[str]) -> Optional[Dict[str, Any]]:
+        result = decode_persisted_json(payload_raw, expected_type=dict)
+        if not result.is_valid or result.state is PersistedJsonState.VALID_EMPTY:
+            return None
+        return dict(result.value)
+
+    @staticmethod
+    def _cached_snapshot_payload_is_compatible(
+        payload: Dict[str, Any],
+        *,
+        account: Any,
+        snapshot_row: Any,
+        as_of_date: date,
+        cost_method: str,
+    ) -> bool:
+        required_numeric_fields = (
+            "total_cash",
+            "total_market_value",
+            "total_equity",
+            "realized_pnl",
+            "unrealized_pnl",
+            "fee_total",
+            "tax_total",
+        )
+        if any(field not in payload or isinstance(payload.get(field), bool) for field in required_numeric_fields):
+            return False
         try:
-            payload = json.loads(payload_raw)
-        except Exception:
-            return {}
-        if isinstance(payload, dict):
-            return payload
-        return {}
+            for field in required_numeric_fields:
+                float(payload[field])
+        except (TypeError, ValueError):
+            return False
+        if any(
+            abs(float(payload[field]) - float(getattr(snapshot_row, field) or 0.0)) > 1e-6
+            for field in required_numeric_fields
+        ):
+            return False
+        if not isinstance(payload.get("fx_stale"), bool) or payload["fx_stale"] is not bool(snapshot_row.fx_stale):
+            return False
+        positions = payload.get("positions")
+        if not isinstance(positions, list) or not all(isinstance(item, dict) for item in positions):
+            return False
+        return (
+            payload.get("account_id") == int(account.id)
+            and str(payload.get("as_of") or "") == as_of_date.isoformat()
+            and str(payload.get("cost_method") or "") == cost_method
+            and str(payload.get("base_currency") or "")
+            == str(snapshot_row.base_currency or account.base_currency)
+        )
 
     def _cached_snapshot_public_payload(
         self,
@@ -4827,7 +4879,12 @@ class PortfolioService:
         cost_method: str,
         payload: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        public_payload = dict(payload or self._parse_snapshot_payload(getattr(snapshot_row, "payload", None)))
+        resolved_payload = payload
+        if resolved_payload is None:
+            resolved_payload = self._parse_snapshot_payload(getattr(snapshot_row, "payload", None))
+        if resolved_payload is None:
+            raise ValueError("cached portfolio snapshot payload is unavailable")
+        public_payload = dict(resolved_payload)
         public_payload.pop("_cache_meta", None)
         payload_positions = list(public_payload.get("positions") or [])
         resolved_positions = payload_positions if payload_positions else positions

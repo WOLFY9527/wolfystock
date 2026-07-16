@@ -5034,6 +5034,126 @@ class RuleBacktestTestCase(unittest.TestCase):
             response["execution_assumptions"],
         )
 
+    def test_corrupt_or_incompatible_summary_fails_closed_without_legacy_metrics(self) -> None:
+        service = RuleBacktestService(self.db)
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        for raw_summary, expected_state in (
+            ("{", "malformed"),
+            ("[]", "incompatible_shape"),
+            ("{}", "valid_empty"),
+        ):
+            with self.subTest(raw_summary=raw_summary):
+                service.repo.update_run(response["id"], summary_json=raw_summary)
+
+                detail = service.get_run(response["id"])
+                history_item = service.list_runs(code="600519")["items"][0]
+                status = service.get_run_status(response["id"])
+
+                assert detail is not None and status is not None
+                from api.v1.schemas.backtest import (
+                    RuleBacktestHistoryItem,
+                    RuleBacktestRunResponse,
+                    RuleBacktestStatusResponse,
+                )
+
+                self.assertEqual(RuleBacktestRunResponse(**detail).status, "unavailable")
+                self.assertEqual(RuleBacktestHistoryItem(**history_item).status, "unavailable")
+                self.assertEqual(RuleBacktestStatusResponse(**status).status, "unavailable")
+                for payload in (detail, history_item, status):
+                    self.assertEqual(payload["status"], "unavailable")
+                    self.assertEqual(payload["calculation_status"], "calculation_unavailable")
+                    self.assertFalse(payload["execution_readiness"]["result_contract_available"])
+                    self.assertEqual(payload["readback_integrity"]["integrity_level"], "unavailable")
+                    self.assertFalse(payload["readback_integrity"]["used_legacy_fallback"])
+                    self.assertEqual(
+                        payload["readback_integrity"]["storage_integrity"]["issues"],
+                        [{"field": "summary_json", "state": expected_state}],
+                    )
+                self.assertEqual(detail["result_authority"]["summary_completeness"], "unavailable")
+                self.assertEqual(detail["result_authority"]["domains"]["metrics"]["state"], "unavailable")
+                self.assertIsNone(detail["total_return_pct"])
+                self.assertIsNone(detail["max_drawdown_pct"])
+                self.assertEqual(detail["trade_count"], 0)
+                self.assertEqual(detail["trades"], [])
+                self.assertEqual(detail["equity_curve"], [])
+                self.assertNotEqual(detail["result_authority"]["summary_completeness"], "legacy_derived")
+
+    def test_null_legacy_summary_remains_explicitly_legacy_derived(self) -> None:
+        service = RuleBacktestService(self.db)
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+        service.repo.update_run(response["id"], summary_json=None)
+
+        detail = service.get_run(response["id"])
+
+        assert detail is not None
+        self.assertEqual(detail["status"], "completed")
+        self.assertEqual(detail["result_authority"]["summary_completeness"], "legacy_derived")
+        self.assertTrue(detail["readback_integrity"]["used_legacy_fallback"])
+        self.assertNotIn("storage_integrity", detail["readback_integrity"])
+
+    def test_corrupt_warnings_are_not_exposed_as_authoritative_empty_list(self) -> None:
+        service = RuleBacktestService(self.db)
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+        for raw_warnings, expected_state in (("{", "malformed"), ('["invalid"]', "semantic_invalid")):
+            with self.subTest(raw_warnings=raw_warnings):
+                service.repo.update_run(response["id"], warnings_json=raw_warnings)
+
+                detail = service.get_run(response["id"])
+
+                assert detail is not None
+                self.assertEqual(detail["warnings"], [{"code": "stored_warnings_unavailable", "message": "Stored warnings are unavailable."}])
+                self.assertEqual(
+                    detail["readback_integrity"]["storage_integrity"]["issues"],
+                    [{"field": "warnings_json", "state": expected_state}],
+                )
+                self.assertEqual(detail["status"], "completed")
+                self.assertIsNotNone(detail["total_return_pct"])
+
+    def test_valid_empty_equity_curve_remains_authoritative_empty_artifact(self) -> None:
+        service = RuleBacktestService(self.db)
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary["visualization"]["audit_rows"] = []
+        service.repo.update_run(
+            response["id"],
+            summary_json=service._serialize_json(summary),
+            equity_curve_json="[]",
+        )
+
+        detail = service.get_run(response["id"])
+
+        assert detail is not None
+        self.assertEqual(detail["equity_curve"], [])
+        self.assertEqual(detail["result_authority"]["equity_curve_source"], "row.equity_curve_json")
+        self.assertEqual(detail["result_authority"]["equity_curve_completeness"], "empty")
+
     def test_compare_runs_returns_stored_first_completed_run_snapshots(self) -> None:
         service = RuleBacktestService(self.db)
 
@@ -8167,7 +8287,7 @@ class RuleBacktestTestCase(unittest.TestCase):
 
         run_row = service.repo.get_run(response["id"])
         assert run_row is not None
-        service.repo.update_run(run_row.id, summary_json="")
+        service.repo.update_run(run_row.id, summary_json=None)
 
         detail = service.get_run(run_row.id)
         assert detail is not None

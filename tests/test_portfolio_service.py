@@ -2241,6 +2241,96 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertEqual(position_ids_after, position_ids_before)
         self.assertEqual(lot_ids_after, lot_ids_before)
 
+    def test_corrupt_or_incompatible_cached_snapshot_payload_recomputes_without_scalar_synthesis(self) -> None:
+        account = self.service.create_account(name="Integrity", broker="Demo", market="cn", base_currency="CNY")
+        account_id = account["id"]
+        self.service.record_cash_ledger(
+            account_id=account_id,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=10000,
+            currency="CNY",
+        )
+        expected = self.service.get_portfolio_snapshot(
+            account_id=account_id,
+            as_of=date(2026, 1, 2),
+            cost_method="fifo",
+        )
+
+        for corrupt_payload in ("{", "[]"):
+            with self.subTest(corrupt_payload=corrupt_payload):
+                with self.db.get_session() as session:
+                    snapshot_row = session.execute(
+                        select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == account_id)
+                    ).scalar_one()
+                    snapshot_row.payload = corrupt_payload
+                    snapshot_row.total_cash = 999999.0
+                    snapshot_row.total_equity = 999999.0
+                    session.commit()
+
+                with patch.object(
+                    self.service,
+                    "_build_account_snapshot",
+                    wraps=self.service._build_account_snapshot,
+                ) as rebuild:
+                    actual = self.service.get_portfolio_snapshot(
+                        account_id=account_id,
+                        as_of=date(2026, 1, 2),
+                        cost_method="fifo",
+                    )
+
+                rebuild.assert_called_once()
+                self.assertEqual(actual["total_cash"], expected["total_cash"])
+                self.assertEqual(actual["total_equity"], expected["total_equity"])
+                self.assertNotEqual(actual["total_equity"], 999999.0)
+
+        with self.db.get_session() as session:
+            snapshot_row = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == account_id)
+            ).scalar_one()
+            snapshot_row.total_cash = 777777.0
+            snapshot_row.total_equity = 777777.0
+            session.commit()
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            wraps=self.service._build_account_snapshot,
+        ) as rebuild:
+            semantic_mismatch = self.service.get_portfolio_snapshot(
+                account_id=account_id,
+                as_of=date(2026, 1, 2),
+                cost_method="fifo",
+            )
+
+        rebuild.assert_called_once()
+        self.assertEqual(semantic_mismatch["total_equity"], expected["total_equity"])
+        self.assertNotEqual(semantic_mismatch["total_equity"], 777777.0)
+
+    def test_authoritative_zero_cached_snapshot_remains_usable(self) -> None:
+        account = self.service.create_account(name="Zero", broker="Demo", market="cn", base_currency="CNY")
+        account_id = account["id"]
+        first = self.service.get_portfolio_snapshot(
+            account_id=account_id,
+            as_of=date(2026, 1, 2),
+            cost_method="fifo",
+        )
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            side_effect=AssertionError("authoritative zero snapshot should remain cache-usable"),
+        ):
+            second = self.service.get_portfolio_snapshot(
+                account_id=account_id,
+                as_of=date(2026, 1, 2),
+                cost_method="fifo",
+            )
+
+        self.assertEqual(second, first)
+        self.assertEqual(second["total_equity"], 0.0)
+        self.assertEqual(second["accounts"][0]["positions"], [])
+
     def test_valuation_lineage_sidecar_persists_and_reloads_from_snapshot_cache(self) -> None:
         account = self.service.create_account(name="Lineage", broker="Demo", market="cn", base_currency="CNY")
         aid = account["id"]

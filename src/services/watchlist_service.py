@@ -14,6 +14,7 @@ from sqlalchemy import and_, desc, select
 from src.multi_user import OWNERSHIP_SCOPE_USER
 from src.repositories.scanner_repo import ScannerRepository
 from src.services.catalyst_event_exposure import build_catalyst_event_exposures
+from src.services._persisted_json import decode_persisted_json
 from src.services.product_read_model import PRODUCT_READ_MODEL_CONTRACT_VERSION, normalize_product_state
 from src.services.reason_code_vocabulary import classify_reason_code
 from src.services.scanner_evidence_packet import build_scanner_investor_signal
@@ -158,6 +159,18 @@ class WatchlistService:
             return parsed if isinstance(parsed, dict) else {}
         except Exception:
             return {}
+
+    @staticmethod
+    def _load_candidate_diagnostics(raw: Optional[str]) -> tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+        result = decode_persisted_json(raw, expected_type=dict)
+        if result.is_valid:
+            return dict(result.value), None
+        return {}, {
+            "state": "blocked",
+            "availability": "unavailable",
+            "reason": "stored_data_integrity_unavailable",
+            "issues": [{"field": "diagnostics_json", "state": result.state.value}],
+        }
 
     @staticmethod
     def _load_json_list(raw: Optional[str]) -> List[Any]:
@@ -1142,9 +1155,15 @@ class WatchlistService:
             key = (int(candidate.run_id), str(candidate.symbol or "").upper())
             if key not in keys or key in context_by_key:
                 continue
-            diagnostics = self._load_json_object(getattr(candidate, "diagnostics_json", None))
+            diagnostics, storage_integrity = self._load_candidate_diagnostics(
+                getattr(candidate, "diagnostics_json", None)
+            )
             item = item_by_key.get(key, {})
             context: Dict[str, Any] = {}
+            if storage_integrity is not None:
+                context["storage_integrity"] = storage_integrity
+                context_by_key[key] = context
+                continue
             provenance = self._project_local_ohlcv_provenance(diagnostics)
             internal_disclosure = self._project_scanner_score_disclosure_internal(diagnostics)
             disclosure = self._project_scanner_score_disclosure(internal_disclosure)
@@ -1180,6 +1199,7 @@ class WatchlistService:
         scanner_investor_signal: Optional[Dict[str, Any]] = None,
         scanner_lineage_v1: Optional[Dict[str, Any]] = None,
         catalyst_exposures: Optional[List[Dict[str, Any]]] = None,
+        scanner_storage_integrity: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         scanner_score = WatchlistService._safe_float(item.get("scanner_score"))
         scanner_status = "selected" if scanner_score is not None or item.get("scanner_run_id") else "unknown"
@@ -1246,6 +1266,14 @@ class WatchlistService:
             scanner_payload["investor_signal"] = scanner_investor_signal
         if scanner_lineage_v1 is not None:
             scanner_payload["scanner_lineage_v1"] = scanner_lineage_v1
+        if scanner_storage_integrity is not None:
+            scanner_payload.update(
+                {
+                    "status": "data_failed",
+                    "data_quality": "unavailable",
+                    "storage_integrity": scanner_storage_integrity,
+                }
+            )
 
         intelligence = {
             "scanner": scanner_payload,
@@ -1311,6 +1339,7 @@ class WatchlistService:
                 scanner_investor_signal=intelligence_context.get("investor_signal"),
                 scanner_lineage_v1=intelligence_context.get("scanner_lineage_v1"),
                 catalyst_exposures=intelligence_context.get("catalyst_exposures"),
+                scanner_storage_integrity=intelligence_context.get("storage_integrity"),
             )
             item.update(self._build_research_context_payload(item))
             item["rowResearchPacket"] = self._build_row_research_packet(item)
@@ -1502,7 +1531,9 @@ class WatchlistService:
             return None
 
         candidate, run = row
-        diagnostics = self._load_json_object(getattr(candidate, "diagnostics_json", None))
+        diagnostics, storage_integrity = self._load_candidate_diagnostics(
+            getattr(candidate, "diagnostics_json", None)
+        )
         safe_reason = self._optional_consumer_text(getattr(candidate, "reason_summary", None))
         item = self.add_item(
             owner_id=resolved_owner_id,
@@ -1517,7 +1548,11 @@ class WatchlistService:
             score_source="scanner_candidate",
             score_profile=str(run.profile or ""),
             score_reason=safe_reason or _SCANNER_CANDIDATE_DEFAULT_REASON,
-            score_status=self._scanner_candidate_score_status(diagnostics, candidate),
+            score_status=(
+                "data_failed"
+                if storage_integrity is not None
+                else self._scanner_candidate_score_status(diagnostics, candidate)
+            ),
         )
         return self._attach_intelligence(owner_id=resolved_owner_id, items=[item])[0]
 

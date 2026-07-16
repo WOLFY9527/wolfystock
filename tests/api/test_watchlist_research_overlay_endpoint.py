@@ -194,6 +194,36 @@ class WatchlistResearchOverlayEndpointTestCase(unittest.TestCase):
         self.assertEqual(other_response.status_code, 200)
         self.assertEqual(other_response.json()["items"], [])
 
+    def test_corrupt_scanner_candidate_evidence_blocks_watchlist_research_projection(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+        run_id = self._save_scanner_candidate()
+        add_response = self.client.post(
+            "/api/v1/watchlist/items",
+            json={
+                "symbol": "NVDA",
+                "market": "us",
+                "source": "scanner",
+                "scanner_run_id": run_id,
+                "scanner_rank": 1,
+                "scanner_score": 82.0,
+            },
+        )
+        self.assertEqual(add_response.status_code, 200)
+        with self.db.get_session() as session:
+            candidate = session.query(MarketScannerCandidate).filter_by(run_id=run_id, symbol="NVDA").one()
+            candidate.diagnostics_json = "{"
+            session.commit()
+
+        response = self.client.get("/api/v1/watchlist/research-overlay")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["overlayState"], "unavailable")
+        self.assertEqual(payload["dataQuality"]["state"], "unavailable")
+        self.assertEqual(payload["items"][0]["overlayState"], "unavailable")
+        self.assertIsNone(payload["items"][0]["researchPriority"])
+        self.assertFalse(payload["decisionGrade"])
+
     def test_research_overlay_endpoint_returns_legitimate_empty_state_for_empty_watchlist(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
         before_alerts = self._alert_counts()

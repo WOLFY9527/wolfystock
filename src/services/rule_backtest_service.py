@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 from src.core.rule_backtest_engine import ExecutionModelConfig, ParsedStrategy, RuleBacktestEngine, RuleBacktestParser, _safe_float
 from src.repositories.rule_backtest_repo import RuleBacktestRepository
 from src.services.backtest_response_contract import build_rule_run_contract
+from src.services._persisted_json import PersistedJsonState, decode_persisted_json
 from src.services.backtest_data_sufficiency import assess_backtest_data_sufficiency
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
 from src.services.historical_ohlcv_readiness import (
@@ -1386,7 +1387,15 @@ class RuleBacktestService:
         if row is None:
             return None
         row = self._classify_stuck_run_if_needed(row)
-        summary = self._load_summary_payload(row.summary_json)
+        summary_decode = decode_persisted_json(row.summary_json, expected_type=dict)
+        summary_issue: Optional[Dict[str, str]] = None
+        if summary_decode.state is PersistedJsonState.NULL_PAYLOAD:
+            summary = {}
+        elif summary_decode.state is PersistedJsonState.VALID_VALUE:
+            summary = dict(summary_decode.value)
+        else:
+            summary = {}
+            summary_issue = self._persisted_json_issue("summary_json", summary_decode.state)
         trade_run_ids = self.repo.get_trade_run_ids([int(row.id)])
         artifact_availability = self._resolve_artifact_availability_payload(
             row=row,
@@ -1408,13 +1417,16 @@ class RuleBacktestService:
             ),
             execution_model=summary.get("execution_model") if isinstance(summary.get("execution_model"), dict) else None,
         )
-        return self._build_run_status_payload(
+        payload = self._build_run_status_payload(
             row=row,
             summary=summary,
             artifact_availability=artifact_availability,
             readback_integrity=readback_integrity,
             readiness_payload=readiness_payload,
         )
+        if summary_issue is not None:
+            return self._fail_closed_corrupt_summary_payload(payload, issue=summary_issue)
+        return payload
 
     def cancel_run(self, run_id: int) -> Optional[Dict[str, Any]]:
         row = self.repo.get_run(run_id, **self._owner_kwargs())
@@ -6613,6 +6625,170 @@ class RuleBacktestService:
             return None
 
     @staticmethod
+    def _persisted_json_issue(field: str, state: PersistedJsonState) -> Dict[str, str]:
+        return {"field": field, "state": state.value}
+
+    @staticmethod
+    def _storage_integrity_payload(
+        issues: List[Dict[str, str]],
+        *,
+        blocked: bool,
+    ) -> Dict[str, Any]:
+        deduped: List[Dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for issue in issues:
+            key = (str(issue.get("field") or ""), str(issue.get("state") or ""))
+            if not all(key) or key in seen:
+                continue
+            seen.add(key)
+            deduped.append({"field": key[0], "state": key[1]})
+            if len(deduped) == 8:
+                break
+        return {
+            "state": "blocked" if blocked else "degraded",
+            "availability": "unavailable" if blocked else "partial",
+            "reason": "stored_data_integrity_unavailable",
+            "issues": deduped,
+        }
+
+    @classmethod
+    def _attach_readback_storage_integrity(
+        cls,
+        payload: Dict[str, Any],
+        *,
+        issues: List[Dict[str, str]],
+        blocked: bool,
+    ) -> Dict[str, Any]:
+        if not issues:
+            return payload
+        storage_integrity = cls._storage_integrity_payload(issues, blocked=blocked)
+        readback = dict(payload.get("readback_integrity") or {})
+        readback["storage_integrity"] = storage_integrity
+        if blocked:
+            readback.update(
+                {
+                    "source": "persisted_json_validation",
+                    "completeness": "unavailable",
+                    "used_legacy_fallback": False,
+                    "used_live_storage_repair": False,
+                    "has_summary_storage_drift": False,
+                    "drift_domains": [],
+                    "missing_summary_fields": ["stored_summary"],
+                    "integrity_level": "unavailable",
+                }
+            )
+        payload["readback_integrity"] = readback
+        summary = payload.get("summary")
+        if isinstance(summary, dict):
+            summary["readback_integrity"] = dict(readback)
+        return payload
+
+    @classmethod
+    def _fail_closed_corrupt_summary_payload(
+        cls,
+        payload: Dict[str, Any],
+        *,
+        issue: Dict[str, str],
+    ) -> Dict[str, Any]:
+        message = "Stored backtest result is unavailable."
+        artifact_availability = cls._build_artifact_availability_payload(
+            source="persisted_json_validation",
+            completeness="unavailable",
+            flags={availability_field: False for availability_field in ARTIFACT_AVAILABILITY_FIELDS},
+        )
+        authority = dict(payload.get("result_authority") or {})
+        domains = dict(authority.get("domains") or {})
+        for domain, entry in domains.items():
+            unavailable = dict(entry or {})
+            unavailable.update(
+                {
+                    "source": "unavailable",
+                    "completeness": "unavailable",
+                    "state": "unavailable",
+                }
+            )
+            domains[domain] = unavailable
+        authority.update(
+            {
+                "summary_source": "row.summary_json",
+                "summary_completeness": "unavailable",
+                "summary_missing_fields": ["stored_summary"],
+                "metrics_source": "unavailable",
+                "metrics_completeness": "unavailable",
+                "domains": domains,
+            }
+        )
+        payload.update(
+            {
+                "status": "unavailable",
+                "status_message": message,
+                "status_history": [],
+                "run_timing": {},
+                "run_diagnostics": {},
+                "no_result_reason": "stored_data_integrity_unavailable",
+                "no_result_message": message,
+                "parsed_strategy": {},
+                "start_date": None,
+                "end_date": None,
+                "period_start": None,
+                "period_end": None,
+                "trade_count": 0,
+                "win_count": 0,
+                "loss_count": 0,
+                "data_quality": {"status": "unavailable", "reason": "stored_data_integrity_unavailable"},
+                "data_sufficiency": {"status": "unavailable", "reason": "stored_data_integrity_unavailable"},
+                "historicalOhlcvReadiness": {},
+                "robustness_analysis": {},
+                "artifact_availability": artifact_availability,
+                "research_artifact": None,
+                "research_artifact_availability": {
+                    "version": "v1",
+                    "state": "blocked",
+                    "reasonCode": "stored_data_integrity_unavailable",
+                    "source": "persisted_json_validation",
+                    "artifactKind": "rule_backtest_research_artifact",
+                },
+                "benchmark_curve": [],
+                "benchmark_summary": {},
+                "buy_and_hold_curve": [],
+                "buy_and_hold_summary": {},
+                "audit_rows": [],
+                "daily_return_series": [],
+                "exposure_curve": [],
+                "equity_curve": [],
+                "trades": [],
+                "execution_trace": None,
+                "result_authority": authority,
+            }
+        )
+        for metric_field in (
+            "total_return_pct",
+            "annualized_return_pct",
+            "sharpe_ratio",
+            "benchmark_mode",
+            "benchmark_code",
+            "benchmark_return_pct",
+            "excess_return_vs_benchmark_pct",
+            "buy_and_hold_return_pct",
+            "excess_return_vs_buy_and_hold_pct",
+            "win_rate_pct",
+            "avg_trade_return_pct",
+            "max_drawdown_pct",
+            "avg_holding_days",
+            "avg_holding_bars",
+            "avg_holding_calendar_days",
+            "final_equity",
+            "ai_summary",
+        ):
+            payload[metric_field] = None
+        payload["summary"] = {
+            "status_message": message,
+            "artifact_availability": artifact_availability,
+        }
+        payload.update(build_rule_run_contract(payload))
+        return cls._attach_readback_storage_integrity(payload, issues=[issue], blocked=True)
+
+    @staticmethod
     def _serialize_json(payload: Any) -> str:
         return json.dumps(payload, ensure_ascii=False)
 
@@ -11065,14 +11241,14 @@ class RuleBacktestService:
         request = dict(summary.get("request") or {})
         raw_text = str(row.strategy_text or "")
         stored_payload = parsed_override if isinstance(parsed_override, dict) else None
+        stored_payload_invalid = False
 
-        if stored_payload is None and row.parsed_strategy_json:
-            try:
-                loaded_payload = json.loads(row.parsed_strategy_json)
-                if isinstance(loaded_payload, dict):
-                    stored_payload = loaded_payload
-            except Exception:
-                stored_payload = None
+        if stored_payload is None and row.parsed_strategy_json != "":
+            decoded = decode_persisted_json(row.parsed_strategy_json, expected_type=dict)
+            if decoded.state is PersistedJsonState.VALID_VALUE:
+                stored_payload = dict(decoded.value)
+            elif decoded.state is not PersistedJsonState.NULL_PAYLOAD:
+                stored_payload_invalid = True
 
         if isinstance(stored_payload, dict) and stored_payload:
             parsed = self._dict_to_parsed_strategy(stored_payload, raw_text)
@@ -11098,6 +11274,19 @@ class RuleBacktestService:
                     missing_fields,
                 )
             return normalized_payload, "row.parsed_strategy_json", "complete", []
+
+        if stored_payload_invalid:
+            return (
+                self._build_summary_only_parsed_strategy_payload(
+                    row=row,
+                    parsed_strategy_summary=None,
+                    warnings=warnings,
+                    source="unavailable",
+                ),
+                "unavailable",
+                "unavailable",
+                ["stored_parsed_strategy"],
+            )
 
         parsed_strategy_summary = summary.get("parsed_strategy_summary")
         if isinstance(parsed_strategy_summary, dict) and parsed_strategy_summary:
@@ -11485,13 +11674,50 @@ class RuleBacktestService:
         ai_summary_override: Optional[str] = None,
         summary_override: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        stored_summary = summary_override if summary_override is not None else self._load_summary_payload(row.summary_json)
-        warnings = []
-        if row.warnings_json:
-            try:
-                warnings = json.loads(row.warnings_json)
-            except Exception:
-                warnings = []
+        storage_issues: List[Dict[str, str]] = []
+        summary_issue: Optional[Dict[str, str]] = None
+        if summary_override is not None:
+            stored_summary = dict(summary_override)
+        else:
+            summary_decode = decode_persisted_json(row.summary_json, expected_type=dict)
+            if summary_decode.state is PersistedJsonState.NULL_PAYLOAD:
+                stored_summary = {}
+            elif summary_decode.state is PersistedJsonState.VALID_VALUE:
+                stored_summary = dict(summary_decode.value)
+            else:
+                stored_summary = {}
+                summary_issue = self._persisted_json_issue("summary_json", summary_decode.state)
+
+        warnings_decode = decode_persisted_json(
+            row.warnings_json,
+            expected_type=list,
+            validator=lambda items: all(isinstance(item, dict) for item in items),
+        )
+        if warnings_decode.is_valid:
+            warnings = list(warnings_decode.value)
+        else:
+            warnings = []
+            if warnings_decode.state is not PersistedJsonState.NULL_PAYLOAD:
+                storage_issues.append(self._persisted_json_issue("warnings_json", warnings_decode.state))
+                warnings.append(
+                    {
+                        "code": "stored_warnings_unavailable",
+                        "message": "Stored warnings are unavailable.",
+                    }
+                )
+
+        if parsed_override is None and row.parsed_strategy_json != "":
+            parsed_decode = decode_persisted_json(row.parsed_strategy_json, expected_type=dict)
+            if parsed_decode.state not in {PersistedJsonState.NULL_PAYLOAD, PersistedJsonState.VALID_VALUE}:
+                storage_issues.append(
+                    self._persisted_json_issue("parsed_strategy_json", parsed_decode.state)
+                )
+        if include_trades:
+            equity_decode = decode_persisted_json(row.equity_curve_json, expected_type=list)
+            if not equity_decode.is_valid and equity_decode.state is not PersistedJsonState.NULL_PAYLOAD:
+                storage_issues.append(
+                    self._persisted_json_issue("equity_curve_json", equity_decode.state)
+                )
         (
             parsed_strategy,
             parsed_strategy_source,
@@ -11801,6 +12027,14 @@ class RuleBacktestService:
             "result_authority": result_authority,
         }
         payload.update(build_rule_run_contract(payload))
+        if summary_issue is not None:
+            return self._fail_closed_corrupt_summary_payload(payload, issue=summary_issue)
+        if storage_issues:
+            self._attach_readback_storage_integrity(
+                payload,
+                issues=storage_issues,
+                blocked=False,
+            )
         return payload
 
     def _trade_row_to_dict(self, trade: RuleBacktestTrade) -> Dict[str, Any]:
