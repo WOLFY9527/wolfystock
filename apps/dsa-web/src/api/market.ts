@@ -1,10 +1,27 @@
 import apiClient from './index';
 import type { MarketDataMeta, MarketOverviewPanel, MarketOverviewItem, MarketProviderHealth } from './marketOverview';
+import { isMarketDataFreshnessValue } from './marketOverview';
 import { toCamelCase } from './utils';
 import { API_BASE_URL } from '../utils/constants';
 import { buildAbsoluteApiUrl, joinApiPath } from './path';
 import { normalizeMarketIntelligenceEvidenceItem } from './marketIntelligenceEvidence';
 import type { ResearchReadinessV1 } from '../types/researchReadiness';
+
+function isMarketContractRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasMarketContractText(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isFiniteMarketContractNumberOrNull(value: unknown): boolean {
+  return value === null || (typeof value === 'number' && Number.isFinite(value));
+}
+
+function isMarketContractStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
 
 const CONSUMER_SOURCE_LABEL_MAP: Record<string, string> = {
   'PROVIDER ALTERNATIVE_ME': '可用',
@@ -422,6 +439,33 @@ function hasUsableSnapshotValue(payload: MarketSnapshotPayload): boolean {
   );
 }
 
+function isMarketSnapshotItemContract(value: unknown): value is MarketSnapshotItem {
+  if (!isMarketContractRecord(value) || !hasMarketContractText(value.symbol)) {
+    return false;
+  }
+  for (const key of ['price', 'value', 'change', 'changePercent'] as const) {
+    if (key in value && value[key] !== undefined && !isFiniteMarketContractNumberOrNull(value[key])) {
+      return false;
+    }
+  }
+  for (const key of ['trend', 'sparkline'] as const) {
+    if (key in value && value[key] !== undefined && (
+      !Array.isArray(value[key])
+      || !value[key].every((point) => typeof point === 'number' && Number.isFinite(point))
+    )) {
+      return false;
+    }
+  }
+  return value.freshness === undefined || isMarketDataFreshnessValue(value.freshness);
+}
+
+function hasMarketSnapshotAuthority(payload: MarketSnapshotPayload): boolean {
+  return hasMarketContractText(payload.source)
+    && !['unknown', 'unavailable', 'error'].includes(payload.source.trim().toLowerCase())
+    && isMarketDataFreshnessValue(payload.freshness)
+    && !['unknown', 'unavailable', 'error'].includes(payload.freshness);
+}
+
 function isExplicitlyUnavailableSnapshot(payload: MarketSnapshotPayload): boolean {
   const freshness = String(payload.freshness || '').trim().toLowerCase();
   const source = String(payload.source || '').trim().toLowerCase();
@@ -515,8 +559,23 @@ function deriveSnapshotPanelErrorMessage(
   return payload.error || payload.refreshError || payload.lastError || null;
 }
 
-function normalizeMarketSnapshotPayload(rawPayload: Record<string, unknown>, panelName: string): MarketOverviewPanel {
+function normalizeMarketSnapshotPayload(rawPayload: unknown, panelName: string): MarketOverviewPanel {
+  if (!isMarketContractRecord(rawPayload)) {
+    throw new Error('invalid_market_snapshot_contract');
+  }
   const payload = toCamelCase<MarketSnapshotPayload>(rawPayload);
+  if (!Array.isArray(payload.items) || !payload.items.every(isMarketSnapshotItemContract)) {
+    throw new Error('invalid_market_snapshot_contract');
+  }
+  if (payload.status != null && !isExplicitPanelStatus(payload.status)) {
+    throw new Error('invalid_market_snapshot_contract');
+  }
+  if (
+    (hasUsableSnapshotValue(payload) || payload.status === 'success' || payload.status === 'partial')
+    && !hasMarketSnapshotAuthority(payload)
+  ) {
+    throw new Error('invalid_market_snapshot_contract');
+  }
   const status = deriveSnapshotPanelStatus(payload);
   const evidenceUpdatedAt = resolveSnapshotEvidenceTimestamp(
     payload.updatedAt,
@@ -579,7 +638,7 @@ function normalizeMarketSnapshotPayload(rawPayload: Record<string, unknown>, pan
     degradationReason: payload.degradationReason,
     degradationReasons: payload.degradationReasons,
     warning: payload.warning,
-    items: Array.isArray(payload.items) ? payload.items.map(normalizeItem) : [],
+    items: payload.items.map(normalizeItem),
   };
 }
 
@@ -2187,7 +2246,7 @@ function normalizeProfessionalDataCapabilityStatus(status?: string | null): Prof
   ].includes(normalized)) {
     return normalized;
   }
-  return 'degraded';
+  return 'unavailable';
 }
 
 function professionalDataCapabilityStatusView(status?: string | null): ProfessionalDataCapabilityStatusView {
@@ -2197,7 +2256,7 @@ function professionalDataCapabilityStatusView(status?: string | null): Professio
   if (normalized === 'entitlement_required') return { key: normalized, label: '需授权', variant: 'danger' };
   if (normalized === 'configured_missing') return { key: normalized, label: '配置待补', variant: 'caution' };
   if (normalized === 'not_implemented') return { key: normalized, label: '未实现', variant: 'neutral' };
-  return { key: 'degraded', label: '降级', variant: 'caution' };
+  return { key: 'unavailable', label: '暂不可用', variant: 'danger' };
 }
 
 function professionalCapabilityReadinessStateLabel(state?: string | null): string {
@@ -2726,7 +2785,7 @@ function selectConsumerEvidenceBoundaryItem(
   matrix?: ConsumerEvidenceReadinessMatrix | null,
 ): ConsumerEvidenceReadinessItem | undefined {
   const items = Array.isArray(matrix?.items) ? matrix.items : [];
-  return items.find((item) => normalizeConsumerEvidenceToken(item.surface) === 'market_overview') || items[0];
+  return items.find((item) => normalizeConsumerEvidenceToken(item.surface) === 'market_overview');
 }
 
 export function buildConsumerEvidenceBoundaryView(
@@ -2758,7 +2817,10 @@ export function buildConsumerEvidenceBoundaryView(
       ? { label: '风险状态待补', variant: 'caution' as const }
       : item.staleInputs.length > 0
         ? { label: '风险状态待更新', variant: 'caution' as const }
-        : { label: '风险状态可用', variant: 'success' as const };
+        : item.readinessState === 'score_grade'
+          && item.scoreGradeInputs.some((input) => item.fulfilledInputs.includes(input))
+          ? { label: '风险状态可用', variant: 'success' as const }
+          : { label: '风险状态待补', variant: 'caution' as const };
 
   const chips: ConsumerEvidenceBoundaryChip[] = [
     { key: 'boundary', label: overallState.label, variant: overallState.variant },
@@ -2860,29 +2922,344 @@ export type MarketRegimeReadModelResponse = {
   providerCallsEnabled: boolean;
 };
 
-function normalizeMarketRegimeReadModelPayload(payload: Record<string, unknown>): MarketRegimeReadModelResponse {
-  const normalized = toCamelCase<MarketRegimeReadModelResponse>(payload);
+function hasMarketAuxiliaryAuthority(value: Record<string, unknown>): boolean {
+  if (!hasMarketContractText(value.source) || !isMarketDataFreshnessValue(value.freshness)) {
+    return false;
+  }
+  const explicitlyUnavailable = value.source === 'unavailable'
+    || value.source === 'error'
+    || value.freshness === 'unavailable'
+    || value.freshness === 'error';
+  return explicitlyUnavailable
+    || (value.freshness !== 'unknown' && (hasMarketContractText(value.updatedAt) || hasMarketContractText(value.asOf)));
+}
+
+export function isMarketBriefingContract(value: unknown): value is MarketBriefingResponse {
+  if (!isMarketContractRecord(value) || !hasMarketAuxiliaryAuthority(value) || !Array.isArray(value.items)) {
+    return false;
+  }
+  return value.items.every((item) => isMarketContractRecord(item)
+    && hasMarketContractText(item.title)
+    && hasMarketContractText(item.message)
+    && ['positive', 'neutral', 'warning', 'risk'].includes(String(item.severity || ''))
+    && hasMarketContractText(item.category)
+    && (item.confidence === undefined || (typeof item.confidence === 'number' && Number.isFinite(item.confidence))));
+}
+
+export function isMarketFuturesContract(value: unknown): value is MarketFuturesResponse {
+  if (!isMarketContractRecord(value) || !hasMarketAuxiliaryAuthority(value) || !Array.isArray(value.items)) {
+    return false;
+  }
+  return value.items.every((item) => {
+    if (!isMarketContractRecord(item)) {
+      return false;
+    }
+    return hasMarketContractText(item.name)
+      && hasMarketContractText(item.symbol)
+      && hasMarketContractText(item.market)
+      && hasMarketContractText(item.session)
+      && hasMarketContractText(item.source)
+      && isFiniteMarketContractNumberOrNull(item.value)
+      && isFiniteMarketContractNumberOrNull(item.change)
+      && isFiniteMarketContractNumberOrNull(item.changePercent)
+      && Array.isArray(item.sparkline)
+      && item.sparkline.every((point) => typeof point === 'number' && Number.isFinite(point))
+      && (item.freshness === undefined || isMarketDataFreshnessValue(item.freshness));
+  });
+}
+
+const CN_SHORT_SENTIMENT_METRIC_KEYS = [
+  'limitUpCount',
+  'limitDownCount',
+  'failedLimitUpRate',
+  'maxConsecutiveLimitUps',
+  'yesterdayLimitUpPerformance',
+  'firstBoardCount',
+  'secondBoardCount',
+  'highBoardCount',
+  'twentyCmLimitUpCount',
+] as const;
+
+export function isCnShortSentimentContract(value: unknown): value is CnShortSentimentResponse {
+  if (
+    !isMarketContractRecord(value)
+    || !hasMarketAuxiliaryAuthority(value)
+    || typeof value.sentimentScore !== 'number'
+    || !Number.isFinite(value.sentimentScore)
+    || !hasMarketContractText(value.summary)
+    || !isMarketContractRecord(value.metrics)
+  ) {
+    return false;
+  }
+  const metrics = value.metrics;
+  return CN_SHORT_SENTIMENT_METRIC_KEYS.every((key) => (
+    typeof metrics[key] === 'number' && Number.isFinite(metrics[key])
+  ));
+}
+
+const MARKET_TEMPERATURE_SCORE_KEYS = [
+  'overall',
+  'usRiskAppetite',
+  'cnMoneyEffect',
+  'macroPressure',
+  'liquidity',
+] as const;
+
+export function isMarketTemperatureContract(value: unknown): value is MarketTemperatureResponse {
+  if (!isMarketContractRecord(value) || !hasMarketAuxiliaryAuthority(value) || !isMarketContractRecord(value.scores)) {
+    return false;
+  }
+  const scores = value.scores;
+  return MARKET_TEMPERATURE_SCORE_KEYS.every((key) => {
+    const score = scores[key];
+    return isMarketContractRecord(score)
+      && isFiniteMarketContractNumberOrNull(score.value)
+      && hasMarketContractText(score.label);
+  });
+}
+
+function normalizeRegimeMetricValue(value: unknown): unknown {
+  if (isMarketContractRecord(value)) {
+    return null;
+  }
+  if (Array.isArray(value) && value.some(isMarketContractRecord)) {
+    return null;
+  }
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    return null;
+  }
+  return value;
+}
+
+function normalizeMarketRegimeEvidenceCards(value: unknown): MarketRegimeReadModelEvidenceCard[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((card) => {
+    if (!isMarketContractRecord(card)) {
+      return [];
+    }
+    const metrics = Array.isArray(card.metrics)
+      ? card.metrics.flatMap((metric) => (
+        isMarketContractRecord(metric) && hasMarketContractText(metric.label)
+          ? [{ label: metric.label, value: normalizeRegimeMetricValue(metric.value) }]
+          : []
+      ))
+      : [];
+    return [{
+      id: hasMarketContractText(card.id) ? card.id : '',
+      title: hasMarketContractText(card.title) ? card.title : '',
+      status: hasMarketContractText(card.status) ? card.status : 'unavailable',
+      severity: hasMarketContractText(card.severity) ? card.severity : 'warning',
+      headline: hasMarketContractText(card.headline) ? card.headline : '',
+      metrics,
+      reasons: isMarketContractStringArray(card.reasons) ? card.reasons : [],
+      ...(isMarketContractStringArray(card.sourceFields) ? { sourceFields: card.sourceFields } : {}),
+      ...(typeof card.consumerSafe === 'boolean' ? { consumerSafe: card.consumerSafe } : {}),
+    }];
+  });
+}
+
+function isCompleteProductReadyReadModel(value: MarketRegimeReadModelResponse): boolean {
+  if (
+    !Array.isArray(value.symbols)
+    || !Array.isArray(value.evidenceCards)
+    || !Array.isArray(value.symbolContext)
+    || !Array.isArray(value.surfaceHints)
+    || !Array.isArray(value.missingDataFamilies)
+    || !Array.isArray(value.blockedProductSurfaces)
+    || !isMarketContractRecord(value.regime)
+    || !isMarketContractRecord(value.dataQuality)
+    || !isMarketContractRecord(value.dataQuality.ohlcvCoverage)
+    || !isMarketContractRecord(value.dataQuality.quoteSnapshotCoverage)
+    || !isMarketContractRecord(value.readiness)
+    || !Array.isArray(value.readiness.missingDataFamilies)
+    || !Array.isArray(value.readiness.blockedProductSurfaces)
+  ) {
+    return false;
+  }
+  const dataQuality = value.dataQuality;
+  const ohlcvCoverage = dataQuality.ohlcvCoverage!;
+  const quoteSnapshotCoverage = dataQuality.quoteSnapshotCoverage!;
+  return value.consumerSafe === true
+    && value.noAdvice === true
+    && hasMarketContractText(value.contractVersion)
+    && hasMarketContractText(value.sourceEvidenceContractVersion)
+    && value.status === 'ok'
+    && hasMarketContractText(value.market)
+    && value.symbols.length > 0
+    && value.symbols.every(hasMarketContractText)
+    && hasMarketContractText(value.benchmarkSymbol)
+    && hasMarketContractText(value.growthProxySymbol)
+    && hasMarketContractText(value.regime?.label)
+    && value.regime?.status === 'ok'
+    && hasMarketContractText(value.productSummary)
+    && value.evidenceCards.length > 0
+    && value.evidenceCards.every((card) => isMarketContractRecord(card)
+      && hasMarketContractText(card.id)
+      && hasMarketContractText(card.title)
+      && hasMarketContractText(card.status)
+      && hasMarketContractText(card.severity)
+      && hasMarketContractText(card.headline)
+      && card.consumerSafe === true
+      && Array.isArray(card.metrics)
+      && card.metrics.length > 0
+      && card.metrics.every((metric) => isMarketContractRecord(metric)
+        && hasMarketContractText(metric.label)
+        && metric.value !== undefined
+        && metric.value !== null
+        && !isMarketContractRecord(metric.value))
+      && Array.isArray(card.reasons)
+      && card.reasons.length > 0
+      && isMarketContractStringArray(card.sourceFields)
+      && card.sourceFields.length > 0)
+    && dataQuality.adjustedCoverageState === 'available'
+    && ohlcvCoverage.state === 'available'
+    && typeof ohlcvCoverage.requiredBars === 'number'
+    && Number.isFinite(ohlcvCoverage.requiredBars)
+    && ohlcvCoverage.requiredBars > 0
+    && isMarketContractStringArray(ohlcvCoverage.availableSymbols)
+    && isMarketContractStringArray(ohlcvCoverage.missingSymbols)
+    && ohlcvCoverage.missingSymbols.length === 0
+    && quoteSnapshotCoverage.state === 'available'
+    && quoteSnapshotCoverage.availabilityState === 'available'
+    && hasMarketContractText(quoteSnapshotCoverage.freshnessState)
+    && isMarketContractStringArray(quoteSnapshotCoverage.availableSymbols)
+    && isMarketContractStringArray(quoteSnapshotCoverage.missingSymbols)
+    && quoteSnapshotCoverage.missingSymbols.length === 0
+    && isMarketContractStringArray(quoteSnapshotCoverage.staleSymbols)
+    && quoteSnapshotCoverage.staleSymbols.length === 0
+    && isMarketContractStringArray(dataQuality.missingDataFamilies)
+    && dataQuality.missingDataFamilies.length === 0
+    && isMarketContractStringArray(dataQuality.blockedProductSurfaces)
+    && dataQuality.blockedProductSurfaces.length === 0
+    && isMarketContractStringArray(dataQuality.failClosedReasons)
+    && dataQuality.failClosedReasons.length === 0
+    && value.readiness.label === 'product_ready'
+    && value.readiness.status === 'ok'
+    && value.readiness.missingDataFamilies.length === 0
+    && value.readiness.blockedProductSurfaces.length === 0
+    && hasMarketContractText(value.readiness.nextOperatorAction)
+    && value.missingDataFamilies.length === 0
+    && value.blockedProductSurfaces.length === 0
+    && hasMarketContractText(value.nextOperatorAction)
+    && typeof value.networkCallsEnabled === 'boolean'
+    && typeof value.mutationEnabled === 'boolean'
+    && typeof value.providerCallsEnabled === 'boolean';
+}
+
+export function isMarketRegimeReadModelContract(value: unknown): value is MarketRegimeReadModelResponse {
+  if (!isMarketContractRecord(value) || !isMarketContractRecord(value.readiness)) {
+    return false;
+  }
+  const payload = value as unknown as MarketRegimeReadModelResponse;
+  if (payload.status === 'ok' || payload.readiness.label === 'product_ready') {
+    return isCompleteProductReadyReadModel(payload);
+  }
+  return hasMarketContractText(payload.status)
+    && hasMarketContractText(payload.readiness.label)
+    && hasMarketContractText(payload.readiness.status)
+    && Array.isArray(payload.evidenceCards)
+    && Array.isArray(payload.missingDataFamilies)
+    && Array.isArray(payload.blockedProductSurfaces)
+    && Array.isArray(payload.readiness.missingDataFamilies)
+    && Array.isArray(payload.readiness.blockedProductSurfaces);
+}
+
+function failedClosedMarketRegimeReadModel(
+  payload: MarketRegimeReadModelResponse,
+): MarketRegimeReadModelResponse {
   return {
-    ...normalized,
-    symbols: Array.isArray(normalized.symbols) ? normalized.symbols : [],
-    evidenceCards: Array.isArray(normalized.evidenceCards) ? normalized.evidenceCards : [],
-    symbolContext: Array.isArray(normalized.symbolContext) ? normalized.symbolContext : [],
-    surfaceHints: Array.isArray(normalized.surfaceHints) ? normalized.surfaceHints : [],
-    missingDataFamilies: Array.isArray(normalized.missingDataFamilies) ? normalized.missingDataFamilies : [],
-    blockedProductSurfaces: Array.isArray(normalized.blockedProductSurfaces) ? normalized.blockedProductSurfaces : [],
-    readiness: {
-      label: normalized.readiness?.label || 'failed_closed',
-      status: normalized.readiness?.status || 'failed_closed',
-      missingDataFamilies: Array.isArray(normalized.readiness?.missingDataFamilies) ? normalized.readiness.missingDataFamilies : [],
-      blockedProductSurfaces: Array.isArray(normalized.readiness?.blockedProductSurfaces) ? normalized.readiness.blockedProductSurfaces : [],
-      nextOperatorAction: normalized.readiness?.nextOperatorAction || normalized.nextOperatorAction || '',
+    ...payload,
+    status: 'failed_closed',
+    regime: {
+      ...payload.regime,
+      label: payload.regime?.label || 'insufficient_data',
+      status: 'failed_closed',
     },
-    dataQuality: {
-      ...normalized.dataQuality,
-      missingDataFamilies: Array.isArray(normalized.dataQuality?.missingDataFamilies) ? normalized.dataQuality.missingDataFamilies : [],
-      blockedProductSurfaces: Array.isArray(normalized.dataQuality?.blockedProductSurfaces) ? normalized.dataQuality.blockedProductSurfaces : [],
+    readiness: {
+      ...payload.readiness,
+      label: 'failed_closed',
+      status: 'failed_closed',
     },
   };
+}
+
+function normalizeMarketRegimeReadModelPayload(payload: unknown): MarketRegimeReadModelResponse {
+  const normalized = isMarketContractRecord(payload)
+    ? toCamelCase<Partial<MarketRegimeReadModelResponse>>(payload)
+    : {};
+  const readiness: Record<string, unknown> = isMarketContractRecord(normalized.readiness) ? normalized.readiness : {};
+  const dataQuality: Record<string, unknown> = isMarketContractRecord(normalized.dataQuality) ? normalized.dataQuality : {};
+  const ohlcvCoverage: Record<string, unknown> = isMarketContractRecord(dataQuality.ohlcvCoverage) ? dataQuality.ohlcvCoverage : {};
+  const quoteSnapshotCoverage: Record<string, unknown> = isMarketContractRecord(dataQuality.quoteSnapshotCoverage) ? dataQuality.quoteSnapshotCoverage : {};
+  const regime: Record<string, unknown> = isMarketContractRecord(normalized.regime) ? normalized.regime : {};
+  const candidate: MarketRegimeReadModelResponse = {
+    consumerSafe: normalized.consumerSafe === true,
+    noAdvice: normalized.noAdvice === true,
+    contractVersion: hasMarketContractText(normalized.contractVersion) ? normalized.contractVersion : '',
+    sourceEvidenceContractVersion: hasMarketContractText(normalized.sourceEvidenceContractVersion) ? normalized.sourceEvidenceContractVersion : '',
+    status: hasMarketContractText(normalized.status) ? normalized.status : 'failed_closed',
+    market: hasMarketContractText(normalized.market) ? normalized.market : '',
+    symbols: isMarketContractStringArray(normalized.symbols) ? normalized.symbols : [],
+    benchmarkSymbol: hasMarketContractText(normalized.benchmarkSymbol) ? normalized.benchmarkSymbol : '',
+    growthProxySymbol: hasMarketContractText(normalized.growthProxySymbol) ? normalized.growthProxySymbol : '',
+    regime: {
+      label: hasMarketContractText(regime.label) ? regime.label : 'insufficient_data',
+      status: hasMarketContractText(regime.status) ? regime.status : 'failed_closed',
+      ...(hasMarketContractText(regime.source) ? { source: regime.source } : {}),
+    },
+    productSummary: hasMarketContractText(normalized.productSummary) ? normalized.productSummary : '',
+    evidenceCards: normalizeMarketRegimeEvidenceCards(normalized.evidenceCards),
+    symbolContext: Array.isArray(normalized.symbolContext) ? normalized.symbolContext.filter(isMarketContractRecord) : [],
+    dataQuality: {
+      adjustedCoverageState: hasMarketContractText(dataQuality.adjustedCoverageState) ? dataQuality.adjustedCoverageState : undefined,
+      ohlcvCoverage: {
+        state: hasMarketContractText(ohlcvCoverage.state) ? ohlcvCoverage.state : undefined,
+        requiredBars: typeof ohlcvCoverage.requiredBars === 'number' && Number.isFinite(ohlcvCoverage.requiredBars) ? ohlcvCoverage.requiredBars : null,
+        availableSymbols: isMarketContractStringArray(ohlcvCoverage.availableSymbols) ? ohlcvCoverage.availableSymbols : [],
+        missingSymbols: isMarketContractStringArray(ohlcvCoverage.missingSymbols) ? ohlcvCoverage.missingSymbols : [],
+        missingBars: isMarketContractRecord(ohlcvCoverage.missingBars) ? ohlcvCoverage.missingBars : {},
+      },
+      quoteSnapshotCoverage: {
+        state: hasMarketContractText(quoteSnapshotCoverage.state) ? quoteSnapshotCoverage.state : undefined,
+        availabilityState: hasMarketContractText(quoteSnapshotCoverage.availabilityState) ? quoteSnapshotCoverage.availabilityState : undefined,
+        freshnessState: hasMarketContractText(quoteSnapshotCoverage.freshnessState) ? quoteSnapshotCoverage.freshnessState : undefined,
+        availableSymbols: isMarketContractStringArray(quoteSnapshotCoverage.availableSymbols) ? quoteSnapshotCoverage.availableSymbols : [],
+        missingSymbols: isMarketContractStringArray(quoteSnapshotCoverage.missingSymbols) ? quoteSnapshotCoverage.missingSymbols : [],
+        staleSymbols: isMarketContractStringArray(quoteSnapshotCoverage.staleSymbols) ? quoteSnapshotCoverage.staleSymbols : [],
+      },
+      missingDataFamilies: isMarketContractStringArray(dataQuality.missingDataFamilies) ? dataQuality.missingDataFamilies : [],
+      blockedProductSurfaces: isMarketContractStringArray(dataQuality.blockedProductSurfaces) ? dataQuality.blockedProductSurfaces : [],
+      nextOperatorAction: hasMarketContractText(dataQuality.nextOperatorAction) ? dataQuality.nextOperatorAction : '',
+      failClosedReasons: isMarketContractStringArray(dataQuality.failClosedReasons) ? dataQuality.failClosedReasons : [],
+    },
+    readiness: {
+      label: hasMarketContractText(readiness.label) ? readiness.label : 'failed_closed',
+      status: hasMarketContractText(readiness.status) ? readiness.status : 'failed_closed',
+      missingDataFamilies: isMarketContractStringArray(readiness.missingDataFamilies) ? readiness.missingDataFamilies : [],
+      blockedProductSurfaces: isMarketContractStringArray(readiness.blockedProductSurfaces) ? readiness.blockedProductSurfaces : [],
+      nextOperatorAction: hasMarketContractText(readiness.nextOperatorAction)
+        ? readiness.nextOperatorAction
+        : hasMarketContractText(normalized.nextOperatorAction) ? normalized.nextOperatorAction : '',
+    },
+    surfaceHints: Array.isArray(normalized.surfaceHints) ? normalized.surfaceHints.filter(isMarketContractRecord) : [],
+    missingDataFamilies: isMarketContractStringArray(normalized.missingDataFamilies) ? normalized.missingDataFamilies : [],
+    blockedProductSurfaces: isMarketContractStringArray(normalized.blockedProductSurfaces) ? normalized.blockedProductSurfaces : [],
+    nextOperatorAction: hasMarketContractText(normalized.nextOperatorAction) ? normalized.nextOperatorAction : '',
+    networkCallsEnabled: normalized.networkCallsEnabled === true,
+    mutationEnabled: normalized.mutationEnabled === true,
+    providerCallsEnabled: normalized.providerCallsEnabled === true,
+  };
+  const optimistic = candidate.status === 'ok'
+    || candidate.readiness.label === 'product_ready'
+    || candidate.readiness.status === 'ok';
+  const runtimeFlagsDeclared = typeof normalized.networkCallsEnabled === 'boolean'
+    && typeof normalized.mutationEnabled === 'boolean'
+    && typeof normalized.providerCallsEnabled === 'boolean';
+  return optimistic && !(runtimeFlagsDeclared && isCompleteProductReadyReadModel(candidate))
+    ? failedClosedMarketRegimeReadModel(candidate)
+    : candidate;
 }
 
 export const marketApi = {
@@ -2903,15 +3280,27 @@ export const marketApi = {
   },
   getMarketBriefing: async (): Promise<MarketBriefingResponse> => {
     const response = await apiClient.get<Record<string, unknown>>(buildMarketApiPath('market-briefing'));
-    return toCamelCase<MarketBriefingResponse>(response.data);
+    const normalized = toCamelCase<MarketBriefingResponse>(response.data);
+    if (!isMarketBriefingContract(normalized)) {
+      throw new Error('invalid_market_briefing_contract');
+    }
+    return normalized;
   },
   getFutures: async (): Promise<MarketFuturesResponse> => {
     const response = await apiClient.get<Record<string, unknown>>(buildMarketApiPath('futures'));
-    return toCamelCase<MarketFuturesResponse>(response.data);
+    const normalized = toCamelCase<MarketFuturesResponse>(response.data);
+    if (!isMarketFuturesContract(normalized)) {
+      throw new Error('invalid_market_futures_contract');
+    }
+    return normalized;
   },
   getCnShortSentiment: async (): Promise<CnShortSentimentResponse> => {
     const response = await apiClient.get<Record<string, unknown>>(buildMarketApiPath('cn-short-sentiment'));
-    return toCamelCase<CnShortSentimentResponse>(response.data);
+    const normalized = toCamelCase<CnShortSentimentResponse>(response.data);
+    if (!isCnShortSentimentContract(normalized)) {
+      throw new Error('invalid_cn_short_sentiment_contract');
+    }
+    return normalized;
   },
   getRegimeReadModel: async (): Promise<MarketRegimeReadModelResponse> => {
     const response = await apiClient.get<Record<string, unknown>>(buildMarketApiPath('regime-read-model'));

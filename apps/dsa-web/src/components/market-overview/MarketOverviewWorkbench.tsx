@@ -1,6 +1,7 @@
 import type React from 'react';
 import { Suspense, lazy, useState } from 'react';
 import type { MarketDataMeta, MarketOverviewItem, MarketOverviewPanel, MarketProviderHealthStatus } from '../../api/marketOverview';
+import { isMarketOverviewPanelContract } from '../../api/marketOverview';
 import type {
   CnShortSentimentResponse,
   MarketDecisionSemantics,
@@ -15,7 +16,13 @@ import type {
   MarketTemperatureResponse,
   MarketTemperatureScore,
 } from '../../api/market';
-import { isMarketTemperatureReliable } from '../../api/market';
+import {
+  isCnShortSentimentContract,
+  isMarketBriefingContract,
+  isMarketFuturesContract,
+  isMarketTemperatureContract,
+  isMarketTemperatureReliable,
+} from '../../api/market';
 import {
   MARKET_OVERVIEW_TAB_CONFIG,
   type MarketOverviewModuleId,
@@ -178,6 +185,7 @@ type MarketTrendChartView = {
   latestLabel: string;
   changeLabel: string;
   statusLabel: string;
+  statusTone: 'success' | 'warning';
   isProxy: boolean;
   points: CoreMarketChartPoint[];
 };
@@ -505,7 +513,8 @@ function panelByCardKey(panels: PanelState, cardKey: CardKey): MarketOverviewPan
   if (cardKey === 'futures' || cardKey === 'cnShortSentiment') {
     return undefined;
   }
-  return panels[cardKey];
+  const panel = panels[cardKey];
+  return isMarketOverviewPanelContract(panel) ? panel : undefined;
 }
 
 function findMetricItem(panels: PanelState, metricId: MarketOverviewPulseMetricId): MarketOverviewItem | undefined {
@@ -558,11 +567,35 @@ function buildMarketTrendPoints(item: MarketOverviewItem): CoreMarketChartPoint[
 }
 
 function buildMarketTrendChartView(panels: PanelState, language: 'zh' | 'en'): MarketTrendChartView | null {
-  const item = findPanelItem(panels.indices, ['SPY'])
-    || findPanelItem(panels.indices, ['QQQ'])
-    || findMetricItem(panels, 'SPX')
-    || findMetricItem(panels, 'NDX');
-  if (!item || !Array.isArray(item.trend) || item.trend.filter((value) => Number.isFinite(value)).length < 2) {
+  const panel = panelByCardKey(panels, 'indices');
+  const sourceItem = findPanelItem(panel, ['SPY'])
+    || findPanelItem(panel, ['QQQ'])
+    || findPanelItem(panel, ['SPX'])
+    || findPanelItem(panel, ['NDX']);
+  if (!panel || !sourceItem || !['success', 'partial'].includes(panel.status)) {
+    return null;
+  }
+  const item: MarketOverviewItem = {
+    ...sourceItem,
+    source: sourceItem.source || panel.source,
+    sourceLabel: sourceItem.sourceLabel || panel.sourceLabel,
+    updatedAt: sourceItem.updatedAt || panel.updatedAt,
+    asOf: sourceItem.asOf || panel.asOf,
+    freshness: sourceItem.freshness || panel.freshness,
+    isFallback: sourceItem.isFallback ?? panel.isFallback,
+    isStale: sourceItem.isStale ?? panel.isStale,
+    isUnavailable: sourceItem.isUnavailable ?? panel.isUnavailable,
+  };
+  if (!Array.isArray(item.trend) || item.trend.filter((value) => Number.isFinite(value)).length < 2) {
+    return null;
+  }
+  if (
+    item.isUnavailable
+    || !item.source
+    || ['unavailable', 'error'].includes(item.source)
+    || !item.freshness
+    || ['unavailable', 'error', 'unknown'].includes(item.freshness)
+  ) {
     return null;
   }
   const symbol = String(item.symbol || '').toUpperCase();
@@ -582,6 +615,7 @@ function buildMarketTrendChartView(panels: PanelState, language: 'zh' | 'en'): M
     : (language === 'en' ? 'Latest value pending' : '最新值待确认');
   const changeText = formatHeroChange(item.changePct, language);
   const changeLabel = language === 'en' ? `Latest change ${changeText}` : `最新涨跌 ${changeText}`;
+  const liveHistory = item.freshness === 'live' || item.freshness === 'fresh';
   return {
     item,
     title,
@@ -591,7 +625,10 @@ function buildMarketTrendChartView(panels: PanelState, language: 'zh' | 'en'): M
     rangeLabel: marketTrendRangeLabel(item, language),
     latestLabel,
     changeLabel,
-    statusLabel: item.isUnavailable ? (language === 'en' ? 'Quote unavailable' : '报价不可用') : (language === 'en' ? 'History available' : '历史数据可用'),
+    statusLabel: liveHistory
+      ? (language === 'en' ? 'History available' : '历史数据可用')
+      : marketTrendFreshnessLabel(item, language),
+    statusTone: liveHistory ? 'success' : 'warning',
     isProxy,
     points: buildMarketTrendPoints(item),
   };
@@ -638,7 +675,7 @@ function MarketOverviewCoreTrendChart({
         points={view.points}
         language={language}
         statusLabel={view.statusLabel}
-        statusTone={view.item.isUnavailable ? 'warning' : 'success'}
+        statusTone={view.statusTone}
         sourceLabel={view.sourceLabel}
         freshnessLabel={view.freshnessLabel}
         rangeLabel={view.rangeLabel}
@@ -703,14 +740,15 @@ function buildMetricPanel(
     panelName,
     // Missing source panel must not invent epoch/client-now evidence timestamps.
     lastRefreshAt: basePanel?.lastRefreshAt || '',
-    status: basePanel?.status || 'success',
+    status: basePanel?.status || 'unavailable',
     source: basePanel?.source || 'unavailable',
     sourceLabel: basePanel?.sourceLabel || '未接入',
     updatedAt: basePanel?.updatedAt || '',
     asOf: basePanel?.asOf,
-    freshness: basePanel?.freshness || 'cached',
+    freshness: basePanel?.freshness || 'unavailable',
     isFallback: basePanel?.isFallback,
     isStale: basePanel?.isStale,
+    isUnavailable: basePanel?.isUnavailable ?? !basePanel,
     warning: basePanel?.warning,
     items: buildMetricItems(panels, metricIds),
   };
@@ -722,22 +760,24 @@ function buildFilteredPanel(
   symbols: string[],
   fallbackItems: MarketOverviewItem[] = [],
 ): MarketOverviewPanel {
+  const validSourcePanel = isMarketOverviewPanelContract(sourcePanel) ? sourcePanel : undefined;
   const symbolSet = new Set(symbols);
-  const items = sourcePanel?.items.filter((item) => symbolSet.has(item.symbol)) || [];
-  const updatedAt = sourcePanel?.updatedAt || '';
+  const items = validSourcePanel?.items.filter((item) => symbolSet.has(item.symbol)) || [];
+  const updatedAt = validSourcePanel?.updatedAt || '';
   return {
-    ...(sourcePanel || {}),
+    ...(validSourcePanel || {}),
     panelName,
-    lastRefreshAt: sourcePanel?.lastRefreshAt || updatedAt,
-    status: sourcePanel?.status || 'success',
-    source: sourcePanel?.source || 'unavailable',
-    sourceLabel: sourcePanel?.sourceLabel || '未接入',
+    lastRefreshAt: validSourcePanel?.lastRefreshAt || updatedAt,
+    status: validSourcePanel?.status || 'unavailable',
+    source: validSourcePanel?.source || 'unavailable',
+    sourceLabel: validSourcePanel?.sourceLabel || '未接入',
     updatedAt,
-    asOf: sourcePanel?.asOf,
-    freshness: sourcePanel?.freshness || 'fallback',
-    isFallback: sourcePanel?.isFallback,
-    isStale: sourcePanel?.isStale,
-    warning: sourcePanel?.warning,
+    asOf: validSourcePanel?.asOf,
+    freshness: validSourcePanel?.freshness || 'unavailable',
+    isFallback: validSourcePanel?.isFallback,
+    isStale: validSourcePanel?.isStale,
+    isUnavailable: validSourcePanel?.isUnavailable ?? !validSourcePanel,
+    warning: validSourcePanel?.warning,
     items: items.length > 0 ? items : fallbackItems,
   };
 }
@@ -2125,30 +2165,45 @@ function isItemFallback(item: { source?: string; freshness?: string; isFallback?
 }
 
 function getCardMeta(panels: PanelState, cardKey: CardKey): {
+  status?: string;
   source?: string;
   freshness?: string;
   isFallback?: boolean;
+  isUnavailable?: boolean;
   isReliable?: boolean;
   metadata?: { isReliable?: boolean };
   items?: Array<{ source?: string; freshness?: string; isFallback?: boolean }>;
 } {
   if (cardKey === 'futures') {
-    return panels.futures;
+    return isMarketFuturesContract(panels.futures)
+      ? panels.futures
+      : { source: 'unavailable', freshness: 'unavailable', items: [] };
   }
   if (cardKey === 'cnShortSentiment') {
-    return panels.cnShortSentiment;
+    return isCnShortSentimentContract(panels.cnShortSentiment)
+      ? panels.cnShortSentiment
+      : { source: 'unavailable', freshness: 'unavailable', items: [] };
   }
-  return panels[cardKey] || {};
+  const panel = panels[cardKey];
+  return isMarketOverviewPanelContract(panel)
+    ? panel
+    : { source: 'unavailable', freshness: 'unavailable', items: [] };
 }
 
 function getCardCoverageKind(panels: PanelState, cardKey: CardKey): CardCoverageKind {
   const meta = getCardMeta(panels, cardKey);
   const items = meta.items || [];
+  if (meta.isUnavailable || meta.source === 'unavailable' || meta.freshness === 'unavailable') {
+    return 'fallback';
+  }
+  if (meta.status && !['success', 'partial'].includes(meta.status)) {
+    return items.length > 0 ? 'mixed' : 'fallback';
+  }
   if (!meta.source && !meta.freshness && items.length === 0) {
     return 'fallback';
   }
   if (meta.source === 'error' || meta.freshness === 'error') {
-    return 'mixed';
+    return items.length > 0 ? 'mixed' : 'fallback';
   }
   if (isFallbackOnlyMeta(meta)) {
     return 'fallback';
@@ -2169,14 +2224,23 @@ function summarizeCardCoverage(panels: PanelState, cards: CardKey[]): Record<Car
 function collectFreshnessValues(panels: PanelState): FreshnessCountKey[] {
   const values: FreshnessCountKey[] = [];
   const push = (freshness?: string, isFallback?: boolean, isStale?: boolean) => {
-    if (freshness && ['live', 'delayed', 'cached', 'stale', 'fallback', 'mock', 'error', 'unavailable'].includes(freshness)) {
-      values.push(freshness as FreshnessCountKey);
+    const normalized = String(freshness || '').trim().toLowerCase();
+    if (normalized === 'fresh') {
+      values.push('live');
+    } else if (['live', 'delayed', 'cached', 'stale', 'fallback', 'mock', 'error', 'unavailable'].includes(normalized)) {
+      values.push(normalized as FreshnessCountKey);
+    } else if (normalized === 'partial') {
+      values.push('delayed');
+    } else if (normalized === 'proxy') {
+      values.push('fallback');
+    } else if (normalized === 'synthetic') {
+      values.push('mock');
     } else if (isFallback) {
       values.push('fallback');
     } else if (isStale) {
       values.push('stale');
     } else {
-      values.push('cached');
+      values.push('unavailable');
     }
   };
   const panelKeys: CardKey[] = ['indices', 'volatility', 'crypto', 'sentiment', 'fundsFlow', 'macro', 'cnIndices', 'cnBreadth', 'cnFlows', 'sectorRotation', 'usBreadth', 'rates', 'fxCommodities'];
@@ -2185,14 +2249,41 @@ function collectFreshnessValues(panels: PanelState): FreshnessCountKey[] {
     if (!panel) {
       return;
     }
+    if (!isMarketOverviewPanelContract(panel)) {
+      push('unavailable');
+      return;
+    }
     push(panel.freshness, panel.isFallback, panel.isStale);
-    panel.items.forEach((item) => push(item.freshness, item.isFallback, item.isStale));
+    panel.items.forEach((item) => push(
+      item.freshness || panel.freshness,
+      item.isFallback ?? panel.isFallback,
+      item.isStale ?? panel.isStale,
+    ));
   });
-  push(panels.temperature.freshness, panels.temperature.isFallback, panels.temperature.isStale);
-  push(panels.briefing.freshness, panels.briefing.isFallback, panels.briefing.isStale);
-  push(panels.futures.freshness, panels.futures.isFallback, panels.futures.isStale);
-  panels.futures.items.forEach((item) => push(item.freshness, item.isFallback, item.isStale));
-  push(panels.cnShortSentiment.freshness, panels.cnShortSentiment.isFallback, panels.cnShortSentiment.isStale);
+  push(
+    isMarketTemperatureContract(panels.temperature) ? panels.temperature.freshness : 'unavailable',
+    panels.temperature.isFallback,
+    panels.temperature.isStale,
+  );
+  push(
+    isMarketBriefingContract(panels.briefing) ? panels.briefing.freshness : 'unavailable',
+    panels.briefing.isFallback,
+    panels.briefing.isStale,
+  );
+  const futuresValid = isMarketFuturesContract(panels.futures);
+  push(futuresValid ? panels.futures.freshness : 'unavailable', panels.futures.isFallback, panels.futures.isStale);
+  if (futuresValid) {
+    panels.futures.items.forEach((item) => push(
+      item.freshness || panels.futures.freshness,
+      item.isFallback ?? panels.futures.isFallback,
+      item.isStale ?? panels.futures.isStale,
+    ));
+  }
+  push(
+    isCnShortSentimentContract(panels.cnShortSentiment) ? panels.cnShortSentiment.freshness : 'unavailable',
+    panels.cnShortSentiment.isFallback,
+    panels.cnShortSentiment.isStale,
+  );
   return values;
 }
 
@@ -2432,9 +2523,6 @@ function buildMarketDecision(params: {
 }
 
 function resolveProviderStatus(meta?: Partial<MarketDataMeta>): MarketProviderHealthStatus {
-  if (meta?.providerHealth?.status) {
-    return meta.providerHealth.status;
-  }
   if (meta?.isRefreshing) {
     return 'refreshing';
   }
@@ -2444,16 +2532,28 @@ function resolveProviderStatus(meta?: Partial<MarketDataMeta>): MarketProviderHe
   if (meta?.freshness === 'error') {
     return 'error';
   }
+  if (meta?.providerHealth?.status) {
+    return ['live', 'cache', 'stale', 'fallback', 'partial', 'unavailable', 'error', 'refreshing']
+      .includes(meta.providerHealth.status)
+      ? meta.providerHealth.status
+      : 'unavailable';
+  }
   if (meta?.isFallback || meta?.source === 'fallback' || meta?.freshness === 'fallback' || meta?.freshness === 'mock') {
     return 'fallback';
   }
   if (meta?.isStale || meta?.freshness === 'stale') {
     return 'stale';
   }
-  if (meta?.freshness === 'live') {
+  if (meta?.freshness === 'live' || meta?.freshness === 'fresh') {
     return 'live';
   }
-  return 'cache';
+  if (meta?.freshness === 'delayed' || meta?.freshness === 'cached') {
+    return 'cache';
+  }
+  if (meta?.freshness === 'partial' || meta?.freshness === 'proxy') {
+    return 'partial';
+  }
+  return 'unavailable';
 }
 
 function collectDataStateMeta(panels: PanelState): Array<Partial<MarketDataMeta>> {
@@ -2462,10 +2562,25 @@ function collectDataStateMeta(panels: PanelState): Array<Partial<MarketDataMeta>
   panelKeys.forEach((key) => {
     const panel = panels[key] as MarketOverviewPanel | undefined;
     if (panel) {
-      entries.push(panel);
+      entries.push(isMarketOverviewPanelContract(panel)
+        ? panel
+        : { source: 'unavailable', freshness: 'unavailable', isUnavailable: true });
     }
   });
-  entries.push(panels.temperature, panels.briefing, panels.futures, panels.cnShortSentiment);
+  entries.push(
+    isMarketTemperatureContract(panels.temperature)
+      ? panels.temperature
+      : { source: 'unavailable', freshness: 'unavailable', isUnavailable: true },
+    isMarketBriefingContract(panels.briefing)
+      ? panels.briefing
+      : { source: 'unavailable', freshness: 'unavailable', isUnavailable: true },
+    isMarketFuturesContract(panels.futures)
+      ? panels.futures
+      : { source: 'unavailable', freshness: 'unavailable', isUnavailable: true },
+    isCnShortSentimentContract(panels.cnShortSentiment)
+      ? panels.cnShortSentiment
+      : { source: 'unavailable', freshness: 'unavailable', isUnavailable: true },
+  );
   return entries;
 }
 

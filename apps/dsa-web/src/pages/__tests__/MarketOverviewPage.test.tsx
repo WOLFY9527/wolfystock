@@ -35,14 +35,18 @@ const { useProductSurfaceMock } = vi.hoisted(() => ({
   useProductSurfaceMock: vi.fn(),
 }));
 
-vi.mock('../../api/marketOverview', () => ({
-  marketOverviewApi: {
-    getIndices: vi.fn(),
-    getVolatility: vi.fn(),
-    getFundsFlow: vi.fn(),
-    getMacro: vi.fn(),
-  },
-}));
+vi.mock('../../api/marketOverview', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/marketOverview')>();
+  return {
+    ...actual,
+    marketOverviewApi: {
+      getIndices: vi.fn(),
+      getVolatility: vi.fn(),
+      getFundsFlow: vi.fn(),
+      getMacro: vi.fn(),
+    },
+  };
+});
 
 vi.mock('../../api/market', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/market')>();
@@ -697,6 +701,12 @@ const cryptoPanel = () => ({
   lastRefreshAt: '2026-04-29T10:00:00',
   status: 'success' as const,
   logSessionId: 'crypto-log',
+  source: 'binance',
+  sourceLabel: 'Binance',
+  updatedAt: '2026-04-29T10:00:00',
+  asOf: '2026-04-29T10:00:00',
+  freshness: 'delayed' as const,
+  isFallback: false,
   items: [
     {
       symbol: 'BTC',
@@ -863,10 +873,12 @@ const officialUsBreadthPanel = () => ({
 
 const usBreadthUnavailablePanel = () => ({
   ...snapshotPanel('UsBreadthCard', 'SECTOR_PROXY_UNAVAILABLE', '数据暂不可用'),
+  status: 'unavailable' as const,
   source: 'unavailable',
   sourceLabel: '未接入',
-  freshness: 'fallback' as const,
-  isFallback: true,
+  freshness: 'unavailable' as const,
+  isFallback: false,
+  isUnavailable: true,
   items: [
     {
       ...snapshotItem('UsBreadthCard', 'SECTOR_PROXY_UNAVAILABLE', '数据暂不可用'),
@@ -875,8 +887,9 @@ const usBreadthUnavailablePanel = () => ({
       unit: '',
       source: 'unavailable',
       sourceLabel: '未接入',
-      freshness: 'fallback' as const,
-      isFallback: true,
+      freshness: 'unavailable' as const,
+      isFallback: false,
+      isUnavailable: true,
       hoverDetails: ['Sector ETF proxy 暂不可用'],
     },
   ],
@@ -1050,6 +1063,12 @@ const sentimentPanel = () => ({
   lastRefreshAt: '2026-04-29T10:00:00',
   status: 'success' as const,
   logSessionId: 'sentiment-log',
+  source: 'recent_cache',
+  sourceLabel: 'Recent cache',
+  updatedAt: '2026-04-29T10:00:00',
+  asOf: '2026-04-29T10:00:00',
+  freshness: 'stale' as const,
+  isStale: true,
   items: [
     {
       symbol: 'FGI',
@@ -1964,6 +1983,7 @@ function fallbackHeavyMarketOverviewPanels() {
 function emptyMarketOverviewPanel() {
   return {
     ...localSnapshotPayload().payload.indices,
+    status: 'unavailable' as const,
     items: [],
     isUnavailable: true,
     source: 'unavailable' as const,
@@ -2353,7 +2373,7 @@ const decisionReadinessScenarios: readonly DecisionReadinessScenario[] = [
     setup: setupUnavailableDecisionReadiness,
     expectedText: [
       ...decisionReadinessCommonCopy,
-      /数据不足|偏强观察|中性观察|偏弱观察/,
+      /数据不足|证据待补|偏强观察|中性观察|偏弱观察/,
       /信心\s*待补/,
       /关键证据未补齐|关键证据仍待补齐|关键确认仍待补齐|评分待恢复|数据更新中/,
     ],
@@ -2411,7 +2431,9 @@ describe('MarketOverviewPage', () => {
   }
 
   beforeEach(() => {
+    vi.resetAllMocks();
     window.localStorage.clear();
+    document.documentElement.lang = 'zh';
     MockEventSource.instances = [];
     useProductSurfaceMock.mockReturnValue({
       isAdminMode: true,
@@ -2425,7 +2447,9 @@ describe('MarketOverviewPage', () => {
         writeText: writeTextMock,
       },
     });
-    writeTextMock.mockClear();
+    writeTextMock.mockResolvedValue(undefined);
+    vi.mocked(marketApi.cryptoStreamUrl).mockReturnValue('/api/v1/market/crypto/stream');
+    vi.mocked(marketApi.normalizeCryptoStreamPayload).mockImplementation((payload) => payload as never);
     vi.mocked(marketOverviewApi.getIndices).mockResolvedValue(panel('IndexTrendsCard', 'SPX'));
     vi.mocked(marketOverviewApi.getVolatility).mockResolvedValue(panel('VolatilityCard', 'VIX'));
     vi.mocked(marketOverviewApi.getFundsFlow).mockResolvedValue(panel('FundsFlowCard', 'ETF'));
@@ -3511,7 +3535,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-data-quality')).toHaveTextContent(/数据可用|更新中|等待实时源|部分数据暂不可用/);
     expect(screen.queryAllByTestId('market-overview-compact-error-badge').length).toBeLessThanOrEqual(2);
     expect(screen.getAllByTestId('data-freshness-badge-fallback').length).toBeGreaterThan(0);
-    expect(screen.getAllByTestId('data-freshness-badge-cache').length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('data-freshness-badge-unavailable').length).toBeGreaterThan(0);
     await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));
   });
 
@@ -3604,6 +3628,198 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByText(/provider_down|provider_error|UNKNOWN/i)).not.toBeInTheDocument();
     expect(within(details).getByTestId('market-overview-data-state-unavailable-chip')).toHaveTextContent(/部分外部数据暂不可用/);
     expect(within(details).getByTestId('market-overview-data-state-unavailable-chip')).toHaveAttribute('data-terminal-primitive', 'chip');
+  });
+
+  it('keeps loading distinct while no classified response has settled', async () => {
+    const indicesRequest = createDeferredPromise<ReturnType<typeof panel>>();
+    vi.mocked(marketOverviewApi.getIndices).mockReturnValueOnce(indicesRequest.promise);
+
+    render(createElement(MarketOverviewPage));
+
+    expect(screen.getByTestId('market-overview-shell')).toHaveAttribute('aria-busy', 'true');
+    await runMarketOverviewAsyncStep(() => indicesRequest.resolve(panel('IndexTrendsCard', 'SPX')));
+  });
+
+  it('discards malformed LKG entries without suppressing loading or cached evidence', async () => {
+    const indicesRequest = createDeferredPromise<ReturnType<typeof panel>>();
+    vi.mocked(marketOverviewApi.getIndices).mockReturnValueOnce(indicesRequest.promise);
+    window.localStorage.setItem(MARKET_OVERVIEW_LKG_STORAGE_KEY, JSON.stringify({
+      schemaVersion: 1,
+      savedAt: '2026-07-16T10:00:00Z',
+      payload: {
+        indices: {
+          panelName: 'IndexTrendsCard',
+          lastRefreshAt: '2026-07-16T09:55:00Z',
+          status: 'success',
+          items: [{ symbol: 'SPX', label: 'Malformed cached index', value: 999, trend: [990, 999] }],
+        },
+      },
+    }));
+
+    render(createElement(MarketOverviewPage));
+
+    expect(screen.getByTestId('market-overview-shell')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.queryByText('Malformed cached index')).not.toBeInTheDocument();
+    const details = expandMarketDecisionDetails();
+    expect(within(details).getByTestId('market-overview-data-state-updated-chip')).toHaveTextContent('待刷新');
+    await runMarketOverviewAsyncStep(() => indicesRequest.resolve(panel('IndexTrendsCard', 'SPX')));
+  });
+
+  it('retains valid LKG and refresh error when a resolved replacement contract is malformed', async () => {
+    window.localStorage.setItem(MARKET_OVERVIEW_LKG_STORAGE_KEY, JSON.stringify(localSnapshotPayload()));
+    vi.mocked(marketOverviewApi.getIndices).mockResolvedValueOnce({
+      panelName: 'IndexTrendsCard',
+      lastRefreshAt: '2026-07-16T10:00:00Z',
+      status: 'success',
+      items: [{ symbol: 'SPX', label: 'Malformed replacement', value: 999, trend: [990, 999] }],
+    } as never);
+
+    render(createElement(MarketOverviewPage));
+
+    expect((await screen.findAllByText('5,111.11')).length).toBeGreaterThan(0);
+    await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText('Malformed replacement')).not.toBeInTheDocument();
+    const details = expandMarketDecisionDetails();
+    expect(within(details).getByTestId('market-overview-data-state-unavailable-chip')).toBeInTheDocument();
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(MARKET_OVERVIEW_LKG_STORAGE_KEY) || '{}');
+      expect(saved.payload?.indices?.items?.[0]?.value).toBe(5111.11);
+    });
+  });
+
+  it('does not promote item fragments without authority metadata to available cached or historical evidence', async () => {
+    const unavailablePanels = {
+      temperature: marketOverviewPanelFactoriesForTests.createUnavailableTemperature(),
+      briefing: marketOverviewPanelFactoriesForTests.createUnavailableBriefing(),
+      futures: marketOverviewPanelFactoriesForTests.createUnavailableFutures(),
+      cnShortSentiment: marketOverviewPanelFactoriesForTests.createUnavailableCnShortSentiment(),
+      indices: {
+        panelName: 'IndexTrendsCard',
+        lastRefreshAt: '',
+        status: 'success',
+        items: [{ symbol: 'SPY', label: 'Malformed SPY fragment', value: 0, trend: [0, 0] }],
+      },
+    };
+
+    renderMarketOverviewWorkbenchWithProps({
+      panels: unavailablePanels as never,
+      localSnapshotSavedAt: undefined,
+      showAdminDiagnostics: true,
+    });
+
+    const chart = await screen.findByTestId('market-overview-core-trend-chart');
+    expect(chart).not.toHaveTextContent(/History available|历史数据可用/);
+    expect(chart).toHaveTextContent(/市场趋势暂不可用|报价延迟\/不可用/);
+    expect(screen.getByTestId('market-overview-coverage-summary')).not.toHaveTextContent('数据可用');
+    const details = expandMarketDecisionDetails();
+    expect(within(details).getByTestId('market-overview-data-state-summary')).toHaveTextContent('可用 0');
+  });
+
+  it('preserves explicit backend unavailability as unavailable rather than authoritative empty', async () => {
+    vi.mocked(marketOverviewApi.getIndices).mockResolvedValueOnce({
+      panelName: 'IndexTrendsCard',
+      lastRefreshAt: '2026-07-16T09:55:00Z',
+      status: 'unavailable',
+      source: 'unavailable',
+      freshness: 'unavailable',
+      updatedAt: '2026-07-16T09:55:00Z',
+      isUnavailable: true,
+      errorMessage: 'Official index source unavailable.',
+      reasonCodes: ['official_source_unavailable'],
+      items: [],
+    });
+
+    render(createElement(MarketOverviewPage));
+
+    const card = await screen.findByTestId('market-overview-card-indices');
+    await waitFor(() => expect(card).toHaveTextContent(/暂不可用|数据待补/));
+    expect(card).not.toHaveTextContent('Malformed');
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(MARKET_OVERVIEW_LKG_STORAGE_KEY) || '{}');
+      expect(saved.payload?.indices).toBeUndefined();
+    });
+  });
+
+  it('persists authoritative empty without fake rows or a request error', async () => {
+    vi.mocked(marketOverviewApi.getIndices).mockResolvedValueOnce({
+      panelName: 'IndexTrendsCard',
+      lastRefreshAt: '2026-07-16T09:55:00Z',
+      status: 'success',
+      source: 'authorized_quotes',
+      freshness: 'live',
+      updatedAt: '2026-07-16T09:55:00Z',
+      items: [],
+    });
+
+    render(createElement(MarketOverviewPage));
+
+    const card = await screen.findByTestId('market-overview-card-indices');
+    expect(within(card).queryByText('SPX')).not.toBeInTheDocument();
+    expect(card).not.toHaveTextContent(/数据更新失败|请求失败/);
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(MARKET_OVERVIEW_LKG_STORAGE_KEY) || '{}');
+      expect(saved.payload?.indices).toMatchObject({ status: 'success', items: [] });
+    });
+  });
+
+  it('preserves observed zero inside a successful page contract', async () => {
+    vi.mocked(marketOverviewApi.getIndices).mockResolvedValueOnce({
+      panelName: 'IndexTrendsCard',
+      lastRefreshAt: '2026-07-16T09:55:00Z',
+      status: 'success',
+      source: 'authorized_quotes',
+      freshness: 'live',
+      updatedAt: '2026-07-16T09:55:00Z',
+      items: [{ symbol: 'ZERO', label: 'Observed zero', value: 0, trend: [0, 0] }],
+    });
+
+    render(createElement(MarketOverviewPage));
+
+    expect((await screen.findAllByText('Observed zero')).length).toBeGreaterThan(0);
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(MARKET_OVERVIEW_LKG_STORAGE_KEY) || '{}');
+      expect(saved.payload?.indices?.items?.[0]?.value).toBe(0);
+    });
+  });
+
+  it('keeps Market Overview readiness pending when only unrelated score-grade rows exist', async () => {
+    vi.mocked(marketApi.getDataReadiness).mockResolvedValueOnce({
+      ...officialRiskReadinessPayload(),
+      consumerEvidenceReadinessMatrix: {
+        contractVersion: 'consumer_evidence_readiness_matrix_v1',
+        diagnosticOnly: true,
+        networkCallsEnabled: false,
+        mutationEnabled: false,
+        items: [marketOverviewReadinessMatrixItem({
+          surface: 'scanner',
+          evidenceFamily: 'scanner_scores',
+          fulfilledInputs: ['scanner score'],
+          scoreGradeInputs: ['scanner score'],
+          readinessState: 'score_grade',
+        })],
+      },
+    });
+
+    render(createElement(MarketOverviewPage));
+    expandMarketOverviewDataDiagnostics();
+
+    const boundary = await screen.findByTestId('market-overview-evidence-boundary');
+    await waitFor(() => expect(boundary).toHaveTextContent('证据边界待确认'));
+    expect(boundary).not.toHaveTextContent('风险状态可用');
+  });
+
+  it('rejects incomplete product-ready read models at page request ownership', async () => {
+    vi.mocked(marketApi.getRegimeReadModel).mockResolvedValueOnce({
+      status: 'ok',
+      readiness: { label: 'product_ready' },
+    } as never);
+
+    render(createElement(MarketOverviewPage));
+    expandMarketOverviewDataDiagnostics();
+
+    const surface = await screen.findByTestId('market-regime-read-model-surface');
+    await waitFor(() => expect(surface).toHaveTextContent('本地市场证据暂不可用'));
+    expect(surface).not.toHaveTextContent(/产品可用|Product-ready/);
   });
 
   it('stages noncritical market overview panels after the primary route data starts loading', async () => {
@@ -4159,7 +4375,7 @@ describe('MarketOverviewPage', () => {
 
     render(createElement(MarketOverviewPage));
     await screen.findByTestId('market-overview-decision-readiness');
-    await waitFor(() => expect(screen.getByTestId('market-overview-decision-readiness')).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足/));
+    await waitFor(() => expect(screen.getByTestId('market-overview-decision-readiness')).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足|证据待补/));
     expectDecisionReadinessScenarioContract(screen.getByTestId('market-overview-decision-readiness'), scenario);
   });
 

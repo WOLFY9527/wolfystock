@@ -1084,4 +1084,224 @@ describe('market snapshot normalization', () => {
       providerHealth: expect.objectContaining({ provider: 'polygon', status: 'partial' }),
     });
   });
+
+  it('fails closed instead of deriving success from numeric fragments without authority metadata', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        items: [{ value: 0 }],
+      },
+    });
+
+    await expect(marketModule.marketApi.getRates()).rejects.toThrow('invalid_market_snapshot_contract');
+  });
+
+  it('keeps zero successful when snapshot contract authority is complete', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        source: 'authorized_market_data',
+        freshness: 'live',
+        updated_at: '2026-07-16T10:00:00Z',
+        items: [{ symbol: 'ZERO', label: 'Observed zero', value: 0 }],
+      },
+    });
+
+    const panel = await marketModule.marketApi.getRates();
+    expect(panel.status).toBe('success');
+    expect(panel.items[0]?.value).toBe(0);
+  });
+});
+
+describe('market auxiliary runtime contracts', () => {
+  it('rejects malformed briefing, futures, and CN short sentiment contracts', async () => {
+    vi.spyOn(apiClient, 'get')
+      .mockResolvedValueOnce({ data: {} })
+      .mockResolvedValueOnce({
+        data: {
+          source: 'public',
+          freshness: 'live',
+          updated_at: '2026-07-16T10:00:00Z',
+          items: {},
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          source: 'public',
+          freshness: 'live',
+          updated_at: '2026-07-16T10:00:00Z',
+          sentiment_score: 0,
+          summary: 'Observed neutral.',
+          metrics: [],
+        },
+      });
+
+    await expect(marketModule.marketApi.getMarketBriefing()).rejects.toThrow('invalid_market_briefing_contract');
+    await expect(marketModule.marketApi.getFutures()).rejects.toThrow('invalid_market_futures_contract');
+    await expect(marketModule.marketApi.getCnShortSentiment()).rejects.toThrow('invalid_cn_short_sentiment_contract');
+  });
+
+  it('fails closed shell-only optimistic regime read models and preserves complete product-ready contracts', async () => {
+    const completeProductReady = {
+      consumer_safe: true,
+      no_advice: true,
+      contract_version: 'market_regime_read_model_v1',
+      source_evidence_contract_version: 'market_regime_evidence_pack_v1',
+      status: 'ok',
+      market: 'US',
+      symbols: ['SPY', 'QQQ'],
+      benchmark_symbol: 'SPY',
+      growth_proxy_symbol: 'QQQ',
+      regime: { label: 'neutral', status: 'ok', source: 'deterministic_evidence_fields' },
+      product_summary: 'Complete local evidence is available.',
+      evidence_cards: [{
+        id: 'benchmark_trend',
+        title: 'Benchmark trend',
+        status: 'neutral',
+        severity: 'info',
+        headline: 'Trend evidence is available.',
+        metrics: [{ label: 'return20d', value: 0 }],
+        reasons: ['Returned evidence is complete.'],
+        source_fields: ['evidence.benchmarkTrend.return20d'],
+        consumer_safe: true,
+      }],
+      symbol_context: [],
+      data_quality: {
+        adjusted_coverage_state: 'available',
+        ohlcv_coverage: { state: 'available', required_bars: 60, available_symbols: ['SPY', 'QQQ'], missing_symbols: [] },
+        quote_snapshot_coverage: { state: 'available', availability_state: 'available', freshness_state: 'fresh', available_symbols: ['SPY', 'QQQ'], missing_symbols: [], stale_symbols: [] },
+        missing_data_families: [],
+        blocked_product_surfaces: [],
+        next_operator_action: 'Continue bounded observation.',
+        fail_closed_reasons: [],
+      },
+      readiness: {
+        label: 'product_ready',
+        status: 'ok',
+        missing_data_families: [],
+        blocked_product_surfaces: [],
+        next_operator_action: 'Continue bounded observation.',
+      },
+      surface_hints: [],
+      missing_data_families: [],
+      blocked_product_surfaces: [],
+      next_operator_action: 'Continue bounded observation.',
+      network_calls_enabled: false,
+      mutation_enabled: false,
+      provider_calls_enabled: false,
+    };
+    vi.spyOn(apiClient, 'get')
+      .mockResolvedValueOnce({ data: { status: 'ok', readiness: { label: 'product_ready' } } })
+      .mockResolvedValueOnce({ data: completeProductReady });
+
+    const failedClosed = await marketModule.marketApi.getRegimeReadModel();
+    expect(failedClosed.status).toBe('failed_closed');
+    expect(failedClosed.readiness.label).toBe('failed_closed');
+    const ready = await marketModule.marketApi.getRegimeReadModel();
+    expect(ready.status).toBe('ok');
+    expect(ready.readiness.label).toBe('product_ready');
+    expect(ready.evidenceCards).toHaveLength(1);
+  });
+
+  it('normalizes object-valued regime metrics to unavailable evidence', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        status: 'failed_closed',
+        readiness: { label: 'failed_closed', status: 'failed_closed' },
+        evidence_cards: [{
+          id: 'data_quality',
+          title: 'Data quality',
+          status: 'unavailable',
+          severity: 'warning',
+          headline: 'Evidence unavailable.',
+          metrics: [{ label: 'coverage', value: {} }],
+          reasons: [],
+        }],
+      },
+    });
+
+    const payload = await marketModule.marketApi.getRegimeReadModel();
+    expect(payload.evidenceCards[0]?.metrics[0]?.value).toBeNull();
+  });
+
+  it('keeps missing or unknown professional capability status unavailable', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        contract_version: 'professional_data_capability_registry_v1',
+        consumer_safe: true,
+        summary: { total_capabilities: 2 },
+        categories: ['macro_cross_asset_regime'],
+        capabilities: [
+          { capability_id: 'missing.status', label: 'Missing status', category: 'macro_cross_asset_regime', source_label: 'Registry' },
+          { capability_id: 'unknown.status', label: 'Unknown status', category: 'macro_cross_asset_regime', status: 'mystery', source_label: 'Registry' },
+        ],
+      },
+    });
+
+    const payload = await marketModule.marketApi.getProfessionalDataCapabilities();
+    const view = marketModule.buildProfessionalDataCapabilityRegistryView(payload);
+    expect(payload.capabilities.map((item) => item.status)).toEqual(['unavailable', 'unavailable']);
+    expect(view.categories.flatMap((category) => category.items).map((item) => item.status.key))
+      .toEqual(['unavailable', 'unavailable']);
+    expect(view.categories.flatMap((category) => category.items).map((item) => item.status.key))
+      .not.toContain('degraded');
+  });
+
+  it('keeps Market Overview evidence pending when only an unrelated readiness row exists', () => {
+    const view = marketModule.buildConsumerEvidenceBoundaryView({
+      contractVersion: 'consumer_evidence_readiness_matrix_v1',
+      diagnosticOnly: true,
+      networkCallsEnabled: false,
+      mutationEnabled: false,
+      items: [{
+        surface: 'scanner',
+        evidenceFamily: 'scanner_scores',
+        requiredInputs: ['scanner score'],
+        fulfilledInputs: ['scanner score'],
+        missingInputs: [],
+        staleInputs: [],
+        blockedInputs: [],
+        observationOnlyInputs: [],
+        scoreGradeInputs: ['scanner score'],
+        readinessState: 'score_grade',
+        confidenceCapReason: '',
+        sourceAuthorityReason: '',
+        freshnessReason: '',
+        nextDiagnostic: '',
+        consumerSafeSummary: '',
+      }],
+    });
+
+    expect(view.label).toBe('证据边界待确认');
+    expect(view.chips.every((chip) => chip.variant !== 'success')).toBe(true);
+  });
+
+  it('keeps Market Overview risk pending when readiness proof arrays are empty', () => {
+    const view = marketModule.buildConsumerEvidenceBoundaryView({
+      contractVersion: 'consumer_evidence_readiness_matrix_v1',
+      diagnosticOnly: true,
+      networkCallsEnabled: false,
+      mutationEnabled: false,
+      items: [{
+        surface: 'market_overview',
+        evidenceFamily: 'market_regime',
+        requiredInputs: [],
+        fulfilledInputs: [],
+        missingInputs: [],
+        staleInputs: [],
+        blockedInputs: [],
+        observationOnlyInputs: [],
+        scoreGradeInputs: [],
+        readinessState: 'unavailable',
+        confidenceCapReason: '',
+        sourceAuthorityReason: '',
+        freshnessReason: '',
+        nextDiagnostic: '',
+        consumerSafeSummary: '',
+      }],
+    });
+
+    expect(view.chips.find((chip) => chip.key === 'risk')).toMatchObject({
+      label: '风险状态待补',
+      variant: 'caution',
+    });
+  });
 });

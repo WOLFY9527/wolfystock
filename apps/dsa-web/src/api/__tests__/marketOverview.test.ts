@@ -12,7 +12,7 @@ vi.mock('../index', () => ({
 
 describe('marketOverviewApi', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    get.mockReset();
   });
 
   it('preserves panel freshness metadata and nested item synthetic flags from snake_case responses', async () => {
@@ -320,5 +320,103 @@ describe('marketOverviewApi', () => {
     expect(panel.fulfilledMetrics).toBeUndefined();
     expect(panel.missingMetrics).toBeUndefined();
     expect(panel.broadMarketClaimAllowed).toBeUndefined();
+  });
+
+  it('rejects a fulfilled empty object as a missing market overview contract', async () => {
+    const { marketOverviewApi } = await import('../marketOverview');
+    get.mockResolvedValueOnce({ data: {} });
+
+    await expect(marketOverviewApi.getIndices()).rejects.toThrow('invalid_market_overview_contract');
+  });
+
+  it('rejects success when items are missing or not an array', async () => {
+    const { marketOverviewApi } = await import('../marketOverview');
+    const base = {
+      panel_name: 'IndexTrendsCard',
+      last_refresh_at: '2026-07-16T09:00:00Z',
+      status: 'success',
+      source: 'authorized_quotes',
+      freshness: 'live',
+    };
+    get
+      .mockResolvedValueOnce({ data: base })
+      .mockResolvedValueOnce({ data: { ...base, items: {} } });
+
+    const missingItemsRequest = marketOverviewApi.getIndices();
+    const wrongItemsRequest = marketOverviewApi.getIndices();
+    await expect(missingItemsRequest).rejects.toThrow('invalid_market_overview_contract');
+    await expect(wrongItemsRequest).rejects.toThrow('invalid_market_overview_contract');
+  });
+
+  it('preserves authoritative empty success with required identity and authority metadata', async () => {
+    const { marketOverviewApi } = await import('../marketOverview');
+    get.mockResolvedValueOnce({
+      data: {
+        panel_name: 'IndexTrendsCard',
+        last_refresh_at: '2026-07-16T09:00:00Z',
+        status: 'success',
+        source: 'authorized_quotes',
+        freshness: 'live',
+        updated_at: '2026-07-16T09:00:00Z',
+        items: [],
+      },
+    });
+
+    await expect(marketOverviewApi.getIndices()).resolves.toMatchObject({
+      panelName: 'IndexTrendsCard',
+      status: 'success',
+      source: 'authorized_quotes',
+      freshness: 'live',
+      items: [],
+    });
+  });
+
+  it('preserves observed numeric zero inside a valid success contract', async () => {
+    const { marketOverviewApi } = await import('../marketOverview');
+    get.mockResolvedValueOnce({
+      data: {
+        panel_name: 'FundsFlowCard',
+        last_refresh_at: '2026-07-16T09:00:00Z',
+        status: 'success',
+        source: 'authorized_flows',
+        freshness: 'fresh',
+        updated_at: '2026-07-16T09:00:00Z',
+        items: [{ symbol: 'NET_FLOW', label: 'Net flow', value: 0 }],
+      },
+    });
+
+    const panel = await marketOverviewApi.getFundsFlow();
+    expect(panel.status).toBe('success');
+    expect(panel.items[0]?.value).toBe(0);
+  });
+
+  it('preserves explicit backend unavailability with timestamps and reasons', async () => {
+    const { marketOverviewApi } = await import('../marketOverview');
+    get.mockResolvedValueOnce({
+      data: {
+        panel_name: 'MacroIndicatorsCard',
+        last_refresh_at: '2026-07-16T08:55:00Z',
+        status: 'unavailable',
+        source: 'unavailable',
+        freshness: 'unavailable',
+        updated_at: '2026-07-16T08:55:00Z',
+        error_message: 'Official macro source unavailable.',
+        reason_codes: ['official_source_unavailable'],
+        is_unavailable: true,
+        items: [],
+      },
+    });
+
+    await expect(marketOverviewApi.getMacro()).resolves.toMatchObject({
+      panelName: 'MacroIndicatorsCard',
+      lastRefreshAt: '2026-07-16T08:55:00Z',
+      status: 'unavailable',
+      source: 'unavailable',
+      freshness: 'unavailable',
+      errorMessage: 'Official macro source unavailable.',
+      reasonCodes: ['official_source_unavailable'],
+      isUnavailable: true,
+      items: [],
+    });
   });
 });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MarketDataMeta, MarketOverviewPanel } from '../api/marketOverview';
-import { marketOverviewApi } from '../api/marketOverview';
+import { isMarketOverviewPanelContract, marketOverviewApi } from '../api/marketOverview';
 import type {
   ConsumerEvidenceReadinessMatrix,
   CrossAssetDriverReadiness,
@@ -18,6 +18,11 @@ import {
   buildConsumerEvidenceBoundaryView,
   buildOfficialRiskSourceReadinessView,
   buildProfessionalDataCapabilityRegistryView,
+  isCnShortSentimentContract,
+  isMarketBriefingContract,
+  isMarketFuturesContract,
+  isMarketRegimeReadModelContract,
+  isMarketTemperatureContract,
   marketApi,
   normalizeCnShortSentimentConsumerCopy,
   normalizeMarketBriefingConsumerCopy,
@@ -171,6 +176,21 @@ const AUTO_REVALIDATE_PANEL_KEYS: PanelKey[] = [
   'cnShortSentiment',
 ];
 
+function isPanelValueContract(panelKey: PanelKey, value: unknown): value is PanelState[PanelKey] {
+  switch (panelKey) {
+    case 'temperature':
+      return isMarketTemperatureContract(value);
+    case 'briefing':
+      return isMarketBriefingContract(value);
+    case 'futures':
+      return isMarketFuturesContract(value);
+    case 'cnShortSentiment':
+      return isCnShortSentimentContract(value);
+    default:
+      return isMarketOverviewPanelContract(value);
+  }
+}
+
 function readLocalMarketOverviewSnapshot(): LocalSnapshotEnvelope | null {
   if (typeof window === 'undefined') {
     return null;
@@ -181,7 +201,15 @@ function readLocalMarketOverviewSnapshot(): LocalSnapshotEnvelope | null {
       return null;
     }
     const parsed = JSON.parse(raw) as LocalSnapshotEnvelope;
-    if (!parsed || parsed.schemaVersion !== 1 || !parsed.payload || typeof parsed.payload !== 'object') {
+    if (
+      !parsed
+      || parsed.schemaVersion !== 1
+      || typeof parsed.savedAt !== 'string'
+      || !parsed.savedAt.trim()
+      || !parsed.payload
+      || typeof parsed.payload !== 'object'
+      || Array.isArray(parsed.payload)
+    ) {
       return null;
     }
     return parsed;
@@ -190,32 +218,34 @@ function readLocalMarketOverviewSnapshot(): LocalSnapshotEnvelope | null {
   }
 }
 
-function hasUsablePanelValue(value: unknown): boolean {
-  if (!value || typeof value !== 'object') {
+function hasPersistablePanelValue(panelKey: PanelKey, value: unknown): boolean {
+  if (!isPanelValueContract(panelKey, value)) {
     return false;
   }
-  const payload = value as {
-    source?: string;
-    freshness?: string;
-    errorMessage?: string | null;
-    isUnavailable?: boolean;
-    items?: unknown[];
-    scores?: unknown;
-    metrics?: unknown;
-    summary?: unknown;
-  };
-  if (
-    (payload.source === 'error' || payload.freshness === 'error' || payload.source === 'unavailable' || payload.freshness === 'unavailable' || payload.isUnavailable)
-    && !payload.items?.length
-  ) {
+  if (panelKey === 'temperature') {
+    const temperature = value as MarketTemperatureResponse;
+    return temperature.source !== 'unavailable'
+      && temperature.source !== 'error'
+      && Object.values(temperature.scores).some((score) => typeof score.value === 'number' && Number.isFinite(score.value));
+  }
+  if (panelKey === 'briefing' || panelKey === 'futures' || panelKey === 'cnShortSentiment') {
+    const payload = value as MarketBriefingResponse | MarketFuturesResponse | CnShortSentimentResponse;
+    return payload.source !== 'unavailable'
+      && payload.source !== 'error'
+      && payload.freshness !== 'unavailable'
+      && payload.freshness !== 'error';
+  }
+  const panel = value as MarketOverviewPanel;
+  if (panel.status === 'success') {
+    return true;
+  }
+  if (panel.status === 'partial') {
+    return panel.items.length > 0;
+  }
+  if (panel.items.length === 0) {
     return false;
   }
-  return Boolean(
-    (Array.isArray(payload.items) && payload.items.length > 0)
-    || payload.scores
-    || payload.metrics
-    || payload.summary
-  );
+  return panel.items.some((item) => typeof item.value === 'number' && Number.isFinite(item.value));
 }
 
 function buildInitialPanelsFromLocalSnapshot(): { panels: PanelState; source: 'local' | 'empty'; savedAt?: string } {
@@ -231,19 +261,23 @@ function buildInitialPanelsFromLocalSnapshot(): { panels: PanelState; source: 'l
       },
     };
   }
-  const panels = {
+  const panels: PanelState = {
     temperature: createUnavailableTemperature(),
     briefing: createUnavailableBriefing(),
     futures: createUnavailableFutures(),
     cnShortSentiment: createUnavailableCnShortSentiment(),
-    ...localSnapshot.payload,
-  } as PanelState;
-  (Object.keys(panels) as PanelKey[]).forEach((panelKey) => {
-    const value = panels[panelKey];
-    if (value) {
-      assignPanelValue(panels, panelKey, value as PanelState[PanelKey]);
+  };
+  let validEntryCount = 0;
+  AUTO_REVALIDATE_PANEL_KEYS.forEach((panelKey) => {
+    const value = localSnapshot.payload[panelKey];
+    if (isPanelValueContract(panelKey, value)) {
+      assignPanelValue(panels, panelKey, value);
+      validEntryCount += 1;
     }
   });
+  if (validEntryCount === 0) {
+    return { source: 'empty', panels };
+  }
   return {
     source: 'local',
     savedAt: localSnapshot.savedAt,
@@ -258,7 +292,7 @@ function writeLocalMarketOverviewSnapshot(panels: PanelState): string | null {
   const payload: Partial<PanelState> = {};
   (Object.keys(panels) as PanelKey[]).forEach((panelKey) => {
     const value = panels[panelKey];
-    if (hasUsablePanelValue(value)) {
+    if (hasPersistablePanelValue(panelKey, value)) {
       payload[panelKey] = value as never;
     }
   });
@@ -640,7 +674,8 @@ function marketRegimeReadinessStatusFromCapability(
   if (status === 'entitlement_required') return 'entitlement required';
   if (status === 'configured_missing') return 'missing provider';
   if (status === 'not_implemented') return 'not available';
-  return 'degraded';
+  if (status === 'degraded') return 'degraded';
+  return 'not available';
 }
 
 function marketRegimeReadinessSeverity(status: MarketRegimeReadinessStatus): number {
@@ -810,7 +845,8 @@ const MARKET_OVERVIEW_FAMILY_STATE_LABEL: Record<MarketOverviewFamilyReadinessSt
 
 function panelHasCurrentItems(panel?: MarketOverviewPanel | null): boolean {
   return Boolean(
-    panel
+    isMarketOverviewPanelContract(panel)
+      && (panel.status === 'success' || panel.status === 'partial')
       && panel.source !== 'error'
       && panel.source !== 'unavailable'
       && panel.freshness !== 'error'
@@ -823,7 +859,7 @@ function panelHasCurrentItems(panel?: MarketOverviewPanel | null): boolean {
 
 function futuresHasCurrentItems(futures?: MarketFuturesResponse | null): boolean {
   return Boolean(
-    futures
+    isMarketFuturesContract(futures)
       && futures.source !== 'error'
       && futures.source !== 'unavailable'
       && futures.freshness !== 'error'
@@ -875,7 +911,10 @@ function evidenceFamilyState(
   matrix: ConsumerEvidenceReadinessMatrix | null,
   match: RegExp,
 ): MarketOverviewFamilyReadinessState | null {
-  const items = (matrix?.items || []).filter((item) => match.test(`${item.surface} ${item.evidenceFamily} ${item.requiredInputs.join(' ')}`));
+  const items = (matrix?.items || []).filter((item) => (
+    String(item.surface || '').trim().toLowerCase().replace(/[\s-]+/g, '_') === 'market_overview'
+    && match.test(`${item.evidenceFamily} ${item.requiredInputs.join(' ')}`)
+  ));
   if (!items.length) {
     return null;
   }
@@ -932,9 +971,20 @@ function buildMarketOverviewReadinessFamilies(params: {
   const crossAssetState = crossAssetFamilyState(crossAssetDriverReadiness);
   const newsState = evidenceFamilyState(consumerEvidenceReadinessMatrix, /news|catalyst|regime/i)
     || capabilityFamilyState(professionalDataCapabilities, 'stock_research_data', /news|catalyst|regime/i);
-  const historicalState = crossAssetDriverReadiness?.drivers.some((driver) => driver.cachedOhlcv?.usableBars > 0)
+  const historicalState = crossAssetDriverReadiness?.drivers.some((driver) => (
+    driver.state === 'available'
+    && driver.cachedOhlcv?.requiredBars > 0
+    && driver.cachedOhlcv.usableBars >= driver.cachedOhlcv.requiredBars
+    && driver.cachedOhlcv.cacheState === 'cache_hit'
+    && ['fresh', 'live', 'cached'].includes(driver.cachedOhlcv.freshnessState)
+  ))
     ? 'available'
-    : crossAssetDriverReadiness?.drivers.some((driver) => driver.state === 'insufficient_history')
+    : crossAssetDriverReadiness?.drivers.some((driver) => (
+      driver.state === 'stale'
+      || driver.cachedOhlcv?.freshnessState === 'stale'
+    ))
+      ? 'stale'
+      : crossAssetDriverReadiness?.drivers.some((driver) => driver.state === 'insufficient_history')
       ? 'insufficient_coverage'
       : 'missing';
 
@@ -1232,7 +1282,7 @@ function formatRegimeReadModelMetricValue(value: unknown): string {
     return value.length ? value.map((item) => sanitizeRegimeReadModelText(item)).join(', ') : 'none';
   }
   if (typeof value === 'object') {
-    return 'available';
+    return 'n/a';
   }
   return sanitizeRegimeReadModelText(value);
 }
@@ -1421,7 +1471,10 @@ const MarketOverviewPage = () => {
     panelKey: PanelKey,
     value: PanelState[PanelKey],
     options?: { persist?: boolean },
-  ) => {
+  ): boolean => {
+    if (!isPanelValueContract(panelKey, value)) {
+      return false;
+    }
     const nextPanels = { ...latestPanelsRef.current };
     assignPanelValue(nextPanels, panelKey, value);
     latestPanelsRef.current = nextPanels;
@@ -1429,6 +1482,7 @@ const MarketOverviewPage = () => {
     if (options?.persist) {
       queueLocalSnapshotPersist(nextPanels);
     }
+    return true;
   }, [queueLocalSnapshotPersist]);
 
   const clearAutoRevalidateTimer = useCallback((panelKey: PanelKey) => {
@@ -1460,6 +1514,9 @@ const MarketOverviewPage = () => {
     const runRequest = async ([panelKey, loadPanel]: PanelRequest) => {
       try {
         const panel = await withPanelTimeout(loadPanelWithRequestDedupe(panelKey, loadPanel), panelKey);
+        if (!isPanelValueContract(panelKey, panel)) {
+          throw new Error('invalid_market_contract');
+        }
         if (!cancelledRef?.current) {
           setRefreshErrors((currentErrors) => {
             const nextErrors = { ...currentErrors };
@@ -1518,6 +1575,9 @@ const MarketOverviewPage = () => {
     }
     try {
       const panel = await withPanelTimeout(loadPanelWithRequestDedupe(panelKey, loadPanel), panelKey);
+      if (!isPanelValueContract(panelKey, panel)) {
+        throw new Error('invalid_market_contract');
+      }
       setRefreshErrors((currentErrors) => {
         const nextErrors = { ...currentErrors };
         delete nextErrors[String(panelKey)];
@@ -1683,6 +1743,9 @@ const MarketOverviewPage = () => {
     setRegimeReadModelError(null);
     try {
       const payload = await marketApi.getRegimeReadModel();
+      if (!isMarketRegimeReadModelContract(payload)) {
+        throw new Error('invalid_market_regime_read_model_contract');
+      }
       if (!cancelledRef?.current) {
         setRegimeReadModel(payload);
       }

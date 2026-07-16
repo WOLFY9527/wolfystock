@@ -126,9 +126,134 @@ export interface MarketOverviewPanel extends Partial<MarketDataMeta> {
   items: MarketOverviewItem[];
 }
 
-function normalizePanel(payload: Record<string, unknown>): MarketOverviewPanel {
-  const normalized = toCamelCase<MarketOverviewPanel>(payload);
-  return {
+const MARKET_PANEL_STATUSES = new Set<MarketPanelStatus>([
+  'success',
+  'partial',
+  'unavailable',
+  'failure',
+]);
+
+const MARKET_DATA_FRESHNESS_STATES = new Set<MarketDataFreshness>([
+  'live',
+  'fresh',
+  'delayed',
+  'cached',
+  'stale',
+  'partial',
+  'fallback',
+  'mock',
+  'synthetic',
+  'error',
+  'unavailable',
+  'unknown',
+  'proxy',
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasText(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isFiniteNumberOrNull(value: unknown): boolean {
+  return value === null || (typeof value === 'number' && Number.isFinite(value));
+}
+
+export function isMarketDataFreshnessValue(value: unknown): value is MarketDataFreshness {
+  return typeof value === 'string' && MARKET_DATA_FRESHNESS_STATES.has(value as MarketDataFreshness);
+}
+
+function hasPanelEvidenceTime(panel: Partial<MarketOverviewPanel>): boolean {
+  return hasText(panel.lastRefreshAt) || hasText(panel.updatedAt) || hasText(panel.asOf);
+}
+
+function isMarketOverviewItemContract(value: unknown): value is MarketOverviewItem {
+  if (!isRecord(value) || !hasText(value.symbol) || !hasText(value.label)) {
+    return false;
+  }
+  if ('value' in value && !isFiniteNumberOrNull(value.value)) {
+    return false;
+  }
+  if ('changePct' in value && value.changePct !== undefined && !isFiniteNumberOrNull(value.changePct)) {
+    return false;
+  }
+  if ('trend' in value && value.trend !== undefined && (
+    !Array.isArray(value.trend) || !value.trend.every((point) => typeof point === 'number' && Number.isFinite(point))
+  )) {
+    return false;
+  }
+  return value.freshness === undefined || isMarketDataFreshnessValue(value.freshness);
+}
+
+function hasExplicitUnavailableState(panel: Partial<MarketOverviewPanel>): boolean {
+  return Boolean(
+    panel.isUnavailable
+    || panel.source === 'unavailable'
+    || panel.source === 'error'
+    || panel.freshness === 'unavailable'
+    || panel.freshness === 'error'
+    || panel.providerHealth?.status === 'unavailable'
+    || panel.providerHealth?.status === 'error'
+    || panel.providerFreshness?.isUnavailable,
+  );
+}
+
+function hasExplicitFailureState(panel: Partial<MarketOverviewPanel>): boolean {
+  return Boolean(
+    hasExplicitUnavailableState(panel)
+    || hasText(panel.errorMessage)
+    || hasText(panel.refreshError)
+    || hasText(panel.lastError)
+    || (panel.isFallback && panel.freshness === 'fallback'),
+  );
+}
+
+export function isMarketOverviewPanelContract(value: unknown): value is MarketOverviewPanel {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const panel = value as Partial<MarketOverviewPanel>;
+  if (
+    !hasText(panel.panelName)
+    || !MARKET_PANEL_STATUSES.has(panel.status as MarketPanelStatus)
+    || !hasText(panel.source)
+    || !isMarketDataFreshnessValue(panel.freshness)
+    || !Array.isArray(panel.items)
+    || !panel.items.every(isMarketOverviewItemContract)
+  ) {
+    return false;
+  }
+
+  if (panel.status === 'success' || panel.status === 'partial') {
+    const hasAuthority = !['unknown', 'unavailable', 'error'].includes(panel.source.trim().toLowerCase())
+      && !['unavailable', 'error', 'unknown'].includes(panel.freshness)
+      && hasPanelEvidenceTime(panel);
+    return hasAuthority && (panel.status === 'success' || panel.items.length > 0);
+  }
+  if (panel.status === 'unavailable') {
+    return hasExplicitUnavailableState(panel);
+  }
+  return hasExplicitFailureState(panel);
+}
+
+export function assertMarketOverviewPanelContract(value: unknown): MarketOverviewPanel {
+  if (!isMarketOverviewPanelContract(value)) {
+    throw new Error('invalid_market_overview_contract');
+  }
+  return value;
+}
+
+function normalizePanel(payload: unknown): MarketOverviewPanel {
+  if (!isRecord(payload)) {
+    throw new Error('invalid_market_overview_contract');
+  }
+  const normalized = toCamelCase<Record<string, unknown>>(payload) as unknown as MarketOverviewPanel;
+  if (!Array.isArray(normalized.items)) {
+    throw new Error('invalid_market_overview_contract');
+  }
+  const panel: MarketOverviewPanel = {
     panelName: normalized.panelName,
     lastRefreshAt: normalized.lastRefreshAt,
     status: normalized.status,
@@ -180,8 +305,9 @@ function normalizePanel(payload: Record<string, unknown>): MarketOverviewPanel {
     degradationReason: normalized.degradationReason,
     degradationReasons: normalized.degradationReasons,
     warning: normalized.warning,
-    items: Array.isArray(normalized.items) ? normalized.items : [],
+    items: normalized.items,
   };
+  return assertMarketOverviewPanelContract(panel);
 }
 
 async function getPanel(path: string): Promise<MarketOverviewPanel> {
