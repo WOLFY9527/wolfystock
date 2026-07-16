@@ -7,7 +7,7 @@ import logging
 import os
 import secrets
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request
@@ -48,6 +48,7 @@ from src.auth import (
     safe_identifier_hash,
     set_initial_password,
     get_session_identity,
+    get_session_revocation_id,
     password_hash_needs_upgrade,
     verify_stored_password_and_upgrade,
     verify_password_hash_string,
@@ -1993,9 +1994,24 @@ async def auth_change_password(request: Request, body: ChangePasswordRequest):
 )
 async def auth_logout(request: Request):
     """Clear session cookie."""
-    current_user = resolve_current_user(request)
-    if current_user and current_user.session_id:
-        AuthRepository().revoke_app_user_session(current_user.session_id)
     resp = Response(status_code=204)
     _delete_session_cookie(resp, request)
+    cookie_value = str((getattr(request, "cookies", {}) or {}).get(COOKIE_NAME) or "")
+    identity = get_session_identity(cookie_value) if cookie_value else None
+    if identity is None:
+        return resp
+
+    try:
+        repo = AuthRepository()
+        session_id = get_session_revocation_id(cookie_value, identity)
+        if identity.session_id is None:
+            repo.create_app_user_session(
+                session_id=session_id,
+                user_id=identity.user_id,
+                expires_at=datetime.fromtimestamp(identity.expires_at, tz=timezone.utc),
+            )
+        repo.revoke_app_user_session(session_id)
+    except Exception as exc:  # pragma: no cover - defensive persistence path
+        logger.error("Failed to terminate current auth session: %s", exc)
+        resp.status_code = 500
     return resp

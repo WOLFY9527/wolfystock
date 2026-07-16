@@ -259,7 +259,7 @@ EXPECTED_AUTH_ROUTE_SOURCE_INVENTORY = {
     ("POST", "/login"): "public",
     ("POST", "/reset-password/request"): "public",
     ("POST", "/change-password"): "request_guarded",
-    ("POST", "/logout"): "request_guarded",
+    ("POST", "/logout"): "public",
 }
 EXPECTED_AUTH_ROUTE_SOURCE_SPECIAL_CASES: set[str] = set()
 

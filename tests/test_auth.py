@@ -120,9 +120,10 @@ class AuthSessionTestCase(unittest.TestCase):
     ):
         with patch.object(auth, "_is_auth_enabled_from_env", return_value=auth_enabled):
             with patch.object(auth, "_get_data_dir", return_value=self.data_dir):
-                auth._auth_enabled = auth_enabled
-                if test_fn:
-                    return test_fn()
+                with patch.object(auth, "_compatibility_session_is_terminated", return_value=False):
+                    auth._auth_enabled = auth_enabled
+                    if test_fn:
+                        return test_fn()
 
     def test_create_session_returns_signed_payload(self) -> None:
         def run():

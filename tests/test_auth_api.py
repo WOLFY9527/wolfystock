@@ -738,6 +738,9 @@ class AuthApiTestCase(unittest.TestCase):
         login_response = self._login_admin(password="passwd6")
         self.assertEqual(login_response.status_code, 200)
         session_cookie = self._extract_session_cookie(login_response)
+        identity = auth.get_session_identity(session_cookie)
+        self.assertIsNotNone(identity)
+        self.assertIsNotNone(identity.session_id)
         self.assertTrue(auth.verify_session(session_cookie))
 
         logout_response = asyncio.run(
@@ -748,12 +751,95 @@ class AuthApiTestCase(unittest.TestCase):
 
         self.assertEqual(logout_response.status_code, 204)
         self.assertFalse(auth.verify_session(session_cookie))
+        session_row = DatabaseManager.get_instance().get_app_user_session(identity.session_id)
+        self.assertIsNotNone(session_row)
+        self.assertIsNotNone(session_row.revoked_at)
+
+    def test_logout_invalidates_signed_compatibility_session_without_sid(self) -> None:
+        login_response = self._login_admin(password="passwd6")
+        authoritative_session = self._extract_session_cookie(login_response)
+        compatibility_session = auth.create_session()
+        compatibility_identity = auth.get_session_identity(compatibility_session)
+        self.assertIsNotNone(compatibility_identity)
+        compatibility_revocation_id = auth.get_session_revocation_id(
+            compatibility_session,
+            compatibility_identity,
+        )
+        self.assertTrue(auth.verify_session(authoritative_session))
+        self.assertTrue(auth.verify_session(compatibility_session))
+
+        logout_response = asyncio.run(
+            auth_endpoint.auth_logout(
+                self._build_request(cookies={auth.COOKIE_NAME: compatibility_session})
+            )
+        )
+
+        self.assertEqual(logout_response.status_code, 204)
+        self.assertIn("Max-Age=0", logout_response.headers["set-cookie"])
+        self.assertFalse(auth.verify_session(compatibility_session))
+        self.assertTrue(auth.verify_session(authoritative_session))
+        compatibility_row = DatabaseManager.get_instance().get_app_user_session(
+            compatibility_revocation_id
+        )
+        self.assertIsNotNone(compatibility_row)
+        self.assertIsNotNone(compatibility_row.revoked_at)
+        rejected = asyncio.run(
+            auth_endpoint.auth_me(
+                self._build_request(cookies={auth.COOKIE_NAME: compatibility_session})
+            )
+        )
+        self.assertEqual(rejected.status_code, 401)
+
+    def test_logout_terminates_legacy_identity_without_constructing_legacy_cookie(self) -> None:
+        login_response = self._login_admin(password="passwd6")
+        authoritative_session = self._extract_session_cookie(login_response)
+        compatibility_session = auth.create_session()
+        now = int(datetime.now(timezone.utc).timestamp())
+        legacy_identity = auth.SessionIdentity(
+            user_id=BOOTSTRAP_ADMIN_USER_ID,
+            username="admin",
+            role="admin",
+            session_id=None,
+            issued_at=now,
+            expires_at=now + auth._get_session_max_age_seconds(),
+            legacy_admin=True,
+        )
+
+        with patch.object(auth, "_resolve_v2_identity", return_value=None), patch.object(
+            auth,
+            "_resolve_legacy_admin_session",
+            return_value=legacy_identity,
+        ):
+            logout_response = asyncio.run(
+                auth_endpoint.auth_logout(
+                    self._build_request(cookies={auth.COOKIE_NAME: compatibility_session})
+                )
+            )
+
+        self.assertEqual(logout_response.status_code, 204)
+        self.assertIn("Max-Age=0", logout_response.headers["set-cookie"])
+        self.assertFalse(auth.verify_session(compatibility_session))
+        self.assertTrue(auth.verify_session(authoritative_session))
 
     def test_logout_without_session_still_clears_cookie(self) -> None:
         response = asyncio.run(auth_endpoint.auth_logout(self._build_request()))
         self.assertEqual(response.status_code, 204)
         self.assertIn("dsa_session=", response.headers["set-cookie"])
         self.assertIn("Max-Age=0", response.headers["set-cookie"])
+
+    def test_logout_cookie_expiration_preserves_https_security_attributes(self) -> None:
+        request = self._build_request()
+        request.url.scheme = "https"
+
+        response = asyncio.run(auth_endpoint.auth_logout(request))
+
+        self.assertEqual(response.status_code, 204)
+        set_cookie = response.headers["set-cookie"]
+        self.assertIn("Max-Age=0", set_cookie)
+        self.assertIn("HttpOnly", set_cookie)
+        self.assertIn("SameSite=lax", set_cookie)
+        self.assertIn("Path=/", set_cookie)
+        self.assertIn("Secure", set_cookie)
 
     def test_reset_password_request_requires_identifier(self) -> None:
         response = asyncio.run(
@@ -967,7 +1053,7 @@ class AuthApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 204)
         call_next.assert_awaited_once()
 
-    def test_logout_requires_session_when_auth_enabled(self) -> None:
+    def test_logout_cleanup_reaches_endpoint_without_valid_session_when_auth_enabled(self) -> None:
         scope = {
             "type": "http",
             "method": "POST",
@@ -986,8 +1072,8 @@ class AuthApiTestCase(unittest.TestCase):
         with patch("api.middlewares.auth.is_auth_enabled", return_value=True):
             response = asyncio.run(middleware.dispatch(request, call_next))
 
-        self.assertEqual(response.status_code, 401)
-        call_next.assert_not_awaited()
+        self.assertEqual(response.status_code, 204)
+        call_next.assert_awaited_once()
 
     def test_reset_password_request_is_exempt_from_auth_middleware(self) -> None:
         scope = {

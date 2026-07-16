@@ -412,7 +412,7 @@ def _collect_auth_route_source_inventory() -> list[dict[str, Any]]:
         {"route_id": "auth.login", "path": "/api/v1/auth/login", "method": "POST", "guard_kind": "public"},
         {"route_id": "auth.reset_password_request", "path": "/api/v1/auth/reset-password/request", "method": "POST", "guard_kind": "public"},
         {"route_id": "auth.change_password", "path": "/api/v1/auth/change-password", "method": "POST", "guard_kind": "request_current_user"},
-        {"route_id": "auth.logout", "path": "/api/v1/auth/logout", "method": "POST", "guard_kind": "request_current_user"},
+        {"route_id": "auth.logout", "path": "/api/v1/auth/logout", "method": "POST", "guard_kind": "public"},
     ]
 
 

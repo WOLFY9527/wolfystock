@@ -138,6 +138,8 @@ class AdminRealAuthSessionSmokeTestCase(unittest.TestCase):
         self.assertEqual(admin_users.status_code, 200)
         self._assert_security_headers(admin_users)
         self.assertGreaterEqual(admin_users.json()["total"], 1)
+        previous_session = self.client.cookies.get(auth.COOKIE_NAME)
+        self.assertIsNotNone(previous_session)
 
         serialized = json.dumps(
             {"status": status_payload, "adminUsers": admin_users.json()},
@@ -166,6 +168,7 @@ class AdminRealAuthSessionSmokeTestCase(unittest.TestCase):
         self.assertIn("Max-Age=0", logout_cookie)
         self.assertIn("HttpOnly", logout_cookie)
         self.assertIn("SameSite=lax", logout_cookie)
+        self.assertIn("Path=/", logout_cookie)
 
         logged_out_status = self.client.get("/api/v1/auth/status")
         self.assertEqual(logged_out_status.status_code, 200)
@@ -176,6 +179,17 @@ class AdminRealAuthSessionSmokeTestCase(unittest.TestCase):
         self.assertEqual(logged_out_again.status_code, 401)
         self._assert_security_headers(logged_out_again)
         self._assert_no_auth_leaks(logged_out_again)
+
+        self.client.cookies.set(auth.COOKIE_NAME, previous_session)
+        cleanup = self.client.post("/api/v1/auth/logout")
+        self.assertEqual(cleanup.status_code, 204)
+        cleanup_cookie = cleanup.headers.get("set-cookie", "")
+        self.assertIn("dsa_session=", cleanup_cookie)
+        self.assertIn("Max-Age=0", cleanup_cookie)
+        self.assertIn("HttpOnly", cleanup_cookie)
+        self.assertIn("SameSite=lax", cleanup_cookie)
+        self.assertIn("Path=/", cleanup_cookie)
+        self.assertEqual(self.client.get("/api/v1/admin/users").status_code, 401)
 
     def test_real_failed_login_and_unauthenticated_admin_errors_are_sanitized_without_session_cookie(self) -> None:
         bootstrap = self.client.post(

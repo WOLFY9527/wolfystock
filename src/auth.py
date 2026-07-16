@@ -742,12 +742,37 @@ def _resolve_legacy_admin_session(value: str) -> Optional[SessionIdentity]:
     )
 
 
+def _compatibility_session_revocation_id(value: str) -> str:
+    """Return an opaque persistence key for accepted sessions without a sid."""
+    return hashlib.sha256(str(value or "").encode("utf-8")).hexdigest()
+
+
+def _compatibility_session_is_terminated(value: str) -> bool:
+    """Fail closed when a stateless compatibility session has a logout tombstone."""
+    try:
+        from src.storage import DatabaseManager
+
+        session_id = _compatibility_session_revocation_id(value)
+        return DatabaseManager.get_instance().get_app_user_session(session_id) is not None
+    except Exception as exc:  # pragma: no cover - defensive validation path
+        logger.warning("Failed to validate compatibility-session revocation state: %s", exc)
+        return True
+
+
 def get_session_identity(value: str) -> Optional[SessionIdentity]:
     """Resolve the signed cookie into a concrete current-user identity."""
     identity = _resolve_v2_identity(value, expected_kind=SESSION_KIND)
-    if identity is not None:
-        return identity
-    return _resolve_legacy_admin_session(value)
+    if identity is None:
+        identity = _resolve_legacy_admin_session(value)
+    if identity is not None and identity.session_id is None:
+        if _compatibility_session_is_terminated(value):
+            return None
+    return identity
+
+
+def get_session_revocation_id(value: str, identity: SessionIdentity) -> str:
+    """Return the authoritative sid or an opaque compatibility-session tombstone key."""
+    return identity.session_id or _compatibility_session_revocation_id(value)
 
 
 def get_admin_unlock_identity(value: str) -> Optional[SessionIdentity]:
