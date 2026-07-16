@@ -1,0 +1,715 @@
+{
+  "families": {
+    "directStorageConsumers": {
+      "auditedBaselineCount": 51,
+      "entries": [
+        {
+          "path": "api/app.py"
+        },
+        {
+          "path": "api/deps.py"
+        },
+        {
+          "path": "api/v1/endpoints/admin_cost.py"
+        },
+        {
+          "path": "api/v1/endpoints/admin_ops_status.py"
+        },
+        {
+          "path": "api/v1/endpoints/admin_provider_circuits.py"
+        },
+        {
+          "path": "api/v1/endpoints/agent.py"
+        },
+        {
+          "path": "api/v1/endpoints/analysis.py"
+        },
+        {
+          "path": "api/v1/endpoints/backtest.py"
+        },
+        {
+          "path": "api/v1/endpoints/history.py"
+        },
+        {
+          "path": "api/v1/endpoints/market.py"
+        },
+        {
+          "path": "api/v1/endpoints/research.py"
+        },
+        {
+          "path": "api/v1/endpoints/scanner.py"
+        },
+        {
+          "path": "api/v1/endpoints/usage.py"
+        },
+        {
+          "path": "src/admin_rbac.py"
+        },
+        {
+          "path": "src/agent/conversation.py"
+        },
+        {
+          "path": "src/agent/memory.py"
+        },
+        {
+          "path": "src/agent/runner.py"
+        },
+        {
+          "path": "src/agent/tools/analysis_tools.py"
+        },
+        {
+          "path": "src/agent/tools/data_tools.py"
+        },
+        {
+          "path": "src/analyzer.py"
+        },
+        {
+          "path": "src/auth.py"
+        },
+        {
+          "path": "src/core/pipeline.py"
+        },
+        {
+          "path": "src/database_doctor.py"
+        },
+        {
+          "path": "src/services/admin_activity_service.py"
+        },
+        {
+          "path": "src/services/admin_incident_timeline_service.py"
+        },
+        {
+          "path": "src/services/admin_logs_service.py"
+        },
+        {
+          "path": "src/services/admin_ops_status_service.py"
+        },
+        {
+          "path": "src/services/admin_portfolio_service.py"
+        },
+        {
+          "path": "src/services/backtest_service.py"
+        },
+        {
+          "path": "src/services/duplicate_cost_summary_service.py"
+        },
+        {
+          "path": "src/services/durable_runtime_v1.py"
+        },
+        {
+          "path": "src/services/durable_task_worker.py"
+        },
+        {
+          "path": "src/services/execution_log_service.py"
+        },
+        {
+          "path": "src/services/history_comparison_service.py"
+        },
+        {
+          "path": "src/services/history_service.py"
+        },
+        {
+          "path": "src/services/liquidity_monitor_service.py"
+        },
+        {
+          "path": "src/services/llm_cost_ledger_service.py"
+        },
+        {
+          "path": "src/services/market_overview_service.py"
+        },
+        {
+          "path": "src/services/market_provider_operations_service.py"
+        },
+        {
+          "path": "src/services/market_scanner_ops_service.py"
+        },
+        {
+          "path": "src/services/market_scanner_service.py"
+        },
+        {
+          "path": "src/services/model_pricing_policy_import_service.py"
+        },
+        {
+          "path": "src/services/notification_service.py"
+        },
+        {
+          "path": "src/services/provider_circuit_observer.py"
+        },
+        {
+          "path": "src/services/quota_policy_service.py"
+        },
+        {
+          "path": "src/services/rule_backtest_service.py"
+        },
+        {
+          "path": "src/services/system_config_service.py"
+        },
+        {
+          "path": "src/services/task_queue.py"
+        },
+        {
+          "path": "src/services/task_service.py"
+        },
+        {
+          "path": "src/services/user_alert_service.py"
+        },
+        {
+          "path": "src/services/watchlist_service.py"
+        }
+      ],
+      "owner": "architecture_validation",
+      "taskId": "T457-W1-GUARD-008"
+    },
+    "providerHeavyConstructionPoints": {
+      "auditedBaselineCount": 21,
+      "entries": [
+        {
+          "constructions": [
+            {
+              "callable": "AkshareFetcher",
+              "count": 1,
+              "scope": "_build_default_fetcher"
+            }
+          ],
+          "imports": [
+            "data_provider.akshare_fetcher"
+          ],
+          "path": "src/services/akshare_cn_ohlcv_cache.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "AkshareFetcher",
+              "count": 1,
+              "scope": "CNProviderHealthService._default_akshare_probe"
+            },
+            {
+              "callable": "BaostockFetcher",
+              "count": 1,
+              "scope": "CNProviderHealthService._default_baostock_probe"
+            },
+            {
+              "callable": "PytdxFetcher",
+              "count": 1,
+              "scope": "CNProviderHealthService._default_pytdx_probe"
+            }
+          ],
+          "imports": [
+            "data_provider.akshare_fetcher",
+            "data_provider.baostock_fetcher",
+            "data_provider.pytdx_fetcher"
+          ],
+          "path": "src/services/cn_provider_health_service.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "MARKET_CACHE_TTLS.get",
+              "count": 1,
+              "scope": "CryptoRealtimeService.handle_tick"
+            },
+            {
+              "callable": "market_cache.set",
+              "count": 1,
+              "scope": "CryptoRealtimeService.handle_tick"
+            }
+          ],
+          "imports": [
+            "src.services.market_cache"
+          ],
+          "path": "src/services/crypto_realtime_service.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "YfinanceFetcher",
+              "count": 1,
+              "scope": "HistoricalOhlcvCachePreflightService._execute_seed"
+            },
+            {
+              "callable": "AkshareFetcher",
+              "count": 1,
+              "scope": "_default_cn_fetcher_factory"
+            }
+          ],
+          "imports": [
+            "data_provider.akshare_fetcher",
+            "data_provider.yfinance_fetcher"
+          ],
+          "path": "src/services/historical_ohlcv_cache_preflight.py"
+        },
+        {
+          "constructions": [],
+          "imports": [
+            "src.services.market_cache"
+          ],
+          "path": "src/services/liquidity_monitor_service.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "AkshareFetcher",
+              "count": 1,
+              "scope": "MarketOverviewService._fetch_akshare_cn_index_observation_rows"
+            },
+            {
+              "callable": "MARKET_CACHE_TTLS.get",
+              "count": 1,
+              "scope": "MarketOverviewService._ttl_for_cache_key"
+            }
+          ],
+          "imports": [
+            "data_provider.akshare_fetcher",
+            "data_provider.coinbase_public_provider",
+            "src.services.market_cache"
+          ],
+          "path": "src/services/market_overview_service.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "TickFlowFetcher",
+              "count": 1,
+              "scope": "MarketOverviewTickFlowBreadthProvider._get_fetcher"
+            },
+            {
+              "callable": "TickFlowFetcher._is_universe_permission_error",
+              "count": 1,
+              "scope": "MarketOverviewTickFlowBreadthProvider._reason_code_for_error"
+            }
+          ],
+          "imports": [
+            "data_provider.tickflow_fetcher"
+          ],
+          "path": "src/services/market_overview_tickflow_breadth_provider.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "yf.Ticker",
+              "count": 1,
+              "scope": "fetch_yfinance_quote_history_frame"
+            },
+            {
+              "callable": "yf.Ticker",
+              "count": 1,
+              "scope": "fetch_yfinance_spy_atr_history_frame"
+            }
+          ],
+          "imports": [
+            "yfinance"
+          ],
+          "path": "src/services/market_overview_yfinance_transport.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "MARKET_CACHE_TTLS.get",
+              "count": 1,
+              "scope": "MarketProviderOperationsService._cache_state"
+            }
+          ],
+          "imports": [
+            "src.services.market_cache"
+          ],
+          "path": "src/services/market_provider_operations_service.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "market_cache.get",
+              "count": 1,
+              "scope": "_read_cached_market_temperature_context"
+            }
+          ],
+          "imports": [
+            "src.services.market_cache"
+          ],
+          "path": "src/services/market_scanner_context_adapter.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "DataFetcherManager",
+              "count": 1,
+              "scope": "MarketScannerService.__init__"
+            }
+          ],
+          "imports": [
+            "data_provider.base"
+          ],
+          "path": "src/services/market_scanner_service.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "DataFetcherManager",
+              "count": 1,
+              "scope": "PortfolioRiskBoardLookup._get_data_manager"
+            }
+          ],
+          "imports": [
+            "data_provider.base"
+          ],
+          "path": "src/services/portfolio_risk_board_lookup.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "get_provider_credentials",
+              "count": 1,
+              "scope": "ProviderOperationsMatrixService._credential_state"
+            }
+          ],
+          "imports": [
+            "data_provider.provider_credentials"
+          ],
+          "path": "src/services/provider_operations_matrix_service.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "AlpacaFetcher",
+              "count": 1,
+              "scope": "_load_configured_provider_quotes"
+            },
+            {
+              "callable": "get_provider_credentials",
+              "count": 1,
+              "scope": "_load_configured_provider_quotes"
+            },
+            {
+              "callable": "get_provider_credentials",
+              "count": 1,
+              "scope": "get_rotation_radar_provider_diagnostics"
+            }
+          ],
+          "imports": [
+            "data_provider.alpaca_fetcher",
+            "data_provider.provider_credentials"
+          ],
+          "path": "src/services/rotation_radar_quote_provider.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "DataFetcherManager",
+              "count": 1,
+              "scope": "StockEvidenceQuoteAdapter.__init__"
+            }
+          ],
+          "imports": [
+            "data_provider.base",
+            "data_provider.realtime_types"
+          ],
+          "path": "src/services/stock_evidence_quote_adapter.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "DataFetcherManager",
+              "count": 1,
+              "scope": "StockService.get_history_data"
+            },
+            {
+              "callable": "DataFetcherManager",
+              "count": 1,
+              "scope": "StockService.get_intraday_data"
+            },
+            {
+              "callable": "yf.download",
+              "count": 1,
+              "scope": "StockService.get_intraday_data"
+            }
+          ],
+          "imports": [
+            "data_provider.base",
+            "yfinance"
+          ],
+          "path": "src/services/stock_service.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "DataFetcherManager",
+              "count": 1,
+              "scope": "StockServiceProviderAdapter._create_manager"
+            }
+          ],
+          "imports": [
+            "data_provider.base"
+          ],
+          "path": "src/services/stock_service_provider_adapter.py"
+        },
+        {
+          "constructions": [],
+          "imports": [
+            "data_provider.us_fundamentals_provider"
+          ],
+          "path": "src/services/us_fundamentals_service.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "DataFetcherManager",
+              "count": 1,
+              "scope": "fetch_daily_history_with_local_us_fallback"
+            }
+          ],
+          "imports": [
+            "data_provider.base"
+          ],
+          "path": "src/services/us_history_helper.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "YfinanceFetcher",
+              "count": 1,
+              "scope": "UsOhlcvCacheRefreshService._refresh_symbol"
+            }
+          ],
+          "imports": [
+            "data_provider.yfinance_fetcher"
+          ],
+          "path": "src/services/us_ohlcv_cache_refresh.py"
+        },
+        {
+          "constructions": [
+            {
+              "callable": "YfinanceFetcher",
+              "count": 1,
+              "scope": "YfinanceUsOhlcvCacheProvider._fetch_from_provider"
+            }
+          ],
+          "imports": [
+            "data_provider.yfinance_fetcher"
+          ],
+          "path": "src/services/yfinance_us_ohlcv_cache_provider.py"
+        }
+      ],
+      "owner": "architecture_validation",
+      "taskId": "T457-W1-GUARD-008"
+    },
+    "serviceToApiSchemaEdges": {
+      "auditedBaselineCount": 53,
+      "entries": [
+        {
+          "source": "src/services/custom_strategy_contracts.py",
+          "target": "api.v1.schemas.custom_strategy"
+        },
+        {
+          "source": "src/services/dashboard_overview_service.py",
+          "target": "api.v1.schemas.dashboard_overview"
+        },
+        {
+          "source": "src/services/event_intelligence_provider_contract.py",
+          "target": "api.v1.schemas.event_intelligence"
+        },
+        {
+          "source": "src/services/event_intelligence_timeline.py",
+          "target": "api.v1.schemas.event_intelligence"
+        },
+        {
+          "source": "src/services/event_radar_service.py",
+          "target": "api.v1.schemas.event_radar"
+        },
+        {
+          "source": "src/services/event_window_service.py",
+          "target": "api.v1.schemas.event_window"
+        },
+        {
+          "source": "src/services/factor_experiment_manifest.py",
+          "target": "api.v1.schemas.factors"
+        },
+        {
+          "source": "src/services/factor_exposure.py",
+          "target": "api.v1.schemas.factors"
+        },
+        {
+          "source": "src/services/factor_metrics.py",
+          "target": "api.v1.schemas.factors"
+        },
+        {
+          "source": "src/services/factor_neutralization.py",
+          "target": "api.v1.schemas.factors"
+        },
+        {
+          "source": "src/services/factor_observations.py",
+          "target": "api.v1.schemas.factors"
+        },
+        {
+          "source": "src/services/factor_registry.py",
+          "target": "api.v1.schemas.factors"
+        },
+        {
+          "source": "src/services/factor_research_report.py",
+          "target": "api.v1.schemas.factors"
+        },
+        {
+          "source": "src/services/homepage_after_close_developments_service.py",
+          "target": "api.v1.schemas.homepage_after_close_developments"
+        },
+        {
+          "source": "src/services/homepage_ai_capex_infrastructure_service.py",
+          "target": "api.v1.schemas.homepage_ai_capex_infrastructure"
+        },
+        {
+          "source": "src/services/homepage_capabilities_service.py",
+          "target": "api.v1.schemas.homepage_capabilities"
+        },
+        {
+          "source": "src/services/homepage_cross_asset_indicators_service.py",
+          "target": "api.v1.schemas.homepage_cross_asset_indicators"
+        },
+        {
+          "source": "src/services/homepage_daily_market_brief_service.py",
+          "target": "api.v1.schemas.homepage_daily_market_brief"
+        },
+        {
+          "source": "src/services/homepage_demo_payload_service.py",
+          "target": "api.v1.schemas.event_radar"
+        },
+        {
+          "source": "src/services/homepage_demo_payload_service.py",
+          "target": "api.v1.schemas.research_queue"
+        },
+        {
+          "source": "src/services/homepage_driver_chain_service.py",
+          "target": "api.v1.schemas.homepage_driver_chain"
+        },
+        {
+          "source": "src/services/homepage_earnings_catalysts_service.py",
+          "target": "api.v1.schemas.homepage_earnings_catalysts"
+        },
+        {
+          "source": "src/services/homepage_empty_state_service.py",
+          "target": "api.v1.schemas.homepage_empty_state"
+        },
+        {
+          "source": "src/services/homepage_event_impact_map_service.py",
+          "target": "api.v1.schemas.homepage_event_impact_map"
+        },
+        {
+          "source": "src/services/homepage_evidence_quality_service.py",
+          "target": "api.v1.schemas.homepage_evidence_quality"
+        },
+        {
+          "source": "src/services/homepage_explanation_service.py",
+          "target": "api.v1.schemas.homepage_explanation"
+        },
+        {
+          "source": "src/services/homepage_geopolitical_commodity_risk_service.py",
+          "target": "api.v1.schemas.homepage_geopolitical_commodity_risk"
+        },
+        {
+          "source": "src/services/homepage_intelligence_service.py",
+          "target": "api.v1.schemas.homepage_intelligence"
+        },
+        {
+          "source": "src/services/homepage_liquidity_credit_service.py",
+          "target": "api.v1.schemas.homepage_liquidity_credit"
+        },
+        {
+          "source": "src/services/homepage_market_breadth_service.py",
+          "target": "api.v1.schemas.homepage_market_breadth"
+        },
+        {
+          "source": "src/services/homepage_module_manifest_service.py",
+          "target": "api.v1.schemas.homepage_module_manifest"
+        },
+        {
+          "source": "src/services/homepage_policy_regulation_watch_service.py",
+          "target": "api.v1.schemas.homepage_policy_regulation_watch"
+        },
+        {
+          "source": "src/services/homepage_pre_session_research_checklist_service.py",
+          "target": "api.v1.schemas.homepage_pre_session_research_checklist"
+        },
+        {
+          "source": "src/services/homepage_rates_pricing_service.py",
+          "target": "api.v1.schemas.homepage_rates_pricing"
+        },
+        {
+          "source": "src/services/homepage_research_priorities_service.py",
+          "target": "api.v1.schemas.homepage_research_priorities"
+        },
+        {
+          "source": "src/services/homepage_risk_regime_service.py",
+          "target": "api.v1.schemas.homepage_risk_regime"
+        },
+        {
+          "source": "src/services/homepage_scenario_watchlist_service.py",
+          "target": "api.v1.schemas.homepage_scenario_watchlist"
+        },
+        {
+          "source": "src/services/homepage_section_layout_service.py",
+          "target": "api.v1.schemas.homepage_section_layout"
+        },
+        {
+          "source": "src/services/homepage_style_leadership_rotation_service.py",
+          "target": "api.v1.schemas.homepage_style_leadership_rotation"
+        },
+        {
+          "source": "src/services/homepage_theme_capital_flow_service.py",
+          "target": "api.v1.schemas.homepage_theme_capital_flow"
+        },
+        {
+          "source": "src/services/homepage_uat_readiness_service.py",
+          "target": "api.v1.schemas.homepage_uat_readiness"
+        },
+        {
+          "source": "src/services/homepage_volatility_positioning_service.py",
+          "target": "api.v1.schemas.homepage_volatility_positioning"
+        },
+        {
+          "source": "src/services/market_pulse_service.py",
+          "target": "api.v1.schemas.market_pulse"
+        },
+        {
+          "source": "src/services/market_session_status_service.py",
+          "target": "api.v1.schemas.market_session_status"
+        },
+        {
+          "source": "src/services/money_flow_service.py",
+          "target": "api.v1.schemas.money_flow"
+        },
+        {
+          "source": "src/services/options_lab_service.py",
+          "target": "api.v1.schemas.options"
+        },
+        {
+          "source": "src/services/options_structure_service.py",
+          "target": "api.v1.schemas.options"
+        },
+        {
+          "source": "src/services/personal_summary_service.py",
+          "target": "api.v1.schemas.personal_summary"
+        },
+        {
+          "source": "src/services/public_data_quality_service.py",
+          "target": "api.v1.schemas.public_data_quality"
+        },
+        {
+          "source": "src/services/research_queue_service.py",
+          "target": "api.v1.schemas.research_queue"
+        },
+        {
+          "source": "src/services/research_stock_service.py",
+          "target": "api.v1.schemas.research_stock"
+        },
+        {
+          "source": "src/services/sector_theme_strength_service.py",
+          "target": "api.v1.schemas.sector_theme_strength"
+        },
+        {
+          "source": "src/services/source_freshness_summary_service.py",
+          "target": "api.v1.schemas.source_freshness_summary"
+        }
+      ],
+      "owner": "architecture_validation",
+      "taskId": "T457-W1-GUARD-008"
+    }
+  },
+  "schemaVersion": "t457-w1-boundary-debt-v1"
+}
