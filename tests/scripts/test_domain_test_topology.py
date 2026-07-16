@@ -25,13 +25,33 @@ def test_manifest_schema_preserves_baseline_and_complete_surface_counts() -> Non
     assert result["baselineBackendTests"] == 7_609
     assert result["backendTests"] >= result["baselineBackendTests"]
     assert result["vitestFiles"] == 175
-    assert result["playwrightSpecs"] == 59
-    assert result["playwrightProjectCases"] == 630
+    assert result["playwrightSpecs"] == 60
+    assert result["playwrightProjectCases"] == 632
     assert manifest["backend"]["baselineCapture"] == {
         "baseSha": topology.BASE_SHA,
         "count": 7_609,
         "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4",
     }
+
+
+def test_manifest_validator_preserves_explicit_historical_baseline_collection_gap() -> None:
+    manifest = load_manifest()
+    broken = deepcopy(manifest)
+    removed = next(entry for entry in broken["backend"]["tests"] if entry["baseline"])
+    broken["backend"]["tests"].remove(removed)
+    broken["backend"]["baselineCollectionGaps"] = sorted(
+        [*broken["backend"]["baselineCollectionGaps"], removed["id"]]
+    )
+    current_ids = [entry["id"] for entry in broken["backend"]["tests"]]
+    broken["backend"]["currentInventory"] = {
+        "count": len(current_ids),
+        "sha256": topology.inventory_hash(current_ids),
+    }
+
+    result = topology.validate_manifest(broken)
+
+    assert result["baselineBackendTests"] == 7_609
+    assert result["backendTests"] == 7_630
 
 
 def test_backend_ownership_is_unique_sorted_and_represents_every_domain() -> None:
@@ -116,9 +136,9 @@ def test_playwright_ownership_retains_projects_and_mandatory_auth_cases() -> Non
     specs = playwright["specs"]
     cases = playwright["projectCases"]
 
-    assert len(specs) == 59
-    assert len(cases) == 630
-    assert playwright["inventory"]["projectCaseCounts"] == {"chromium": 315, "chromium-mobile": 315}
+    assert len(specs) == 60
+    assert len(cases) == 632
+    assert playwright["inventory"]["projectCaseCounts"] == {"chromium": 316, "chromium-mobile": 316}
     assert {spec["owner"] for spec in specs} == set(topology.PLAYWRIGHT_CLASSES)
     protected_auth_specs = [spec for spec in specs if any(word in spec["path"] for word in ("auth", "session", "rbac"))]
     assert protected_auth_specs

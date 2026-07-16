@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7627,
-      "sha256": "5cea1f980c9d846f68760b20862e3e2e9c89ac8e244a81dd0a8a6a7a74b01b64"
+      "count": 7631,
+      "sha256": "4445d3a779b59ef7aaf9310ec83bda6ca8163668766a4334e339dafb5d21ea5d"
     },
     "tests": [
       {
@@ -5844,6 +5844,11 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_domain_test_topology.py::test_manifest_validator_preserves_explicit_historical_baseline_collection_gap",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_domain_test_topology.py::test_manifest_validator_rejects_duplicate_and_unstable_backend_entries",
         "domain": "runtime_operator_tooling",
         "baseline": false
@@ -10314,9 +10319,19 @@
         "baseline": true
       },
       {
+        "id": "tests/test_auth_api.py::AuthApiTestCase::test_logout_cleanup_reaches_endpoint_without_valid_session_when_auth_enabled",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
         "id": "tests/test_auth_api.py::AuthApiTestCase::test_logout_clears_cookie",
         "domain": "auth_security",
         "baseline": true
+      },
+      {
+        "id": "tests/test_auth_api.py::AuthApiTestCase::test_logout_cookie_expiration_preserves_https_security_attributes",
+        "domain": "auth_security",
+        "baseline": false
       },
       {
         "id": "tests/test_auth_api.py::AuthApiTestCase::test_logout_invalidates_existing_session",
@@ -10324,9 +10339,14 @@
         "baseline": true
       },
       {
-        "id": "tests/test_auth_api.py::AuthApiTestCase::test_logout_requires_session_when_auth_enabled",
+        "id": "tests/test_auth_api.py::AuthApiTestCase::test_logout_invalidates_signed_compatibility_session_without_sid",
         "domain": "auth_security",
-        "baseline": true
+        "baseline": false
+      },
+      {
+        "id": "tests/test_auth_api.py::AuthApiTestCase::test_logout_terminates_legacy_identity_without_constructing_legacy_cookie",
+        "domain": "auth_security",
+        "baseline": false
       },
       {
         "id": "tests/test_auth_api.py::AuthApiTestCase::test_logout_without_session_still_clears_cookie",
@@ -38199,6 +38219,9 @@
         "baseline": true
       }
     ],
+    "baselineCollectionGaps": [
+      "tests/test_auth_api.py::AuthApiTestCase::test_logout_requires_session_when_auth_enabled"
+    ],
     "networkTests": [],
     "knownBaselineFailures": [
       "tests/api/test_admin_cost_summary.py::AdminCostSummaryApiTestCase::test_duplicate_summary_requires_cost_observability_capability",
@@ -39301,13 +39324,13 @@
       "chromium-mobile"
     ],
     "inventory": {
-      "specCount": 59,
-      "specSha256": "9f0c82540aacaa664012134cf1c30882a7c029aa05fc9bc41c6ea416f4c2f6b5",
-      "projectCaseCount": 630,
-      "projectCaseSha256": "3deeb442f0ca42335ef0cd14f2bd3b9dffa15d8558e93c57f7584a3ced484eed",
+      "specCount": 60,
+      "specSha256": "e87e8220fd2a792bc34a1a9dc758bd9b8fa2875fa223f9a2a15250bb6e8b28c7",
+      "projectCaseCount": 632,
+      "projectCaseSha256": "ca7d3dd38629a49219014ba80e581abce201c619c937076fd5c9e7b3a081883e",
       "projectCaseCounts": {
-        "chromium": 315,
-        "chromium-mobile": 315
+        "chromium": 316,
+        "chromium-mobile": 316
       }
     },
     "specs": [
@@ -39410,6 +39433,11 @@
         "path": "apps/dsa-web/e2e/locale-route-switch.spec.ts",
         "owner": "bounded_integration",
         "mandatory": false
+      },
+      {
+        "path": "apps/dsa-web/e2e/logout-session-termination.real.spec.ts",
+        "owner": "protected_critical",
+        "mandatory": true
       },
       {
         "path": "apps/dsa-web/e2e/market-intelligence-actionability.smoke.spec.ts",
@@ -40447,6 +40475,13 @@
         "project": "chromium-mobile",
         "owner": "bounded_integration",
         "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/logout-session-termination.real.spec.ts::logout-session-termination.real.spec.ts › terminates v2 sessions in two isolated browser contexts without private-content flash",
+        "spec": "apps/dsa-web/e2e/logout-session-termination.real.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "protected_critical",
+        "mandatory": true
       },
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/market-intelligence-actionability.smoke.spec.ts::market-intelligence-actionability.smoke.spec.ts › market intelligence actionability browser smoke › fail closes missing evidence without default diagnostic strips or trading language",
@@ -42652,6 +42687,13 @@
         "project": "chromium",
         "owner": "bounded_integration",
         "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/logout-session-termination.real.spec.ts::logout-session-termination.real.spec.ts › terminates v2 sessions in two isolated browser contexts without private-content flash",
+        "spec": "apps/dsa-web/e2e/logout-session-termination.real.spec.ts",
+        "project": "chromium",
+        "owner": "protected_critical",
+        "mandatory": true
       },
       {
         "id": "chromium::apps/dsa-web/e2e/market-intelligence-actionability.smoke.spec.ts::market-intelligence-actionability.smoke.spec.ts › market intelligence actionability browser smoke › fail closes missing evidence without default diagnostic strips or trading language",

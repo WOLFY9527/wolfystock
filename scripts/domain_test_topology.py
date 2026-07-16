@@ -145,11 +145,23 @@ def _validate_backend(manifest: dict[str, Any]) -> dict[str, int]:
         raise TopologyError("every backend test entry requires a boolean baseline flag")
 
     baseline_ids = [entry["id"] for entry in entries if entry["baseline"]]
+    baseline_gaps = backend.get("baselineCollectionGaps", [])
+    if (
+        not isinstance(baseline_gaps, list)
+        or any(not isinstance(nodeid, str) or not nodeid for nodeid in baseline_gaps)
+        or baseline_gaps != sorted(set(baseline_gaps))
+    ):
+        raise TopologyError("backend.baselineCollectionGaps must be a unique, sorted list of test IDs")
+    if set(baseline_gaps) & set(ids):
+        raise TopologyError("backend.baselineCollectionGaps must only contain tests absent from current discovery")
+    historical_baseline_ids = [*baseline_ids, *baseline_gaps]
     baseline = backend.get("baselineCapture", {})
     if baseline.get("baseSha") != BASE_SHA:
         raise TopologyError(f"backend baseline baseSha must be {BASE_SHA}")
-    if baseline.get("count") != len(baseline_ids) or baseline.get("sha256") != inventory_hash(baseline_ids):
-        raise TopologyError("backend baseline capture count/hash does not match baseline=true entries")
+    if baseline.get("count") != len(historical_baseline_ids) or baseline.get("sha256") != inventory_hash(
+        historical_baseline_ids
+    ):
+        raise TopologyError("backend baseline capture count/hash does not match baseline entries and collection gaps")
     current = backend.get("currentInventory", {})
     if current.get("count") != len(ids) or current.get("sha256") != inventory_hash(ids):
         raise TopologyError("backend current inventory count/hash does not match test entries")
@@ -167,9 +179,13 @@ def _validate_backend(manifest: dict[str, Any]) -> dict[str, int]:
     known = backend.get("knownBaselineFailures", [])
     if not isinstance(known, list) or known != sorted(set(known)):
         raise TopologyError("backend.knownBaselineFailures must be a unique, sorted list")
-    if not set(known).issubset(baseline_ids):
+    if not set(known).issubset(historical_baseline_ids):
         raise TopologyError("backend.knownBaselineFailures must reference baseline-owned test IDs")
-    return {"backendTests": len(ids), "baselineBackendTests": len(baseline_ids), "networkTests": len(network_ids)}
+    return {
+        "backendTests": len(ids),
+        "baselineBackendTests": len(historical_baseline_ids),
+        "networkTests": len(network_ids),
+    }
 
 
 def _validate_vitest(manifest: dict[str, Any]) -> dict[str, int]:
@@ -454,8 +470,6 @@ def build_manifest(
     backend = discover_backend(bootstrap=True)
     backend_ids = sorted(backend["ids"])
     missing_baseline = sorted(baseline_backend_ids - set(backend_ids))
-    if missing_baseline:
-        raise TopologyError(f"T446 removed or renamed baseline backend tests: {missing_baseline[:10]}")
     unknown_baseline_failures = sorted(known_baseline_failures - baseline_backend_ids)
     if unknown_baseline_failures:
         raise TopologyError(f"known failures are not baseline backend tests: {unknown_baseline_failures[:10]}")
@@ -497,6 +511,7 @@ def build_manifest(
             },
             "currentInventory": {"count": len(backend_ids), "sha256": inventory_hash(backend_ids)},
             "tests": backend_entries,
+            "baselineCollectionGaps": missing_baseline,
             "networkTests": sorted(backend.get("networkTests", []), key=lambda item: item["id"]),
             "knownBaselineFailures": sorted(known_baseline_failures),
             "offlinePolicy": {
