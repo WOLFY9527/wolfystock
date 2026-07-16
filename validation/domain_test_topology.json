@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7631,
-      "sha256": "4445d3a779b59ef7aaf9310ec83bda6ca8163668766a4334e339dafb5d21ea5d"
+      "count": 7712,
+      "sha256": "49af95a3c11baf3d1c74146ce68b32dfb2b0a5e712400e1e742d50ff3618d160"
     },
     "tests": [
       {
@@ -5067,6 +5067,371 @@
         "id": "tests/api/test_scanner_diagnostics.py::test_crypto_mining_scan_returns_full_candidate_diagnostics",
         "domain": "scanner",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_share_authoritative_skip_reason_normalizer",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[amount]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[benchmark-symbol]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[data-failed-status]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[duplicate-symbol]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[evaluated]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[insufficient-history]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[invalid-payload]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[invalid]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[liquidity]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[ma-rules]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[ma20]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[ma60]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[missing-history-field]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[missing-price-history]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[momentum]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[not-enough-history]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[not-evaluated]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[ordering-history-before-score]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[ordering-liquidity-before-price]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[ordering-momentum-before-universe]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[ordering-price-before-trend]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[ordering-score-before-liquidity]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[ordering-selected-first]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[ordering-trend-before-momentum]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[ordering-universe-before-input]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[payload]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[price]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[score-threshold]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[selected-status]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[trend]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[turnover]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[unknown]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[unsupported-market]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_schema_and_service_skip_reason_projections_are_equal[volume]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[amount]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[benchmark-symbol]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[data-failed-status]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[duplicate-symbol]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[empty]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[evaluated]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[insufficient-history]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[invalid-payload]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[invalid]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[liquidity]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[ma-rules]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[ma20]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[ma60]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[malformed]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[missing-history-field]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[missing-price-history]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[momentum]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[not-enough-history]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[not-evaluated]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[null]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[ordering-history-before-score]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[ordering-liquidity-before-price]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[ordering-momentum-before-universe]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[ordering-price-before-trend]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[ordering-score-before-liquidity]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[ordering-selected-first]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[ordering-trend-before-momentum]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[ordering-universe-before-input]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[payload]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[price]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[score-threshold]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[selected-status]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[status-case-sensitive]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[trend]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[turnover]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[unknown]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[unsupported-market]",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_scanner_diagnostics.py::test_scanner_skip_reason_normalizer_golden_parity[volume]",
+        "domain": "scanner",
+        "baseline": false
       },
       {
         "id": "tests/api/test_scanner_research_overlay_endpoint.py::test_get_scanner_research_overlay_returns_404_when_run_is_not_visible",
@@ -17487,6 +17852,11 @@
         "id": "tests/test_homepage_intelligence_cockpit_aggregate.py::test_homepage_intelligence_cockpit_aggregate_is_deterministic_and_public_safe",
         "domain": "residual_repository_integration",
         "baseline": true
+      },
+      {
+        "id": "tests/test_homepage_intelligence_cockpit_aggregate.py::test_homepage_intelligence_fixture_bundle_fails_closed_on_readiness_truth",
+        "domain": "residual_repository_integration",
+        "baseline": false
       },
       {
         "id": "tests/test_homepage_intelligence_serialization_budget.py::test_homepage_intelligence_bundle_has_deterministic_stable_public_keys",
@@ -34407,6 +34777,41 @@
         "id": "tests/test_sector_theme_strength_service.py::test_build_summary_defaults_to_safe_no_evidence_contract",
         "domain": "residual_repository_integration",
         "baseline": true
+      },
+      {
+        "id": "tests/test_sector_theme_strength_service.py::test_build_summary_projects_only_explicit_non_sample_ready_evidence[explicitly_ready]",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sector_theme_strength_service.py::test_build_summary_projects_only_explicit_non_sample_ready_evidence[fixture]",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sector_theme_strength_service.py::test_build_summary_projects_only_explicit_non_sample_ready_evidence[not_checked]",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sector_theme_strength_service.py::test_build_summary_projects_only_explicit_non_sample_ready_evidence[observation_only]",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sector_theme_strength_service.py::test_build_summary_projects_only_explicit_non_sample_ready_evidence[partial]",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sector_theme_strength_service.py::test_build_summary_projects_only_explicit_non_sample_ready_evidence[real_shaped_unverified]",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sector_theme_strength_service.py::test_build_summary_projects_only_explicit_non_sample_ready_evidence[unavailable]",
+        "domain": "residual_repository_integration",
+        "baseline": false
       },
       {
         "id": "tests/test_sector_theme_strength_service.py::test_build_summary_serializes_strongest_and_weakest_lists",

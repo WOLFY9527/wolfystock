@@ -51,7 +51,7 @@ def test_manifest_validator_preserves_explicit_historical_baseline_collection_ga
     result = topology.validate_manifest(broken)
 
     assert result["baselineBackendTests"] == 7_609
-    assert result["backendTests"] == 7_630
+    assert result["backendTests"] == len(current_ids)
 
 
 def test_backend_ownership_is_unique_sorted_and_represents_every_domain() -> None:
