@@ -3,11 +3,16 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, Mapping, Sequence
 
+from src.services.options_authority_sanitizers import (
+    mapping,
+    sanitize_authority_text,
+    sanitize_mapping,
+    sanitize_sequence,
+    text,
+)
 
-REDACTED = "redacted"
 REQUIRED_EVIDENCE_FAMILIES = (
     "source_identity_and_provenance_chain",
     "licensed_source_backing",
@@ -44,7 +49,6 @@ _SECRET_MARKERS = (
     "secret",
     "token",
 )
-_URL_LIKE_HOST_RE = re.compile(r"^[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?(?:[/?#].*)?$")
 _TAXONOMY_KEYS = (
     "weekly",
     "monthly",
@@ -56,75 +60,37 @@ _TAXONOMY_KEYS = (
 _TAXONOMY_ALLOWED_STATES = {"proven", "missing", "partial", "unverified"}
 
 
-def _mapping(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _text(value: Any) -> str:
-    return str(value or "").strip()
-
-
-def _looks_like_url_text(text: str) -> bool:
-    lowered = text.lower()
-    if lowered.startswith(("http://", "https://", "www.")):
-        return True
-    return bool(_URL_LIKE_HOST_RE.fullmatch(lowered))
-
-
 def _sanitize_text(value: Any) -> str | None:
-    text = _text(value)
-    if not text:
-        return None
-    lowered = text.lower()
-    if any(marker in lowered for marker in _SECRET_MARKERS):
-        return REDACTED
-    if _looks_like_url_text(text):
-        return REDACTED
-    if any(marker in text for marker in ("{", "}", "[", "]")):
-        return REDACTED
-    if len(text) > 160:
-        return REDACTED
-    if any(character.lower() not in _SAFE_TEXT_CHARS for character in text):
-        return REDACTED
-    return text
+    return sanitize_authority_text(
+        value,
+        safe_chars=_SAFE_TEXT_CHARS,
+        blocked_markers=_SECRET_MARKERS,
+        max_length=160,
+        redact_url_like=True,
+        redact_payload_brackets=True,
+    )
 
 
-def _sanitize_value(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return _sanitize_mapping(value)
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return _sanitize_sequence(value)
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, int):
-        return value
-    return _sanitize_text(value)
+_mapping = mapping
+_text = text
 
 
 def _sanitize_mapping(value: Any) -> dict[str, Any]:
-    data = _mapping(value)
-    sanitized: dict[str, Any] = {}
-    for key, raw in data.items():
-        safe_key = _sanitize_text(key)
-        if not safe_key:
-            continue
-        safe_value = _sanitize_value(raw)
-        if safe_value in (None, "", [], {}):
-            continue
-        sanitized[safe_key] = safe_value
-    return sanitized
+    return sanitize_mapping(
+        value,
+        sanitize_text=_sanitize_text,
+        scalar_types=(bool, int),
+        nested_sequence_types=(Sequence,),
+    )
 
 
 def _sanitize_sequence(value: Any) -> list[Any]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
-        return []
-    sanitized: list[Any] = []
-    for item in value:
-        safe_value = _sanitize_value(item)
-        if safe_value in (None, "", [], {}):
-            continue
-        sanitized.append(safe_value)
-    return sanitized
+    return sanitize_sequence(
+        value,
+        sanitize_text=_sanitize_text,
+        scalar_types=(bool, int),
+        nested_sequence_types=(Sequence,),
+    )
 
 
 def _get_text(data: Mapping[str, Any], key: str) -> str | None:

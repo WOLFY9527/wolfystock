@@ -3,11 +3,25 @@
 
 from __future__ import annotations
 
-import re
+from functools import partial
 from typing import Any, Mapping, Sequence
 
 from src.services.options_authority_policy_matrix import (
     EVENT_CALENDAR_REQUIRED_FUTURE_EVIDENCE_FAMILIES,
+)
+from src.services.options_authority_sanitizers import (
+    calendar_sla_evidence_present,
+    coerce_bool,
+    flatten_text,
+    has_value,
+    mapping,
+    normalized_text,
+    sanitize_authority_text,
+    sanitize_date_range,
+    sanitize_mapping,
+    sanitize_sequence,
+    text,
+    value,
 )
 
 
@@ -35,7 +49,6 @@ REQUIRED_FUTURE_EVENT_CALENDAR_AUTHORITY_EVIDENCE_FIELDS = (
     "sandboxOrProduction",
 )
 _SAFE_TEXT_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789_:-+./")
-_REDACTED = "redacted"
 _BLOCKED_TEXT_MARKERS = (
     "api_key",
     "apikey",
@@ -47,7 +60,6 @@ _BLOCKED_TEXT_MARKERS = (
     "secret",
     "token",
 )
-_URL_LIKE_HOST_RE = re.compile(r"^[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?(?:[/?#].*)?$")
 _AUTHORITATIVE_SOURCE_AUTHORITIES = frozenset(
     {"authorized", "authoritative", "licensed", "internal_authorized", "provider_reported_authorized"}
 )
@@ -61,123 +73,25 @@ _CHECKLIST_REASON_CODES = {
 }
 
 
-def _mapping(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _text(value: Any) -> str:
-    return str(value or "").strip()
-
-
 def _sanitize_text(value: Any) -> str | None:
-    text = _text(value)
-    if not text:
-        return None
-    lowered = text.lower()
-    if any(marker in lowered for marker in _BLOCKED_TEXT_MARKERS):
-        return _REDACTED
-    if _looks_like_url_text(text):
-        return _REDACTED
-    if len(text) > 120 or any(character.lower() not in _SAFE_TEXT_CHARS for character in text):
-        return _REDACTED
-    return text
+    return sanitize_authority_text(
+        value,
+        safe_chars=_SAFE_TEXT_CHARS,
+        blocked_markers=_BLOCKED_TEXT_MARKERS,
+        redact_url_like=True,
+    )
 
 
-def _looks_like_url_text(text: str) -> bool:
-    lowered = text.lower()
-    if lowered.startswith(("http://", "https://", "www.")):
-        return True
-    return bool(_URL_LIKE_HOST_RE.fullmatch(lowered))
-
-
-def _normalized_text(value: Any) -> str:
-    return (_sanitize_text(value) or "").lower().replace("-", "_")
-
-
-def _value(data: Mapping[str, Any], *keys: str) -> Any:
-    for key in keys:
-        if key in data:
-            return data.get(key)
-    return None
-
-
-def _bool(value: Any) -> bool | None:
-    if isinstance(value, bool):
-        return value
-    if value in (None, ""):
-        return None
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"1", "true", "yes", "on", "enabled"}:
-            return True
-        if lowered in {"0", "false", "no", "off", "disabled"}:
-            return False
-        return None
-    return bool(value)
-
-
-def _sanitize_sequence(value: Any) -> list[Any]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
-        return []
-    sanitized: list[Any] = []
-    for item in value:
-        if isinstance(item, Mapping):
-            nested = _sanitize_mapping(item)
-            if nested:
-                sanitized.append(nested)
-            continue
-        if isinstance(item, (list, tuple)):
-            nested = _sanitize_sequence(item)
-            if nested:
-                sanitized.append(nested)
-            continue
-        if isinstance(item, bool) or isinstance(item, (int, float)):
-            sanitized.append(item)
-            continue
-        text = _sanitize_text(item)
-        if text is not None:
-            sanitized.append(text)
-    return sanitized
-
-
-def _sanitize_mapping(value: Any) -> dict[str, Any]:
-    data = _mapping(value)
-    sanitized: dict[str, Any] = {}
-    for key, raw in data.items():
-        safe_key = _sanitize_text(key)
-        if safe_key is None:
-            continue
-        if isinstance(raw, Mapping):
-            nested = _sanitize_mapping(raw)
-            if nested:
-                sanitized[safe_key] = nested
-            continue
-        if isinstance(raw, (list, tuple)):
-            nested = _sanitize_sequence(raw)
-            if nested:
-                sanitized[safe_key] = nested
-            continue
-        if isinstance(raw, bool) or isinstance(raw, (int, float)):
-            sanitized[safe_key] = raw
-            continue
-        text = _sanitize_text(raw)
-        if text is not None:
-            sanitized[safe_key] = text
-    return sanitized
-
-
-def _date_range(value: Any) -> dict[str, str] | None:
-    data = _mapping(value)
-    start = _sanitize_text(_value(data, "start", "from"))
-    end = _sanitize_text(_value(data, "end", "to"))
-    if not start and not end:
-        return None
-    result: dict[str, str] = {}
-    if start:
-        result["start"] = start
-    if end:
-        result["end"] = end
-    return result or None
+_mapping = mapping
+_text = text
+_value = value
+_bool = coerce_bool
+_has_value = has_value
+_normalized_text = partial(normalized_text, sanitize_text=_sanitize_text)
+_sanitize_sequence = partial(sanitize_sequence, sanitize_text=_sanitize_text)
+_sanitize_mapping = partial(sanitize_mapping, sanitize_text=_sanitize_text)
+_date_range = partial(sanitize_date_range, sanitize_text=_sanitize_text)
+_flatten_text = partial(flatten_text, sanitize_text=_sanitize_text)
 
 
 def _string_list(value: Any) -> list[str]:
@@ -185,33 +99,6 @@ def _string_list(value: Any) -> list[str]:
         sanitized = _sanitize_text(value)
         return [sanitized] if sanitized else []
     return [item for item in _sanitize_sequence(value) if isinstance(item, str)]
-
-
-def _has_value(value: Any) -> bool:
-    if isinstance(value, Mapping):
-        return any(_has_value(item) for item in value.values())
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return any(_has_value(item) for item in value)
-    if isinstance(value, bool):
-        return True
-    if isinstance(value, (int, float)):
-        return True
-    return bool(_text(value))
-
-
-def _flatten_text(values: Sequence[Any]) -> str:
-    chunks: list[str] = []
-    for value in values:
-        if isinstance(value, Mapping):
-            chunks.append(_flatten_text(list(value.values())))
-            continue
-        if isinstance(value, (list, tuple, set, frozenset)):
-            chunks.append(_flatten_text(list(value)))
-            continue
-        text = _normalized_text(value)
-        if text:
-            chunks.append(text)
-    return " ".join(chunks)
 
 
 def _source_reason_codes(data: Mapping[str, Any]) -> list[str]:
@@ -342,22 +229,7 @@ def _family_present_sla(data: Mapping[str, Any], as_of: str | None, freshness: s
         "freshnessEvidence",
         "freshness_evidence",
     )
-    has_latency_or_error_state = any(
-        _has_value(_value(sla, *keys))
-        for keys in (
-            ("latencyState", "latency_state"),
-            ("errorState", "error_state"),
-        )
-    )
-    return bool(
-        as_of
-        and freshness
-        and _has_value(_value(sla, "maxAgePolicy", "max_age_policy"))
-        and _has_value(_value(sla, "providerSlaStatus", "provider_sla_status"))
-        and _has_value(_value(sla, "freshnessSeconds", "freshness_seconds"))
-        and _has_value(_value(sla, "freshnessState", "freshness_state"))
-        and has_latency_or_error_state
-    )
+    return calendar_sla_evidence_present(sla, as_of=as_of, freshness=freshness)
 
 
 def _family_present_event_taxonomy(data: Mapping[str, Any]) -> bool:
