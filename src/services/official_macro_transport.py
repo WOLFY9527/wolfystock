@@ -19,6 +19,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
+from src.providers import classify_provider_retry_disposition
 from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
 
 
@@ -486,25 +487,27 @@ def run_official_macro_live_smoke(
         for attempt_index in range(bounded_max_attempts):
             attempts_executed = attempt_index + 1
             current_attempt_missing: list[str] = []
+            next_pending_series: list[str] = []
             for series_id in pending_series:
                 timeout = remaining_timeout(fred_timeout_seconds)
                 if timeout is None:
                     current_attempt_missing.append(series_id)
+                    next_pending_series.append(series_id)
                     continue
+                retry_same_target = True
                 try:
                     points = fetch_fred_observation_points(series_id, limit=2, timeout=timeout)
-                except Exception:
+                except Exception as exc:
                     points = []
+                    retry_same_target = classify_provider_retry_disposition(exc).retry_same_target
                 series_status = _official_macro_smoke_series_status(series_id, points, now=now)
                 results[series_id] = series_status
                 if series_status == "missing":
                     current_attempt_missing.append(series_id)
+                    if retry_same_target:
+                        next_pending_series.append(series_id)
             transient_missing_series_seen.update(current_attempt_missing)
-            pending_series = [
-                series_id
-                for series_id in OFFICIAL_MACRO_LIVE_SMOKE_FRED_SERIES_IDS
-                if results.get(series_id) != "fulfilled"
-            ]
+            pending_series = next_pending_series
             if not pending_series or attempts_executed >= bounded_max_attempts:
                 break
             sleep_budget = remaining_timeout(bounded_retry_sleep_seconds)
@@ -621,31 +624,35 @@ def run_fed_liquidity_live_smoke(
             attempts_executed = attempt_index + 1
             current_attempt_missing: list[str] = []
             current_attempt_timeout: list[str] = []
+            next_pending_series: list[str] = []
             for series_id in pending_series:
                 timeout = remaining_timeout(fred_timeout_seconds)
                 if timeout is None:
                     results[series_id] = "timeout"
                     current_attempt_timeout.append(series_id)
+                    next_pending_series.append(series_id)
                     continue
+                retry_same_target = True
                 try:
                     points = fetch_fred_observation_points(series_id, limit=2, timeout=timeout)
                 except Exception as exc:
+                    retry_same_target = classify_provider_retry_disposition(exc).retry_same_target
                     if classify_official_macro_exception(exc) == "timeout":
                         results[series_id] = "timeout"
                         current_attempt_timeout.append(series_id)
+                        if retry_same_target:
+                            next_pending_series.append(series_id)
                         continue
                     points = []
                 series_status = _official_macro_smoke_series_status(series_id, points, now=now)
                 results[series_id] = series_status
                 if series_status == "missing":
                     current_attempt_missing.append(series_id)
+                    if retry_same_target:
+                        next_pending_series.append(series_id)
             transient_missing_series_seen.update(current_attempt_missing)
             timeout_series_seen.update(current_attempt_timeout)
-            pending_series = [
-                series_id
-                for series_id in FED_LIQUIDITY_LIVE_SMOKE_SERIES_IDS
-                if results.get(series_id) != "fulfilled"
-            ]
+            pending_series = next_pending_series
             if not pending_series or attempts_executed >= bounded_max_attempts:
                 break
             sleep_budget = remaining_timeout(bounded_retry_sleep_seconds)
@@ -779,15 +786,19 @@ def run_usd_pressure_live_smoke(
         for attempt_index in range(bounded_max_attempts):
             attempts_executed = attempt_index + 1
             current_attempt_missing: list[str] = []
+            next_pending_series: list[str] = []
             for series_id in pending_series:
                 timeout = remaining_timeout(fred_timeout_seconds)
                 if timeout is None:
                     current_attempt_missing.append(series_id)
+                    next_pending_series.append(series_id)
                     continue
+                retry_same_target = True
                 try:
                     points = fetch_fred_observation_points(series_id, limit=2, timeout=timeout)
-                except Exception:
+                except Exception as exc:
                     points = []
+                    retry_same_target = classify_provider_retry_disposition(exc).retry_same_target
                 latest_point = _official_macro_smoke_latest_point(points)
                 if latest_point is not None:
                     latest_points[series_id] = latest_point
@@ -800,12 +811,10 @@ def run_usd_pressure_live_smoke(
                 results[series_id] = series_status
                 if series_status == "missing":
                     current_attempt_missing.append(series_id)
+                    if retry_same_target:
+                        next_pending_series.append(series_id)
             transient_missing_series_seen.update(current_attempt_missing)
-            pending_series = [
-                series_id
-                for series_id in USD_PRESSURE_LIVE_SMOKE_SERIES_IDS
-                if results.get(series_id) != "fulfilled"
-            ]
+            pending_series = next_pending_series
             if not pending_series or attempts_executed >= bounded_max_attempts:
                 break
             sleep_budget = remaining_timeout(bounded_retry_sleep_seconds)

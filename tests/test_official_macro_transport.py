@@ -668,7 +668,7 @@ def test_usd_pressure_live_smoke_fails_closed_on_stale_series() -> None:
     ):
         summary = run_usd_pressure_live_smoke(now=now)
 
-    assert fred_requested == ["DTWEXBGS", "DTWEXBGS", "DTWEXBGS"]
+    assert fred_requested == ["DTWEXBGS"]
     _assert_smoke_summary_fields(summary)
     assert summary["probePassed"] is False
     assert summary["sourceAuthorityAllowed"] is False
@@ -998,6 +998,176 @@ def test_official_macro_activation_cache_readiness_unexpected_error_is_sanitized
     assert all(item["blocked"] is True for item in payload["seriesReadiness"])
     assert all(item["blockedReason"] == "unexpected_error" for item in payload["seriesReadiness"])
     assert "SECRET" not in output
+
+
+def test_official_macro_smoke_401_stops_each_series_after_one_attempt_and_fails_closed() -> None:
+    requested: list[str] = []
+
+    def _unauthorized(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        requested.append(series_id)
+        raise OfficialMacroTransportError(
+            "http_error",
+            "FRED request failed token=SECRET",
+            status_code=401,
+        )
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_unauthorized,
+    ), patch(
+        "src.services.official_macro_transport.fetch_treasury_daily_rate_observation_points",
+        side_effect=AssertionError("configured FRED failure must not introduce Treasury fallback"),
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_official_macro_live_smoke(retry_sleep_seconds=0.0)
+
+    assert requested == list(official_macro_transport.OFFICIAL_MACRO_LIVE_SMOKE_FRED_SERIES_IDS)
+    assert summary["attempts"] == 1
+    assert summary["probePassed"] is False
+    assert summary["sourceAuthorityAllowed"] is False
+    assert summary["scoreContributionAllowed"] is False
+    assert "SECRET" not in json.dumps(summary)
+
+
+def test_fed_liquidity_smoke_429_stops_each_series_after_one_attempt_and_fails_closed() -> None:
+    requested: list[str] = []
+
+    def _rate_limited(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        requested.append(series_id)
+        raise OfficialMacroTransportError("http_error", "quota exhausted", status_code=429)
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_rate_limited,
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_fed_liquidity_live_smoke(retry_sleep_seconds=0.0)
+
+    assert requested == list(official_macro_transport.FED_LIQUIDITY_LIVE_SMOKE_SERIES_IDS)
+    assert summary["attempts"] == 1
+    assert summary["probePassed"] is False
+    assert summary["sourceAuthorityAllowed"] is False
+    assert summary["scoreContributionAllowed"] is False
+
+
+def test_usd_pressure_smoke_parse_error_stops_after_one_attempt_and_fails_closed() -> None:
+    requested: list[str] = []
+
+    def _parse_error(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        requested.append(series_id)
+        raise OfficialMacroTransportError("parse_error", "response could not be parsed")
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_parse_error,
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_usd_pressure_live_smoke(retry_sleep_seconds=0.0)
+
+    assert requested == ["DTWEXBGS"]
+    assert summary["attempts"] == 1
+    assert summary["probePassed"] is False
+    assert summary["sourceAuthorityAllowed"] is False
+    assert summary["scoreContributionAllowed"] is False
+
+
+def test_official_macro_smoke_timeout_retries_within_existing_budget() -> None:
+    attempts_by_series: dict[str, int] = {}
+
+    def _timeout(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        attempts_by_series[series_id] = attempts_by_series.get(series_id, 0) + 1
+        raise OfficialMacroTransportError("timeout", "request timed out")
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_timeout,
+    ), patch(
+        "src.services.official_macro_transport.fetch_treasury_daily_rate_observation_points",
+        side_effect=AssertionError("configured FRED timeout must not introduce Treasury fallback"),
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_official_macro_live_smoke(
+            aggregate_budget_seconds=8.0,
+            max_attempts=3,
+            retry_sleep_seconds=0.0,
+        )
+
+    assert set(attempts_by_series) == set(official_macro_transport.OFFICIAL_MACRO_LIVE_SMOKE_FRED_SERIES_IDS)
+    assert set(attempts_by_series.values()) == {3}
+    assert summary["attempts"] == 3
+    assert summary["sourceAuthorityAllowed"] is False
+    assert summary["scoreContributionAllowed"] is False
+
+
+def test_official_macro_smoke_stale_series_is_not_re_requested() -> None:
+    now = datetime(2026, 5, 14, 12, 0, tzinfo=timezone.utc)
+    attempts_by_series: dict[str, int] = {}
+
+    def _fetch(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        attempts_by_series[series_id] = attempts_by_series.get(series_id, 0) + 1
+        date_text = "2026-05-08" if series_id == "DGS10" else "2026-05-13"
+        return [_macro_point(series_id, 1.0, date_text)]
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_fetch,
+    ), patch(
+        "src.services.official_macro_transport.fetch_treasury_daily_rate_observation_points",
+        side_effect=AssertionError("stale FRED series must not introduce Treasury fallback"),
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_official_macro_live_smoke(now=now, retry_sleep_seconds=0.0)
+
+    assert set(attempts_by_series.values()) == {1}
+    assert summary["staleSeries"] == ["DGS10"]
+    assert summary["sourceAuthorityAllowed"] is False
+    assert summary["scoreContributionAllowed"] is False
+
+
+def test_official_macro_smoke_invalid_metadata_is_not_re_requested() -> None:
+    now = datetime(2026, 5, 14, 12, 0, tzinfo=timezone.utc)
+    attempts_by_series: dict[str, int] = {}
+
+    def _fetch(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        attempts_by_series[series_id] = attempts_by_series.get(series_id, 0) + 1
+        if series_id == "DGS10":
+            return [
+                _macro_point(
+                    series_id,
+                    4.41,
+                    "2026-05-13",
+                    source_id="unofficial:DGS10",
+                    source_type="unofficial_proxy",
+                )
+            ]
+        return [_macro_point(series_id, 1.0, "2026-05-13")]
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_fetch,
+    ), patch(
+        "src.services.official_macro_transport.fetch_treasury_daily_rate_observation_points",
+        side_effect=AssertionError("invalid metadata must not introduce Treasury fallback"),
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_official_macro_live_smoke(now=now, retry_sleep_seconds=0.0)
+
+    assert set(attempts_by_series.values()) == {1}
+    assert summary["sourceMetadataValid"] is False
+    assert summary["sourceAuthorityAllowed"] is False
+    assert summary["scoreContributionAllowed"] is False
 
 
 def test_official_macro_activation_help_includes_cache_readiness_mode(
@@ -1602,7 +1772,7 @@ def test_official_macro_live_smoke_stale_dgs_yields_fail_closed_without_treasury
         "missingSeries": [],
         "staleSeries": ["DGS10"],
         "reason": "stale_series",
-        "attempts": 3,
+        "attempts": 1,
         "maxAttempts": 3,
         "transientMissingSeries": [],
         "finalAttemptMissingSeries": [],
@@ -1658,7 +1828,7 @@ def test_official_macro_live_smoke_rejects_proxy_metadata_for_treasury_yield_ser
         "missingSeries": ["DGS10"],
         "staleSeries": [],
         "reason": "source_metadata_invalid",
-        "attempts": 3,
+        "attempts": 1,
         "maxAttempts": 3,
         "transientMissingSeries": [],
         "finalAttemptMissingSeries": ["DGS10"],

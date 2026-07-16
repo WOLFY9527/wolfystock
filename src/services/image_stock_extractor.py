@@ -20,6 +20,7 @@ import time
 from typing import List, Optional, Tuple
 
 from src.config import Config, get_config
+from src.providers import classify_provider_retry_disposition
 from src.services.llm_instrumentation import emit_llm_event, provider_from_model
 from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
 
@@ -368,10 +369,11 @@ def extract_stock_codes_from_image(
             return items, raw
         except Exception as e:
             last_error = e
-            if attempt < 2:
-                delay = 2 ** attempt
-                logger.warning(f"[ImageExtractor] 尝试 {attempt + 1}/3 失败，{delay}s 后重试: {e}")
-                time.sleep(delay)
+            if attempt >= 2 or not classify_provider_retry_disposition(e).retry_same_target:
+                break
+            delay = 2 ** attempt
+            logger.warning(f"[ImageExtractor] 尝试 {attempt + 1}/3 失败，{delay}s 后重试: {e}")
+            time.sleep(delay)
 
     raise ValueError(
         f"Vision API 调用失败，请检查 API Key 与网络: {last_error}"

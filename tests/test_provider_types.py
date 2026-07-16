@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import json
+import socket
+import ssl
 import unittest
+from dataclasses import asdict
 from datetime import datetime, timezone
+from types import SimpleNamespace
+
+import src.providers.errors as provider_errors
 
 from src.providers import (
     ProviderCapability,
@@ -129,3 +135,100 @@ class TestProviderTypes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _StatusCodeError(RuntimeError):
+    def __init__(self, status_code: int) -> None:
+        super().__init__("request failed token=SECRET")
+        self.status_code = status_code
+
+
+class _HttpStatusError(RuntimeError):
+    def __init__(self, http_status: int) -> None:
+        super().__init__("request failed token=SECRET")
+        self.http_status = http_status
+
+
+class _ResponseStatusError(RuntimeError):
+    def __init__(self, status_code: int) -> None:
+        super().__init__("request failed token=SECRET")
+        self.response = SimpleNamespace(status_code=status_code)
+
+
+def test_retry_disposition_retries_timeout_connection_and_5xx_same_target() -> None:
+    cases = [
+        (TimeoutError("timed out token=SECRET"), None),
+        (ConnectionError("connection reset token=SECRET"), None),
+        (_StatusCodeError(503), 503),
+        (_HttpStatusError(502), 502),
+        (_ResponseStatusError(504), 504),
+        (provider_errors.ProviderError("provider failed", http_status=503), 503),
+    ]
+    for failure, expected_status in cases:
+        disposition = provider_errors.classify_provider_retry_disposition(failure)
+
+        assert disposition.retry_same_target is True
+        assert disposition.fallback_allowed is True
+        assert disposition.counts_toward_transport_circuit is True
+        assert set(asdict(disposition)) == {
+            "retry_same_target",
+            "fallback_allowed",
+            "counts_toward_transport_circuit",
+        }
+        assert "SECRET" not in repr(disposition)
+        if expected_status is not None:
+            assert provider_errors._http_status_from_exception(failure) == expected_status
+
+
+def test_retry_disposition_stops_401_403_429_same_target() -> None:
+    for failure in (_StatusCodeError(401), _HttpStatusError(403), _ResponseStatusError(429)):
+        disposition = provider_errors.classify_provider_retry_disposition(failure)
+
+        assert disposition.retry_same_target is False
+        assert disposition.fallback_allowed is True
+        assert disposition.counts_toward_transport_circuit is False
+
+
+def test_retry_disposition_stops_invalid_input_unsupported_payload_and_contract_failures() -> None:
+    certificate_failure = RuntimeError("transport failed")
+    certificate_failure.reason = "transport_error"  # type: ignore[attr-defined]
+    certificate_failure.__cause__ = ssl.SSLCertVerificationError(1, "certificate verify failed")
+    failures = [
+        provider_errors.ProviderInvalidPayload("invalid request"),
+        _StatusCodeError(415),
+        ValueError("deterministic contract failure"),
+        TypeError("deterministic contract failure"),
+        KeyError("deterministic contract failure"),
+        certificate_failure,
+    ]
+    for failure in failures:
+        disposition = provider_errors.classify_provider_retry_disposition(failure)
+
+        assert disposition.retry_same_target is False
+        assert disposition.counts_toward_transport_circuit is False
+
+
+def test_retry_disposition_separates_fallback_permission_from_same_target_retry() -> None:
+    auth = provider_errors.classify_provider_retry_disposition(_StatusCodeError(401))
+    invalid = provider_errors.classify_provider_retry_disposition(_StatusCodeError(400))
+    timeout = provider_errors.classify_provider_retry_disposition(TimeoutError("timed out"))
+
+    assert (auth.retry_same_target, auth.fallback_allowed) == (False, True)
+    assert (invalid.retry_same_target, invalid.fallback_allowed) == (False, False)
+    assert (timeout.retry_same_target, timeout.fallback_allowed) == (True, True)
+
+
+def test_retry_disposition_counts_only_transport_availability_failures_toward_circuit() -> None:
+    cases = [
+        (socket.timeout("timed out"), True),
+        (ConnectionResetError("connection reset"), True),
+        (_StatusCodeError(500), True),
+        (_StatusCodeError(401), False),
+        (_StatusCodeError(429), False),
+        (provider_errors.ProviderInvalidPayload("invalid payload"), False),
+        (provider_errors.ProviderUnsupported("unsupported payload"), False),
+    ]
+    for failure, expected in cases:
+        disposition = provider_errors.classify_provider_retry_disposition(failure)
+
+        assert disposition.counts_toward_transport_circuit is expected

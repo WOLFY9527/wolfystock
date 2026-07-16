@@ -76,6 +76,12 @@ def _make_jpeg_bytes() -> bytes:
     return b"\xff\xd8\xff" + b"\x00" * 20
 
 
+class _VisionHTTPError(RuntimeError):
+    def __init__(self, status_code: int, message: str) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
 # ---------------------------------------------------------------------------
 # _resolve_vision_model
 # ---------------------------------------------------------------------------
@@ -339,3 +345,91 @@ class TestExtractStockCodesFromImage:
                    side_effect=RuntimeError("network down")):
             with pytest.raises(ValueError, match="Vision API 调用失败"):
                 extract_stock_codes_from_image(jpeg, "image/jpeg")
+
+
+def test_vision_auth_failure_stops_after_one_attempt_without_sleep() -> None:
+    cfg = _cfg(gemini_api_keys=[_GEMINI_KEY])
+    failure = _VisionHTTPError(401, "authentication failed")
+    with patch("src.services.image_stock_extractor.get_config", return_value=cfg), patch(
+        "src.services.image_stock_extractor.litellm.completion", side_effect=failure
+    ) as completion, patch("src.services.image_stock_extractor.time.sleep") as sleep:
+        with pytest.raises(ValueError, match="Vision API 调用失败"):
+            extract_stock_codes_from_image(_make_jpeg_bytes(), "image/jpeg")
+
+    assert completion.call_count == 1
+    sleep.assert_not_called()
+
+
+def test_vision_quota_failure_stops_after_one_attempt_without_sleep() -> None:
+    cfg = _cfg(gemini_api_keys=[_GEMINI_KEY])
+    failure = _VisionHTTPError(429, "quota exhausted")
+    with patch("src.services.image_stock_extractor.get_config", return_value=cfg), patch(
+        "src.services.image_stock_extractor.litellm.completion", side_effect=failure
+    ) as completion, patch("src.services.image_stock_extractor.time.sleep") as sleep:
+        with pytest.raises(ValueError, match="Vision API 调用失败"):
+            extract_stock_codes_from_image(_make_jpeg_bytes(), "image/jpeg")
+
+    assert completion.call_count == 1
+    sleep.assert_not_called()
+
+
+def test_vision_bad_request_or_unsupported_payload_stops_after_one_attempt() -> None:
+    cfg = _cfg(gemini_api_keys=[_GEMINI_KEY])
+    for status_code, message in ((400, "bad request"), (415, "unsupported payload")):
+        with patch("src.services.image_stock_extractor.get_config", return_value=cfg), patch(
+            "src.services.image_stock_extractor.litellm.completion",
+            side_effect=_VisionHTTPError(status_code, message),
+        ) as completion, patch("src.services.image_stock_extractor.time.sleep") as sleep:
+            with pytest.raises(ValueError, match="Vision API 调用失败"):
+                extract_stock_codes_from_image(_make_jpeg_bytes(), "image/jpeg")
+
+        assert completion.call_count == 1
+        sleep.assert_not_called()
+
+
+def test_vision_timeout_retries_three_times_with_existing_1_and_2_second_delays() -> None:
+    cfg = _cfg(gemini_api_keys=[_GEMINI_KEY])
+    with patch("src.services.image_stock_extractor.get_config", return_value=cfg), patch(
+        "src.services.image_stock_extractor.litellm.completion", side_effect=TimeoutError("timed out")
+    ) as completion, patch("src.services.image_stock_extractor.time.sleep") as sleep:
+        with pytest.raises(ValueError, match="Vision API 调用失败"):
+            extract_stock_codes_from_image(_make_jpeg_bytes(), "image/jpeg")
+
+    assert completion.call_count == 3
+    assert [call.args[0] for call in sleep.call_args_list] == [1, 2]
+
+
+def test_vision_connection_failure_can_rotate_existing_keys_without_changing_model_order() -> None:
+    second_key = "sk-gemini-testkey-5678"
+    cfg = _cfg(
+        vision_model="gemini/gemini-2.0-flash",
+        gemini_api_keys=[_GEMINI_KEY, second_key],
+    )
+    response = TestExtractStockCodesFromImage()._good_vision_response()
+    with patch("src.services.image_stock_extractor.get_config", return_value=cfg), patch(
+        "src.services.image_stock_extractor.random.choice", side_effect=[_GEMINI_KEY, second_key]
+    ), patch(
+        "src.services.image_stock_extractor.litellm.completion",
+        side_effect=[ConnectionError("connection reset"), response],
+    ) as completion, patch("src.services.image_stock_extractor.time.sleep") as sleep:
+        items, _raw = extract_stock_codes_from_image(_make_jpeg_bytes(), "image/jpeg")
+
+    assert [item[0] for item in items] == ["600519", "300750"]
+    assert [call.kwargs["api_key"] for call in completion.call_args_list] == [_GEMINI_KEY, second_key]
+    assert [call.kwargs["model"] for call in completion.call_args_list] == [
+        "gemini/gemini-2.0-flash",
+        "gemini/gemini-2.0-flash",
+    ]
+    sleep.assert_called_once_with(1)
+
+
+def test_vision_terminal_failure_preserves_existing_public_exception_contract() -> None:
+    cfg = _cfg(gemini_api_keys=[_GEMINI_KEY])
+    failure = _VisionHTTPError(403, "forbidden")
+    with patch("src.services.image_stock_extractor.get_config", return_value=cfg), patch(
+        "src.services.image_stock_extractor.litellm.completion", side_effect=failure
+    ):
+        with pytest.raises(ValueError, match="Vision API 调用失败，请检查 API Key 与网络") as exc_info:
+            extract_stock_codes_from_image(_make_jpeg_bytes(), "image/jpeg")
+
+    assert exc_info.value.__cause__ is failure
