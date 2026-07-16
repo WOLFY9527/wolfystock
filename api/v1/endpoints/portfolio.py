@@ -156,8 +156,27 @@ def _portfolio_consumer_safety_envelope(data: dict[str, Any], *, schema_version:
     data_status = _safe_status(payload.get("data_status"), default="unknown")
     calculation_status = _safe_status(payload.get("calculation_status"), default="unknown")
     freshness_status = data_status
-    availability = payload.get("availability") if isinstance(payload.get("availability"), dict) else {}
+    availability = dict(payload.get("availability")) if isinstance(payload.get("availability"), dict) else {}
     metrics_ready = bool(availability.get("metrics_ready")) if availability else calculation_status == "ready"
+    account_count, account_count_state = _portfolio_count_observation(
+        availability.get("account_count", payload.get("account_count")),
+        data_status=data_status,
+        count_kind="account",
+    )
+    position_count, position_count_state = _portfolio_count_observation(
+        availability.get("position_count"),
+        data_status=data_status,
+        count_kind="position",
+    )
+    availability.update(
+        {
+            "account_count": account_count,
+            "account_count_state": account_count_state,
+            "position_count": position_count,
+            "position_count_state": position_count_state,
+        }
+    )
+    payload["availability"] = availability
     evidence_gaps = _portfolio_consumer_evidence_gaps(payload, data_status=data_status)
     degraded_inputs = _portfolio_consumer_degraded_inputs(
         payload,
@@ -192,6 +211,8 @@ def _portfolio_consumer_safety_envelope(data: dict[str, Any], *, schema_version:
                 data_status=data_status,
                 calculation_status=calculation_status,
                 freshness_status=freshness_status,
+                account_count=account_count,
+                position_count=position_count,
             ),
             "dataQuality": {
                 "status": data_status,
@@ -199,8 +220,10 @@ def _portfolio_consumer_safety_envelope(data: dict[str, Any], *, schema_version:
                 "calculationStatus": calculation_status,
                 "reason": _safe_status(availability.get("reason"), default=data_status),
                 "metricsReady": metrics_ready,
-                "accountCount": _safe_int(availability.get("account_count", payload.get("account_count"))),
-                "positionCount": _safe_int(availability.get("position_count")),
+                "accountCount": account_count,
+                "accountCountState": account_count_state,
+                "positionCount": position_count,
+                "positionCountState": position_count_state,
                 "evidenceGapCount": len(evidence_gaps),
                 "degradedInputCount": len(degraded_inputs),
                 "observationOnly": True,
@@ -220,11 +243,50 @@ def _safe_status(value: Any, *, default: str) -> str:
     return text or default
 
 
-def _safe_int(value: Any) -> int:
+def _safe_count(value: Any) -> Optional[int]:
+    if value is None or isinstance(value, bool):
+        return None
     try:
-        return max(0, int(value or 0))
-    except (TypeError, ValueError):
-        return 0
+        count = int(value)
+    except (OverflowError, TypeError, ValueError):
+        return None
+    if count < 0:
+        return None
+    if isinstance(value, float) and not value.is_integer():
+        return None
+    if isinstance(value, str) and not value.strip().isdigit():
+        return None
+    return count
+
+
+def _portfolio_count_observation(
+    value: Any,
+    *,
+    data_status: str,
+    count_kind: str,
+) -> tuple[Optional[int], str]:
+    count = _safe_count(value)
+    if count_kind == "position" and data_status == "no_account":
+        return None, "not_applicable"
+    if data_status in {"data_unavailable", "calculation_unavailable"}:
+        return None, "unavailable"
+    if count is None:
+        state = "unavailable" if data_status == "provider_unavailable" else "unknown"
+        return None, state
+
+    if data_status == "no_account":
+        consistent = count_kind == "account" and count == 0
+    elif data_status == "no_positions":
+        consistent = count == 0 if count_kind == "position" else count > 0
+    elif data_status in {"ready", "provider_unavailable", "stale_or_cached"}:
+        consistent = count > 0
+    else:
+        consistent = False
+    if not consistent:
+        return None, "unknown"
+    if data_status == "stale_or_cached":
+        return count, "stale"
+    return count, "observed_zero" if count == 0 else "observed_positive"
 
 
 def _safe_float(value: Any) -> Optional[float]:
@@ -257,9 +319,10 @@ def _portfolio_risk_exposure_readiness(
     data_status: str,
     calculation_status: str,
     freshness_status: str,
+    account_count: Optional[int],
+    position_count: Optional[int],
 ) -> dict[str, Any]:
     availability = _safe_dict(payload.get("availability"))
-    position_count = _safe_int(availability.get("position_count"))
     metrics_ready = bool(availability.get("metrics_ready")) and calculation_status == "ready"
     as_of = str(payload.get("as_of") or payload.get("asOf") or "").strip() or None
     diagnostics = _safe_dict(payload.get("riskDiagnostics"))
@@ -271,6 +334,7 @@ def _portfolio_risk_exposure_readiness(
     broker_disabled = _portfolio_has_disabled_broker_link(source_authority)
     holdings_state = _portfolio_holdings_readiness_state(
         data_status=data_status,
+        account_count=account_count,
         position_count=position_count,
         source_state=source_state,
         broker_disabled=broker_disabled,
@@ -400,10 +464,13 @@ def _portfolio_has_disabled_broker_link(source_authority: dict[str, Any]) -> boo
 def _portfolio_holdings_readiness_state(
     *,
     data_status: str,
-    position_count: int,
+    account_count: Optional[int],
+    position_count: Optional[int],
     source_state: str,
     broker_disabled: bool,
 ) -> str:
+    if account_count is None or position_count is None:
+        return "missing"
     if broker_disabled and position_count == 0:
         return "broker_disabled"
     if position_count <= 0 or data_status in {"no_account", "no_positions"}:
@@ -479,11 +546,13 @@ def _portfolio_sector_readiness_state(payload: dict[str, Any], *, holdings_state
         return base_state
     sector_concentration = _safe_dict(payload.get("sector_concentration"))
     coverage = _safe_dict(sector_concentration.get("coverage"))
-    if _safe_int(coverage.get("classified_count")) > 0:
+    classified_count = _safe_count(coverage.get("classified_count"))
+    if classified_count is not None and classified_count > 0:
         return base_state
     provenance = _safe_dict(payload.get("sectorSourceProvenance"))
     summary = _safe_dict(provenance.get("summary"))
-    if _safe_int(summary.get("resolvedCount")) > 0:
+    resolved_count = _safe_count(summary.get("resolvedCount"))
+    if resolved_count is not None and resolved_count > 0:
         return base_state
     return "missing"
 
@@ -493,7 +562,8 @@ def _portfolio_liquidity_volatility_readiness_state(payload: dict[str, Any], *, 
     if base_state == "missing":
         return "missing"
     risk_window = _safe_dict(payload.get("drawdown"))
-    if _safe_int(risk_window.get("series_points")) > 1:
+    series_points = _safe_count(risk_window.get("series_points"))
+    if series_points is not None and series_points > 1:
         return base_state
     return "missing"
 
@@ -824,12 +894,25 @@ def _portfolio_concentration_context(payload: dict[str, Any]) -> dict[str, Any]:
         state = "elevated"
     else:
         state = "observable"
+    data_status = _safe_status(payload.get("data_status"), default="unknown")
+    holding_count, holding_count_state = _portfolio_count_observation(
+        analytics_risk.get("holding_count"),
+        data_status=data_status,
+        count_kind="position",
+    )
+    account_count, account_count_state = _portfolio_count_observation(
+        analytics_risk.get("account_count", payload.get("account_count")),
+        data_status=data_status,
+        count_kind="account",
+    )
     return {
         "state": state,
         "topWeightPct": top_weight,
         "alert": alert,
-        "holdingCount": _safe_int(analytics_risk.get("holding_count")),
-        "accountCount": _safe_int(analytics_risk.get("account_count", payload.get("account_count"))),
+        "holdingCount": holding_count,
+        "holdingCountState": holding_count_state,
+        "accountCount": account_count,
+        "accountCountState": account_count_state,
         "dominantType": dominant.get("type"),
         "dominantLabel": dominant.get("label"),
         "warningCodes": warnings,
@@ -868,15 +951,22 @@ def _portfolio_market_context(payload: dict[str, Any]) -> dict[str, Any]:
     analytics_exposure = _safe_dict(analytics.get("exposure"))
     largest_market = _safe_dict(_portfolio_analytics_risk(payload).get("largest_market"))
     market_breakdown = payload.get("market_breakdown") if isinstance(payload.get("market_breakdown"), list) else []
+    data_status = _safe_status(payload.get("data_status"), default="unknown")
     market_rows: list[dict[str, Any]] = []
     for item in market_breakdown[:3]:
         if not isinstance(item, dict):
             continue
+        position_count, position_count_state = _portfolio_count_observation(
+            item.get("position_count"),
+            data_status=data_status,
+            count_kind="position",
+        )
         market_rows.append(
             {
                 "market": item.get("market"),
                 "weightPct": _safe_float(item.get("weight_pct")),
-                "positionCount": _safe_int(item.get("position_count")),
+                "positionCount": position_count,
+                "positionCountState": position_count_state,
             }
         )
     benchmark_state = _safe_status(payload.get("benchmarkMappingState"), default="unknown")

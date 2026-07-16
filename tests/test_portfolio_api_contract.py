@@ -74,6 +74,11 @@ _RISK_EXPOSURE_READINESS_FIELDS = {
     "blockers",
 }
 
+_COUNT_STATE_FIELDS = {
+    "accountCountState",
+    "positionCountState",
+}
+
 
 def _reset_auth_globals() -> None:
     auth._auth_enabled = None
@@ -176,6 +181,7 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
         self.assertEqual(payload["dataQuality"]["freshnessStatus"], freshness_status)
         self.assertEqual(payload["dataQuality"]["calculationStatus"], payload["calculation_status"])
         self.assertEqual(payload["dataQuality"]["metricsReady"], payload["availability"]["metrics_ready"])
+        self.assertTrue(_COUNT_STATE_FIELDS.issubset(payload["dataQuality"]))
         self.assertTrue(payload["dataQuality"]["observationOnly"])
         self.assertFalse(payload["dataQuality"]["decisionGrade"])
         self.assertIsInstance(payload["consumerIssues"], list)
@@ -199,6 +205,156 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, envelope_text.lower())
         self._assert_no_admin_diagnostic_keys(payload)
+
+    @staticmethod
+    def _count_contract_payload(
+        *,
+        data_status: str,
+        availability: dict,
+        account_count: object = None,
+    ) -> dict:
+        return {
+            "as_of": "2026-05-10",
+            "account_id": None,
+            "cost_method": "fifo",
+            "currency": "USD",
+            "account_count": account_count,
+            "data_status": data_status,
+            "calculation_status": (
+                "calculation_unavailable"
+                if data_status in {"no_account", "no_positions", "data_unavailable", "calculation_unavailable"}
+                else "ready"
+            ),
+            "availability": {
+                "status": data_status,
+                "reason": data_status,
+                "metrics_ready": data_status not in {"no_account", "no_positions", "data_unavailable"},
+                **availability,
+            },
+            "benchmarkMappingState": "unmapped",
+            "factorMappingState": "unmapped",
+            "sourceAuthorityState": "manual",
+            "fxFreshnessState": "live",
+            "drawdown": {},
+        }
+
+    def _get_count_contract_payload(self, service_payload: dict) -> dict:
+        with patch(
+            "api.v1.endpoints.portfolio.PortfolioRiskService.get_risk_report",
+            return_value=service_payload,
+        ):
+            response = self.client.get(
+                "/api/v1/portfolio/risk",
+                params={"as_of": "2026-05-10", "cost_method": "fifo"},
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()
+
+    def _assert_readiness_count_contract_preserves_all_observation_states(self) -> None:
+        cases = {
+            "missing_count": {
+                "payload": self._count_contract_payload(
+                    data_status="ready",
+                    availability={},
+                ),
+                "expected": (None, "unknown", None, "unknown", "missing"),
+            },
+            "missing_account_count": {
+                "payload": self._count_contract_payload(
+                    data_status="ready",
+                    availability={"position_count": 2},
+                ),
+                "expected": (None, "unknown", 2, "observed_positive", "missing"),
+            },
+            "malformed_count": {
+                "payload": self._count_contract_payload(
+                    data_status="ready",
+                    availability={"account_count": "one", "position_count": "not-a-count"},
+                    account_count="also-not-a-count",
+                ),
+                "expected": (None, "unknown", None, "unknown", "missing"),
+            },
+            "explicit_real_zero": {
+                "payload": self._count_contract_payload(
+                    data_status="no_positions",
+                    availability={"account_count": 1, "position_count": 0},
+                    account_count=1,
+                ),
+                "expected": (1, "observed_positive", 0, "observed_zero", "missing"),
+            },
+            "unproven_zero": {
+                "payload": self._count_contract_payload(
+                    data_status="ready",
+                    availability={"account_count": 0, "position_count": 0},
+                    account_count=0,
+                ),
+                "expected": (None, "unknown", None, "unknown", "missing"),
+            },
+            "unavailable_provider": {
+                "payload": self._count_contract_payload(
+                    data_status="provider_unavailable",
+                    availability={"account_count": 1},
+                    account_count=1,
+                ),
+                "expected": (1, "observed_positive", None, "unavailable", "missing"),
+            },
+            "no_portfolio_account": {
+                "payload": self._count_contract_payload(
+                    data_status="no_account",
+                    availability={"account_count": 0, "position_count": 0},
+                    account_count=0,
+                ),
+                "expected": (0, "observed_zero", None, "not_applicable", "missing"),
+            },
+            "account_with_no_positions": {
+                "payload": self._count_contract_payload(
+                    data_status="no_positions",
+                    availability={"account_count": 1, "position_count": 0},
+                    account_count=1,
+                ),
+                "expected": (1, "observed_positive", 0, "observed_zero", "missing"),
+            },
+            "stale_cached_portfolio": {
+                "payload": self._count_contract_payload(
+                    data_status="stale_or_cached",
+                    availability={"account_count": 1, "position_count": 2},
+                    account_count=1,
+                ),
+                "expected": (1, "stale", 2, "stale", "stale"),
+            },
+            "valid_nonzero_count": {
+                "payload": self._count_contract_payload(
+                    data_status="ready",
+                    availability={"account_count": 1, "position_count": 2},
+                    account_count=1,
+                ),
+                "expected": (1, "observed_positive", 2, "observed_positive", "manual_only"),
+            },
+        }
+
+        for case_name, case in cases.items():
+            with self.subTest(case=case_name):
+                payload = self._get_count_contract_payload(case["payload"])
+                data_quality = payload["dataQuality"]
+                (
+                    expected_account,
+                    expected_account_state,
+                    expected_position,
+                    expected_position_state,
+                    expected_holdings,
+                ) = case["expected"]
+                self.assertEqual(data_quality["accountCount"], expected_account)
+                self.assertEqual(data_quality["accountCountState"], expected_account_state)
+                self.assertEqual(data_quality["positionCount"], expected_position)
+                self.assertEqual(data_quality["positionCountState"], expected_position_state)
+                self.assertEqual(payload["availability"]["account_count"], expected_account)
+                self.assertEqual(payload["availability"]["account_count_state"], expected_account_state)
+                self.assertEqual(payload["availability"]["position_count"], expected_position)
+                self.assertEqual(payload["availability"]["position_count_state"], expected_position_state)
+                self.assertEqual(payload["riskExposureReadiness"]["holdings"]["state"], expected_holdings)
+                if expected_position_state in {"unknown", "unavailable", "not_applicable"}:
+                    self.assertIn("portfolio_positions", payload["riskExposureReadiness"]["blockers"])
+                json.dumps(payload, ensure_ascii=False, allow_nan=False)
 
     def _assert_exposure_research_context(
         self,
@@ -451,6 +607,20 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
         self.assertIn("benchmark_mapping", readiness["blockers"])
 
     def test_snapshot_readiness_exposes_missing_holdings_without_fake_metrics(self) -> None:
+        self._assert_readiness_count_contract_preserves_all_observation_states()
+
+        no_account_response = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"as_of": "2026-05-10", "cost_method": "fifo"},
+        )
+        self.assertEqual(no_account_response.status_code, 200)
+        no_account_payload = no_account_response.json()
+        self.assertEqual(no_account_payload["data_status"], "no_account")
+        self.assertEqual(no_account_payload["dataQuality"]["accountCount"], 0)
+        self.assertEqual(no_account_payload["dataQuality"]["accountCountState"], "observed_zero")
+        self.assertIsNone(no_account_payload["dataQuality"]["positionCount"])
+        self.assertEqual(no_account_payload["dataQuality"]["positionCountState"], "not_applicable")
+
         create_resp = self.client.post(
             "/api/v1/portfolio/accounts",
             json={"name": "Empty", "broker": "Manual", "market": "us", "base_currency": "USD"},
@@ -471,6 +641,10 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
             freshness_status="no_positions",
         )
         readiness = self._assert_risk_exposure_readiness(payload, holdings_state="missing")
+        self.assertEqual(payload["dataQuality"]["accountCount"], 1)
+        self.assertEqual(payload["dataQuality"]["accountCountState"], "observed_positive")
+        self.assertEqual(payload["dataQuality"]["positionCount"], 0)
+        self.assertEqual(payload["dataQuality"]["positionCountState"], "observed_zero")
         self.assertEqual(readiness["exposureCategories"]["singleNameConcentration"]["state"], "missing")
         self.assertEqual(readiness["exposureCategories"]["currencyExposure"]["state"], "missing")
         self.assertIn("portfolio_positions", readiness["blockers"])
