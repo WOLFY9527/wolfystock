@@ -872,21 +872,20 @@ describe('StockStructureDecisionPage', () => {
     expect(conclusion).toHaveTextContent('当前研究结论');
     expect(conclusion).toHaveTextContent('AAPL 当前为突破观察；置信度为中。');
     expect(conclusion).toHaveTextContent('支持证据');
-    expect(conclusion).toHaveTextContent('不确定性');
-    expect(conclusion).toHaveTextContent('失效 / 风险条件');
+    expect(conclusion).toHaveTextContent('主要风险 / 限制');
     expect(conclusion).toHaveTextContent('下一步研究动作');
-    expect(summary).toHaveTextContent('Analyst Memo');
+    expect(summary).toHaveTextContent('研究备忘');
     expect(summary).toHaveTextContent('当前观察');
     expect(summary).toHaveTextContent('为什么');
     expect(summary).toHaveTextContent('数据是否足够可靠');
     expect(summary).toHaveTextContent('下一步检查什么');
-    expect(summary).toHaveTextContent('limitations / evidence gaps');
+    expect(summary).toHaveTextContent('限制 / 证据缺口');
     expect(summary).toHaveTextContent('研究观察，不构成投资建议。');
-    expect(summary).toHaveTextContent('查看研究雷达');
+    expect(summary).toHaveTextContent('前往研究雷达继续核对');
     expect(summary).toHaveTextContent('打开回测');
     expect(summary).toHaveTextContent('复制证据');
     const firstViewportPanel = within(page).getByTestId('stock-first-viewport-summary-panel');
-    expect(firstViewportPanel).toHaveTextContent('研究状态：中');
+    expect(firstViewportPanel).toHaveTextContent('置信度：中');
     expect(firstViewportPanel).toHaveTextContent('历史数据可用');
     const trustRow = within(page).getByTestId('stock-data-trust-row');
     expect(trustRow).toHaveTextContent('报价');
@@ -930,11 +929,11 @@ describe('StockStructureDecisionPage', () => {
     expect(within(ledger).getByRole('columnheader', { name: '来源边界' })).toBeInTheDocument();
     const stockCoreChart = within(page).getByTestId('stock-history-core-chart');
     expect(within(page).getByTestId('stock-price-history-visual-block')).toContainElement(stockCoreChart);
-    // G025 first-screen sequence: identity → price path → conclusion/memo (not equal-weight card wall).
+    // T448 first-screen sequence: identity → conclusion → price path (not equal-weight card wall).
     const identityHeader = within(summary).getByTestId('stock-research-identity-header');
     const pricePath = within(summary).getByTestId('stock-price-history-visual-block');
-    expect(identityHeader.compareDocumentPosition(pricePath) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(pricePath.compareDocumentPosition(conclusion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(identityHeader.compareDocumentPosition(conclusion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(conclusion.compareDocumentPosition(pricePath) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(stockCoreChart.compareDocumentPosition(knownFacts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(knownFacts.compareDocumentPosition(historyWorkspace) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(historyWorkspace.compareDocumentPosition(analystMemoWorkspace) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -1200,8 +1199,9 @@ describe('StockStructureDecisionPage', () => {
     const page = await screen.findByTestId('stock-structure-decision-page');
     const summary = within(page).getByTestId('stock-consumer-research-summary');
     const firstViewportPanel = within(page).getByTestId('stock-first-viewport-summary-panel');
-    const productReadModel = await within(firstViewportPanel).findByTestId('stock-structure-product-read-model');
-    const freshness = within(firstViewportPanel).getByTestId('stock-product-read-model-freshness');
+    const boundaryDisclosure = within(summary).getByTestId('stock-research-boundary-disclosure');
+    const productReadModel = await within(boundaryDisclosure).findByTestId('stock-structure-product-read-model');
+    const freshness = within(boundaryDisclosure).getByTestId('stock-product-read-model-freshness');
 
     expect(summary).toHaveTextContent('暂不形成强结论');
     expect(summary).toHaveTextContent('置信度：低');
@@ -1212,6 +1212,7 @@ describe('StockStructureDecisionPage', () => {
     expect(productReadModel).toHaveTextContent('历史行情证据');
     expect(freshness).toHaveTextContent('新鲜度：已过期');
     expect(freshness).toHaveTextContent('截至 2026-05-20');
+    expect(boundaryDisclosure).not.toHaveAttribute('open');
     expect(textContentWithoutObservationBoundary(firstViewportPanel)).not.toMatch(/\bbreakout\b|provider|trace|raw|sourceAuthority|sourceConfidence/i);
   });
 

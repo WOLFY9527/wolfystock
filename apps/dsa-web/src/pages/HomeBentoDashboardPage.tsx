@@ -39,7 +39,6 @@ import type { HomeCandlestickChartContext } from '../components/home-bento/HomeC
 import {
   CompactFilterBar,
   FixedRegionGrid,
-  MetricStrip,
 } from '../components/linear/LinearPrimitives';
 import { Button } from '../components/common/Button';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
@@ -2113,6 +2112,7 @@ function HomeConclusionFirstConsole({
   thesisCopy: string;
   confidenceVisual: ReturnType<typeof resolveConfidenceVisual>;
 }) {
+  const [boundaryOpen, setBoundaryOpen] = useState(false);
   const isEnglish = locale === 'en';
   const routeLocale = typeof window !== 'undefined' ? parseLocaleFromPathname(window.location.pathname) : null;
   const frameworkRows = buildResearchFrameworkRows(locale, dashboard, dataQualityReport);
@@ -2129,12 +2129,6 @@ function HomeConclusionFirstConsole({
   const dataQualityLabel = dataQualityReport
     ? dataQualityTierLabel(dataQualityReport.dataQualityTier, locale)
     : (isEnglish ? 'Unconfirmed' : '未确认');
-  const dataHealthSummary = buildHomeDataHealthSummary(
-    locale,
-    evidenceCoverageFrame,
-    evidencePacket,
-    dataQualityReport,
-  );
   const researchPacketView = buildHomeResearchPacketView({
     locale,
     report,
@@ -2146,73 +2140,27 @@ function HomeConclusionFirstConsole({
     sourceProvenanceEntries,
   });
   const judgmentGateCopy = resolveJudgmentGateCopy(locale, dashboard, dataQualityReport, researchPacketView.status);
-  const scoreDisplayValue = displaySlotValue(
-    dashboard.decision.heroValue,
-    locale,
-    isEnglish ? 'Pending' : '待补充数据',
-  );
   const confidenceTone: 'neutral' | 'used' | 'warning' | 'missing' = dataQualityReport
     ? dataQualityChipTone(dataQualityReport)
     : 'neutral';
   const primaryActionHref = routeLocale
     ? buildLocalizedPath(`/stocks/${dashboard.ticker}/structure-decision`, routeLocale)
     : `/stocks/${dashboard.ticker}/structure-decision`;
-  const quickActions = [
-    {
-      key: 'stock-structure',
-      label: isEnglish ? 'Stock Structure' : '结构面板',
-      href: primaryActionHref,
-      primary: true,
-      detail: isEnglish ? 'Open the current symbol structure view first.' : '优先打开当前标的结构面板。',
-    },
-    {
-      key: 'research-radar',
-      label: isEnglish ? 'Research Radar' : '研究雷达',
-      href: routeLocale ? buildLocalizedPath('/research/radar', routeLocale) : '/research/radar',
-      primary: false,
-    },
-    {
-      key: 'market-overview',
-      label: isEnglish ? 'Market Overview' : '市场总览',
-      href: routeLocale ? buildLocalizedPath('/market-overview', routeLocale) : '/market-overview',
-      primary: false,
-    },
-  ] as const;
-  const primaryAction = quickActions[0];
+  const primaryAction = {
+    label: isEnglish ? 'Open stock structure' : '打开结构面板',
+    href: primaryActionHref,
+    detail: isEnglish ? 'Inspect the current symbol structure and its evidence boundary.' : '查看当前标的结构及其证据边界。',
+  };
   const researchLocale = isEnglish ? 'en' : 'zh';
-  const firstReadItems = [
-    {
-      key: 'state',
-      label: isEnglish ? 'Research state' : '研究状态',
-      value: researchReadiness.verdictLabel,
-      detail: researchPacketView.status === 'INSUFFICIENT'
-        ? researchPacketView.judgmentBoundary
-        : researchReadiness.summaryLine,
-    },
-    {
-      key: 'boundary',
-      label: isEnglish ? 'Data boundary' : '数据边界',
-      value: qualityPreview,
-      detail: researchPacketView.status === 'AVAILABLE'
-        ? qualityImpactCopy
-        : researchPacketView.judgmentBoundary,
-    },
-    {
-      key: 'focus',
-      label: isEnglish ? 'Next research focus' : '下一步研究重点',
-      value: nextCopy,
-      detail: researchPacketView.status === 'AVAILABLE'
-        ? missingCopy
-        : researchPacketView.missingEvidence,
-    },
-    {
-      key: 'next-click',
-      label: isEnglish ? 'Where to click next' : '下一跳入口',
-      value: primaryAction.label,
-      detail: primaryAction.detail,
-    },
-  ] as const;
-  // G017: no ObservationHead fact wall — first-read / support / risk / next own those semantics.
+  const trustSummary = researchPacketView.status === 'INSUFFICIENT'
+    ? researchPacketView.judgmentBoundary
+    : researchReadiness.summaryLine;
+  const dataHealthSummary = buildHomeDataHealthSummary(
+    locale,
+    evidenceCoverageFrame,
+    evidencePacket,
+    dataQualityReport,
+  );
   const qualityFacets: ResearchQualityFacet[] = [
     {
       key: 'data-state',
@@ -2229,13 +2177,6 @@ function HomeConclusionFirstConsole({
       value: confidenceVisual.label,
     },
   ];
-  const nextActionSteps: NextResearchActionItem[] = quickActions.map((action) => ({
-    key: action.key,
-    kind: action.key === 'stock-structure' ? 'inspect' : action.key === 'research-radar' ? 'continue' : 'handoff',
-    label: action.label,
-    description: 'detail' in action ? action.detail : undefined,
-    href: action.href,
-  }));
 
   return (
     <section
@@ -2246,28 +2187,11 @@ function HomeConclusionFirstConsole({
       data-research-density="editorial"
     >
       <div className="min-w-0 px-3 py-2.5 sm:px-4 sm:py-3 md:px-5">
-        {/* A. Judgment gate — research boundary posture before deep diagnostics */}
         <div
-          className="mb-1.5 flex min-w-0 flex-wrap items-center gap-1.5"
-          data-testid="home-research-judgment-gate"
+          className="min-w-0"
+          data-testid="home-research-current-conclusion"
+          data-primary-information-block="conclusion"
         >
-          <TraceBadge tone={dataQualityReport ? dataQualityChipTone(dataQualityReport) : 'neutral'}>
-            {judgmentGateCopy}
-          </TraceBadge>
-          <TraceBadge tone="neutral">
-            {isEnglish ? 'State' : '状态'}
-            {' · '}
-            {stanceLabel}
-          </TraceBadge>
-          <TraceBadge tone={confidenceTone}>
-            {isEnglish ? 'Confidence' : '可信度'}
-            {' · '}
-            {confidenceVisual.label}
-          </TraceBadge>
-        </div>
-
-        {/* B. Conclusion-first head — known / changed / uncertain without fact-wall restatement */}
-        <div className="min-w-0" data-testid="home-research-current-conclusion">
           <ObservationHead
             density="editorial"
             locale={researchLocale}
@@ -2282,21 +2206,9 @@ function HomeConclusionFirstConsole({
             )}
             lead={(
               // LeadText is <p>; phrasing-only children (no nested block elements).
-              <span className="block space-y-1" data-testid="home-research-conclusion-hierarchy">
+              <span className="block" data-testid="home-research-conclusion-hierarchy">
                 <span className="block text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]" data-testid="home-bento-decision-action">
                   {currentConclusion}
-                </span>
-                <span className="block text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)]">
-                  <span className="mr-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
-                    {isEnglish ? 'Support' : '支撑'}
-                  </span>
-                  {supportCopy}
-                </span>
-                <span className="block text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)]">
-                  <span className="mr-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
-                    {isEnglish ? 'Uncertain' : '仍不确定'}
-                  </span>
-                  {missingCopy}
                 </span>
               </span>
             )}
@@ -2313,40 +2225,28 @@ function HomeConclusionFirstConsole({
           </ObservationHead>
         </div>
 
-        {/* C. Subordinate score / confidence / data-state — not the lead hero */}
-        <div className="mt-2 min-w-0" data-testid="home-research-metric-adjacency">
-          <MetricStrip
-            className="overflow-hidden rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] sm:grid-cols-3"
-            items={[
-              {
-                key: 'score',
-                label: isEnglish ? 'Research score' : '研究评分',
-                value: scoreDisplayValue,
-                testId: 'home-research-score-strip',
-              },
-              {
-                key: 'confidence',
-                label: isEnglish ? 'Confidence' : '可信度',
-                value: confidenceVisual.label,
-                testId: 'home-research-confidence-strip',
-              },
-              {
-                key: 'data-state',
-                label: isEnglish ? 'Data state' : '数据状态',
-                value: dataQualityLabel,
-                testId: 'home-research-data-state-strip',
-              },
-            ]}
-          />
+        <div
+          className="home-research-trust-line mt-2 flex min-w-0 flex-col gap-1 py-2 sm:flex-row sm:items-start sm:justify-between sm:gap-5"
+          data-testid="home-research-judgment-gate"
+          data-primary-information-block="trust"
+          role="status"
+        >
+          <p className="text-xs font-semibold text-[color:var(--wolfy-text-primary)]">
+            {judgmentGateCopy}
+            <span className="ml-2 font-normal text-[color:var(--wolfy-text-secondary)]">
+              {isEnglish ? 'Confidence' : '可信度'} · {confidenceVisual.label}
+            </span>
+          </p>
+          <p className="max-w-3xl text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{trustSummary}</p>
         </div>
 
-        {/* D. Evidence + risk limits + next watch — early research path (before supporting first-read grid) */}
         <div
-          className="mt-2 grid min-w-0 gap-0 overflow-hidden rounded-[8px] border border-[color:var(--wolfy-divider)] md:grid-cols-3"
+          className="home-research-reason-grid mt-2 grid min-w-0 gap-3 py-2 md:grid-cols-3"
           data-testid="home-research-evidence-risk-workbench"
+          data-primary-information-block="reasons-risk"
         >
           <div
-            className="min-w-0 border-b border-[color:var(--wolfy-divider)] px-3 py-1.5 md:border-b-0 md:border-r"
+            className="min-w-0"
             data-testid="home-research-support-factors"
           >
             <p className="text-[11px] font-semibold tracking-[0] text-[color:var(--wolfy-text-muted)]">
@@ -2357,7 +2257,7 @@ function HomeConclusionFirstConsole({
             </p>
           </div>
           <div
-            className="min-w-0 border-b border-[color:var(--wolfy-divider)] px-3 py-1.5 md:border-b-0 md:border-r"
+            className="min-w-0"
             data-testid="home-research-risk-boundaries"
           >
             <ResearchRiskLimits
@@ -2369,7 +2269,7 @@ function HomeConclusionFirstConsole({
               data-testid="home-research-risk-limits"
             />
           </div>
-          <div className="min-w-0 px-3 py-1.5" data-testid="home-research-next-actions">
+          <div className="min-w-0" data-testid="home-research-next-actions">
             <p className="text-[11px] font-semibold tracking-[0] text-[color:var(--wolfy-text-muted)]">
               {isEnglish ? 'Next watch point' : '下一步关注点'}
             </p>
@@ -2379,45 +2279,23 @@ function HomeConclusionFirstConsole({
           </div>
         </div>
 
-        {/* E. Single continuation path — early, using existing valid workflows only */}
-        <div className="mt-2" data-testid="home-research-quick-actions">
-          <NextResearchAction
-            density="editorial"
-            locale={researchLocale}
-            compact
-            title={isEnglish ? 'Continue research' : '继续研究'}
-            steps={nextActionSteps}
-          />
+        <div className="mt-2" data-testid="home-research-quick-actions" data-primary-information-block="action">
+          <Link
+            to={primaryAction.href}
+            className="home-research-primary-action inline-flex min-h-11 items-center rounded-md bg-[color:var(--theme-button-primary-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--theme-button-primary-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
+          >
+            {primaryAction.label}
+            <span className="ml-2" aria-hidden="true">→</span>
+          </Link>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+            {primaryAction.detail} · {isEnglish ? 'For observation only, not investment advice.' : '仅供观察，不构成投资建议。'}
+          </p>
         </div>
 
-        {/* F. First-read supporting strip — dense hierarchy, not equal-card monopoly */}
-        <section
-          className="mt-2 grid min-w-0 gap-0 overflow-hidden rounded-[8px] border border-[color:var(--wolfy-divider)] md:grid-cols-2 xl:grid-cols-4"
-          data-testid="home-research-first-read-summary"
-          aria-label={isEnglish ? 'First-read summary' : '首读摘要'}
-        >
-          {firstReadItems.map((item, index) => (
-            <article
-              key={item.key}
-              className={cn(
-                'min-w-0 border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-1.5',
-                index < firstReadItems.length - 1 && 'border-b xl:border-b-0 xl:border-r',
-                index % 2 === 0 && index < firstReadItems.length - 1 && 'md:border-r',
-                index < 2 && 'md:border-b xl:border-b-0',
-              )}
-              data-testid={`home-research-first-read-${item.key}`}
-            >
-              <p className="text-[11px] font-semibold tracking-[0] text-[color:var(--wolfy-text-muted)]">{item.label}</p>
-              <p className="mt-0.5 break-words text-[13px] font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">{item.value}</p>
-              <p className="mt-0.5 line-clamp-1 break-words text-[11px] leading-4 text-[color:var(--wolfy-text-secondary)] sm:line-clamp-2">{item.detail}</p>
-            </article>
-          ))}
-        </section>
-
-        {/* G. Deeper data quality / packet / provenance — collapsed, not first-fold monopoly */}
         <details
-          className="group mt-2 min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-1.5"
+          className="group mt-2 min-w-0 rounded-[8px] bg-[var(--wolfy-surface-input)] px-3 py-1.5"
           data-testid="home-research-trust-strip"
+          onToggle={(event) => setBoundaryOpen(event.currentTarget.open)}
         >
           <summary
             className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-[color:var(--wolfy-text-secondary)] marker:hidden"
@@ -2426,61 +2304,8 @@ function HomeConclusionFirstConsole({
             <span>{isEnglish ? 'View research boundary' : '查看研究边界'}</span>
             <span className="text-[color:var(--wolfy-text-muted)] transition-transform group-open:rotate-180" aria-hidden="true">▾</span>
           </summary>
-          <div className="mt-2 space-y-3 border-t border-[color:var(--wolfy-divider)] pt-2.5 text-[11px]">
-            <ResearchDataQualityComposition
-              density="editorial"
-              locale={researchLocale}
-              compact
-              title={isEnglish ? 'Data quality' : '数据质量'}
-              facets={qualityFacets}
-              statusSlot={(
-                <ConsumerResearchReadinessStrip
-                  readiness={researchReadiness}
-                  title={isEnglish ? 'Research readiness' : '研究就绪度'}
-                  testId="home-research-readiness-strip"
-                />
-              )}
-              coverageSlot={(
-                <>
-                  <ConsumerEvidenceCoverageStrip
-                    frame={evidenceCoverageFrame}
-                    locale={researchLocale}
-                    title={isEnglish ? 'Evidence coverage' : '证据覆盖'}
-                    testId="home-evidence-coverage-strip"
-                  />
-                  <ConsumerDataHealthSummaryPanel
-                    summary={dataHealthSummary}
-                    title={isEnglish ? 'Data health' : '数据健康'}
-                    testId="home-data-health-summary"
-                  />
-                  <ConsumerEvidencePacketStrip
-                    packet={evidencePacket}
-                    locale={researchLocale}
-                    title={isEnglish ? 'Evidence packet' : '证据包摘要'}
-                    testId="home-evidence-packet-strip"
-                  />
-                </>
-              )}
-            >
-              <HomeResearchPacketPanel
-                locale={locale}
-                report={report}
-                dataQualityReport={dataQualityReport}
-                researchReadiness={researchReadiness}
-                evidenceCoverageFrame={evidenceCoverageFrame}
-                evidenceCitationFrame={evidenceCitationFrame}
-                evidencePacket={evidencePacket}
-                sourceProvenanceEntries={sourceProvenanceEntries}
-                view={researchPacketView}
-              />
-              {sourceProvenanceEntries ? (
-                <HomeSourceProvenanceStrip locale={locale} entries={sourceProvenanceEntries} />
-              ) : null}
-              {evidenceCitationFrame ? (
-                <HomeEvidenceCitationSummary locale={locale} frame={evidenceCitationFrame} />
-              ) : null}
-            </ResearchDataQualityComposition>
-            <div className="divide-y divide-[color:var(--wolfy-divider)] text-[11px]">
+          <div className="mt-2 border-t border-[color:var(--wolfy-divider)] pt-2.5 text-[11px]">
+            <div className="home-research-boundary-list text-[11px]">
               <div className="flex min-w-0 items-start justify-between gap-4 py-2">
                 <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'Data state' : '数据状态'}</span>
                 <span
@@ -2491,7 +2316,7 @@ function HomeConclusionFirstConsole({
                 </span>
               </div>
               <div className="flex min-w-0 items-start justify-between gap-4 py-2">
-                <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'Research boundary' : '研究边界'}</span>
+                <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'Quality tier' : '质量层级'}</span>
                 <span className="min-w-0 break-words text-right text-[color:var(--wolfy-text-secondary)] whitespace-normal">
                   {dataQualityLabel}
                 </span>
@@ -2500,6 +2325,7 @@ function HomeConclusionFirstConsole({
                 { label: isEnglish ? 'Available data' : '已可用数据', value: availableCopy },
                 { label: isEnglish ? 'Missing data' : '仍缺失数据', value: missingCopy },
                 { label: isEnglish ? 'Impact' : '对结论的影响', value: qualityImpactCopy },
+                { label: isEnglish ? 'Next evidence' : '下一步证据', value: researchPacketView.nextEvidence },
               ].map((item) => (
                 <div key={item.label} className="flex min-w-0 items-start justify-between gap-4 py-2">
                   <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{item.label}</span>
@@ -2507,6 +2333,57 @@ function HomeConclusionFirstConsole({
                 </div>
               ))}
             </div>
+            {boundaryOpen ? (
+              <ResearchDataQualityComposition
+                density="editorial"
+                locale={researchLocale}
+                compact
+                title={isEnglish ? 'Data quality' : '数据质量'}
+                facets={qualityFacets}
+                statusSlot={(
+                  <ConsumerResearchReadinessStrip
+                    readiness={researchReadiness}
+                    title={isEnglish ? 'Research readiness' : '研究就绪度'}
+                    testId="home-research-readiness-strip"
+                  />
+                )}
+                coverageSlot={(
+                  <>
+                    <ConsumerEvidenceCoverageStrip
+                      frame={evidenceCoverageFrame}
+                      locale={researchLocale}
+                      title={isEnglish ? 'Evidence coverage' : '证据覆盖'}
+                      testId="home-evidence-coverage-strip"
+                    />
+                    <ConsumerDataHealthSummaryPanel
+                      summary={dataHealthSummary}
+                      title={isEnglish ? 'Data health' : '数据健康'}
+                      testId="home-data-health-summary"
+                    />
+                    <ConsumerEvidencePacketStrip
+                      packet={evidencePacket}
+                      locale={researchLocale}
+                      title={isEnglish ? 'Evidence packet' : '证据包摘要'}
+                      testId="home-evidence-packet-strip"
+                    />
+                  </>
+                )}
+              >
+                <HomeResearchPacketPanel
+                  locale={locale}
+                  report={report}
+                  dataQualityReport={dataQualityReport}
+                  researchReadiness={researchReadiness}
+                  evidenceCoverageFrame={evidenceCoverageFrame}
+                  evidenceCitationFrame={evidenceCitationFrame}
+                  evidencePacket={evidencePacket}
+                  sourceProvenanceEntries={sourceProvenanceEntries}
+                  view={researchPacketView}
+                />
+                {sourceProvenanceEntries ? <HomeSourceProvenanceStrip locale={locale} entries={sourceProvenanceEntries} /> : null}
+                {evidenceCitationFrame ? <HomeEvidenceCitationSummary locale={locale} frame={evidenceCitationFrame} /> : null}
+              </ResearchDataQualityComposition>
+            ) : null}
           </div>
         </details>
       </div>
@@ -3023,6 +2900,7 @@ function LinearObservationPanel({
   onOpenStrategy: () => void;
   onOpenFundamentals: () => void;
 }) {
+  const [supportingContextOpen, setSupportingContextOpen] = useState(false);
   const {
     ref: openStrategyButtonRef,
     onClick: handleOpenStrategyClick,
@@ -3047,18 +2925,19 @@ function LinearObservationPanel({
   );
 
   return (
-    <div className="home-research-rail-body relative flex min-w-0 flex-col gap-2.5 px-0 py-0">
-      <section
-        className={HOME_LOCAL_RAIL_CARD_CLASS}
+    <aside
+      className={cn(HOME_LOCAL_RAIL_CARD_CLASS, 'home-research-rail-body relative min-w-0')}
+      data-right-rail-group="research-checklist"
+      aria-label={isEnglish ? 'Research checklist' : '研究检查单'}
+    >
+      <div
         data-testid="home-bento-card-strategy"
         data-research-card="research-actions"
         data-rail-section="current-action"
       >
         <div className="flex min-w-0 items-center justify-between gap-3">
           <p className="text-sm font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">
-            {isGuest
-              ? (isEnglish ? 'Current observation' : '当前观察')
-              : (isEnglish ? 'Current action' : '当前动作')}
+            {isEnglish ? 'Research checklist' : '研究检查单'}
           </p>
           <button
             ref={openStrategyButtonRef}
@@ -3068,56 +2947,62 @@ function LinearObservationPanel({
             onClick={handleOpenStrategyClick}
             onPointerUp={handleOpenStrategyPointerUp}
           >
-            {dashboard.strategy.detailLabel}
+            {isEnglish ? 'Evidence' : '证据'}
           </button>
         </div>
-        <p className="mt-1.5 line-clamp-2 min-w-0 break-words text-xs leading-[1.55] text-[color:var(--wolfy-text-secondary)]">
-          {actionCopy}
-        </p>
-      </section>
+        <dl className="home-research-checklist mt-2">
+          {[
+            { key: 'observation', label: isEnglish ? 'Current observation' : '当前观察', value: actionCopy },
+            { key: 'risk', label: isEnglish ? 'Main risk' : '主要风险', value: riskCopy },
+            { key: 'next', label: isEnglish ? 'Next watch' : '下一步关注', value: nextCopy },
+          ].map((item) => (
+            <div key={item.key} className="py-2 first:pt-0 last:pb-0" data-rail-section={item.key}>
+              <dt className="text-[11px] font-semibold text-[color:var(--wolfy-text-muted)]">{item.label}</dt>
+              <dd className="mt-1 break-words text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{item.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
 
-      <HomeFundamentalsSummaryBlock
-        locale={locale}
-        summary={fundamentalsSummary}
-        symbolEvidenceReadiness={symbolEvidenceReadiness}
-        productReadModel={productReadModel}
-        isLoading={isFundamentalsLoading}
-        onOpenFundamentals={onOpenFundamentals}
-      />
-
-      <PeerCorrelationSnapshotBlock
-        snapshot={peerCorrelationSnapshot}
-        locale={locale}
-        testId="home-peer-correlation-snapshot"
-        className={HOME_LOCAL_RAIL_CARD_CLASS}
-      />
-
-      <section
-        className={HOME_LOCAL_RAIL_CARD_CLASS}
-        data-testid="home-bento-card-fundamentals"
-        data-research-card="risk-boundary"
-        data-rail-section="main-risk"
+      <details
+        className="group mt-3"
+        data-testid="home-supporting-context-disclosure"
+        onToggle={(event) => setSupportingContextOpen(event.currentTarget.open)}
       >
-        <div className="flex min-w-0 items-center justify-between gap-3">
-          <p className="text-sm font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">{isEnglish ? 'Main risk' : '主要风险'}</p>
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-xs font-semibold text-[color:var(--wolfy-text-secondary)] marker:hidden">
+          <span>{isEnglish ? 'Supporting context' : '补充研究语境'}</span>
+          <span aria-hidden="true">＋</span>
+        </summary>
+        <div className="space-y-3 pb-1">
+          <button
+            type="button"
+            className="min-h-11 w-full text-left text-xs font-semibold text-[color:var(--wolfy-text-primary)] underline decoration-[color:var(--wolfy-divider)] underline-offset-4"
+            onClick={onOpenFundamentals}
+          >
+            {isEnglish ? 'Open fundamentals and data boundary' : '查看基本面与数据边界'}
+          </button>
+          {supportingContextOpen ? (
+            <>
+              <HomeFundamentalsSummaryBlock
+                locale={locale}
+                summary={fundamentalsSummary}
+                symbolEvidenceReadiness={symbolEvidenceReadiness}
+                productReadModel={productReadModel}
+                isLoading={isFundamentalsLoading}
+                onOpenFundamentals={onOpenFundamentals}
+              />
+              <PeerCorrelationSnapshotBlock
+                snapshot={peerCorrelationSnapshot}
+                locale={locale}
+                testId="home-peer-correlation-snapshot"
+                className="border-0 bg-transparent p-0 shadow-none"
+              />
+            </>
+          ) : null}
         </div>
-        <p className="mt-1.5 line-clamp-2 min-w-0 break-words text-xs leading-[1.55] text-[color:var(--wolfy-text-secondary)]">
-          {riskCopy}
-        </p>
-      </section>
-      <section
-        className={HOME_LOCAL_RAIL_CARD_CLASS}
-        data-testid="home-linear-quant-snapshot"
-        data-research-card="next-step"
-        data-rail-section="next-step"
-      >
-        <p className="text-sm font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">{isEnglish ? 'Next step' : '下一步'}</p>
-        <p className="mt-1.5 line-clamp-2 min-w-0 break-words text-xs leading-[1.55] text-[color:var(--wolfy-text-secondary)]">
-          {nextCopy}
-        </p>
-      </section>
+      </details>
       {isGuest ? <div className="min-w-0 py-2 last:pb-0">{guestPaywall}</div> : null}
-    </div>
+    </aside>
   );
 }
 
@@ -4988,7 +4873,12 @@ function buildGuestMarketSnapshotView(
       summary,
       state,
       asOf: formatHistoryTimestamp(briefing.asOf || briefing.updatedAt, locale),
-      sourceLabel: String(briefing.sourceLabel || '').trim() || undefined,
+      sourceLabel: (() => {
+        const rawSource = String(briefing.sourceLabel || '').trim();
+        if (!rawSource) return undefined;
+        const localeMismatch = isEnglish ? /[\u3400-\u9fff]/.test(rawSource) : /\b(?:model|feed|fixture|provider|source)\b/i.test(rawSource);
+        return localeMismatch ? (isEnglish ? 'Public market model' : '公开市场模型') : rawSource;
+      })(),
       items,
       note,
     };
@@ -7662,7 +7552,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           </div>
         </div>
       ) : null}
-      <main className="w-full flex-1 flex flex-col min-h-0 min-w-0" data-testid="home-bento-main">
+      <div className="w-full flex-1 flex flex-col min-h-0 min-w-0" data-testid="home-bento-main">
         {showNeutralHomeStart && memberMarketBrief && homeDailyResearch ? (
           <section
             className="mx-auto flex w-full max-w-[1880px] flex-1 min-w-0 flex-col px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
@@ -8510,7 +8400,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           </div>
                         </div>
                         {!isHomeAnalyzing ? (
-                          <div className="mt-4 px-0" data-testid="home-research-chart-section">
+                          <div
+                            className="mt-4 px-0"
+                            data-testid="home-research-chart-section"
+                            data-primary-information-block="visualization"
+                          >
                               <LinearTechnicalStructure
                                 locale={locale}
                                 ticker={readyCopy.ticker}
@@ -8550,7 +8444,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             </div>
           );
         })()}
-      </main>
+      </div>
 
       <DeepReportDrawer
         isOpen={Boolean(activeDrawerPayload)}

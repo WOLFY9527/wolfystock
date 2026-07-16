@@ -4,7 +4,6 @@ import { Copy, Download } from 'lucide-react';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import {
   ConsoleBoard,
-  ConsoleContextRail,
   ResearchConsoleShell,
   WolfyCommandBar,
 } from '../components/linear/LinearPrimitives';
@@ -101,6 +100,21 @@ function safeConsumerList(values: Array<string | null | undefined>, language: 'z
   return compactUnique(values
     .map((value) => safeOptionalConsumerText(value, language))
     .filter(Boolean) as string[]);
+}
+
+function localizedStockNarrative(
+  value: string | null | undefined,
+  language: 'zh' | 'en',
+  fallbackZh: string,
+): string {
+  const text = String(value || '').trim();
+  if (!text || language === 'en' || /[\u3400-\u9fff]/.test(text)) return text;
+  if (/volume.*(?:constructive|support)/i.test(text)) return '成交量仍提供支持。';
+  if (/(?:close|price).*(?:fall|drop).*prior range/i.test(text)) return '若收盘价重新跌回前期区间，当前观察失效。';
+  if (/review.*next close/i.test(text)) return '关注下一次收盘确认。';
+  if (/refresh.*quote.*evidence/i.test(text)) return '刷新报价证据后再继续复核。';
+  if (/price.*(?:stayed|remained).*above.*range/i.test(text)) return '价格仍维持在近期区间上方。';
+  return fallbackZh;
 }
 
 function compactUnique(values: string[]): string[] {
@@ -1038,8 +1052,9 @@ function StockCurrentConclusionPanel({
   const isEnglish = language === 'en';
   return (
     <section
-      className="stock-current-conclusion"
+      className="stock-current-conclusion stock-current-conclusion--simplified"
       data-testid="stock-current-research-conclusion"
+      data-primary-information-block="conclusion"
       aria-labelledby="stock-current-research-conclusion-title"
     >
       <div className="stock-current-conclusion__header">
@@ -1048,27 +1063,20 @@ function StockCurrentConclusionPanel({
           {view.interpretation}
         </h3>
       </div>
-      <div className="stock-current-conclusion__grid">
+      <div className="stock-current-conclusion__grid" data-primary-information-block="reasons-risk">
         <div className="stock-current-conclusion__item stock-current-conclusion__item--primary">
           <span>{isEnglish ? 'Supporting evidence' : '支持证据'}</span>
-          <RoughBulletList
-            items={view.supportingEvidence}
-            emptyText={isEnglish ? 'No supporting evidence is listed yet.' : '暂未列出支持证据。'}
-          />
+          {view.supportingEvidence.length ? (
+            <ul className="mt-2 space-y-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+              {view.supportingEvidence.slice(0, 3).map((item) => <li key={item}>• {item}</li>)}
+            </ul>
+          ) : (
+            <p>{isEnglish ? 'No supporting evidence is listed yet.' : '暂未列出支持证据。'}</p>
+          )}
         </div>
         <div className="stock-current-conclusion__item">
-          <span>{isEnglish ? 'Uncertainty' : '不确定性'}</span>
-          <RoughBulletList
-            items={view.uncertainty}
-            emptyText={isEnglish ? 'No uncertainty note is listed yet.' : '暂未列出不确定性。'}
-          />
-        </div>
-        <div className="stock-current-conclusion__item">
-          <span>{isEnglish ? 'Invalidation / risk' : '失效 / 风险条件'}</span>
-          <RoughBulletList
-            items={view.invalidation}
-            emptyText={isEnglish ? 'No invalidation condition is listed yet.' : '暂未列出失效条件。'}
-          />
+          <span>{isEnglish ? 'Main risk / limitation' : '主要风险 / 限制'}</span>
+          <p>{view.invalidation[0] || view.uncertainty[0] || (isEnglish ? 'No invalidation condition is listed yet.' : '暂未列出失效条件。')}</p>
         </div>
         <div className="stock-current-conclusion__item">
           <span>{isEnglish ? 'Next research action' : '下一步研究动作'}</span>
@@ -2032,6 +2040,9 @@ function stockHistorySourceLabel(history: StockHistoryResponse | null, language:
   if (source.includes('local') || source.includes('cache') || explicitToken.includes('local')) {
     return language === 'en' ? 'Local history data' : '本地历史数据';
   }
+  if (/fixture|mock|test/.test(source) || /fixture|mock|test/.test(explicitToken)) {
+    return language === 'en' ? 'History source pending' : '历史来源待确认';
+  }
   if (explicit) return explicit;
   if (source.includes('yahoo')) {
     return 'Yahoo Finance';
@@ -2176,12 +2187,17 @@ function buildStockResearchConclusionView({
   const requiredBars = requiredHistoryBars(history, data);
   const historyState = stockHistoryReadinessState({ history, failed: historyFailed, data, language });
   const quoteFreshness = quote ? quoteBoundaryFreshnessLabel(quote, language).label : null;
-  const confirms = safeConsumerList(data.explanation.whatConfirmsIt ?? [], language);
+  const confirms = safeConsumerList(data.explanation.whatConfirmsIt ?? [], language)
+    .map((item) => localizedStockNarrative(item, language, '支持证据已记录，具体表述可在证据明细中核对。'));
   const risks = safeConsumerList([
     ...(data.explanation.whatInvalidatesIt ?? []),
     ...(data.riskObservations ?? []),
     ...(data.researchNotes.riskFlags ?? []),
-  ], language).map((item) => mapConsumerStatusText(item, language));
+  ], language).map((item) => localizedStockNarrative(
+    mapConsumerStatusText(item, language),
+    language,
+    '存在已记录的失效条件，具体表述可在证据明细中核对。',
+  ));
   const gaps = compactUnique([
     ...buildEvidenceGapLabels(researchPacket ?? {
       symbol: data.ticker,
@@ -2203,8 +2219,13 @@ function buildStockResearchConclusionView({
     ...safeConsumerList(data.researchNotes.needsMoreEvidence ?? [], language),
     ...safeConsumerList(data.evidenceGaps ?? [], language),
   ]);
-  const nextAction = safeConsumerList(data.researchNotes.watchNext ?? [], language)[0]
-    || safeOptionalConsumerText(researchPacket?.nextDataAction, language)
+  const nextActionRaw = safeConsumerList(data.researchNotes.watchNext ?? [], language)[0]
+    || safeOptionalConsumerText(researchPacket?.nextDataAction, language);
+  const nextAction = localizedStockNarrative(
+    nextActionRaw,
+    language,
+    '按已记录的下一项证据继续复核。',
+  )
     || (language === 'en' ? 'Recheck after the next data refresh.' : '下一次数据刷新后复核。');
 
   return {
@@ -2271,7 +2292,7 @@ function StockAnalystMemo({
   return (
     <section className="stock-analyst-memo" data-testid="stock-analyst-memo" aria-labelledby="stock-analyst-memo-title">
       <div className="stock-analyst-memo__header">
-        <p className="stock-analyst-memo__eyebrow">{language === 'en' ? 'Analyst Memo' : 'Analyst Memo'}</p>
+        <p className="stock-analyst-memo__eyebrow">{language === 'en' ? 'Analyst Memo' : '研究备忘'}</p>
         <h3 id="stock-analyst-memo-title" className="stock-analyst-memo__title">
           {language === 'en' ? 'Observation brief' : '研究简报'}
         </h3>
@@ -2285,7 +2306,7 @@ function StockAnalystMemo({
         ))}
       </dl>
       <div className="stock-analyst-memo__limitations">
-        <p>{language === 'en' ? 'Limitations / evidence gaps' : 'limitations / evidence gaps'}</p>
+        <p>{language === 'en' ? 'Limitations / evidence gaps' : '限制 / 证据缺口'}</p>
         {limitations.length ? (
           <ul>
             {limitations.slice(0, 4).map((item) => (
@@ -2311,7 +2332,7 @@ function StockEvidenceLedger({
     <section className="stock-evidence-ledger" data-testid="stock-evidence-ledger" aria-labelledby="stock-evidence-ledger-title">
       <div className="stock-evidence-ledger__header">
         <div>
-          <p className="stock-evidence-ledger__eyebrow">{language === 'en' ? 'Evidence Ledger' : 'Evidence Ledger'}</p>
+          <p className="stock-evidence-ledger__eyebrow">{language === 'en' ? 'Evidence Ledger' : '证据账本'}</p>
           <h3 id="stock-evidence-ledger-title" className="stock-evidence-ledger__title">
             {language === 'en' ? 'Evidence, freshness, and limitations' : '证据、新鲜度与限制'}
           </h3>
@@ -2455,12 +2476,14 @@ function StockConsumerResearchSummary({
         || safeConsumerList(data.researchNotes.needsMoreEvidence ?? [], language)[0]
         || (language === 'en' ? 'No major limitation is listed in the visible packet.' : '当前可见研究包未列出主要限制。')
   );
-  const nextCheck = safeConsumerList(data.researchNotes.watchNext ?? [], language)[0]
+  const nextCheckRaw = safeConsumerList(data.researchNotes.watchNext ?? [], language)[0]
     || safeConsumerList(data.researchNotes.needsMoreEvidence ?? [], language)[0]
     || (language === 'en' ? 'Recheck after the next data refresh.' : '下一次数据刷新后复核。');
-  const whyText = safeOptionalConsumerText(data.explanation.whyThisStructure, language)
+  const nextCheck = localizedStockNarrative(nextCheckRaw, language, '按已记录的下一项证据继续复核。');
+  const whyTextRaw = safeOptionalConsumerText(data.explanation.whyThisStructure, language)
     || keyEvidence[0]
     || (language === 'en' ? 'The page only has enough evidence for a bounded observation.' : '当前页面只足以形成有边界的观察。');
+  const whyText = localizedStockNarrative(whyTextRaw, language, '当前结构依据已记录，具体表述可在证据明细中核对。');
   const reliabilityText = productReadStrongConclusionAllowed(data.productReadModel || researchPacket?.productReadModel || null)
     ? confidenceText
     : (language === 'en'
@@ -2527,100 +2550,118 @@ function StockConsumerResearchSummary({
       data-research-sequence="identity-price-path-memo-metrics-limitation-next"
       data-first-screen-priority="conclusion-first"
     >
-      <div className="stock-research-identity-header rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] p-4" data-testid="stock-research-identity-header">
+      <div className="stock-research-identity-header px-1 py-2" data-testid="stock-research-identity-header">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h2 className="stock-research-identity-header__ticker text-2xl font-semibold text-[color:var(--wolfy-text-primary)]">{data.ticker}</h2>
           {name ? <span className="text-sm text-[color:var(--wolfy-text-secondary)]">{name}</span> : null}
-          <TerminalChip variant="neutral">{[market, exchange].filter(Boolean).join(' · ') || '--'}</TerminalChip>
-          <TerminalChip variant="neutral">{timestamp ? `${language === 'en' ? 'Updated' : '更新'} ${timestamp}` : (language === 'en' ? 'Update time pending' : '更新时间待确认')}</TerminalChip>
+          <span className="text-xs text-[color:var(--wolfy-text-muted)]">{[market, exchange].filter(Boolean).join(' · ') || '--'}</span>
+          <span className="text-xs text-[color:var(--wolfy-text-muted)]">{timestamp ? `${language === 'en' ? 'Updated' : '更新'} ${timestamp}` : (language === 'en' ? 'Update time pending' : '更新时间待确认')}</span>
         </div>
         <div className="mt-3 flex min-w-0 flex-wrap items-end gap-3">
           <span className="stock-research-identity-header__price text-3xl font-semibold tabular-nums text-[color:var(--wolfy-text-primary)]">{price}</span>
           <span className={change.startsWith('-') ? 'stock-price-change stock-price-change--down' : 'stock-price-change stock-price-change--up'}>{change}</span>
-          <StatusBadge status={toneFor(confidenceValue)} label={`${language === 'en' ? 'Confidence' : '置信度'}：${confidence}`} size="sm" />
-          <StatusBadge status={toneFor(displayStructureState)} label={structureState} size="sm" />
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(360px,0.85fr)]">
-        <div className="min-w-0 space-y-3">
-          <div data-testid="stock-price-history-visual-block" data-primary-analytical-surface="price-path">
-            <StockHistoryCoreChart
-              history={history}
-              failed={historyFailed}
-              data={data}
-              language={language}
-            />
-          </div>
-          <StockCurrentConclusionPanel view={conclusionView} language={language} />
-        </div>
-        <aside className="stock-research-memo-panel min-w-0 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-4" data-testid="stock-first-viewport-summary-panel">
-          <div className="flex flex-wrap gap-2">
-            <StatusBadge status={toneFor(confidenceValue)} label={`${language === 'en' ? 'Research state' : '研究状态'}：${confidence}`} size="sm" />
-            <StatusBadge status={historyToneStatus(historyState.tone)} label={historyState.label} size="sm" />
-          </div>
-          <ProductReadModelStatusStrip
-            model={data.productReadModel || researchPacket?.productReadModel || null}
-            language={language}
-            title={language === 'en' ? 'Structure readiness' : '结构读模型'}
-            testId="stock-structure-product-read-model"
-            className="mt-3"
-          />
-          <StockAnalystMemo
-            language={language}
-            observation={summary}
-            why={whyText}
-            reliability={reliabilityText}
-            nextCheck={nextCheck}
-            limitations={limitationItems}
-          />
-          <div
-            className={trustDensity === 'full'
-              ? 'mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1'
-              : 'mt-4 grid gap-2 sm:grid-cols-2'}
-            data-testid="stock-data-trust-row"
-            data-module-density={trustDensity === 'hide' ? 'compact' : trustDensity}
-          >
-            {trustItems.map((item) => (
-              <div key={item.key} className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] px-3 py-2">
-                <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{item.label}</p>
-                <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.value}</p>
-              </div>
-            ))}
-          </div>
-          <p className="mt-4 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]" data-testid="stock-compact-no-advice">
-            {disclosure}
+      <div className="mt-3 flex min-w-0 flex-col gap-3">
+        <StockCurrentConclusionPanel view={conclusionView} language={language} />
+
+        <div
+          className="stock-research-trust-line flex min-w-0 flex-col gap-1 py-2 sm:flex-row sm:items-start sm:justify-between sm:gap-5"
+          data-testid="stock-first-viewport-summary-panel"
+          data-primary-information-block="trust"
+        >
+          <p className="text-xs font-semibold text-[color:var(--wolfy-text-primary)]" data-status-badge="true">
+            {language === 'en' ? `Confidence: ${confidence}` : `置信度：${confidence}`} · {structureState}
           </p>
-          {productFreshness ? (
-            <p className="mt-3 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]" data-testid="stock-product-read-model-freshness">
-              {productFreshness}
-            </p>
-          ) : null}
-          <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{confidenceText}</p>
-          <div className="mt-4 flex flex-wrap gap-2" data-testid="stock-first-viewport-next-actions">
-            <Link
-              to={localize('/research/radar')}
-              className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
+          <p className="max-w-3xl text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+            {historyState.label} · {reliabilityText}
+          </p>
+        </div>
+
+        <div data-testid="stock-first-viewport-next-actions" data-primary-information-block="action">
+          <Link
+            to={localize('/research/radar')}
+            className="inline-flex min-h-11 items-center rounded-md bg-[color:var(--theme-button-primary-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--theme-button-primary-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
+          >
+            {language === 'en' ? 'Continue in Research Radar' : '前往研究雷达继续核对'}
+            <span className="ml-2" aria-hidden="true">→</span>
+          </Link>
+        </div>
+
+        <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]" data-testid="stock-compact-no-advice">
+          {disclosure}
+        </p>
+
+        <div
+          data-testid="stock-price-history-visual-block"
+          data-primary-analytical-surface="price-path"
+          data-primary-information-block="visualization"
+        >
+          <StockHistoryCoreChart
+            history={history}
+            failed={historyFailed}
+            data={data}
+            language={language}
+          />
+        </div>
+
+        <details className="group stock-research-boundary-disclosure border-t border-[color:var(--wolfy-divider)]" data-testid="stock-research-boundary-disclosure">
+          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between text-sm font-semibold text-[color:var(--wolfy-text-primary)] marker:hidden">
+            <span>{language === 'en' ? 'Research memo and data boundaries' : '研究备忘与数据边界'}</span>
+            <span className="text-[color:var(--wolfy-text-muted)]" aria-hidden="true">＋</span>
+          </summary>
+          <div className="space-y-3 pb-3">
+            <ProductReadModelStatusStrip
+              model={data.productReadModel || researchPacket?.productReadModel || null}
+              language={language}
+              title={language === 'en' ? 'Structure readiness' : '结构读模型'}
+              testId="stock-structure-product-read-model"
+            />
+            <StockAnalystMemo
+              language={language}
+              observation={summary}
+              why={whyText}
+              reliability={reliabilityText}
+              nextCheck={nextCheck}
+              limitations={limitationItems}
+            />
+            <dl
+              className="stock-data-trust-list"
+              data-testid="stock-data-trust-row"
+              data-module-density={trustDensity === 'hide' ? 'compact' : trustDensity}
             >
-              {language === 'en' ? 'Open Research Radar' : '查看研究雷达'}
-            </Link>
-            <Link
-              to={localize(`/backtest?symbol=${encodeURIComponent(data.ticker)}`)}
-              className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
-            >
-              {language === 'en' ? 'Open Backtest' : '打开回测'}
-            </Link>
-            <button
-              type="button"
-              className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!canCopyEvidence}
-              onClick={handleCopyEvidence}
-              data-testid="stock-first-viewport-copy-evidence"
-            >
-              {language === 'en' ? 'Copy evidence' : '复制证据'}
-            </button>
+              {trustItems.map((item) => (
+                <div key={item.key} className="flex min-w-0 items-start justify-between gap-4 py-2">
+                  <dt className="text-xs text-[color:var(--wolfy-text-muted)]">{item.label}</dt>
+                  <dd className="min-w-0 text-right text-xs font-semibold text-[color:var(--wolfy-text-primary)]">{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+            {productFreshness ? (
+              <p className="text-xs leading-5 text-[color:var(--wolfy-text-secondary)]" data-testid="stock-product-read-model-freshness">
+                {productFreshness}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-3">
+              <Link
+                to={localize(`/backtest?symbol=${encodeURIComponent(data.ticker)}`)}
+                className="inline-flex min-h-11 items-center text-xs font-semibold text-[color:var(--wolfy-text-primary)] underline decoration-[color:var(--wolfy-divider)] underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
+              >
+                {language === 'en' ? 'Open Backtest' : '打开回测'}
+              </Link>
+              <button
+                type="button"
+                className="min-h-11 text-xs font-semibold text-[color:var(--wolfy-text-primary)] underline decoration-[color:var(--wolfy-divider)] underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!canCopyEvidence}
+                onClick={handleCopyEvidence}
+                data-testid="stock-first-viewport-copy-evidence"
+              >
+                {language === 'en' ? 'Copy evidence' : '复制证据'}
+              </button>
+            </div>
           </div>
-        </aside>
+        </details>
       </div>
     </section>
   );
@@ -4118,7 +4159,6 @@ export default function StockStructureDecisionPage() {
     [data, locale, scoreRows],
   );
   const missingDataSummary = data ? buildMissingDataSummary(data, locale) : null;
-  const safeWatchNext = data ? safeConsumerList(data.researchNotes.watchNext ?? [], locale) : [];
   const quoteBoundaryView = useMemo(
     () => buildQuoteBoundaryView(quote, quoteFailed, locale),
     [locale, quote, quoteFailed],
@@ -4243,24 +4283,6 @@ export default function StockStructureDecisionPage() {
     : (locale === 'en'
       ? 'Assembles bounded stock structure evidence without turning it into advice.'
       : '汇总有边界的个股结构证据，不生成行动建议。');
-  const railContent = data && hasResearchPacket ? (
-    <ConsoleContextRail className="flex flex-col gap-3 p-3">
-      {safeWatchNext.length ? (
-        <RoughSectionCard eyebrow={locale === 'en' ? 'Research notes' : '研究备注'} title={locale === 'en' ? 'Watch next' : '下一步观察'}>
-          <RoughBulletList
-            items={safeWatchNext.slice(0, 3)}
-            emptyText={locale === 'en' ? 'No next watch item yet.' : '暂未整理下一步观察项。'}
-          />
-        </RoughSectionCard>
-      ) : null}
-      {missingDataSummary ? (
-        <RoughSectionCard eyebrow={locale === 'en' ? 'Boundary' : '边界'} title={locale === 'en' ? 'Data still missing' : '仍缺资料'}>
-          <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{missingDataSummary}</p>
-        </RoughSectionCard>
-      ) : null}
-    </ConsoleContextRail>
-  ) : null;
-
   return (
     <ConsumerWorkspaceScope className="flex min-h-0 flex-1">
       <ConsumerWorkspacePageShell className="flex min-h-0 flex-1 flex-col gap-4 md:gap-6">
@@ -4295,7 +4317,6 @@ export default function StockStructureDecisionPage() {
               </div>
             </WolfyCommandBar>
           )}
-          rail={railContent}
         >
           <ConsoleBoard
             className="min-h-0 stock-structure-decision-page"
@@ -4356,6 +4377,13 @@ export default function StockStructureDecisionPage() {
                   language={locale}
                   localize={localize}
                 />
+
+                <details className="group stock-deep-evidence-disclosure" data-testid="stock-deep-evidence-disclosure">
+                  <summary className="mx-3 flex min-h-12 cursor-pointer list-none items-center justify-between border-t border-[color:var(--wolfy-divider)] text-sm font-semibold text-[color:var(--wolfy-text-primary)] marker:hidden md:mx-4">
+                    <span>{locale === 'en' ? 'Deep evidence, lineage, and secondary workspaces' : '深层证据、血缘与次级工作区'}</span>
+                    <span className="text-[color:var(--wolfy-text-muted)]" aria-hidden="true">＋</span>
+                  </summary>
+                  <div className="stock-deep-evidence-disclosure__content">
 
                 <div className="stock-workspace-grid stock-workspace-grid--evidence" data-testid="stock-identity-data-state-workspace">
                   <StockWorkspaceSection
@@ -4657,6 +4685,8 @@ export default function StockStructureDecisionPage() {
                     testId="stock-research-workspace-flow"
                   />
                 </StockWorkspaceSection>
+                  </div>
+                </details>
               </div>
             ) : null}
           </ConsoleBoard>

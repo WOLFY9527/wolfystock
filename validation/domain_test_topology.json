@@ -38899,8 +38899,8 @@
       }
     },
     "inventory": {
-      "count": 175,
-      "sha256": "8cfa24821f57bdd5bc4d47496d3874b50930eea3b937a0820a33baac28ea5195"
+      "count": 176,
+      "sha256": "9330504ca244199783332967bb8a62e8a29425a98d30a4086b70452a54d37608"
     },
     "files": [
       {
@@ -39001,6 +39001,10 @@
       },
       {
         "path": "apps/dsa-web/src/api/__tests__/researchRadar.test.ts",
+        "owner": "api_schema_contracts"
+      },
+      {
+        "path": "apps/dsa-web/src/api/__tests__/researchReadiness.test.ts",
         "owner": "api_schema_contracts"
       },
       {
@@ -39615,7 +39619,7 @@
       {
         "path": "apps/dsa-web/src/components/layout/__tests__/Shell.test.tsx",
         "owner": "frontend_shared",
-        "bytes": 88197,
+        "bytes": 86376,
         "lines": 1821
       },
       {
@@ -39639,8 +39643,8 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/HomeSurfacePage.test.tsx",
         "owner": "milestone_t448_consumer_product",
-        "bytes": 252507,
-        "lines": 5203
+        "bytes": 246750,
+        "lines": 5213
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/LiquidityMonitorPage.test.tsx",
@@ -39651,8 +39655,8 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/MarketOverviewPage.test.tsx",
         "owner": "market",
-        "bytes": 260602,
-        "lines": 5743
+        "bytes": 254955,
+        "lines": 5747
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/MarketProviderOperationsPage.test.tsx",
@@ -39699,8 +39703,8 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/StockStructureDecisionPage.test.tsx",
         "owner": "market",
-        "bytes": 97862,
-        "lines": 2252
+        "bytes": 95709,
+        "lines": 2253
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/UserScannerPage.test.tsx",
@@ -39729,13 +39733,13 @@
       "chromium-mobile"
     ],
     "inventory": {
-      "specCount": 60,
-      "specSha256": "e87e8220fd2a792bc34a1a9dc758bd9b8fa2875fa223f9a2a15250bb6e8b28c7",
-      "projectCaseCount": 632,
-      "projectCaseSha256": "ca7d3dd38629a49219014ba80e581abce201c619c937076fd5c9e7b3a081883e",
+      "specCount": 61,
+      "specSha256": "99377562b86278a828c34ad78fb53a0db8e3199a9317c4458fbe7d3224866096",
+      "projectCaseCount": 700,
+      "projectCaseSha256": "955d465e4a34bba50d7ed2cc79dc8751c614acd7b9fe99d0edc2984570378773",
       "projectCaseCounts": {
-        "chromium": 316,
-        "chromium-mobile": 316
+        "chromium": 350,
+        "chromium-mobile": 350
       }
     },
     "specs": [
@@ -40006,6 +40010,11 @@
       },
       {
         "path": "apps/dsa-web/e2e/t307-shell-a11y-error-boundary.spec.ts",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "path": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
         "owner": "milestone",
         "mandatory": false
       },
@@ -41885,6 +41894,244 @@
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/t307-shell-a11y-error-boundary.spec.ts::t307-shell-a11y-error-boundary.spec.ts › T307 shell accessibility invariants › tablet grouped child route keeps one active route owner",
         "spec": "apps/dsa-web/e2e/t307-shell-a11y-error-boundary.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Guest en 1440x900",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Guest en 390x844",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Guest zh 1440x900",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Guest zh 390x844",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Home en 1280x720",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Home en 1440x900",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Home en 390x844",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Home en 768x1024",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Home zh 1280x720",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Home zh 1440x900",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Home zh 390x844",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Home zh 768x1024",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Market Overview en 1280x720",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Market Overview en 1440x900",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Market Overview en 390x844",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Market Overview en 768x1024",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Market Overview zh 1280x720",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Market Overview zh 1440x900",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Market Overview zh 390x844",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Market Overview zh 768x1024",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Stock Structure en 1280x720",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Stock Structure en 1440x900",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Stock Structure en 390x844",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Stock Structure en 768x1024",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Stock Structure zh 1280x720",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Stock Structure zh 1440x900",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Stock Structure zh 390x844",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Stock Structure zh 768x1024",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › keeps a capability-gated administrator route reachable",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "protected_critical",
+        "mandatory": true
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › keeps expanded Home and Stock Structure evidence localized in English",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › keeps expanded Market Overview evidence reachable and localized in English",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › keeps the mobile drawer Escape and focus-return contract",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › preserves direct route, refresh, query/hash and back/forward",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › writes T448 browser measurements and enforces after-state limits",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
         "project": "chromium-mobile",
         "owner": "milestone",
         "mandatory": false
@@ -44097,6 +44344,244 @@
       {
         "id": "chromium::apps/dsa-web/e2e/t307-shell-a11y-error-boundary.spec.ts::t307-shell-a11y-error-boundary.spec.ts › T307 shell accessibility invariants › tablet grouped child route keeps one active route owner",
         "spec": "apps/dsa-web/e2e/t307-shell-a11y-error-boundary.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Guest en 1440x900",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Guest en 390x844",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Guest zh 1440x900",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Guest zh 390x844",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Home en 1280x720",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Home en 1440x900",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Home en 390x844",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Home en 768x1024",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Home zh 1280x720",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Home zh 1440x900",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Home zh 390x844",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Home zh 768x1024",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Market Overview en 1280x720",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Market Overview en 1440x900",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Market Overview en 390x844",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Market Overview en 768x1024",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Market Overview zh 1280x720",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Market Overview zh 1440x900",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Market Overview zh 390x844",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Market Overview zh 768x1024",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Stock Structure en 1280x720",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Stock Structure en 1440x900",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Stock Structure en 390x844",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Stock Structure en 768x1024",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Stock Structure zh 1280x720",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Stock Structure zh 1440x900",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Stock Structure zh 390x844",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › captures Stock Structure zh 768x1024",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › keeps a capability-gated administrator route reachable",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "protected_critical",
+        "mandatory": true
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › keeps expanded Home and Stock Structure evidence localized in English",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › keeps expanded Market Overview evidence reachable and localized in English",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › keeps the mobile drawer Escape and focus-return contract",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › preserves direct route, refresh, query/hash and back/forward",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
+        "project": "chromium",
+        "owner": "milestone",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts::t448-consumer-research-simplification.spec.ts › writes T448 browser measurements and enforces after-state limits",
+        "spec": "apps/dsa-web/e2e/t448-consumer-research-simplification.spec.ts",
         "project": "chromium",
         "owner": "milestone",
         "mandatory": false
