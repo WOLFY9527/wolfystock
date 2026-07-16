@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7777,
-      "sha256": "ca654ae177cf5e43be83f14b5557d1a4baa0ad2c4906ed2f862a6d7640a536b3"
+      "count": 7786,
+      "sha256": "1905aedc7d04c4f9ff86ec1f0535c22d994477394256b147c28fc67d2ffc9a29"
     },
     "tests": [
       {
@@ -28344,6 +28344,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_ibkr_import_currency_rejection_uses_safe_structured_error",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_ibkr_import_preview_reports_contract_without_creating_connection",
         "domain": "portfolio_broker",
         "baseline": true
@@ -28534,6 +28539,16 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_ibkr_currency_classifier_distinguishes_all_states",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_accepts_explicit_summary_currency_evidence",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_coexists_with_existing_ibkr_file_import",
         "domain": "portfolio_broker",
         "baseline": true
@@ -28564,6 +28579,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_requires_explicit_valid_broker_base_currency",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_requires_transient_session_token",
         "domain": "portfolio_broker",
         "baseline": true
@@ -28577,6 +28597,21 @@
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_treats_empty_positions_as_valid_current_state",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_uses_direct_fx_for_material_position_values",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_uses_inverse_fx_for_material_position_values",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_rejected_sync_preserves_account_overlay_cash_positions_and_cached_snapshot",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_same_day_overlay_resync_refreshes_cached_snapshot",
@@ -28629,9 +28664,19 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_ibkr_flex_currency_gate_is_all_or_nothing_and_corrected_retry_is_idempotent",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_ibkr_flex_parse_and_commit_with_repeat_import_protection",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_ibkr_flex_preview_classifies_statement_and_record_currency_issues",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_ibkr_import_rejects_malformed_xml",
