@@ -9,6 +9,11 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Mapping
 
+from src.contracts.evidence.source_observation import (
+    SourceClass,
+    SourceObservationFacts,
+)
+
 
 SOURCE_PROVENANCE_CONTRACT_VERSION = "source_provenance_v1"
 
@@ -30,7 +35,7 @@ _DEFAULT_ENTRY = {
 
 _FRESHNESS_ALIASES = {
     "fresh": "fresh",
-    "live": "fresh",
+    "live": "live",
     "cached": "cached",
     "delayed": "delayed",
     "partial": "partial",
@@ -70,11 +75,15 @@ _SOURCE_TIER_ALIASES = {
     "exchange_public": "official_public",
     "public_proxy": "proxy",
     "unofficial_proxy": "proxy",
+    "proxy": "proxy",
     "cache_snapshot": "stored_snapshot",
     "stored_snapshot": "stored_snapshot",
     "fallback_static": "fallback",
     "fallback": "fallback",
     "synthetic_fixture": "fixture",
+    "synthetic": "synthetic",
+    "first_party": "first_party",
+    "third_party": "third_party",
     "delayed_fixture": "fixture",
     "malformed_fixture": "fixture",
     "disabled_live_stub": "fixture",
@@ -259,7 +268,24 @@ def build_source_provenance(
     limitations: Any = None,
     next_evidence_needed: Any = None,
     debug_ref: Any = None,
+    source_observation: SourceObservationFacts | Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    facts = _coerce_source_observation(source_observation)
+    if facts is not None:
+        canonical_source_id = facts.identity.source_id
+        canonical_freshness = facts.freshness.value
+        canonical_source_tier = _source_tier_from_identity(facts)
+        if source_id is not None and _text(source_id) != canonical_source_id:
+            raise ValueError("sourceId conflicts with sourceObservation")
+        if freshness_state is not None and _normalize_freshness(freshness_state) != canonical_freshness:
+            raise ValueError("freshnessState conflicts with sourceObservation")
+        if source_tier is not None and _normalize_source_tier(source_tier) != canonical_source_tier:
+            raise ValueError("sourceTier conflicts with sourceObservation")
+        source_id = canonical_source_id
+        freshness_state = canonical_freshness
+        source_tier = canonical_source_tier
+        fallback_or_proxy = bool(fallback_or_proxy) or facts.identity.is_proxy
+
     entry = dict(_DEFAULT_ENTRY)
     normalized_source_id = _sanitize_source_id(source_id)
     normalized_source_label = _sanitize_source_label(source_label)
@@ -275,9 +301,9 @@ def build_source_provenance(
 
     if normalized_authority != "score_grade":
         score_allowed = False
-    if fallback_flag or normalized_freshness not in {"fresh", "cached"}:
+    if fallback_flag or normalized_freshness not in {"live", "fresh", "cached"}:
         score_allowed = False
-    if normalized_source_tier in {"proxy", "fallback", "fixture", "unknown"}:
+    if normalized_source_tier in {"proxy", "fallback", "synthetic", "fixture", "unknown"}:
         score_allowed = False
     if normalized_source_id == "unknown_source":
         normalized_authority = "unknown"
@@ -319,7 +345,38 @@ def build_source_provenance(
             "debugRef": normalized_debug_ref,
         }
     )
+    if facts is not None:
+        entry["sourceObservation"] = facts.to_dict()
     return entry
+
+
+def _coerce_source_observation(
+    value: SourceObservationFacts | Mapping[str, Any] | None,
+) -> SourceObservationFacts | None:
+    if value is None:
+        return None
+    if isinstance(value, SourceObservationFacts):
+        return value
+    if isinstance(value, Mapping):
+        return SourceObservationFacts.from_dict(value)
+    raise TypeError("source_observation must be SourceObservationFacts, a mapping, or None")
+
+
+def _source_tier_from_identity(facts: SourceObservationFacts) -> str:
+    identity = facts.identity
+    if identity.is_fixture:
+        return "fixture"
+    if identity.is_synthetic:
+        return "synthetic"
+    if identity.is_proxy:
+        return "proxy"
+    return {
+        SourceClass.OFFICIAL: "official_public",
+        SourceClass.LICENSED: "authorized_feed",
+        SourceClass.FIRST_PARTY: "first_party",
+        SourceClass.THIRD_PARTY: "third_party",
+        SourceClass.UNKNOWN: "unknown",
+    }[identity.source_class]
 
 
 def build_unknown_source_provenance(*, evidence_domain: Any = "general", debug_ref: Any = None) -> dict[str, Any]:

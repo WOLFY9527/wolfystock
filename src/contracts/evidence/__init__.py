@@ -24,6 +24,15 @@ from src.contracts.evidence.provenance_ledger import (
     EVIDENCE_PROVENANCE_LEDGER_VERSION,
     build_evidence_provenance_ledger,
 )
+from src.contracts.evidence.source_observation import (
+    SOURCE_OBSERVATION_FACTS_VERSION,
+    ObservationFreshness,
+    RawAvailability,
+    SourceClass,
+    SourceIdentity,
+    SourceObservationFacts,
+    merge_source_observations,
+)
 from src.contracts.evidence.validator import (
     AiEvidenceValidationIssue,
     AiEvidenceValidationResult,
@@ -50,6 +59,13 @@ __all__ = [
     "evaluate_evidence_policy",
     "EVIDENCE_PROVENANCE_LEDGER_VERSION",
     "build_evidence_provenance_ledger",
+    "SOURCE_OBSERVATION_FACTS_VERSION",
+    "ObservationFreshness",
+    "RawAvailability",
+    "SourceClass",
+    "SourceIdentity",
+    "SourceObservationFacts",
+    "merge_source_observations",
     "AiEvidenceValidationIssue",
     "AiEvidenceValidationResult",
     "validate_ai_evidence_packet",

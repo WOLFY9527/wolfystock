@@ -12,6 +12,12 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Mapping, Protocol
 
+from src.contracts.evidence.source_observation import (
+    ObservationFreshness,
+    RawAvailability,
+    SourceObservationFacts,
+)
+
 
 SOURCE_CONFIDENCE_CONTRACT_VERSION = "source_confidence_contract_v1"
 PROVIDER_SOURCE_READINESS_CONTRACT_VERSION = "provider_source_readiness_contract_v1"
@@ -95,11 +101,15 @@ class SourceConfidenceContract:
     coverage: float | None = None
     degradation_reason: str | None = None
     cap_reason: str | None = None
+    observation_facts: SourceObservationFacts | None = None
 
     @classmethod
     def from_dict(cls, value: Any) -> "SourceConfidenceContract":
         payload = _coerce_mapping(value)
-        return cls(
+        observation_payload = _get(payload, "source_observation", "sourceObservation")
+        if observation_payload is not None and not isinstance(observation_payload, Mapping):
+            raise TypeError("sourceObservation must be a mapping")
+        contract = cls(
             source=_text(_get(payload, "source")),
             source_label=_text(_get(payload, "source_label", "sourceLabel")),
             as_of=_optional_text(_get(payload, "as_of", "asOf")),
@@ -116,10 +126,52 @@ class SourceConfidenceContract:
             coverage=_optional_float(_get(payload, "coverage")),
             degradation_reason=_optional_text(_get(payload, "degradation_reason", "degradationReason")),
             cap_reason=_optional_text(_get(payload, "cap_reason", "capReason")),
+            observation_facts=(
+                SourceObservationFacts.from_dict(observation_payload)
+                if observation_payload is not None
+                else None
+            ),
+        )
+        if contract.observation_facts is not None:
+            _validate_observation_projection(contract)
+        return contract
+
+    @classmethod
+    def from_observation_facts(
+        cls,
+        facts: SourceObservationFacts,
+        *,
+        source_label: str,
+        confidence_weight: float = 0.0,
+        coverage: float | None = None,
+        degradation_reason: str | None = None,
+        cap_reason: str | None = None,
+    ) -> "SourceConfidenceContract":
+        if not isinstance(facts, SourceObservationFacts):
+            raise TypeError("facts must be SourceObservationFacts")
+        return cls(
+            source=facts.identity.source_id,
+            source_label=source_label,
+            as_of=facts.to_dict()["asOf"],
+            freshness=SourceFreshness(facts.freshness.value),
+            is_fallback=facts.identity.is_proxy,
+            is_stale=facts.freshness is ObservationFreshness.STALE,
+            is_synthetic=facts.identity.is_synthetic,
+            is_unavailable=facts.raw_availability is RawAvailability.UNAVAILABLE,
+            confidence_weight=confidence_weight,
+            coverage=coverage,
+            degradation_reason=degradation_reason,
+            cap_reason=cap_reason,
+            observation_facts=facts,
         )
 
+    def to_observation_facts(self) -> SourceObservationFacts:
+        if self.observation_facts is None:
+            raise ValueError("source confidence payload has no canonical sourceObservation facts")
+        return self.observation_facts
+
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "source": self.source,
             "sourceLabel": self.source_label,
             "asOf": self.as_of,
@@ -134,6 +186,9 @@ class SourceConfidenceContract:
             "degradationReason": self.degradation_reason,
             "capReason": self.cap_reason,
         }
+        if self.observation_facts is not None:
+            payload["sourceObservation"] = self.observation_facts.to_dict()
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -780,6 +835,7 @@ def apply_source_confidence_caps(contract: SourceConfidenceContract) -> SourceCo
             coverage=_optional_bounded_float(contract.coverage),
             degradation_reason=contract.degradation_reason,
             cap_reason=contract.cap_reason,
+            observation_facts=contract.observation_facts,
         )
 
     freshness, cap, reason = degraded
@@ -800,6 +856,7 @@ def apply_source_confidence_caps(contract: SourceConfidenceContract) -> SourceCo
         coverage=coverage,
         degradation_reason=contract.degradation_reason or reason,
         cap_reason=contract.cap_reason or reason,
+        observation_facts=contract.observation_facts,
     )
 
 
@@ -986,22 +1043,74 @@ def _coerce_freshness(value: Any) -> SourceFreshness:
     return SourceFreshness.UNKNOWN
 
 
+def _validate_observation_projection(contract: SourceConfidenceContract) -> None:
+    facts = contract.to_observation_facts()
+    expected_as_of = facts.to_dict()["asOf"]
+    expected = {
+        "source": facts.identity.source_id,
+        "asOf": expected_as_of,
+        "isFallback": facts.identity.is_proxy,
+        "isStale": facts.freshness is ObservationFreshness.STALE,
+        "isSynthetic": facts.identity.is_synthetic,
+        "isUnavailable": facts.raw_availability is RawAvailability.UNAVAILABLE,
+    }
+    actual = {
+        "source": contract.source,
+        "asOf": contract.as_of,
+        "isFallback": contract.is_fallback,
+        "isStale": contract.is_stale,
+        "isSynthetic": contract.is_synthetic,
+        "isUnavailable": contract.is_unavailable,
+    }
+    conflicts = sorted(key for key, expected_value in expected.items() if actual[key] != expected_value)
+    if not _legacy_freshness_is_degradation(contract, facts):
+        conflicts.append("freshness")
+    if conflicts:
+        raise ValueError(f"source confidence projection conflicts with sourceObservation: {conflicts}")
+
+
+def _legacy_freshness_is_degradation(
+    contract: SourceConfidenceContract,
+    facts: SourceObservationFacts,
+) -> bool:
+    factual_values = {
+        SourceFreshness.LIVE,
+        SourceFreshness.FRESH,
+        SourceFreshness.DELAYED,
+        SourceFreshness.STALE,
+        SourceFreshness.UNKNOWN,
+    }
+    if contract.freshness in factual_values:
+        try:
+            facts.degrade(freshness=ObservationFreshness(contract.freshness.value))
+        except ValueError:
+            return False
+        return True
+    return {
+        SourceFreshness.CACHED: facts.is_cached,
+        SourceFreshness.PARTIAL: contract.is_partial,
+        SourceFreshness.FALLBACK: contract.is_fallback,
+        SourceFreshness.SYNTHETIC: contract.is_synthetic,
+        SourceFreshness.UNAVAILABLE: contract.is_unavailable,
+    }.get(contract.freshness, False)
+
+
 def _derived_flags(contract: SourceConfidenceContract) -> dict[str, bool]:
-    source = contract.source.lower()
     freshness = contract.freshness
+    facts = contract.observation_facts
     return {
         "is_unavailable": contract.is_unavailable
         or freshness is SourceFreshness.UNAVAILABLE
-        or source in {"missing", "unavailable"},
+        or (facts is not None and facts.raw_availability is RawAvailability.UNAVAILABLE),
         "is_synthetic": contract.is_synthetic
         or freshness is SourceFreshness.SYNTHETIC
-        or "synthetic" in source
-        or source in {"mock", "fixture", "unit_fixture"},
+        or (facts is not None and facts.identity.is_synthetic),
         "is_fallback": contract.is_fallback
         or freshness is SourceFreshness.FALLBACK
-        or source.endswith("_fallback")
-        or source == "fallback",
-        "is_stale": contract.is_stale or freshness is SourceFreshness.STALE,
+        or (facts is not None and facts.identity.is_proxy),
+        "is_stale": contract.is_stale
+        or freshness is SourceFreshness.STALE
+        or (facts is not None and facts.freshness is ObservationFreshness.STALE),
         "is_partial": contract.is_partial or freshness is SourceFreshness.PARTIAL,
     }
 
