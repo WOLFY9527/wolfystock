@@ -28,10 +28,12 @@ setup_env()
 import argparse
 import logging
 import sys
+import threading
 import time
 import uuid
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional, Tuple
+from enum import Enum
+from typing import Any, List, Optional, Tuple
 
 from data_provider.base import canonical_stock_code
 from src.core.pipeline import StockAnalysisPipeline
@@ -434,31 +436,122 @@ def run_full_analysis(
         logger.exception(f"分析流程执行失败: {e}")
 
 
-def start_api_server(host: str, port: int, config: Config) -> None:
-    """
-    在后台线程启动 FastAPI 服务
-    
-    Args:
-        host: 监听地址
-        port: 监听端口
-        config: 配置对象
-    """
-    import threading
+class ApiServerState(str, Enum):
+    STARTING = "starting"
+    READY = "ready"
+    FAILED = "failed"
+    STOPPED = "stopped"
+    UNEXPECTED_EXIT = "unexpected_exit"
+
+
+class ApiStartupError(RuntimeError):
+    """Bounded API startup failure safe for operator logs."""
+
+    def __init__(self, reason: str, failure_type: str = "none") -> None:
+        self.reason = reason
+        self.failure_type = failure_type
+        super().__init__(f"reason={reason} failure_type={failure_type}")
+
+
+class _ApiServerRuntime:
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.stopped = threading.Event()
+        self.state = ApiServerState.STARTING
+        self.failure: BaseException | None = None
+
+
+class ApiServerHandle:
+    def __init__(self, server: Any, thread: threading.Thread, runtime: _ApiServerRuntime) -> None:
+        self.server = server
+        self.thread = thread
+        self._runtime = runtime
+
+    @property
+    def state(self) -> ApiServerState:
+        with self._runtime.lock:
+            return self._runtime.state
+
+    def stop_and_join(self, timeout: float = 10.0) -> bool:
+        self.server.should_exit = True
+        self.thread.join(timeout=max(0.0, timeout))
+        if self.thread.is_alive():
+            return False
+        with self._runtime.lock:
+            if self._runtime.state is ApiServerState.READY:
+                self._runtime.state = ApiServerState.STOPPED
+        return True
+
+
+def start_api_server(
+    host: str,
+    port: int,
+    config: Config,
+    *,
+    startup_timeout: float = 30.0,
+) -> ApiServerHandle:
+    """Start uvicorn and return only after import, lifespan, and bind succeed."""
     import uvicorn
 
-    def run_server():
-        level_name = (config.log_level or "INFO").lower()
-        uvicorn.run(
-            "api.app:app",
-            host=host,
-            port=port,
-            log_level=level_name,
-            log_config=None,
-        )
+    level_name = (config.log_level or "INFO").lower()
+    server_config = uvicorn.Config(
+        "api.app:app",
+        host=host,
+        port=port,
+        log_level=level_name,
+        log_config=None,
+    )
+    server = uvicorn.Server(server_config)
+    runtime = _ApiServerRuntime()
 
-    thread = threading.Thread(target=run_server, daemon=True)
-    thread.start()
-    logger.info(f"FastAPI 服务已启动: http://{host}:{port}")
+    def run_server() -> None:
+        try:
+            server.run()
+        except BaseException as exc:
+            with runtime.lock:
+                runtime.failure = exc
+                runtime.state = (
+                    ApiServerState.UNEXPECTED_EXIT if server.started else ApiServerState.FAILED
+                )
+        else:
+            with runtime.lock:
+                if server.started and server.should_exit:
+                    runtime.state = ApiServerState.STOPPED
+                elif server.started:
+                    runtime.state = ApiServerState.UNEXPECTED_EXIT
+                else:
+                    runtime.state = ApiServerState.FAILED
+        finally:
+            runtime.stopped.set()
+
+    thread = threading.Thread(target=run_server, name="wolfystock-api", daemon=True)
+    handle = ApiServerHandle(server=server, thread=thread, runtime=runtime)
+    logger.info("FastAPI 服务正在启动: http://%s:%s", host, port)
+    try:
+        thread.start()
+    except BaseException as exc:
+        raise ApiStartupError("thread_start_failed", type(exc).__name__) from None
+
+    deadline = time.monotonic() + max(0.0, startup_timeout)
+    while True:
+        if runtime.stopped.is_set():
+            failure_type = type(runtime.failure).__name__ if runtime.failure else "none"
+            raise ApiStartupError("runner_exited_before_start", failure_type)
+        if server.started:
+            with runtime.lock:
+                startup_confirmed = runtime.state is ApiServerState.STARTING
+                if startup_confirmed:
+                    runtime.state = ApiServerState.READY
+            if startup_confirmed:
+                logger.info("FastAPI 服务已启动: http://%s:%s", host, port)
+                return handle
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            handle.stop_and_join()
+            with runtime.lock:
+                runtime.state = ApiServerState.FAILED
+            raise ApiStartupError("startup_timeout")
+        runtime.stopped.wait(timeout=min(0.01, remaining))
 
 
 def _is_truthy_env(var_name: str, default: str = "true") -> bool:
@@ -499,6 +592,20 @@ def start_bot_stream_clients(config: Config) -> None:
             logger.error(f"[Main] Failed to start Feishu Stream client: {exc}")
 
 
+def _finish_main(api_handle: ApiServerHandle | None, exit_code: int) -> int:
+    if api_handle is None:
+        return exit_code
+    try:
+        stopped = api_handle.stop_and_join()
+    except Exception as exc:
+        logger.error("FastAPI 服务清理失败: failure_type=%s", type(exc).__name__)
+        return 1
+    if not stopped:
+        logger.error("FastAPI 服务清理失败: reason=shutdown_timeout")
+        return 1
+    return exit_code
+
+
 def main() -> int:
     """
     主入口函数
@@ -536,7 +643,11 @@ def main() -> int:
         args.serve = True
 
     # === 启动 Web 服务 (如果启用) ===
-    start_serve = (args.serve or args.serve_only) and os.getenv("GITHUB_ACTIONS") != "true"
+    api_requested = args.serve or args.serve_only
+    start_serve = api_requested and os.getenv("GITHUB_ACTIONS") != "true"
+    if api_requested and not start_serve:
+        logger.error("FastAPI 服务启动失败: reason=start_suppressed")
+        return 1
 
     # 兼容旧版 WEBUI_HOST/WEBUI_PORT：如果用户未通过 --host/--port 指定，则使用旧变量
     if start_serve:
@@ -545,18 +656,29 @@ def main() -> int:
         if args.port == 8000 and os.getenv('WEBUI_PORT'):
             args.port = int(os.getenv('WEBUI_PORT'))
 
-    bot_clients_started = False
+    api_handle = None
     if start_serve:
         if not prepare_webui_frontend_assets():
             logger.warning("前端静态资源未就绪，继续启动 FastAPI 服务（Web 页面可能不可用）")
         try:
-            start_api_server(host=args.host, port=args.port, config=config)
-            bot_clients_started = True
-        except Exception as e:
-            logger.error(f"启动 FastAPI 服务失败: {e}")
+            api_handle = start_api_server(host=args.host, port=args.port, config=config)
+        except ApiStartupError as exc:
+            logger.error(
+                "FastAPI 服务启动失败: reason=%s failure_type=%s",
+                exc.reason,
+                exc.failure_type,
+            )
+            return 1
+        except Exception as exc:
+            logger.error("FastAPI 服务启动失败: reason=setup_failed failure_type=%s", type(exc).__name__)
+            return 1
 
-    if bot_clients_started:
-        start_bot_stream_clients(config)
+    if api_handle is not None:
+        try:
+            start_bot_stream_clients(config)
+        except KeyboardInterrupt:
+            logger.info("\n用户中断，程序退出")
+            return _finish_main(api_handle, 130)
 
     # === 仅 Web 服务模式：不自动执行分析 ===
     if args.serve_only:
@@ -570,7 +692,7 @@ def main() -> int:
                 time.sleep(1)
         except KeyboardInterrupt:
             logger.info("\n用户中断，程序退出")
-        return 0
+        return _finish_main(api_handle, 0)
 
     try:
         # 模式0: 回测
@@ -588,7 +710,7 @@ def main() -> int:
                 f"回测完成: processed={stats.get('processed')} saved={stats.get('saved')} "
                 f"completed={stats.get('completed')} insufficient={stats.get('insufficient')} errors={stats.get('errors')}"
             )
-            return 0
+            return _finish_main(api_handle, 0)
 
         # 模式1: 仅大盘复盘
         if args.market_review:
@@ -610,7 +732,7 @@ def main() -> int:
                 )
                 if effective_region == '':
                     logger.info("今日大盘复盘相关市场均为非交易日，跳过执行。可使用 --force-run 强制执行。")
-                    return 0
+                    return _finish_main(api_handle, 0)
 
             logger.info("模式: 仅大盘复盘")
             notifier = NotificationService()
@@ -647,7 +769,7 @@ def main() -> int:
                 send_notification=not args.no_notify,
                 override_region=effective_region,
             )
-            return 0
+            return _finish_main(api_handle, 0)
 
         # 模式2: 单次运行 Scanner
         if args.scanner:
@@ -666,7 +788,7 @@ def main() -> int:
                 detail.get("shortlist_size"),
                 detail.get("watchlist_date"),
             )
-            return 0
+            return _finish_main(api_handle, 0)
 
         # 模式3: 定时任务模式（分析 / Scanner 可并存）
         analysis_schedule_enabled = args.schedule or config.schedule_enabled
@@ -774,7 +896,7 @@ def main() -> int:
                     )
 
             scheduler.run()
-            return 0
+            return _finish_main(api_handle, 0)
 
         # 模式4: 正常单次运行
         if config.run_immediately:
@@ -794,15 +916,15 @@ def main() -> int:
             except KeyboardInterrupt:
                 pass
 
-        return 0
+        return _finish_main(api_handle, 0)
 
     except KeyboardInterrupt:
         logger.info("\n用户中断，程序退出")
-        return 130
+        return _finish_main(api_handle, 130)
 
     except Exception as e:
         logger.exception(f"程序执行失败: {e}")
-        return 1
+        return _finish_main(api_handle, 1)
 
 
 if __name__ == "__main__":

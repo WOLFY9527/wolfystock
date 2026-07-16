@@ -345,7 +345,12 @@ SECTIONS = [
             "for persistence boundaries, `src/schemas/` for DTO/schema contracts, `data_provider/` for provider adapters "
             "and fallback normalization, `bot/` for notification integrations, `apps/dsa-web/` for the web terminal, "
             "`apps/dsa-desktop/` for the Electron wrapper, `scripts/` for local and CI utilities, and `.github/workflows/` "
-            "for CI/release automation.\n\n"
+            "for CI/release automation. `main.py --serve` and `main.py --serve-only` wait for application import, FastAPI "
+            "lifespan startup, and socket bind before reporting API startup. Any failure or bounded startup timeout exits "
+            "the main process with code 1 before bots, analysis, scheduling, or keepalive, giving Desktop, Docker, and UAT "
+            "one authoritative process-level startup signal. Frontend asset preparation returning `False` remains a "
+            "warning-only degradation, and readiness 503 after a successful bind remains distinct from startup failure. "
+            "Normal returns and interactive shutdown explicitly stop and join the managed uvicorn thread.\n\n"
             "Maintain bounded contexts. Consumers should call public facades, API clients, schemas, DTOs, validators, and "
             "documented commands. Do not reach into private engines, repositories, provider clients, cache keys, ledger "
             "internals, or mutation code from another domain just to make a local task easier.\n\n"
@@ -507,8 +512,8 @@ SECTIONS = [
                     ),
                     (
                         "Runtime startup verification",
-                        "`scripts/uat_runtime_harness.py` is the canonical local runtime verifier for clean tree, expected SHA, build, no-proxy localhost checks, asset identity, and evidence-bound stop.",
-                        "UAT harness evidence is local runtime proof, not production launch approval.",
+                        "`main.py` fails closed with exit code 1 on API import, lifespan, bind, pre-start runner exit, or bounded startup timeout; `scripts/uat_runtime_harness.py` remains the canonical local runtime verifier.",
+                        "Desktop, Docker, and UAT observe the same process exit. Static preparation `False` is nonfatal, while readiness 503 after bind remains an operational health state. UAT evidence is local runtime proof, not production launch approval.",
                     ),
                     (
                         "Health and readiness checks",

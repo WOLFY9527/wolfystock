@@ -60,6 +60,22 @@ python main.py --serve-only
 uvicorn server:app --reload --host 0.0.0.0 --port 8000
 ```
 
+### Runtime startup truth
+
+`main.py --serve` and `main.py --serve-only` report the API as started only
+after the application import, FastAPI lifespan startup, and socket bind have
+completed. A failure or bounded startup timeout exits the main process with
+code 1 before bot clients, analysis, scheduling, or a keepalive loop starts.
+This process exit is the shared failure signal observed by the Desktop child
+launcher, Docker restart/health supervision, and the UAT runtime harness.
+
+Frontend preparation remains a separate degradation boundary. When
+`prepare_webui_frontend_assets()` returns `False`, startup logs a warning and
+continues with the API and its fallback root page. Likewise, an API that has
+bound successfully but reports readiness 503 is operationally not ready; it is
+not mislabeled as an import, lifespan, or bind failure. Normal returns and
+interactive shutdown request uvicorn shutdown and wait for its managed thread.
+
 Web:
 
 ```bash
