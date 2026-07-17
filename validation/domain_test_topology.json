@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7891,
-      "sha256": "7acff4cafb53968648dcb7f49a45f2137942872c17fe8f04394f1e4ae82cbf1e"
+      "count": 7922,
+      "sha256": "5d3f67f27ef3e0f0ac58d3a1361b49579c8652d0725a5eaf1500a0074a4620c6"
     },
     "tests": [
       {
@@ -6199,149 +6199,34 @@
         "baseline": false
       },
       {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_absolute_script_invocation_targets_the_current_linked_worktree",
+        "id": "tests/scripts/test_bootstrap_worktree.py::test_posix_entrypoint_is_a_thin_wolfy_delegate",
         "domain": "runtime_operator_tooling",
-        "baseline": true
+        "baseline": false
       },
       {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_apply_discovers_canonical_main_worktree_and_creates_dependency_links",
+        "id": "tests/scripts/test_bootstrap_worktree.py::test_powershell_entrypoint_is_a_thin_wolfy_delegate",
         "domain": "runtime_operator_tooling",
-        "baseline": true
+        "baseline": false
       },
       {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_apply_does_not_change_shared_git_metadata",
+        "id": "tests/scripts/test_bootstrap_worktree.py::test_python_compatibility_entrypoint_delegates_to_wolfy[arguments0-delegated0]",
         "domain": "runtime_operator_tooling",
-        "baseline": true
+        "baseline": false
       },
       {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_apply_is_idempotent_for_existing_correct_links",
+        "id": "tests/scripts/test_bootstrap_worktree.py::test_python_compatibility_entrypoint_delegates_to_wolfy[arguments1-delegated1]",
         "domain": "runtime_operator_tooling",
-        "baseline": true
+        "baseline": false
       },
       {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_apply_links_explicit_external_env_file_without_printing_its_contents",
+        "id": "tests/scripts/test_bootstrap_worktree.py::test_python_compatibility_entrypoint_rejects_obsolete_commands",
         "domain": "runtime_operator_tooling",
-        "baseline": true
+        "baseline": false
       },
       {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_apply_refuses_symlink_that_points_to_another_target",
+        "id": "tests/scripts/test_bootstrap_worktree.py::test_python_delegate_contains_no_environment_authority",
         "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_apply_refuses_to_replace_real_conflict_nodes[.venv-False]",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_apply_refuses_to_replace_real_conflict_nodes[.venv-True]",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_apply_refuses_to_replace_real_conflict_nodes[apps/dsa-web/node_modules-False]",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_bootstrap_does_not_link_runtime_products",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_check_fails_fast_when_canonical_dependency_is_missing_without_mutation",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_check_is_read_only_and_reports_planned_links",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_check_is_read_only_without_changing_shared_git_metadata",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_detect_shell_flavor_uses_explicit_environment_or_capability[env0-C:\\\\\\\\Program Files\\\\\\\\Git\\\\\\\\usr\\\\\\\\bin\\\\\\\\bash.exe-msys]",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_detect_shell_flavor_uses_explicit_environment_or_capability[env1-C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\bash.exe-wsl]",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_detect_shell_flavor_uses_explicit_environment_or_capability[env2-/usr/bin/bash-posix]",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_entrypoints_run_shared_core_in_isolated_mode",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_fingerprint_output_is_deterministic",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_isolated_environment_opt_out_makes_no_links",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_link_capabilities_do_not_require_privileged_probe",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_normalize_git_path_cross_platform[/c/repo/.git-Windows-C:]",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_normalize_git_path_cross_platform[/srv/repo/.git-Linux-/srv/repo/.git]",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_normalize_git_path_cross_platform[C:\\\\\\\\repo\\\\\\\\.git-Linux-/mnt/c/repo/.git]",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_normalize_git_path_cross_platform[C:\\\\\\\\repo\\\\\\\\.git-Windows-C:]",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_normalize_git_path_rejects_malformed_pointers[]",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_normalize_git_path_rejects_malformed_pointers[gitdir: ../broken]",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_normalize_git_path_rejects_malformed_pointers[relative/.git]",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_posix_entrypoint_delegates_to_the_shared_core",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_powershell_entrypoint_delegates_to_the_shared_core",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
+        "baseline": false
       },
       {
         "id": "tests/scripts/test_bootstrap_worktree.py::test_qualification_accepts_repository_python",
@@ -6352,31 +6237,6 @@
         "id": "tests/scripts/test_bootstrap_worktree.py::test_qualification_rejects_wrong_python_interpreter",
         "domain": "runtime_operator_tooling",
         "baseline": false
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_rejects_linked_manifest_mismatch_without_mutation",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_rejects_stale_echarts_before_links_or_heavy_validation",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_windows_to_posix_path_is_deterministic[msys-/c/Users/test/repo]",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_windows_to_posix_path_is_deterministic[posix-C:\\\\\\\\Users\\\\\\\\test\\\\\\\\repo]",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_bootstrap_worktree.py::test_windows_to_posix_path_is_deterministic[wsl-/mnt/c/Users/test/repo]",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
       },
       {
         "id": "tests/scripts/test_build_ai_project_manual.py::test_ai_assets_check_invokes_manual_freshness_guard",
@@ -7372,6 +7232,301 @@
         "id": "tests/scripts/test_web_build_artifact.py::test_verify_artifact_rejects_manifest_tampering",
         "domain": "runtime_operator_tooling",
         "baseline": true
+      },
+      {
+        "id": "tests/scripts/test_wolfy_cli.py::test_cli_help_exposes_single_canonical_command_surface",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_cli.py::test_existing_worktree_entrypoints_are_thin_wolfy_delegates",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_cli.py::test_failed_exec_retains_run_scoped_environment_evidence",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_cli.py::test_local_backend_gates_delegate_to_hermetic_test_profile",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_cli.py::test_managed_service_entrypoint_resolves_repository_without_pythonpath",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_cli.py::test_qualify_env_rejects_implicit_or_mismatched_baseline_identity",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_cli.py::test_root_launchers_select_supported_bootstrap_without_using_mutable_worktree_dependencies",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_components.py::test_broken_python_import_is_detected",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_components.py::test_missing_transitive_web_dependency_is_detected",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_components.py::test_offline_wheel_index_preserves_conflicting_cache_material",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_components.py::test_python_installed_file_change_is_detected_against_provenance",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_components.py::test_python_metadata_change_is_detected_against_provenance",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_components.py::test_python_promotion_rewrites_full_prefix_and_prompt_identity",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_components.py::test_python_record_normalization_removes_temporary_console_script_hashes",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_components.py::test_web_dependency_tree_command_failure_is_rejected",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_components.py::test_web_installed_file_change_is_detected_against_provenance",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_identity.py::test_identical_manifests_and_toolchains_produce_identical_fingerprints",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_identity.py::test_lockfile_content_change_produces_new_web_and_combined_fingerprints",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_identity.py::test_missing_authoritative_python_input_fails_closed",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_identity.py::test_platform_or_toolchain_change_produces_new_environment_fingerprint[architecture-x86_64]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_identity.py::test_platform_or_toolchain_change_produces_new_environment_fingerprint[node_version-20.20.1]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_identity.py::test_platform_or_toolchain_change_produces_new_environment_fingerprint[npm_version-10.8.1]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_identity.py::test_platform_or_toolchain_change_produces_new_environment_fingerprint[os_name-Linux]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_identity.py::test_platform_or_toolchain_change_produces_new_environment_fingerprint[python_implementation-PyPy]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_identity.py::test_platform_or_toolchain_change_produces_new_environment_fingerprint[python_version-3.11.14]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_identity.py::test_toolchain_detection_strips_node_and_npm_execution_modifiers",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_manager.py::test_environment_evidence_redacts_cache_paths_and_credentials",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_manager.py::test_existing_environment_cache_permissions_are_restricted",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_manager.py::test_linking_environment_keeps_tracked_git_state_clean",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_manager.py::test_migration_replaces_legacy_dependencies_only_after_snapshots_exist",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_manager.py::test_missing_replacement_snapshot_leaves_legacy_environment_untouched",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_manager.py::test_multiple_worktrees_share_snapshots_but_not_run_state",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_manager.py::test_verify_rejects_pointer_component_identity_mismatch[python-installedFingerprint-ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_manager.py::test_verify_rejects_pointer_component_identity_mismatch[web-snapshot-$CACHE/snapshots/web/wrong/snapshot]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_manager.py::test_worktree_links_never_target_canonical_mutable_dependencies",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_manager.py::test_wrong_active_python_cannot_qualify_managed_environment",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_qualification.py::test_baseline_comparison_reports_new_unchanged_and_removed_findings",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_qualification.py::test_empty_current_findings_pass_only_with_explicit_baseline_identity",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_qualification.py::test_historical_release_blocker_remains_blocking",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_qualification.py::test_normalized_findings_drop_terminal_and_location_details",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_runtime.py::test_app_env_is_preserved_only_when_explicitly_present",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_runtime.py::test_cleanup_is_idempotent_and_failed_runs_are_bounded",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_runtime.py::test_destructive_postgres_dsn_requires_full_explicit_command_contract",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_runtime.py::test_multiple_runs_share_no_mutable_paths",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_runtime.py::test_test_projection_strips_credentials_dsns_admin_flags_and_startup_modifiers",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_services.py::test_generated_vite_config_is_run_scoped_and_has_no_top_level_await",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_services.py::test_partial_service_startup_rolls_back_started_sibling",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_services.py::test_service_ports_are_nonfixed_and_backend_socket_remains_reserved",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_services.py::test_windows_process_identity_uses_cim_not_posix_ps",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_active_lock_is_not_stolen",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_corrupt_provenance_manifest_is_rejected_and_rebuilt",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_failed_installation_never_creates_a_valid_final_snapshot",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_failed_promotion_verification_never_exposes_final_snapshot",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_interrupted_temporary_build_is_quarantined_and_ignored",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_offline_ensure_never_uses_online_builder",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_online_ensure_reports_network_use_only_after_offline_material_miss",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_stale_dead_owner_lock_is_recovered",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_two_concurrent_ensure_operations_converge_on_one_snapshot",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_writable_cached_snapshot_is_not_accepted_as_immutable",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
       },
       {
         "id": "tests/services/test_analysis_research_readiness_projection.py::test_home_analysis_consumed_evidence_schema_preserves_sidecars_and_extra_fields",
@@ -39526,6 +39681,40 @@
       "tests/api/test_openapi_docs_auth_gate.py::test_root_docs_surfaces_fail_closed_in_production_when_auth_disabled[/docs]",
       "tests/api/test_openapi_docs_auth_gate.py::test_root_docs_surfaces_fail_closed_in_production_when_auth_disabled[/openapi.json]",
       "tests/api/test_openapi_docs_auth_gate.py::test_root_docs_surfaces_fail_closed_in_production_when_auth_disabled[/redoc]",
+      "tests/scripts/test_bootstrap_worktree.py::test_absolute_script_invocation_targets_the_current_linked_worktree",
+      "tests/scripts/test_bootstrap_worktree.py::test_apply_discovers_canonical_main_worktree_and_creates_dependency_links",
+      "tests/scripts/test_bootstrap_worktree.py::test_apply_does_not_change_shared_git_metadata",
+      "tests/scripts/test_bootstrap_worktree.py::test_apply_is_idempotent_for_existing_correct_links",
+      "tests/scripts/test_bootstrap_worktree.py::test_apply_links_explicit_external_env_file_without_printing_its_contents",
+      "tests/scripts/test_bootstrap_worktree.py::test_apply_refuses_symlink_that_points_to_another_target",
+      "tests/scripts/test_bootstrap_worktree.py::test_apply_refuses_to_replace_real_conflict_nodes[.venv-False]",
+      "tests/scripts/test_bootstrap_worktree.py::test_apply_refuses_to_replace_real_conflict_nodes[.venv-True]",
+      "tests/scripts/test_bootstrap_worktree.py::test_apply_refuses_to_replace_real_conflict_nodes[apps/dsa-web/node_modules-False]",
+      "tests/scripts/test_bootstrap_worktree.py::test_bootstrap_does_not_link_runtime_products",
+      "tests/scripts/test_bootstrap_worktree.py::test_check_fails_fast_when_canonical_dependency_is_missing_without_mutation",
+      "tests/scripts/test_bootstrap_worktree.py::test_check_is_read_only_and_reports_planned_links",
+      "tests/scripts/test_bootstrap_worktree.py::test_check_is_read_only_without_changing_shared_git_metadata",
+      "tests/scripts/test_bootstrap_worktree.py::test_detect_shell_flavor_uses_explicit_environment_or_capability[env0-C:\\\\\\\\Program Files\\\\\\\\Git\\\\\\\\usr\\\\\\\\bin\\\\\\\\bash.exe-msys]",
+      "tests/scripts/test_bootstrap_worktree.py::test_detect_shell_flavor_uses_explicit_environment_or_capability[env1-C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\bash.exe-wsl]",
+      "tests/scripts/test_bootstrap_worktree.py::test_detect_shell_flavor_uses_explicit_environment_or_capability[env2-/usr/bin/bash-posix]",
+      "tests/scripts/test_bootstrap_worktree.py::test_entrypoints_run_shared_core_in_isolated_mode",
+      "tests/scripts/test_bootstrap_worktree.py::test_fingerprint_output_is_deterministic",
+      "tests/scripts/test_bootstrap_worktree.py::test_isolated_environment_opt_out_makes_no_links",
+      "tests/scripts/test_bootstrap_worktree.py::test_link_capabilities_do_not_require_privileged_probe",
+      "tests/scripts/test_bootstrap_worktree.py::test_normalize_git_path_cross_platform[/c/repo/.git-Windows-C:]",
+      "tests/scripts/test_bootstrap_worktree.py::test_normalize_git_path_cross_platform[/srv/repo/.git-Linux-/srv/repo/.git]",
+      "tests/scripts/test_bootstrap_worktree.py::test_normalize_git_path_cross_platform[C:\\\\\\\\repo\\\\\\\\.git-Linux-/mnt/c/repo/.git]",
+      "tests/scripts/test_bootstrap_worktree.py::test_normalize_git_path_cross_platform[C:\\\\\\\\repo\\\\\\\\.git-Windows-C:]",
+      "tests/scripts/test_bootstrap_worktree.py::test_normalize_git_path_rejects_malformed_pointers[]",
+      "tests/scripts/test_bootstrap_worktree.py::test_normalize_git_path_rejects_malformed_pointers[gitdir: ../broken]",
+      "tests/scripts/test_bootstrap_worktree.py::test_normalize_git_path_rejects_malformed_pointers[relative/.git]",
+      "tests/scripts/test_bootstrap_worktree.py::test_posix_entrypoint_delegates_to_the_shared_core",
+      "tests/scripts/test_bootstrap_worktree.py::test_powershell_entrypoint_delegates_to_the_shared_core",
+      "tests/scripts/test_bootstrap_worktree.py::test_rejects_linked_manifest_mismatch_without_mutation",
+      "tests/scripts/test_bootstrap_worktree.py::test_rejects_stale_echarts_before_links_or_heavy_validation",
+      "tests/scripts/test_bootstrap_worktree.py::test_windows_to_posix_path_is_deterministic[msys-/c/Users/test/repo]",
+      "tests/scripts/test_bootstrap_worktree.py::test_windows_to_posix_path_is_deterministic[posix-C:\\\\\\\\Users\\\\\\\\test\\\\\\\\repo]",
+      "tests/scripts/test_bootstrap_worktree.py::test_windows_to_posix_path_is_deterministic[wsl-/mnt/c/Users/test/repo]",
       "tests/test_auth_api.py::AuthApiTestCase::test_logout_requires_session_when_auth_enabled",
       "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_main_returns_zero_when_probe_times_out"
     ],
