@@ -7,14 +7,24 @@ import hashlib
 import io
 import logging
 import re
+import csv
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
+from functools import partial
+from threading import BoundedSemaphore, Lock
 from typing import Any, Dict, List, Optional, Tuple
 import xml.etree.ElementTree as ET
 
 import pandas as pd
 
-from src.repositories.portfolio_repo import PortfolioRepository
+from src.config import get_config
+from src.repositories.portfolio_repo import (
+    DuplicateTradeDedupHashError,
+    DuplicateTradeUidError,
+    PortfolioRepository,
+)
+from src.runtime.settings import PortfolioImportLimits
 from src.services.portfolio_ibkr_currency import (
     IbkrCurrencyClassification,
     IbkrCurrencyStatus,
@@ -47,6 +57,59 @@ class PortfolioIbkrImportError(ValueError):
         self.code = str(code)
         self.issues = list(issues)
         super().__init__(f"{self.code}: {message}")
+
+
+class PortfolioImportUnavailableError(RuntimeError):
+    """Raised when bounded parser capacity or execution time is exhausted."""
+
+
+class _PortfolioImportPreviewRollback(Exception):
+    """Internal signal used to return preview results after rolling back writes."""
+
+    def __init__(self, result: Dict[str, Any]) -> None:
+        self.result = result
+        super().__init__("portfolio import preview rollback")
+
+
+class _BoundedParserRuntime:
+    def __init__(self, concurrency: int) -> None:
+        self._executor = ThreadPoolExecutor(
+            max_workers=concurrency,
+            thread_name_prefix="portfolio-import-parser",
+        )
+        self._slots = BoundedSemaphore(concurrency)
+
+    def run(self, parser: Any, *, timeout_seconds: float) -> Dict[str, Any]:
+        if not self._slots.acquire(blocking=False):
+            raise PortfolioImportUnavailableError(
+                "Portfolio import parser capacity is exhausted"
+            )
+        try:
+            future = self._executor.submit(parser)
+        except Exception:
+            self._slots.release()
+            raise
+        future.add_done_callback(lambda _future: self._slots.release())
+        try:
+            return future.result(timeout=timeout_seconds)
+        except FutureTimeoutError as exc:
+            future.cancel()
+            raise PortfolioImportUnavailableError(
+                "Portfolio import parser timed out"
+            ) from exc
+
+
+_PARSER_RUNTIMES: Dict[int, _BoundedParserRuntime] = {}
+_PARSER_RUNTIMES_LOCK = Lock()
+
+
+def _get_bounded_parser_runtime(concurrency: int) -> _BoundedParserRuntime:
+    with _PARSER_RUNTIMES_LOCK:
+        runtime = _PARSER_RUNTIMES.get(concurrency)
+        if runtime is None:
+            runtime = _BoundedParserRuntime(concurrency)
+            _PARSER_RUNTIMES[concurrency] = runtime
+        return runtime
 
 
 @dataclass(frozen=True)
@@ -113,9 +176,17 @@ class PortfolioImportService:
         *,
         portfolio_service: Optional[PortfolioService] = None,
         repo: Optional[PortfolioRepository] = None,
+        limits: Optional[PortfolioImportLimits] = None,
     ):
-        self.portfolio_service = portfolio_service or PortfolioService()
-        self.repo = repo or PortfolioRepository()
+        self.portfolio_service = portfolio_service or PortfolioService(repo=repo)
+        self.repo = repo or self.portfolio_service.repo
+        if limits is None:
+            runtime_settings = get_config().runtime_settings
+            if runtime_settings is None:
+                raise RuntimeError("Runtime settings snapshot is unavailable")
+            limits = runtime_settings.portfolio_import_limits
+        self.limits = limits
+        self._parser_runtime = _get_bounded_parser_runtime(limits.parse_concurrency)
         self._parser_registry = self.__class__._shared_parser_registry
         self._broker_alias_map = self.__class__._shared_broker_alias_map
         if not self.__class__._shared_registry_initialized:
@@ -191,6 +262,77 @@ class PortfolioImportService:
             return self.parse_ibkr_flex_report(content=content)
         return self.parse_trade_csv(broker=broker_norm, content=content)
 
+    def parse_uploaded_file(
+        self,
+        *,
+        broker: str,
+        content: bytes,
+        filename: Optional[str],
+        content_type: Optional[str],
+        csv_only: bool = False,
+    ) -> Dict[str, Any]:
+        broker_norm = self._normalize_broker(broker)
+        file_kind = "xml" if broker_norm == IBKR_BROKER else "csv"
+        if csv_only and file_kind != "csv":
+            raise ValueError("CSV import endpoint requires a CSV broker")
+        self._validate_upload_contract(
+            file_kind=file_kind,
+            content=content,
+            filename=filename,
+            content_type=content_type,
+        )
+        if csv_only:
+            parser = partial(
+                self.parse_trade_csv,
+                broker=broker_norm,
+                content=content,
+            )
+        else:
+            parser = partial(
+                self.parse_import_file,
+                broker=broker_norm,
+                content=content,
+            )
+        return self._parser_runtime.run(
+            parser,
+            timeout_seconds=self.limits.parse_timeout_seconds,
+        )
+
+    @staticmethod
+    def _validate_upload_contract(
+        *,
+        file_kind: str,
+        content: bytes,
+        filename: Optional[str],
+        content_type: Optional[str],
+    ) -> None:
+        if not content:
+            raise ValueError("Broker import file is empty")
+        filename_norm = str(filename or "").strip().lower()
+        declared_type = str(content_type or "").split(";", 1)[0].strip().lower()
+        allowed_types = {
+            "csv": {"text/csv", "application/csv", "application/vnd.ms-excel"},
+            "xml": {"application/xml", "text/xml"},
+        }
+        expected_suffix = f".{file_kind}"
+        if not filename_norm.endswith(expected_suffix):
+            raise ValueError("Broker import filename does not match the declared broker")
+        if declared_type not in allowed_types[file_kind]:
+            raise ValueError("Broker import content type does not match the declared broker")
+        prefix = content.lstrip(b"\xef\xbb\xbf\x00\x09\x0a\x0d\x20")
+        if file_kind == "xml":
+            if not prefix.startswith(b"<"):
+                raise ValueError("Broker import content signature is not XML")
+            lowered = content.lower()
+            if b"<!doctype" in lowered or b"<!entity" in lowered:
+                raise ValueError("Broker import XML declarations are not allowed")
+            return
+        if b"\x00" in content or prefix.startswith(b"<"):
+            raise ValueError("Broker import content signature is not CSV")
+        first_line = prefix.splitlines()[0] if prefix.splitlines() else b""
+        if b"," not in first_line:
+            raise ValueError("Broker import content signature is not CSV")
+
     def commit_import_records(
         self,
         *,
@@ -201,37 +343,19 @@ class PortfolioImportService:
         broker_connection_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         broker_norm = self._normalize_broker(broker)
-        if broker_norm != IBKR_BROKER:
-            account = self._require_import_account(account_id)
-            base = self.commit_trade_records(
+        if broker_norm == IBKR_BROKER:
+            return self._commit_ibkr_import(
                 account_id=account_id,
-                broker=broker_norm,
-                records=list(parsed_payload.get("records", [])),
-                dry_run=dry_run,
-            )
-            base.setdefault("cash_record_count", 0)
-            base.setdefault("cash_inserted_count", 0)
-            base.setdefault("cash_failed_count", 0)
-            base.setdefault("corporate_action_count", 0)
-            base.setdefault("corporate_action_inserted_count", 0)
-            base.setdefault("corporate_action_failed_count", 0)
-            base.setdefault("duplicate_import", False)
-            base.setdefault("broker_connection_id", broker_connection_id)
-            base.setdefault("warnings", list(parsed_payload.get("warnings", [])))
-            base.setdefault("metadata", dict(parsed_payload.get("metadata", {})))
-            self._attach_import_preview_contract(
-                base,
-                account=account,
-                broker=broker_norm,
                 parsed_payload=parsed_payload,
+                dry_run=dry_run,
                 broker_connection_id=broker_connection_id,
             )
-            return base
-        return self._commit_ibkr_import(
+        return self._commit_atomic_import(
             account_id=account_id,
+            broker=broker_norm,
             parsed_payload=parsed_payload,
             dry_run=dry_run,
-            broker_connection_id=broker_connection_id,
+            broker_connection_id=None,
         )
 
     def _require_import_account(self, account_id: int) -> Dict[str, Any]:
@@ -397,7 +521,9 @@ class PortfolioImportService:
                 records.append(normalized)
             except Exception as exc:  # pragma: no cover - defensive path
                 skipped += 1
-                errors.append(f"row={idx + 1}: {exc}")
+                errors.append(
+                    f"row={idx + 1}: {self._safe_import_record_error(exc)}"
+                )
 
         return {
             "broker": broker_norm,
@@ -426,86 +552,24 @@ class PortfolioImportService:
         dry_run: bool = False,
     ) -> Dict[str, Any]:
         broker_norm = self._normalize_broker(broker)
-
-        inserted_count = 0
-        duplicate_count = 0
-        failed_count = 0
-        errors: List[str] = []
-        seen_trade_uids: set[str] = set()
-        seen_dedup_hashes: set[str] = set()
-
-        for i, record in enumerate(records):
-            try:
-                trade_uid = (record.get("trade_uid") or "").strip() or None
-                dedup_hash = (record.get("dedup_hash") or "").strip()
-                if not dedup_hash:
-                    dedup_hash = self._build_dedup_hash(record)
-
-                if trade_uid and self.repo.has_trade_uid(account_id, trade_uid):
-                    duplicate_count += 1
-                    continue
-                dedup_hash_to_use: Optional[str] = dedup_hash or None
-                if dedup_hash_to_use and self.repo.has_trade_dedup_hash(account_id, dedup_hash_to_use):
-                    duplicate_count += 1
-                    continue
-
-                if dry_run:
-                    if trade_uid and trade_uid in seen_trade_uids:
-                        duplicate_count += 1
-                        continue
-                    if dedup_hash_to_use and dedup_hash_to_use in seen_dedup_hashes:
-                        duplicate_count += 1
-                        continue
-                    inserted_count += 1
-                    if trade_uid:
-                        seen_trade_uids.add(trade_uid)
-                    if dedup_hash_to_use:
-                        seen_dedup_hashes.add(dedup_hash_to_use)
-                    continue
-
-                trade_date_value = record.get("trade_date")
-                if isinstance(trade_date_value, date):
-                    trade_date_obj = trade_date_value
-                else:
-                    trade_date_obj = date.fromisoformat(str(trade_date_value))
-
-                self.portfolio_service.record_trade(
+        try:
+            with self.repo.portfolio_write_session() as session:
+                self.portfolio_service._require_active_account_in_session(
+                    session=session,
                     account_id=account_id,
-                    symbol=str(record["symbol"]),
-                    trade_date=trade_date_obj,
-                    side=str(record["side"]),
-                    quantity=float(record["quantity"]),
-                    price=float(record["price"]),
-                    fee=float(record.get("fee", 0.0) or 0.0),
-                    tax=float(record.get("tax", 0.0) or 0.0),
-                    market=record.get("market"),
-                    currency=record.get("currency"),
-                    trade_uid=trade_uid,
-                    dedup_hash=dedup_hash_to_use,
-                    note=(record.get("note") or "").strip() or f"csv_import:{broker_norm}",
                 )
-                inserted_count += 1
-            except PortfolioConflictError:
-                duplicate_count += 1
-            except PortfolioOversellError as exc:
-                failed_count += 1
-                errors.append(f"idx={i}: {exc}")
-            except PortfolioBusyError as exc:
-                failed_count += 1
-                errors.append(f"idx={i}: portfolio_busy: {exc}")
-            except Exception as exc:
-                failed_count += 1
-                errors.append(f"idx={i}: {exc}")
-
-        return {
-            "account_id": account_id,
-            "record_count": len(records),
-            "inserted_count": inserted_count,
-            "duplicate_count": duplicate_count,
-            "failed_count": failed_count,
-            "dry_run": bool(dry_run),
-            "errors": errors[:20],
-        }
+                result = self._apply_trade_records_in_session(
+                    session=session,
+                    account_id=account_id,
+                    broker=broker_norm,
+                    records=records,
+                    dry_run=dry_run,
+                )
+                if dry_run:
+                    raise _PortfolioImportPreviewRollback(result)
+        except _PortfolioImportPreviewRollback as preview:
+            return preview.result
+        return result
 
     def _commit_ibkr_import(
         self,
@@ -518,8 +582,6 @@ class PortfolioImportService:
         trade_records = list(parsed_payload.get("records", []))
         cash_entries = list(parsed_payload.get("cash_entries", []))
         corporate_actions = list(parsed_payload.get("corporate_actions", []))
-        warnings = list(parsed_payload.get("warnings", []))
-        metadata = dict(parsed_payload.get("metadata", {}))
         account = self._require_import_account(account_id)
 
         currency_issues = self._collect_ibkr_commit_currency_issues(
@@ -544,127 +606,238 @@ class PortfolioImportService:
                 issues=fatal_currency_issues,
             )
 
-        connection = self._resolve_import_broker_connection(
+        return self._commit_atomic_import(
             account_id=account_id,
+            broker=IBKR_BROKER,
+            parsed_payload=preview_payload,
+            dry_run=dry_run,
             broker_connection_id=broker_connection_id,
-            broker=IBKR_BROKER,
-            parsed_payload=parsed_payload,
-            dry_run=dry_run,
         )
 
-        fingerprint = str(metadata.get("file_fingerprint") or "").strip() or None
-        if (
-            not dry_run
-            and connection is not None
-            and fingerprint
-            and str(connection.get("last_import_fingerprint") or "").strip() == fingerprint
+    def _commit_atomic_import(
+        self,
+        *,
+        account_id: int,
+        broker: str,
+        parsed_payload: Dict[str, Any],
+        dry_run: bool,
+        broker_connection_id: Optional[int],
+    ) -> Dict[str, Any]:
+        account = self._require_import_account(account_id)
+        metadata = dict(parsed_payload.get("metadata", {}))
+        fingerprint = str(metadata.get("file_fingerprint") or "").strip().lower()
+        if not re.fullmatch(r"[a-f0-9]{64}", fingerprint):
+            raise ValueError("Broker import file fingerprint is missing or invalid")
+        if not dry_run and (
+            int(parsed_payload.get("skipped_count", 0) or 0) > 0
+            or int(parsed_payload.get("error_count", 0) or 0) > 0
         ):
-            result = {
-                "account_id": account_id,
-                "record_count": len(trade_records),
-                "inserted_count": 0,
-                "duplicate_count": 0,
-                "failed_count": 0,
-                "cash_record_count": len(cash_entries),
-                "cash_inserted_count": 0,
-                "cash_failed_count": 0,
-                "corporate_action_count": len(corporate_actions),
-                "corporate_action_inserted_count": 0,
-                "corporate_action_failed_count": 0,
-                "dry_run": False,
-                "duplicate_import": True,
-                "broker_connection_id": connection.get("id"),
-                "warnings": warnings,
-                "metadata": metadata,
-                "errors": [],
-            }
-            self._attach_import_preview_contract(
-                result,
-                account=account,
-                broker=IBKR_BROKER,
-                parsed_payload=preview_payload,
-                broker_connection_id=broker_connection_id,
-            )
-            return result
+            raise ValueError("Broker import contains rejected parser records")
 
-        self._maybe_upgrade_account_market_for_ibkr(
-            account_id=account_id,
-            trade_records=trade_records,
-            corporate_actions=corporate_actions,
-            dry_run=dry_run,
-        )
+        trade_records = list(parsed_payload.get("records", []))
+        cash_entries = list(parsed_payload.get("cash_entries", []))
+        corporate_actions = list(parsed_payload.get("corporate_actions", []))
+        result: Dict[str, Any]
+        try:
+            with self.repo.portfolio_write_session() as session:
+                account_row = self.portfolio_service._require_active_account_in_session(
+                    session=session,
+                    account_id=account_id,
+                )
+                owner_id = str(account_row.owner_id)
+                completed = None
+                if not dry_run:
+                    completed = self.repo.get_completed_import_operation_in_session(
+                        session=session,
+                        account_id=account_id,
+                        broker_type=broker,
+                        file_fingerprint=fingerprint,
+                        owner_id=owner_id,
+                    )
+                if completed is not None:
+                    result = self._build_atomic_import_result(
+                        account_id=account_id,
+                        parsed_payload=parsed_payload,
+                        inserted_count=0,
+                        duplicate_count=0,
+                        failed_count=0,
+                        cash_inserted_count=0,
+                        cash_failed_count=0,
+                        corporate_action_inserted_count=0,
+                        corporate_action_failed_count=0,
+                        dry_run=False,
+                        duplicate_import=True,
+                        broker_connection_id=completed.broker_connection_id,
+                        errors=[],
+                    )
+                else:
+                    connection = self._resolve_import_broker_connection_in_session(
+                        session=session,
+                        account_id=account_id,
+                        owner_id=owner_id,
+                        broker_connection_id=broker_connection_id,
+                        broker=broker,
+                        parsed_payload=parsed_payload,
+                        dry_run=dry_run,
+                    )
+                    self._maybe_upgrade_account_market_for_ibkr_in_session(
+                        session=session,
+                        account_row=account_row,
+                        trade_records=trade_records,
+                        corporate_actions=corporate_actions,
+                        dry_run=dry_run,
+                        broker=broker,
+                    )
+                    trade_result = self._apply_trade_records_in_session(
+                        session=session,
+                        account_id=account_id,
+                        broker=broker,
+                        records=trade_records,
+                        dry_run=dry_run,
+                    )
+                    cash_inserted, cash_failed, cash_errors = (
+                        self._apply_cash_entries_in_session(
+                            session=session,
+                            account_id=account_id,
+                            entries=cash_entries,
+                            dry_run=dry_run,
+                        )
+                    )
+                    action_inserted, action_failed, action_errors = (
+                        self._apply_corporate_actions_in_session(
+                            session=session,
+                            account_id=account_id,
+                            actions=corporate_actions,
+                            dry_run=dry_run,
+                        )
+                    )
+                    errors = [
+                        *list(trade_result.get("errors", [])),
+                        *cash_errors,
+                        *action_errors,
+                    ]
+                    result = self._build_atomic_import_result(
+                        account_id=account_id,
+                        parsed_payload=parsed_payload,
+                        inserted_count=int(trade_result["inserted_count"]),
+                        duplicate_count=int(trade_result["duplicate_count"]),
+                        failed_count=(
+                            int(trade_result["failed_count"])
+                            + cash_failed
+                            + action_failed
+                        ),
+                        cash_inserted_count=cash_inserted,
+                        cash_failed_count=cash_failed,
+                        corporate_action_inserted_count=action_inserted,
+                        corporate_action_failed_count=action_failed,
+                        dry_run=dry_run,
+                        duplicate_import=False,
+                        broker_connection_id=(
+                            int(connection.id) if connection is not None else None
+                        ),
+                        errors=errors,
+                    )
+                    if dry_run:
+                        raise _PortfolioImportPreviewRollback(result)
 
-        trade_result = self.commit_trade_records(
-            account_id=account_id,
-            broker=IBKR_BROKER,
-            records=trade_records,
-            dry_run=dry_run,
-        )
-        cash_inserted_count, cash_failed_count, cash_errors = self._commit_cash_entries(
-            account_id=account_id,
-            entries=cash_entries,
-            dry_run=dry_run,
-        )
-        corp_inserted_count, corp_failed_count, corp_errors = self._commit_corporate_actions(
-            account_id=account_id,
-            actions=corporate_actions,
-            dry_run=dry_run,
-        )
+                    if connection is not None:
+                        connection.last_imported_at = datetime.now()
+                        connection.last_import_source = "ibkr_flex_xml"
+                        connection.last_import_fingerprint = fingerprint
+                        connection.status = "active"
+                        connection.sync_metadata_json = (
+                            self.portfolio_service._serialize_sync_metadata(
+                                {
+                                    "last_statement_from": metadata.get("statement_from"),
+                                    "last_statement_to": metadata.get("statement_to"),
+                                    "base_currency": metadata.get("base_currency"),
+                                    "last_file_format": metadata.get("file_format"),
+                                }
+                            )
+                        )
+                        connection.updated_at = datetime.now()
+                        self.repo._mark_phase_f_account_sync_in_session(
+                            session=session,
+                            account_id=account_id,
+                        )
+                        session.flush()
 
-        combined_errors = list(trade_result.get("errors", [])) + cash_errors + corp_errors
+                    self.repo.add_completed_import_operation_in_session(
+                        session=session,
+                        account_id=account_id,
+                        broker_connection_id=(
+                            int(connection.id) if connection is not None else None
+                        ),
+                        broker_type=broker,
+                        file_fingerprint=fingerprint,
+                        trade_inserted_count=int(trade_result["inserted_count"]),
+                        trade_duplicate_count=int(trade_result["duplicate_count"]),
+                        cash_inserted_count=cash_inserted,
+                        corporate_action_inserted_count=action_inserted,
+                        owner_id=owner_id,
+                    )
+        except _PortfolioImportPreviewRollback as preview:
+            result = preview.result
 
-        if not dry_run and connection is not None and not combined_errors:
-            updated = self.portfolio_service.mark_broker_connection_imported(
-                int(connection["id"]),
-                import_source="ibkr_flex_xml",
-                import_fingerprint=fingerprint,
-                sync_metadata={
-                    "last_statement_from": metadata.get("statement_from"),
-                    "last_statement_to": metadata.get("statement_to"),
-                    "base_currency": metadata.get("base_currency"),
-                    "last_file_format": metadata.get("file_format"),
-                },
-            )
-            if updated is not None:
-                connection = updated
-
-        result = {
-            "account_id": account_id,
-            "record_count": len(trade_records),
-            "inserted_count": int(trade_result.get("inserted_count", 0)),
-            "duplicate_count": int(trade_result.get("duplicate_count", 0)),
-            "failed_count": int(trade_result.get("failed_count", 0)) + cash_failed_count + corp_failed_count,
-            "cash_record_count": len(cash_entries),
-            "cash_inserted_count": cash_inserted_count,
-            "cash_failed_count": cash_failed_count,
-            "corporate_action_count": len(corporate_actions),
-            "corporate_action_inserted_count": corp_inserted_count,
-            "corporate_action_failed_count": corp_failed_count,
-            "dry_run": bool(dry_run),
-            "duplicate_import": False,
-            "broker_connection_id": connection.get("id") if connection else None,
-            "warnings": warnings,
-            "metadata": metadata,
-            "errors": combined_errors[:20],
-        }
         self._attach_import_preview_contract(
             result,
             account=account,
-            broker=IBKR_BROKER,
-            parsed_payload=preview_payload,
+            broker=broker,
+            parsed_payload=parsed_payload,
             broker_connection_id=broker_connection_id,
         )
         return result
 
-    def _maybe_upgrade_account_market_for_ibkr(
-        self,
+    @staticmethod
+    def _build_atomic_import_result(
         *,
         account_id: int,
+        parsed_payload: Dict[str, Any],
+        inserted_count: int,
+        duplicate_count: int,
+        failed_count: int,
+        cash_inserted_count: int,
+        cash_failed_count: int,
+        corporate_action_inserted_count: int,
+        corporate_action_failed_count: int,
+        dry_run: bool,
+        duplicate_import: bool,
+        broker_connection_id: Optional[int],
+        errors: List[str],
+    ) -> Dict[str, Any]:
+        return {
+            "account_id": account_id,
+            "record_count": len(list(parsed_payload.get("records", []))),
+            "inserted_count": inserted_count,
+            "duplicate_count": duplicate_count,
+            "failed_count": failed_count,
+            "cash_record_count": len(list(parsed_payload.get("cash_entries", []))),
+            "cash_inserted_count": cash_inserted_count,
+            "cash_failed_count": cash_failed_count,
+            "corporate_action_count": len(
+                list(parsed_payload.get("corporate_actions", []))
+            ),
+            "corporate_action_inserted_count": corporate_action_inserted_count,
+            "corporate_action_failed_count": corporate_action_failed_count,
+            "dry_run": bool(dry_run),
+            "duplicate_import": bool(duplicate_import),
+            "broker_connection_id": broker_connection_id,
+            "warnings": list(parsed_payload.get("warnings", [])),
+            "metadata": dict(parsed_payload.get("metadata", {})),
+            "errors": errors[:20],
+        }
+
+    def _maybe_upgrade_account_market_for_ibkr_in_session(
+        self,
+        *,
+        session: Any,
+        account_row: Any,
         trade_records: List[Dict[str, Any]],
         corporate_actions: List[Dict[str, Any]],
         dry_run: bool,
+        broker: str,
     ) -> None:
-        if dry_run:
+        if dry_run or broker != IBKR_BROKER:
             return
         markets = {
             str(item.get("market") or "").strip().lower()
@@ -673,46 +846,60 @@ class PortfolioImportService:
         }
         if len(markets) <= 1:
             return
-        account = self.portfolio_service.get_account(account_id, include_inactive=True)
-        if account is None:
+        if str(account_row.market or "").strip().lower() == "global":
             return
-        if str(account.get("market") or "").strip().lower() == "global":
-            return
-        self.portfolio_service.update_account(account_id, market="global")
+        account_row.market = "global"
+        account_row.updated_at = datetime.now()
+        self.repo._mark_phase_f_account_sync_in_session(
+            session=session,
+            account_id=int(account_row.id),
+        )
+        session.flush()
 
-    def _resolve_import_broker_connection(
+    def _resolve_import_broker_connection_in_session(
         self,
         *,
+        session: Any,
         account_id: int,
+        owner_id: str,
         broker_connection_id: Optional[int],
         broker: str,
         parsed_payload: Dict[str, Any],
         dry_run: bool = False,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[Any]:
+        if broker != IBKR_BROKER:
+            return None
         metadata = dict(parsed_payload.get("metadata", {}))
         broker_account_ref = str(metadata.get("broker_account_ref") or "").strip() or None
         if broker_connection_id is not None:
-            connection = self.portfolio_service.get_broker_connection(int(broker_connection_id))
+            connection = self.repo.get_broker_connection_in_session(
+                session=session,
+                connection_id=int(broker_connection_id),
+                owner_id=owner_id,
+            )
             if connection is None:
                 raise ValueError(f"Broker connection not found: {broker_connection_id}")
-            if int(connection["portfolio_account_id"]) != int(account_id):
+            if int(connection.portfolio_account_id) != int(account_id):
                 raise ValueError("broker_connection_id must belong to the selected portfolio account")
             return connection
         if not broker_account_ref:
             return None
-        existing = self.portfolio_service.get_broker_connection_by_ref(
+        existing = self.repo.get_broker_connection_by_ref_in_session(
+            session=session,
             broker_type=broker,
             broker_account_ref=broker_account_ref,
+            owner_id=owner_id,
         )
         if existing is not None:
-            if int(existing["portfolio_account_id"]) != int(account_id):
+            if int(existing.portfolio_account_id) != int(account_id):
                 raise ValueError(
                     "Detected broker_account_ref is already linked to a different portfolio account"
                 )
             return existing
         if dry_run:
             return None
-        return self.portfolio_service.create_broker_connection(
+        return self.repo.add_broker_connection_in_session(
+            session=session,
             portfolio_account_id=account_id,
             broker_type=broker,
             broker_name="Interactive Brokers",
@@ -721,16 +908,109 @@ class PortfolioImportService:
             )[:64],
             broker_account_ref=broker_account_ref,
             import_mode="file",
-            sync_metadata={
-                "base_currency": metadata.get("base_currency"),
-                "statement_from": metadata.get("statement_from"),
-                "statement_to": metadata.get("statement_to"),
-            },
+            status="active",
+            sync_metadata_json=self.portfolio_service._serialize_sync_metadata(
+                {
+                    "base_currency": metadata.get("base_currency"),
+                    "statement_from": metadata.get("statement_from"),
+                    "statement_to": metadata.get("statement_to"),
+                }
+            ),
+            owner_id=owner_id,
         )
 
-    def _commit_cash_entries(
+    def _apply_trade_records_in_session(
         self,
         *,
+        session: Any,
+        account_id: int,
+        broker: str,
+        records: List[Dict[str, Any]],
+        dry_run: bool,
+    ) -> Dict[str, Any]:
+        inserted_count = 0
+        duplicate_count = 0
+        failed_count = 0
+        errors: List[str] = []
+        for idx, record in enumerate(records):
+            trade_uid = str(record.get("trade_uid") or "").strip() or None
+            dedup_hash = str(record.get("dedup_hash") or "").strip()
+            if not dedup_hash:
+                dedup_hash = self._build_dedup_hash(record)
+            try:
+                trade_date_value = record.get("trade_date")
+                trade_date_obj = (
+                    trade_date_value
+                    if isinstance(trade_date_value, date)
+                    else self._parse_date(trade_date_value)
+                )
+                if trade_date_obj is None:
+                    raise ValueError("trade_date is required")
+                self.portfolio_service._record_trade_in_session(
+                    session=session,
+                    account_id=account_id,
+                    symbol=str(record["symbol"]),
+                    trade_date=trade_date_obj,
+                    side=str(record["side"]),
+                    quantity=float(record["quantity"]),
+                    price=float(record["price"]),
+                    fee=float(record.get("fee", 0.0) or 0.0),
+                    tax=float(record.get("tax", 0.0) or 0.0),
+                    market=record.get("market"),
+                    currency=record.get("currency"),
+                    trade_uid=trade_uid,
+                    dedup_hash=dedup_hash or None,
+                    note=(record.get("note") or "").strip() or f"csv_import:{broker}",
+                )
+                inserted_count += 1
+            except PortfolioConflictError as exc:
+                if exc.reason_code not in {
+                    "duplicate_trade_uid",
+                    "duplicate_trade_dedup_hash",
+                }:
+                    if not dry_run:
+                        raise
+                    failed_count += 1
+                    errors.append(
+                        f"trade_idx={idx}: {self._safe_import_record_error(exc)}"
+                    )
+                    continue
+                duplicate_count += 1
+            except (DuplicateTradeUidError, DuplicateTradeDedupHashError):
+                duplicate_count += 1
+            except Exception as exc:
+                if not dry_run:
+                    raise
+                failed_count += 1
+                errors.append(
+                    f"trade_idx={idx}: {self._safe_import_record_error(exc)}"
+                )
+        return {
+            "account_id": account_id,
+            "record_count": len(records),
+            "inserted_count": inserted_count,
+            "duplicate_count": duplicate_count,
+            "failed_count": failed_count,
+            "dry_run": bool(dry_run),
+            "errors": errors[:20],
+        }
+
+    @staticmethod
+    def _safe_import_record_error(exc: Exception) -> str:
+        if isinstance(exc, PortfolioOversellError):
+            return "oversell"
+        if isinstance(exc, PortfolioBusyError):
+            return "portfolio_busy"
+        if isinstance(exc, PortfolioConflictError):
+            return exc.reason_code
+        if isinstance(exc, ValueError):
+            return "invalid_record"
+        return "persistence_error"
+
+    def _apply_cash_entries_in_session(
+        self,
+        *,
+        session: Any,
         account_id: int,
         entries: List[Dict[str, Any]],
         dry_run: bool,
@@ -740,30 +1020,27 @@ class PortfolioImportService:
         errors: List[str] = []
         seen_keys: set[Tuple[str, str, str, str, str]] = set()
         for idx, entry in enumerate(entries):
-            event_date_value = entry.get("event_date")
-            if isinstance(event_date_value, date):
-                event_date_obj = event_date_value
-            else:
-                event_date_obj = self._parse_date(event_date_value)
-            if event_date_obj is None:
-                failed_count += 1
-                errors.append(f"cash_idx={idx}: missing event_date")
-                continue
-            key = (
-                event_date_obj.isoformat(),
-                str(entry.get("direction") or ""),
-                f"{float(entry.get('amount', 0.0)):.8f}",
-                str(entry.get("currency") or ""),
-                str(entry.get("note") or ""),
-            )
-            if key in seen_keys:
-                continue
-            seen_keys.add(key)
-            if dry_run:
-                inserted_count += 1
-                continue
             try:
-                self.portfolio_service.record_cash_ledger(
+                event_date_value = entry.get("event_date")
+                event_date_obj = (
+                    event_date_value
+                    if isinstance(event_date_value, date)
+                    else self._parse_date(event_date_value)
+                )
+                if event_date_obj is None:
+                    raise ValueError("cash entry event_date is required")
+                key = (
+                    event_date_obj.isoformat(),
+                    str(entry.get("direction") or ""),
+                    f"{float(entry.get('amount', 0.0)):.8f}",
+                    str(entry.get("currency") or ""),
+                    str(entry.get("note") or ""),
+                )
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                self.portfolio_service._record_cash_ledger_in_session(
+                    session=session,
                     account_id=account_id,
                     event_date=event_date_obj,
                     direction=str(entry["direction"]),
@@ -773,13 +1050,18 @@ class PortfolioImportService:
                 )
                 inserted_count += 1
             except Exception as exc:
+                if not dry_run:
+                    raise
                 failed_count += 1
-                errors.append(f"cash_idx={idx}: {exc}")
+                errors.append(
+                    f"cash_idx={idx}: {self._safe_import_record_error(exc)}"
+                )
         return inserted_count, failed_count, errors
 
-    def _commit_corporate_actions(
+    def _apply_corporate_actions_in_session(
         self,
         *,
+        session: Any,
         account_id: int,
         actions: List[Dict[str, Any]],
         dry_run: bool,
@@ -789,30 +1071,27 @@ class PortfolioImportService:
         errors: List[str] = []
         seen_keys: set[Tuple[str, str, str, str, str]] = set()
         for idx, action in enumerate(actions):
-            effective_date_value = action.get("effective_date")
-            if isinstance(effective_date_value, date):
-                effective_date_obj = effective_date_value
-            else:
-                effective_date_obj = self._parse_date(effective_date_value)
-            if effective_date_obj is None:
-                failed_count += 1
-                errors.append(f"corp_idx={idx}: missing effective_date")
-                continue
-            key = (
-                effective_date_obj.isoformat(),
-                str(action.get("symbol") or ""),
-                str(action.get("action_type") or ""),
-                str(action.get("market") or ""),
-                str(action.get("currency") or ""),
-            )
-            if key in seen_keys:
-                continue
-            seen_keys.add(key)
-            if dry_run:
-                inserted_count += 1
-                continue
             try:
-                self.portfolio_service.record_corporate_action(
+                effective_date_value = action.get("effective_date")
+                effective_date_obj = (
+                    effective_date_value
+                    if isinstance(effective_date_value, date)
+                    else self._parse_date(effective_date_value)
+                )
+                if effective_date_obj is None:
+                    raise ValueError("corporate action effective_date is required")
+                key = (
+                    effective_date_obj.isoformat(),
+                    str(action.get("symbol") or ""),
+                    str(action.get("action_type") or ""),
+                    str(action.get("market") or ""),
+                    str(action.get("currency") or ""),
+                )
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                self.portfolio_service._record_corporate_action_in_session(
+                    session=session,
                     account_id=account_id,
                     symbol=str(action["symbol"]),
                     effective_date=effective_date_obj,
@@ -825,8 +1104,12 @@ class PortfolioImportService:
                 )
                 inserted_count += 1
             except Exception as exc:
+                if not dry_run:
+                    raise
                 failed_count += 1
-                errors.append(f"corp_idx={idx}: {exc}")
+                errors.append(
+                    f"corp_idx={idx}: {self._safe_import_record_error(exc)}"
+                )
         return inserted_count, failed_count, errors
 
     def parse_ibkr_flex_report(self, *, content: bytes) -> Dict[str, Any]:
@@ -868,11 +1151,16 @@ class PortfolioImportService:
         open_position_records: List[Dict[str, Any]] = []
         ignored_open_position_records: List[Dict[str, Any]] = []
         open_position_count = 0
+        open_position_skipped = 0
         if not trade_records:
             open_position_records, open_position_count, position_warnings = self._parse_ibkr_open_position_seed_records(
                 statement,
                 statement_to=statement_to,
                 broker_account_ref=broker_account_ref,
+            )
+            open_position_skipped = max(
+                0,
+                open_position_count - len(open_position_records),
             )
             trade_records.extend(open_position_records)
             warnings.extend(position_warnings)
@@ -916,7 +1204,13 @@ class PortfolioImportService:
             f"ibkr_currency_invalid: {item['scope']} row={item.get('row')} reason={item['reason']}"
             for item in record_currency_issues
         ]
-        skipped_count = trade_skipped + cash_skipped + corp_skipped + len(record_currency_issues)
+        skipped_count = (
+            trade_skipped
+            + cash_skipped
+            + corp_skipped
+            + open_position_skipped
+            + len(record_currency_issues)
+        )
         suggested_connection_name = (
             f"IBKR {broker_account_ref}"[:64]
             if broker_account_ref
@@ -1137,19 +1431,50 @@ class PortfolioImportService:
             raise ValueError(f"broker must be one of: {supported}")
         return broker
 
+    def _read_csv(self, content: bytes) -> pd.DataFrame:
+        text = self._decode_csv_text(content)
+        row_count = 0
+        cell_count = 0
+        header_seen = False
+        try:
+            for row in csv.reader(io.StringIO(text, newline="")):
+                if not row or not any(str(cell).strip() for cell in row):
+                    continue
+                cell_count += len(row)
+                if cell_count > self.limits.max_csv_cells:
+                    raise ValueError("Broker import CSV cell budget exceeded")
+                if any(
+                    len(str(cell)) > self.limits.max_csv_cell_chars
+                    for cell in row
+                ):
+                    raise ValueError("Broker import CSV cell size budget exceeded")
+                if not header_seen:
+                    header_seen = True
+                    continue
+                row_count += 1
+                if row_count > self.limits.max_csv_rows:
+                    raise ValueError("Broker import CSV row budget exceeded")
+        except csv.Error as exc:
+            raise ValueError("Unsupported CSV input") from exc
+        if not header_seen:
+            raise ValueError("Unsupported CSV input")
+        try:
+            return pd.read_csv(
+                io.StringIO(text),
+                dtype=str,
+                keep_default_na=False,
+            )
+        except Exception as exc:
+            raise ValueError("Unsupported CSV input") from exc
+
     @staticmethod
-    def _read_csv(content: bytes) -> pd.DataFrame:
+    def _decode_csv_text(content: bytes) -> str:
         for encoding in ("utf-8-sig", "gbk", "gb18030"):
             try:
-                return pd.read_csv(
-                    io.BytesIO(content),
-                    encoding=encoding,
-                    dtype=str,
-                    keep_default_na=False,
-                )
+                return content.decode(encoding)
             except UnicodeDecodeError:
                 continue
-        return pd.read_csv(io.BytesIO(content), dtype=str, keep_default_na=False)
+        raise ValueError("Unsupported CSV encoding")
 
     def _normalize_trade_row(
         self,
@@ -1311,12 +1636,27 @@ class PortfolioImportService:
     def _fingerprint_bytes(content: bytes) -> str:
         return hashlib.sha256(content).hexdigest()
 
-    @staticmethod
-    def _parse_xml_root(content: bytes) -> ET.Element:
+    def _parse_xml_root(self, content: bytes) -> ET.Element:
+        depth = 0
+        node_count = 0
         try:
-            return ET.fromstring(content)
+            parser = ET.iterparse(io.BytesIO(content), events=("start", "end"))
+            for event, _element in parser:
+                if event == "start":
+                    depth += 1
+                    node_count += 1
+                    if node_count > self.limits.max_xml_nodes:
+                        raise ValueError("Broker import XML node budget exceeded")
+                    if depth > self.limits.max_xml_depth:
+                        raise ValueError("Broker import XML depth budget exceeded")
+                else:
+                    depth -= 1
+            root = parser.root
         except ET.ParseError as exc:
-            raise ValueError(f"Unsupported XML input: {exc}") from exc
+            raise ValueError("Unsupported XML input") from exc
+        if root is None:
+            raise ValueError("Unsupported XML input")
+        return root
 
     @staticmethod
     def _local_name(tag: str) -> str:
@@ -1361,7 +1701,9 @@ class PortfolioImportService:
                 records.append(record)
             except Exception as exc:
                 skipped += 1
-                errors.append(f"trade_idx={idx}: {exc}")
+                errors.append(
+                    f"trade_idx={idx}: {self._safe_import_record_error(exc)}"
+                )
         return records, skipped, errors
 
     def _parse_ibkr_cash_entries(
@@ -1380,7 +1722,9 @@ class PortfolioImportService:
                 entries.append(entry)
             except Exception as exc:
                 skipped += 1
-                errors.append(f"cash_idx={idx}: {exc}")
+                errors.append(
+                    f"cash_idx={idx}: {self._safe_import_record_error(exc)}"
+                )
         return entries, skipped, errors
 
     def _parse_ibkr_corporate_actions(
@@ -1399,7 +1743,9 @@ class PortfolioImportService:
                 actions.append(action)
             except Exception as exc:
                 skipped += 1
-                errors.append(f"corp_idx={idx}: {exc}")
+                errors.append(
+                    f"corp_idx={idx}: {self._safe_import_record_error(exc)}"
+                )
         return actions, skipped, errors
 
     def _parse_ibkr_open_position_seed_records(
@@ -1425,7 +1771,9 @@ class PortfolioImportService:
                     continue
                 records.append(record)
             except ValueError as exc:
-                warnings.append(str(exc))
+                warnings.append(
+                    f"open_position_idx={idx}: {self._safe_import_record_error(exc)}"
+                )
         return records, count, warnings[:20]
 
     def _normalize_ibkr_trade_record(self, *, element: ET.Element, source_index: int) -> Optional[Dict[str, Any]]:

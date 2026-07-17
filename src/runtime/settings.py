@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import threading
@@ -234,6 +235,14 @@ PHASE_F_CORPORATE_ACTIONS_COMPARISON_ACCOUNT_IDS
 PHASE_F_TRADES_LIST_COMPARISON_ACCOUNT_IDS
 POLYGON_API_KEY
 PORTFOLIO_FX_UPDATE_ENABLED
+PORTFOLIO_IMPORT_MAX_BYTES
+PORTFOLIO_IMPORT_MAX_CSV_CELLS
+PORTFOLIO_IMPORT_MAX_CSV_CELL_CHARS
+PORTFOLIO_IMPORT_MAX_CSV_ROWS
+PORTFOLIO_IMPORT_MAX_XML_DEPTH
+PORTFOLIO_IMPORT_MAX_XML_NODES
+PORTFOLIO_IMPORT_PARSE_CONCURRENCY
+PORTFOLIO_IMPORT_PARSE_TIMEOUT_SECONDS
 PORTFOLIO_RISK_CONCENTRATION_ALERT_PCT
 PORTFOLIO_RISK_DRAWDOWN_ALERT_PCT
 PORTFOLIO_RISK_LOOKBACK_DAYS
@@ -477,12 +486,25 @@ class SettingConflict:
 
 
 @dataclass(frozen=True)
+class PortfolioImportLimits:
+    max_upload_bytes: int = 5 * 1024 * 1024
+    max_csv_rows: int = 10_000
+    max_csv_cells: int = 200_000
+    max_csv_cell_chars: int = 16_384
+    max_xml_nodes: int = 50_000
+    max_xml_depth: int = 32
+    parse_timeout_seconds: float = 5.0
+    parse_concurrency: int = 2
+
+
+@dataclass(frozen=True)
 class RuntimeSettings:
     env_file: Path
     profile: str
     config_values: Mapping[str, Any] = field(repr=False)
     provenance: Mapping[str, SettingProvenance]
     conflicts: tuple[SettingConflict, ...]
+    portfolio_import_limits: PortfolioImportLimits
     _raw_environment: Mapping[str, str] = field(repr=False)
 
     @classmethod
@@ -512,6 +534,9 @@ class RuntimeSettings:
             prepared_sources,
         )
         conflicts = _detect_alias_conflicts(effective_environment)
+        portfolio_import_limits = _parse_portfolio_import_limits(
+            effective_environment
+        )
         config_values = {
             config_field.name: _freeze(getattr(config, config_field.name))
             for config_field in fields(config_type)
@@ -526,6 +551,7 @@ class RuntimeSettings:
             config_values=MappingProxyType(config_values),
             provenance=MappingProxyType(provenance),
             conflicts=conflicts,
+            portfolio_import_limits=portfolio_import_limits,
             _raw_environment=MappingProxyType(effective_environment),
         )
 
@@ -566,6 +592,110 @@ class RuntimeSettings:
                 for conflict in self.conflicts
             ],
         }
+
+
+def _bounded_int_setting(
+    environment: Mapping[str, str],
+    *,
+    name: str,
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    raw = environment.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if value < minimum or value > maximum:
+        raise ValueError(f"{name} must be between {minimum} and {maximum}")
+    return value
+
+
+def _bounded_float_setting(
+    environment: Mapping[str, str],
+    *,
+    name: str,
+    default: float,
+    minimum: float,
+    maximum: float,
+) -> float:
+    raw = environment.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(str(raw).strip())
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be numeric") from exc
+    if not math.isfinite(value) or value < minimum or value > maximum:
+        raise ValueError(f"{name} must be between {minimum} and {maximum}")
+    return value
+
+
+def _parse_portfolio_import_limits(
+    environment: Mapping[str, str],
+) -> PortfolioImportLimits:
+    defaults = PortfolioImportLimits()
+    return PortfolioImportLimits(
+        max_upload_bytes=_bounded_int_setting(
+            environment,
+            name="PORTFOLIO_IMPORT_MAX_BYTES",
+            default=defaults.max_upload_bytes,
+            minimum=1024,
+            maximum=20 * 1024 * 1024,
+        ),
+        max_csv_rows=_bounded_int_setting(
+            environment,
+            name="PORTFOLIO_IMPORT_MAX_CSV_ROWS",
+            default=defaults.max_csv_rows,
+            minimum=1,
+            maximum=100_000,
+        ),
+        max_csv_cells=_bounded_int_setting(
+            environment,
+            name="PORTFOLIO_IMPORT_MAX_CSV_CELLS",
+            default=defaults.max_csv_cells,
+            minimum=1,
+            maximum=2_000_000,
+        ),
+        max_csv_cell_chars=_bounded_int_setting(
+            environment,
+            name="PORTFOLIO_IMPORT_MAX_CSV_CELL_CHARS",
+            default=defaults.max_csv_cell_chars,
+            minimum=1,
+            maximum=1_048_576,
+        ),
+        max_xml_nodes=_bounded_int_setting(
+            environment,
+            name="PORTFOLIO_IMPORT_MAX_XML_NODES",
+            default=defaults.max_xml_nodes,
+            minimum=1,
+            maximum=500_000,
+        ),
+        max_xml_depth=_bounded_int_setting(
+            environment,
+            name="PORTFOLIO_IMPORT_MAX_XML_DEPTH",
+            default=defaults.max_xml_depth,
+            minimum=1,
+            maximum=128,
+        ),
+        parse_timeout_seconds=_bounded_float_setting(
+            environment,
+            name="PORTFOLIO_IMPORT_PARSE_TIMEOUT_SECONDS",
+            default=defaults.parse_timeout_seconds,
+            minimum=0.01,
+            maximum=30.0,
+        ),
+        parse_concurrency=_bounded_int_setting(
+            environment,
+            name="PORTFOLIO_IMPORT_PARSE_CONCURRENCY",
+            default=defaults.parse_concurrency,
+            minimum=1,
+            maximum=8,
+        ),
+    )
 
 
 def _resolve_env_file(raw_path: str | None) -> Path:

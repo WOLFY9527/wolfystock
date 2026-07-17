@@ -54,6 +54,8 @@ from api.v1.schemas.portfolio import (
     PortfolioTradeListResponse,
     PortfolioTradeUpdateRequest,
 )
+from src.config import get_config
+from src.runtime.settings import PortfolioImportLimits
 from src.services.fx_rate_service import default_fx_rate_service
 from src.repositories.portfolio_repo import PortfolioRepository
 from src.services.portfolio_import_service import PortfolioIbkrImportError, PortfolioImportService
@@ -1432,13 +1434,60 @@ def _import_conflict_error() -> HTTPException:
 
 
 def _import_internal_error(message: str, exc: Exception) -> HTTPException:
-    logger.error("%s: %s", message, exc, exc_info=True)
+    logger.error("%s (%s)", message, exc.__class__.__name__)
     return safe_api_error(
         status_code=500,
         error="internal_error",
         message=IMPORT_INTERNAL_ERROR_MESSAGE,
         retryable=True,
     )
+
+
+def _portfolio_import_limits() -> PortfolioImportLimits:
+    runtime_settings = get_config().runtime_settings
+    if runtime_settings is None:
+        raise RuntimeError("Runtime settings snapshot is unavailable")
+    return runtime_settings.portfolio_import_limits
+
+
+def _read_bounded_broker_upload(
+    file: UploadFile,
+    *,
+    limits: PortfolioImportLimits,
+) -> bytes:
+    content = bytearray()
+    while len(content) <= limits.max_upload_bytes:
+        read_size = min(64 * 1024, limits.max_upload_bytes + 1 - len(content))
+        chunk = file.file.read(read_size)
+        if not chunk:
+            break
+        content.extend(chunk)
+        if len(content) > limits.max_upload_bytes:
+            raise ValueError("Broker import upload exceeds the configured byte limit")
+    return bytes(content)
+
+
+def _parse_broker_upload(
+    *,
+    file: UploadFile,
+    broker: str,
+    portfolio_service: PortfolioService,
+    csv_only: bool,
+) -> tuple[PortfolioImportService, dict]:
+    limits = _portfolio_import_limits()
+    content = _read_bounded_broker_upload(file, limits=limits)
+    importer = PortfolioImportService(
+        portfolio_service=portfolio_service,
+        limits=limits,
+    )
+    parsed = importer.parse_uploaded_file(
+        broker=broker,
+        content=content,
+        filename=file.filename,
+        content_type=file.content_type,
+        csv_only=csv_only,
+    )
+    return importer, parsed
 
 
 def _serialize_import_record(item: dict) -> PortfolioImportTradeItem:
@@ -2419,10 +2468,13 @@ def parse_broker_import(
     file: UploadFile = File(...),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioImportParseResponse:
-    importer = PortfolioImportService(portfolio_service=_get_portfolio_service(current_user))
     try:
-        content = file.file.read()
-        parsed = importer.parse_import_file(broker=broker, content=content)
+        _, parsed = _parse_broker_upload(
+            file=file,
+            broker=broker,
+            portfolio_service=_get_portfolio_service(current_user),
+            csv_only=False,
+        )
         return _build_import_parse_response(parsed)
     except ValueError as exc:
         raise _import_bad_request(exc) from exc
@@ -2460,10 +2512,13 @@ def commit_broker_import(
     file: UploadFile = File(...),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioImportCommitResponse:
-    importer = PortfolioImportService(portfolio_service=_get_portfolio_service(current_user))
     try:
-        content = file.file.read()
-        parsed = importer.parse_import_file(broker=broker, content=content)
+        importer, parsed = _parse_broker_upload(
+            file=file,
+            broker=broker,
+            portfolio_service=_get_portfolio_service(current_user),
+            csv_only=False,
+        )
         result = importer.commit_import_records(
             account_id=account_id,
             broker=parsed["broker"],
@@ -2491,10 +2546,13 @@ def parse_csv_import(
     file: UploadFile = File(...),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioImportParseResponse:
-    importer = PortfolioImportService(portfolio_service=_get_portfolio_service(current_user))
     try:
-        content = file.file.read()
-        parsed = importer.parse_trade_csv(broker=broker, content=content)
+        _, parsed = _parse_broker_upload(
+            file=file,
+            broker=broker,
+            portfolio_service=_get_portfolio_service(current_user),
+            csv_only=True,
+        )
         return _build_import_parse_response(parsed)
     except ValueError as exc:
         raise _import_bad_request(exc) from exc
@@ -2531,10 +2589,13 @@ def commit_csv_import(
     file: UploadFile = File(...),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioImportCommitResponse:
-    importer = PortfolioImportService(portfolio_service=_get_portfolio_service(current_user))
     try:
-        content = file.file.read()
-        parsed = importer.parse_trade_csv(broker=broker, content=content)
+        importer, parsed = _parse_broker_upload(
+            file=file,
+            broker=broker,
+            portfolio_service=_get_portfolio_service(current_user),
+            csv_only=True,
+        )
         result = importer.commit_import_records(
             account_id=account_id,
             broker=parsed["broker"],

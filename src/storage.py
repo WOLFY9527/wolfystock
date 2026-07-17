@@ -1863,6 +1863,50 @@ class PortfolioBrokerConnection(Base):
     )
 
 
+class PortfolioImportOperation(Base):
+    """Completed broker import used as the replay and acknowledgement boundary."""
+
+    __tablename__ = 'portfolio_import_operations'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), nullable=False, index=True)
+    portfolio_account_id = Column(
+        Integer,
+        ForeignKey('portfolio_accounts.id'),
+        nullable=False,
+        index=True,
+    )
+    broker_connection_id = Column(
+        Integer,
+        ForeignKey('portfolio_broker_connections.id'),
+        index=True,
+    )
+    broker_type = Column(String(32), nullable=False)
+    file_fingerprint = Column(String(64), nullable=False)
+    status = Column(String(16), nullable=False, default='completed')
+    trade_inserted_count = Column(Integer, nullable=False, default=0)
+    trade_duplicate_count = Column(Integer, nullable=False, default=0)
+    cash_inserted_count = Column(Integer, nullable=False, default=0)
+    corporate_action_inserted_count = Column(Integer, nullable=False, default=0)
+    completed_at = Column(DateTime, nullable=False, default=datetime.now, index=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint(
+            'owner_id',
+            'portfolio_account_id',
+            'broker_type',
+            'file_fingerprint',
+            name='uix_portfolio_import_operation_fingerprint',
+        ),
+        Index(
+            'ix_portfolio_import_operation_account_completed',
+            'portfolio_account_id',
+            'completed_at',
+        ),
+    )
+
+
 class PortfolioBrokerSyncState(Base):
     """Current read-only broker sync snapshot kept separate from ledger source events."""
 

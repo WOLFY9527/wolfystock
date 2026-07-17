@@ -21,7 +21,7 @@ from src.runtime.settings import (
 
 
 EXPECTED_INVENTORY_SHA256 = (
-    "5109b01b1b9f3e5ec1dfdf19f0d57ff12b1177ed2a630a9b1775d0cc5a98402e"
+    "e2848e4df5955d4b867adcede5921e583f7e9cde751bfc33f03d10a105d77b67"
 )
 EXPECTED_DEFAULT_CONFIG_SHA256 = (
     "c63b4317e4170b08964626c37a87f098a9a33063fb7b555a45b572994c50777d"
@@ -63,7 +63,7 @@ def _config_contract_digest(config: Config) -> str:
 def test_runtime_settings_inventory_preserves_all_344_names() -> None:
     inventory = "\n".join(sorted(RECOGNIZED_SETTING_NAMES)) + "\n"
 
-    assert len(RECOGNIZED_SETTING_NAMES) == 344
+    assert len(RECOGNIZED_SETTING_NAMES) == 352
     assert hashlib.sha256(inventory.encode("utf-8")).hexdigest() == (
         EXPECTED_INVENTORY_SHA256
     )
@@ -115,6 +115,62 @@ def test_runtime_settings_preserves_process_over_file_over_default_precedence(
     assert snapshot.provenance["APP_ENV"].source_name == "ENVIRONMENT"
     assert snapshot.provenance["APP_ENV"].is_alias is True
     assert snapshot.provenance["WEBUI_PORT"].source is SettingSource.DEFAULT
+
+
+def test_runtime_settings_owns_validated_portfolio_import_limits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("src.config.setup_env", lambda override=False: None)
+    with patch.dict(
+        os.environ,
+        {
+            "PORTFOLIO_IMPORT_MAX_BYTES": "4096",
+            "PORTFOLIO_IMPORT_MAX_CSV_ROWS": "7",
+            "PORTFOLIO_IMPORT_MAX_CSV_CELLS": "56",
+            "PORTFOLIO_IMPORT_MAX_CSV_CELL_CHARS": "128",
+            "PORTFOLIO_IMPORT_MAX_XML_NODES": "17",
+            "PORTFOLIO_IMPORT_MAX_XML_DEPTH": "6",
+            "PORTFOLIO_IMPORT_PARSE_TIMEOUT_SECONDS": "0.5",
+            "PORTFOLIO_IMPORT_PARSE_CONCURRENCY": "1",
+        },
+        clear=True,
+    ):
+        snapshot = _load_snapshot()
+
+    assert hasattr(snapshot, "portfolio_import_limits")
+    limits = snapshot.portfolio_import_limits
+    assert limits.max_upload_bytes == 4096
+    assert limits.max_csv_rows == 7
+    assert limits.max_csv_cells == 56
+    assert limits.max_csv_cell_chars == 128
+    assert limits.max_xml_nodes == 17
+    assert limits.max_xml_depth == 6
+    assert limits.parse_timeout_seconds == 0.5
+    assert limits.parse_concurrency == 1
+
+
+def test_runtime_settings_rejects_invalid_portfolio_import_limits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("src.config.setup_env", lambda override=False: None)
+    with patch.dict(
+        os.environ,
+        {"PORTFOLIO_IMPORT_MAX_BYTES": "not-an-integer"},
+        clear=True,
+    ):
+        with pytest.raises(ValueError, match="PORTFOLIO_IMPORT_MAX_BYTES"):
+            _load_snapshot()
+
+    with patch.dict(
+        os.environ,
+        {"PORTFOLIO_IMPORT_PARSE_TIMEOUT_SECONDS": "nan"},
+        clear=True,
+    ):
+        with pytest.raises(
+            ValueError,
+            match="PORTFOLIO_IMPORT_PARSE_TIMEOUT_SECONDS",
+        ):
+            _load_snapshot()
 
 
 def test_runtime_settings_preserves_profile_matrix_and_environment_overrides(

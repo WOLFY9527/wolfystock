@@ -25,6 +25,7 @@ from src.storage import (
     PortfolioCorporateAction,
     PortfolioDailySnapshot,
     PortfolioFxRate,
+    PortfolioImportOperation,
     PortfolioPosition,
     PortfolioPositionLot,
     PortfolioTrade,
@@ -335,6 +336,66 @@ class PortfolioRepository:
                 select(PortfolioBrokerConnection).where(and_(*conditions)).limit(1)
             ).scalar_one_or_none()
 
+    def get_broker_connection_by_ref_in_session(
+        self,
+        *,
+        session: Any,
+        broker_type: str,
+        broker_account_ref: str,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[PortfolioBrokerConnection]:
+        conditions = self._broker_connection_conditions(
+            broker_type=broker_type,
+            owner_id=owner_id,
+            include_all_owners=include_all_owners,
+        )
+        conditions.append(
+            PortfolioBrokerConnection.broker_account_ref == broker_account_ref
+        )
+        return session.execute(
+            select(PortfolioBrokerConnection).where(and_(*conditions)).limit(1)
+        ).scalar_one_or_none()
+
+    def add_broker_connection_in_session(
+        self,
+        *,
+        session: Any,
+        portfolio_account_id: int,
+        broker_type: str,
+        broker_name: Optional[str],
+        connection_name: str,
+        broker_account_ref: Optional[str],
+        import_mode: str,
+        status: str,
+        sync_metadata_json: Optional[str],
+        owner_id: Optional[str] = None,
+    ) -> PortfolioBrokerConnection:
+        row = PortfolioBrokerConnection(
+            owner_id=self.db.require_user_id(owner_id),
+            portfolio_account_id=portfolio_account_id,
+            broker_type=broker_type,
+            broker_name=broker_name,
+            connection_name=connection_name,
+            broker_account_ref=broker_account_ref,
+            import_mode=import_mode,
+            status=status,
+            sync_metadata_json=sync_metadata_json,
+        )
+        session.add(row)
+        self._mark_phase_f_account_sync_in_session(
+            session=session,
+            account_id=portfolio_account_id,
+        )
+        try:
+            session.flush()
+        except IntegrityError as exc:
+            raise DuplicateBrokerConnectionRefError(
+                "Duplicate broker_account_ref for this broker connection owner scope"
+            ) from exc
+        session.refresh(row)
+        return row
+
     def list_broker_connections(
         self,
         *,
@@ -617,6 +678,63 @@ class PortfolioRepository:
     # ------------------------------------------------------------------
     # Event writes
     # ------------------------------------------------------------------
+    def get_completed_import_operation_in_session(
+        self,
+        *,
+        session: Any,
+        account_id: int,
+        broker_type: str,
+        file_fingerprint: str,
+        owner_id: Optional[str] = None,
+    ) -> Optional[PortfolioImportOperation]:
+        return session.execute(
+            select(PortfolioImportOperation)
+            .where(
+                and_(
+                    PortfolioImportOperation.owner_id == self.db.require_user_id(owner_id),
+                    PortfolioImportOperation.portfolio_account_id == int(account_id),
+                    PortfolioImportOperation.broker_type == broker_type,
+                    PortfolioImportOperation.file_fingerprint == file_fingerprint,
+                    PortfolioImportOperation.status == "completed",
+                )
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+
+    def add_completed_import_operation_in_session(
+        self,
+        *,
+        session: Any,
+        account_id: int,
+        broker_connection_id: Optional[int],
+        broker_type: str,
+        file_fingerprint: str,
+        trade_inserted_count: int,
+        trade_duplicate_count: int,
+        cash_inserted_count: int,
+        corporate_action_inserted_count: int,
+        owner_id: Optional[str] = None,
+    ) -> PortfolioImportOperation:
+        row = PortfolioImportOperation(
+            owner_id=self.db.require_user_id(owner_id),
+            portfolio_account_id=int(account_id),
+            broker_connection_id=(
+                int(broker_connection_id) if broker_connection_id is not None else None
+            ),
+            broker_type=broker_type,
+            file_fingerprint=file_fingerprint,
+            status="completed",
+            trade_inserted_count=int(trade_inserted_count),
+            trade_duplicate_count=int(trade_duplicate_count),
+            cash_inserted_count=int(cash_inserted_count),
+            corporate_action_inserted_count=int(corporate_action_inserted_count),
+            completed_at=datetime.now(),
+        )
+        session.add(row)
+        session.flush()
+        session.refresh(row)
+        return row
+
     @contextmanager
     def portfolio_write_session(self):
         session = self.db.get_session()

@@ -8,8 +8,10 @@ import sys
 import tempfile
 import unittest
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
+from threading import Event
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -25,10 +27,14 @@ import src.auth as auth
 from api.app import create_app
 from api.deps import CurrentUser, get_current_user
 from src.config import Config
-from src.services.portfolio_import_service import PortfolioImportService
+from src.runtime.settings import PortfolioImportLimits
+from src.services.portfolio_import_service import (
+    PortfolioImportService,
+    PortfolioImportUnavailableError,
+)
 from src.services.portfolio_risk_service import PortfolioRiskService
-from src.services.portfolio_service import PortfolioBusyError, PortfolioService
-from src.storage import DatabaseManager
+from src.services.portfolio_service import PortfolioBusyError, PortfolioOversellError, PortfolioService
+from src.storage import DatabaseManager, PortfolioImportOperation
 
 
 def _reset_auth_globals() -> None:
@@ -322,30 +328,31 @@ class PortfolioPr2TestCase(unittest.TestCase):
             currency="CNY",
         )
 
-        result = self.import_service.commit_trade_records(
-            account_id=aid,
-            broker="huatai",
-            records=[
-                {
-                    "trade_date": "2026-01-02",
-                    "symbol": "600519",
-                    "side": "sell",
-                    "quantity": 20,
-                    "price": 90,
-                    "fee": 0.0,
-                    "tax": 0.0,
-                    "trade_uid": "HT-SELL-001",
-                    "dedup_hash": "oversell-hash-001",
-                    "market": "cn",
-                    "currency": "CNY",
-                }
-            ],
-        )
+        with self.assertRaises(PortfolioOversellError):
+            self.import_service.commit_trade_records(
+                account_id=aid,
+                broker="huatai",
+                records=[
+                    {
+                        "trade_date": "2026-01-02",
+                        "symbol": "600519",
+                        "side": "sell",
+                        "quantity": 20,
+                        "price": 90,
+                        "fee": 0.0,
+                        "tax": 0.0,
+                        "trade_uid": "HT-SELL-001",
+                        "dedup_hash": "oversell-hash-001",
+                        "market": "cn",
+                        "currency": "CNY",
+                    }
+                ],
+            )
 
-        self.assertEqual(result["inserted_count"], 0)
-        self.assertEqual(result["duplicate_count"], 0)
-        self.assertEqual(result["failed_count"], 1)
-        self.assertEqual(len(result["errors"]), 1)
+        self.assertEqual(
+            self.service.list_trade_events(account_id=aid, page=1, page_size=20)["total"],
+            1,
+        )
 
     def test_import_busy_counts_failed_not_duplicate(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
@@ -353,33 +360,34 @@ class PortfolioPr2TestCase(unittest.TestCase):
 
         with patch.object(
             self.import_service.portfolio_service,
-            "record_trade",
+            "_record_trade_in_session",
             side_effect=PortfolioBusyError("Portfolio ledger is busy; please retry shortly."),
         ):
-            result = self.import_service.commit_trade_records(
-                account_id=aid,
-                broker="huatai",
-                records=[
-                    {
-                        "trade_date": "2026-01-02",
-                        "symbol": "600519",
-                        "side": "buy",
-                        "quantity": 10,
-                        "price": 90,
-                        "fee": 0.0,
-                        "tax": 0.0,
-                        "trade_uid": "HT-BUSY-001",
-                        "dedup_hash": "busy-hash-001",
-                        "market": "cn",
-                        "currency": "CNY",
-                    }
-                ],
-            )
+            with self.assertRaises(PortfolioBusyError):
+                self.import_service.commit_trade_records(
+                    account_id=aid,
+                    broker="huatai",
+                    records=[
+                        {
+                            "trade_date": "2026-01-02",
+                            "symbol": "600519",
+                            "side": "buy",
+                            "quantity": 10,
+                            "price": 90,
+                            "fee": 0.0,
+                            "tax": 0.0,
+                            "trade_uid": "HT-BUSY-001",
+                            "dedup_hash": "busy-hash-001",
+                            "market": "cn",
+                            "currency": "CNY",
+                        }
+                    ],
+                )
 
-        self.assertEqual(result["inserted_count"], 0)
-        self.assertEqual(result["duplicate_count"], 0)
-        self.assertEqual(result["failed_count"], 1)
-        self.assertIn("portfolio_busy", result["errors"][0])
+        self.assertEqual(
+            self.service.list_trade_events(account_id=aid, page=1, page_size=20)["total"],
+            0,
+        )
 
     def test_ibkr_flex_parse_and_commit_with_repeat_import_protection(self) -> None:
         account = self.service.create_account(name="Global", broker="IBKR", market="us", base_currency="USD")
@@ -588,6 +596,344 @@ class PortfolioPr2TestCase(unittest.TestCase):
         self.assertEqual(self.service.list_trade_events(account_id=account["id"], page=1, page_size=20)["total"], 1)
         self.assertEqual(self.service.list_cash_ledger_events(account_id=account["id"], page=1, page_size=20)["total"], 1)
         self.assertEqual(self.service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)["total"], 1)
+
+    @staticmethod
+    def _ibkr_atomicity_xml_bytes(*, operation: str, cash_amount: int = 5000) -> bytes:
+        return f"""<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements>
+  <FlexStatement accountId="U-ATOMIC" fromDate="2026-01-01" toDate="2026-01-31" currency="USD">
+    <Trades>
+      <Trade assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" tradeDate="2026-01-03" buySell="BUY" quantity="1" tradePrice="10" ibExecID="{operation}-BUY"/>
+    </Trades>
+    <CashTransactions>
+      <CashTransaction reportDate="2026-01-02" currency="USD" amount="{cash_amount}" description="Deposit {operation}"/>
+    </CashTransactions>
+    <CorporateActions>
+      <CorporateAction assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" reportDate="2026-01-10" description="2 for 1 split {operation}" ratio="2:1"/>
+    </CorporateActions>
+  </FlexStatement>
+</FlexStatements>
+""".encode("utf-8")
+
+    def test_ibkr_failure_on_later_trade_rolls_back_entire_import(self) -> None:
+        account = self.service.create_account(
+            name="Atomic Import",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements>
+  <FlexStatement accountId="U-ROLLBACK" fromDate="2026-01-01" toDate="2026-01-31" currency="USD">
+    <Trades>
+      <Trade assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" tradeDate="2026-01-03" buySell="BUY" quantity="1" tradePrice="10" ibExecID="ROLLBACK-BUY-US"/>
+      <Trade assetCategory="STK" symbol="HK00700" exchange="SEHK" currency="HKD" tradeDate="2026-01-03" buySell="BUY" quantity="1" tradePrice="20" ibExecID="ROLLBACK-BUY-HK"/>
+      <Trade assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" tradeDate="2026-01-04" buySell="SELL" quantity="2" tradePrice="11" ibExecID="ROLLBACK-SELL"/>
+    </Trades>
+    <CashTransactions>
+      <CashTransaction reportDate="2026-01-02" currency="USD" amount="5000" description="Deposit"/>
+    </CashTransactions>
+    <CorporateActions>
+      <CorporateAction assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" reportDate="2026-01-10" description="2 for 1 split" ratio="2:1"/>
+    </CorporateActions>
+  </FlexStatement>
+</FlexStatements>"""
+        self.service.repo.save_fx_rate(
+            from_currency="HKD",
+            to_currency="USD",
+            rate_date=date(2026, 1, 1),
+            rate=0.128,
+            source="unit-test",
+            is_stale=False,
+        )
+        parsed = self.import_service.parse_import_file(broker="ibkr", content=xml)
+
+        with self.assertRaises(PortfolioOversellError):
+            self.import_service.commit_import_records(
+                account_id=account["id"],
+                broker="ibkr",
+                parsed_payload=parsed,
+            )
+
+        self.assertEqual(self.service.get_account(account["id"], include_inactive=True)["market"], "us")
+        self.assertEqual(self.service.list_trade_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_cash_ledger_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_broker_connections(portfolio_account_id=account["id"]), [])
+
+    def test_ibkr_parser_rejection_prevents_valid_prefix_commit(self) -> None:
+        account = self.service.create_account(
+            name="Parser Rejection",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements>
+  <FlexStatement accountId="U-PARSER-REJECT" currency="USD" toDate="2026-01-31">
+    <Trades>
+      <Trade assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" tradeDate="2026-01-03" buySell="BUY" quantity="1" tradePrice="10" ibExecID="VALID-PREFIX"/>
+      <Trade assetCategory="STK" symbol="MSFT" exchange="NASDAQ" currency="USD" tradeDate="2026-01-04" buySell="BUY" quantity="1" ibExecID="INVALID-LATER"/>
+    </Trades>
+    <CashTransactions>
+      <CashTransaction reportDate="2026-01-02" currency="USD" amount="5000" description="Deposit"/>
+    </CashTransactions>
+  </FlexStatement>
+</FlexStatements>"""
+        parsed = self.import_service.parse_import_file(broker="ibkr", content=xml)
+        self.assertEqual(parsed["record_count"], 1)
+        self.assertEqual(parsed["skipped_count"], 1)
+
+        with self.assertRaises(ValueError):
+            self.import_service.commit_import_records(
+                account_id=account["id"],
+                broker="ibkr",
+                parsed_payload=parsed,
+            )
+
+        self.assertEqual(self.service.list_trade_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_cash_ledger_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_broker_connections(portfolio_account_id=account["id"]), [])
+
+        seed_account = self.service.create_account(
+            name="Open Position Parser Rejection",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        open_position_xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements>
+  <FlexStatement accountId="U-SEED-REJECT" currency="USD" toDate="2026-01-31">
+    <OpenPositions>
+      <OpenPosition assetCategory="STK" symbol="MSFT" exchange="NASDAQ" currency="USD" reportDate="2026-01-31" position="1" costBasisPrice="10"/>
+      <OpenPosition assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" reportDate="2026-01-31" position="1"/>
+    </OpenPositions>
+  </FlexStatement>
+</FlexStatements>"""
+        seed_parsed = self.import_service.parse_import_file(
+            broker="ibkr",
+            content=open_position_xml,
+        )
+        self.assertEqual(seed_parsed["record_count"], 1)
+        self.assertEqual(seed_parsed["skipped_count"], 1)
+
+        with self.assertRaises(ValueError):
+            self.import_service.commit_import_records(
+                account_id=seed_account["id"],
+                broker="ibkr",
+                parsed_payload=seed_parsed,
+            )
+
+        self.assertEqual(
+            self.service.list_trade_events(
+                account_id=seed_account["id"],
+                page=1,
+                page_size=20,
+            )["total"],
+            0,
+        )
+        self.assertEqual(
+            self.service.list_broker_connections(
+                portfolio_account_id=seed_account["id"],
+            ),
+            [],
+        )
+
+    def test_ibkr_persistence_failure_rolls_back_entire_import(self) -> None:
+        account = self.service.create_account(
+            name="Injected Failure",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        parsed = self.import_service.parse_import_file(
+            broker="ibkr",
+            content=self._ibkr_atomicity_xml_bytes(operation="INJECT"),
+        )
+
+        with patch.object(
+            self.service.repo,
+            "add_cash_ledger_in_session",
+            side_effect=RuntimeError("fault-injected cash persistence failure"),
+        ):
+            with self.assertRaises(RuntimeError):
+                self.import_service.commit_import_records(
+                    account_id=account["id"],
+                    broker="ibkr",
+                    parsed_payload=parsed,
+                )
+
+        self.assertEqual(self.service.list_trade_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_cash_ledger_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_broker_connections(portfolio_account_id=account["id"]), [])
+
+    def test_ibkr_historical_replay_does_not_duplicate_cash_or_actions(self) -> None:
+        account = self.service.create_account(
+            name="Historical Replay",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        payload_a = self.import_service.parse_import_file(
+            broker="ibkr",
+            content=self._ibkr_atomicity_xml_bytes(operation="A", cash_amount=100),
+        )
+        payload_b = self.import_service.parse_import_file(
+            broker="ibkr",
+            content=self._ibkr_atomicity_xml_bytes(operation="B", cash_amount=200),
+        )
+
+        first_a = self.import_service.commit_import_records(
+            account_id=account["id"],
+            broker="ibkr",
+            parsed_payload=payload_a,
+        )
+        first_b = self.import_service.commit_import_records(
+            account_id=account["id"],
+            broker="ibkr",
+            parsed_payload=payload_b,
+        )
+        replay_a = self.import_service.commit_import_records(
+            account_id=account["id"],
+            broker="ibkr",
+            parsed_payload=payload_a,
+        )
+
+        self.assertFalse(first_a["duplicate_import"])
+        self.assertFalse(first_b["duplicate_import"])
+        self.assertTrue(replay_a["duplicate_import"])
+        self.assertEqual(self.service.list_trade_events(account_id=account["id"], page=1, page_size=20)["total"], 1)
+        self.assertEqual(self.service.list_cash_ledger_events(account_id=account["id"], page=1, page_size=20)["total"], 2)
+        self.assertEqual(self.service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)["total"], 2)
+
+    def test_ibkr_completion_failure_rolls_back_fingerprint_and_children(self) -> None:
+        account = self.service.create_account(
+            name="Completion Failure",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        parsed = self.import_service.parse_import_file(
+            broker="ibkr",
+            content=self._ibkr_atomicity_xml_bytes(operation="COMPLETE"),
+        )
+
+        with patch.object(
+            self.service.repo,
+            "add_completed_import_operation_in_session",
+            side_effect=RuntimeError("fault-injected completion failure"),
+        ):
+            with self.assertRaises(RuntimeError):
+                self.import_service.commit_import_records(
+                    account_id=account["id"],
+                    broker="ibkr",
+                    parsed_payload=parsed,
+                )
+
+        self.assertEqual(self.service.list_trade_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_cash_ledger_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)["total"], 0)
+        self.assertEqual(self.service.list_broker_connections(portfolio_account_id=account["id"]), [])
+        with self.db.get_session() as session:
+            self.assertEqual(session.query(PortfolioImportOperation).count(), 0)
+
+    def test_concurrent_duplicate_ibkr_import_has_one_complete_winner(self) -> None:
+        account = self.service.create_account(
+            name="Concurrent Replay",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        parsed = self.import_service.parse_import_file(
+            broker="ibkr",
+            content=self._ibkr_atomicity_xml_bytes(operation="CONCURRENT"),
+        )
+
+        def commit() -> dict:
+            importer = PortfolioImportService(
+                portfolio_service=PortfolioService(owner_id="portfolio-pr2-consumer")
+            )
+            return importer.commit_import_records(
+                account_id=account["id"],
+                broker="ibkr",
+                parsed_payload=parsed,
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = [future.result() for future in (executor.submit(commit), executor.submit(commit))]
+
+        self.assertEqual(sorted(item["duplicate_import"] for item in results), [False, True])
+        self.assertEqual(self.service.list_trade_events(account_id=account["id"], page=1, page_size=20)["total"], 1)
+        self.assertEqual(self.service.list_cash_ledger_events(account_id=account["id"], page=1, page_size=20)["total"], 1)
+        self.assertEqual(self.service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)["total"], 1)
+        connections = self.service.list_broker_connections(portfolio_account_id=account["id"])
+        self.assertEqual(len(connections), 1)
+        self.assertEqual(
+            connections[0]["last_import_fingerprint"],
+            parsed["metadata"]["file_fingerprint"],
+        )
+        with self.db.get_session() as session:
+            operations = session.query(PortfolioImportOperation).all()
+        self.assertEqual(len(operations), 1)
+        self.assertEqual(operations[0].status, "completed")
+
+    def test_broker_parser_capacity_is_bounded(self) -> None:
+        limits = PortfolioImportLimits(
+            max_upload_bytes=4096,
+            max_csv_rows=10,
+            max_csv_cells=100,
+            max_csv_cell_chars=1024,
+            max_xml_nodes=100,
+            max_xml_depth=10,
+            parse_timeout_seconds=1.0,
+            parse_concurrency=1,
+        )
+        importer = PortfolioImportService(
+            portfolio_service=self.service,
+            limits=limits,
+        )
+        started = Event()
+        release = Event()
+        expected = {
+            "broker": "ibkr",
+            "record_count": 0,
+            "skipped_count": 0,
+            "error_count": 0,
+            "records": [],
+            "cash_record_count": 0,
+            "cash_entries": [],
+            "corporate_action_count": 0,
+            "corporate_actions": [],
+            "warnings": [],
+            "metadata": {"file_fingerprint": "0" * 64},
+            "errors": [],
+        }
+
+        def blocked_parser(**_kwargs) -> dict:
+            started.set()
+            release.wait(timeout=1.0)
+            return expected
+
+        with patch.object(importer, "parse_import_file", side_effect=blocked_parser):
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                first = executor.submit(
+                    importer.parse_uploaded_file,
+                    broker="ibkr",
+                    content=self._ibkr_atomicity_xml_bytes(operation="CAPACITY"),
+                    filename="capacity.xml",
+                    content_type="application/xml",
+                )
+                self.assertTrue(started.wait(timeout=1.0))
+                with self.assertRaises(PortfolioImportUnavailableError):
+                    importer.parse_uploaded_file(
+                        broker="ibkr",
+                        content=self._ibkr_atomicity_xml_bytes(operation="CAPACITY"),
+                        filename="capacity.xml",
+                        content_type="application/xml",
+                    )
+                release.set()
+                self.assertEqual(first.result(), expected)
 
     def test_ibkr_open_positions_seed_when_trades_absent(self) -> None:
         account = self.service.create_account(name="Global", broker="IBKR", market="us", base_currency="USD")

@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 from datetime import date
 from pathlib import Path
@@ -1143,10 +1144,15 @@ class PortfolioApiTestCase(unittest.TestCase):
                     f"api.v1.endpoints.portfolio.PortfolioImportService.{method_name}",
                     side_effect=ValueError(_raw_import_exception_text()),
                 ):
+                    content = (
+                        self._bounded_import_xml()
+                        if broker == "ibkr"
+                        else self._bounded_import_csv()
+                    )
                     response = self.client.post(
                         endpoint,
                         data={"broker": broker},
-                        files={"file": (filename, b"synthetic", content_type)},
+                        files={"file": (filename, content, content_type)},
                     )
 
                 self._assert_safe_import_error(
@@ -1155,6 +1161,221 @@ class PortfolioApiTestCase(unittest.TestCase):
                     error_code="validation_error",
                     message=SAFE_IMPORT_VALIDATION_MESSAGE,
                 )
+
+    @staticmethod
+    def _bounded_import_xml() -> bytes:
+        return b"""<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements><FlexStatement accountId="U-BOUNDED" currency="USD" toDate="2026-01-31">
+<Trades><Trade assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" tradeDate="2026-01-03" buySell="BUY" quantity="1" tradePrice="10" ibExecID="BOUNDED-1"/></Trades>
+</FlexStatement></FlexStatements>"""
+
+    @staticmethod
+    def _bounded_import_csv(*, rows: int = 1) -> bytes:
+        header = "成交日期,证券代码,买卖标志,成交数量,成交均价,成交编号,手续费,印花税\n"
+        body = "".join(
+            f"2026-01-{index + 2:02d},600519,买入,1,100,BOUND-{index},1,0\n"
+            for index in range(rows)
+        )
+        return (header + body).encode("utf-8")
+
+    def test_all_broker_import_routes_enforce_exact_upload_byte_boundary(self) -> None:
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Bounded", "broker": "IBKR", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        account_id = account_resp.json()["id"]
+        raw_cases = (
+            (
+                "/api/v1/portfolio/imports/parse",
+                {"broker": "ibkr"},
+                "bounded.xml",
+                "application/xml",
+                self._bounded_import_xml(),
+            ),
+            (
+                "/api/v1/portfolio/imports/commit",
+                {"account_id": str(account_id), "broker": "ibkr", "dry_run": "false"},
+                "bounded.xml",
+                "application/xml",
+                self._bounded_import_xml(),
+            ),
+            (
+                "/api/v1/portfolio/imports/csv/parse",
+                {"broker": "huatai"},
+                "bounded.csv",
+                "text/csv",
+                self._bounded_import_csv(),
+            ),
+            (
+                "/api/v1/portfolio/imports/csv/commit",
+                {"account_id": str(account_id), "broker": "huatai", "dry_run": "false"},
+                "bounded.csv",
+                "text/csv",
+                self._bounded_import_csv(),
+            ),
+        )
+        for endpoint, data, filename, content_type, raw in raw_cases:
+            with self.subTest(endpoint=endpoint):
+                boundary = max(1024, len(raw))
+                content = raw + b"\n" * (boundary - len(raw))
+                with patch.dict(
+                    os.environ,
+                    {"PORTFOLIO_IMPORT_MAX_BYTES": str(boundary)},
+                    clear=False,
+                ):
+                    Config.reset_instance()
+                    accepted = self.client.post(
+                        endpoint,
+                        data=data,
+                        files={"file": (filename, content, content_type)},
+                    )
+                    rejected = self.client.post(
+                        endpoint,
+                        data=data,
+                        files={"file": (filename, content + b"x", content_type)},
+                    )
+                Config.reset_instance()
+                self.assertEqual(accepted.status_code, 200)
+                self.assertEqual(rejected.status_code, 400)
+
+    def test_oversized_upload_is_rejected_before_parser_invocation(self) -> None:
+        parsed = {
+            "broker": "huatai",
+            "record_count": 0,
+            "skipped_count": 0,
+            "error_count": 0,
+            "records": [],
+            "cash_record_count": 0,
+            "cash_entries": [],
+            "corporate_action_count": 0,
+            "corporate_actions": [],
+            "warnings": [],
+            "metadata": {"file_fingerprint": "0" * 64},
+            "errors": [],
+        }
+        with patch.dict(
+            os.environ,
+            {"PORTFOLIO_IMPORT_MAX_BYTES": "1024"},
+            clear=False,
+        ), patch(
+            "api.v1.endpoints.portfolio.PortfolioImportService.parse_trade_csv",
+            return_value=parsed,
+        ) as parser:
+            Config.reset_instance()
+            response = self.client.post(
+                "/api/v1/portfolio/imports/csv/parse",
+                data={"broker": "huatai"},
+                files={"file": ("oversized.csv", b"x" * 1025, "text/csv")},
+            )
+        Config.reset_instance()
+        self.assertEqual(response.status_code, 400)
+        parser.assert_not_called()
+
+    def test_broker_import_parser_budgets_reject_csv_and_xml_excess(self) -> None:
+        cases = (
+            (
+                {"PORTFOLIO_IMPORT_MAX_CSV_ROWS": "1"},
+                "huatai",
+                "rows.csv",
+                "text/csv",
+                self._bounded_import_csv(rows=2),
+            ),
+            (
+                {"PORTFOLIO_IMPORT_MAX_CSV_CELLS": "10"},
+                "huatai",
+                "cells.csv",
+                "text/csv",
+                self._bounded_import_csv(),
+            ),
+            (
+                {"PORTFOLIO_IMPORT_MAX_XML_NODES": "3"},
+                "ibkr",
+                "nodes.xml",
+                "application/xml",
+                self._bounded_import_xml(),
+            ),
+            (
+                {"PORTFOLIO_IMPORT_MAX_XML_DEPTH": "2"},
+                "ibkr",
+                "depth.xml",
+                "application/xml",
+                self._bounded_import_xml(),
+            ),
+        )
+        for environment, broker, filename, content_type, content in cases:
+            with self.subTest(environment=environment):
+                with patch.dict(os.environ, environment, clear=False):
+                    Config.reset_instance()
+                    response = self.client.post(
+                        "/api/v1/portfolio/imports/parse",
+                        data={"broker": broker},
+                        files={"file": (filename, content, content_type)},
+                    )
+                Config.reset_instance()
+                self.assertEqual(response.status_code, 400)
+
+    def test_broker_import_rejects_declared_type_filename_and_signature_mismatch(self) -> None:
+        cases = (
+            ("ibkr", "statement.csv", "application/xml", self._bounded_import_xml()),
+            ("ibkr", "statement.xml", "text/csv", self._bounded_import_xml()),
+            ("huatai", "statement.csv", "text/csv", self._bounded_import_xml()),
+        )
+        for broker, filename, content_type, content in cases:
+            with self.subTest(filename=filename, content_type=content_type):
+                response = self.client.post(
+                    "/api/v1/portfolio/imports/parse",
+                    data={"broker": broker},
+                    files={"file": (filename, content, content_type)},
+                )
+                self.assertEqual(response.status_code, 400)
+
+    def test_broker_import_parser_timeout_is_bounded(self) -> None:
+        parsed = {
+            "broker": "ibkr",
+            "record_count": 0,
+            "skipped_count": 0,
+            "error_count": 0,
+            "records": [],
+            "cash_record_count": 0,
+            "cash_entries": [],
+            "corporate_action_count": 0,
+            "corporate_actions": [],
+            "warnings": [],
+            "metadata": {"file_fingerprint": "0" * 64},
+            "errors": [],
+        }
+        with patch.dict(
+            os.environ,
+            {"PORTFOLIO_IMPORT_PARSE_TIMEOUT_SECONDS": "0.01"},
+            clear=False,
+        ), patch(
+            "api.v1.endpoints.portfolio.PortfolioImportService.parse_import_file",
+            side_effect=lambda **_kwargs: (time.sleep(0.1), parsed)[1],
+        ):
+            Config.reset_instance()
+            response = self.client.post(
+                "/api/v1/portfolio/imports/parse",
+                data={"broker": "ibkr"},
+                files={"file": ("bounded.xml", self._bounded_import_xml(), "application/xml")},
+            )
+        Config.reset_instance()
+        self.assertEqual(response.status_code, 500)
+
+    def test_import_internal_error_log_does_not_include_raw_parser_exception(self) -> None:
+        marker = "raw-parser-secret-value"
+        with patch(
+            "api.v1.endpoints.portfolio.PortfolioImportService.parse_import_file",
+            side_effect=RuntimeError(marker),
+        ), self.assertLogs("api.v1.endpoints.portfolio", level="ERROR") as logs:
+            response = self.client.post(
+                "/api/v1/portfolio/imports/parse",
+                data={"broker": "ibkr"},
+                files={"file": ("bounded.xml", self._bounded_import_xml(), "application/xml")},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertNotIn(marker, "\n".join(logs.output))
 
     def test_import_commit_conflicts_use_safe_envelopes_without_raw_broker_markers(self) -> None:
         account_resp = self.client.post(
@@ -1189,10 +1410,15 @@ class PortfolioApiTestCase(unittest.TestCase):
                     "api.v1.endpoints.portfolio.PortfolioImportService.commit_import_records",
                     side_effect=PortfolioConflictError(_raw_import_exception_text()),
                 ):
+                    content = (
+                        self._bounded_import_xml()
+                        if broker == "ibkr"
+                        else self._bounded_import_csv()
+                    )
                     response = self.client.post(
                         endpoint,
                         data={"account_id": str(account_id), "broker": broker, "dry_run": "false"},
-                        files={"file": (filename, b"synthetic", content_type)},
+                        files={"file": (filename, content, content_type)},
                     )
 
                 self._assert_safe_import_error(
@@ -1210,7 +1436,7 @@ class PortfolioApiTestCase(unittest.TestCase):
             response = self.client.post(
                 "/api/v1/portfolio/imports/parse",
                 data={"broker": "ibkr"},
-                files={"file": ("ibkr-flex.xml", b"synthetic", "application/xml")},
+                files={"file": ("ibkr-flex.xml", self._bounded_import_xml(), "application/xml")},
             )
 
         self._assert_safe_import_error(
