@@ -14,6 +14,7 @@ import ctypes
 import hashlib
 import json
 import os
+import re
 import signal
 import shutil
 import socket
@@ -55,6 +56,7 @@ UAT_ENV_OVERRIDES = {
     "PREFETCH_REALTIME_QUOTES": "false",
 }
 PROXY_ENV_KEYS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")
+POSIX_COMMAND_DIRS = (Path("/usr/sbin"), Path("/usr/bin"), Path("/sbin"), Path("/bin"))
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -185,8 +187,62 @@ def seed_uat_consumer_test_accounts() -> dict[str, Any]:
     return _seed_uat_consumer_test_accounts()
 
 
+def read_runtime_json(client: Any, base_url: str, path: str) -> dict[str, Any] | None:
+    """Read one required local runtime payload without proxy or credential fallback."""
+    try:
+        response = client.request("GET", clean_base_url(base_url) + path)
+        if int(getattr(response, "status_code", 0)) != 200:
+            return None
+        payload = response.json()
+        return payload if isinstance(payload, dict) else None
+    except (OSError, TimeoutError, urllib.error.URLError, json.JSONDecodeError, ValueError):
+        return None
+
+
+def sanitize_release_evidence(payload: Any, repo_root: Path) -> Any:
+    """Normalize reviewed local roots and reject any remaining private user path."""
+    replacements = [
+        (str(repo_root.resolve()), "$WORKTREE"),
+        (str(Path(os.environ["WOLFYSTOCK_ENV_CACHE"]).resolve()), "$CACHE")
+        if os.environ.get("WOLFYSTOCK_ENV_CACHE")
+        else ("", ""),
+        (str(Path.home().resolve()), "$HOME"),
+    ]
+    replacements = sorted((item for item in replacements if item[0]), key=lambda item: len(item[0]), reverse=True)
+
+    def normalize(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {key: normalize(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [normalize(item) for item in value]
+        if not isinstance(value, str):
+            return value
+        normalized = value
+        for source, replacement in replacements:
+            normalized = normalized.replace(source, replacement)
+        if re.search(r"(?:/Users/[^/\s\"']+|/home/[^/\s\"']+|[A-Za-z]:\\Users\\[^\\\s\"']+)", normalized):
+            raise ValueError("release_evidence_private_path_remaining")
+        return normalized
+
+    return normalize(payload)
+
+
 def clean_base_url(raw_url: str) -> str:
     return str(raw_url or "").strip().rstrip("/")
+
+
+def find_system_command(name: str, *, extra_candidates: Sequence[Path] = ()) -> str | None:
+    """Resolve a reviewed OS utility even when the managed PATH omits system directories."""
+    if not name or Path(name).name != name:
+        return None
+    discovered = shutil.which(name)
+    if discovered:
+        return discovered
+    candidates = (*extra_candidates, *(directory / name for directory in POSIX_COMMAND_DIRS))
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
 
 
 def run_runtime_smoke(**kwargs: Any) -> dict[str, Any]:
@@ -303,7 +359,7 @@ def find_port_owner(host: str, port: int) -> PortOwner | None:
         return None
     if is_windows():
         return _find_windows_port_owner(port)
-    lsof = shutil.which("lsof")
+    lsof = find_system_command("lsof")
     if not lsof:
         return PortOwner(pid=-1, cwd=None, command="unknown: lsof unavailable")
     completed = subprocess.run(
@@ -336,12 +392,12 @@ def process_cwd(pid: int) -> str | None:
             return str(proc_cwd.resolve())
     except Exception:
         pass
-    pwdx = shutil.which("pwdx")
+    pwdx = find_system_command("pwdx")
     if pwdx:
         completed = subprocess.run([pwdx, str(pid)], capture_output=True, text=True, check=False, timeout=5)
         if completed.returncode == 0 and ":" in completed.stdout:
             return completed.stdout.split(":", 1)[1].strip() or None
-    lsof = shutil.which("lsof")
+    lsof = find_system_command("lsof")
     if lsof:
         completed = subprocess.run(
             [lsof, "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
@@ -374,7 +430,7 @@ def process_executable(pid: int) -> str | None:
             return str(proc_exe.resolve())
     except Exception:
         pass
-    lsof = shutil.which("lsof")
+    lsof = find_system_command("lsof")
     if lsof:
         completed = subprocess.run(
             [lsof, "-a", "-p", str(pid), "-d", "txt", "-Fn"],
@@ -386,7 +442,7 @@ def process_executable(pid: int) -> str | None:
         for line in completed.stdout.splitlines():
             if line.startswith("n") and Path(line[1:]).is_file():
                 return line[1:]
-    ps = shutil.which("ps")
+    ps = find_system_command("ps")
     if not ps:
         return None
     completed = subprocess.run(
@@ -404,7 +460,7 @@ def process_command(pid: int) -> str | None:
         return None
     if is_windows():
         return _windows_process_command(pid)
-    ps = shutil.which("ps")
+    ps = find_system_command("ps")
     if not ps:
         return None
     completed = subprocess.run(
@@ -1359,6 +1415,8 @@ def run_harness(
     prepare_uat_accounts: bool = False,
     stop_runtime_after: bool = False,
     readiness_timeout_seconds: float = DEFAULT_READINESS_TIMEOUT_SECONDS,
+    expected_environment_fingerprint: str | None = None,
+    sanitize_for_release: bool = False,
 ) -> tuple[int, dict[str, Any]]:
     repo_root = repo_root.resolve()
     static_root = repo_root / "static"
@@ -1524,6 +1582,9 @@ def run_harness(
         runtime_command = process_command(process.pid)
         interpreter_identity = build_interpreter_identity(expected_python, runtime_executable)
         identity_errors: list[str] = []
+        observed_environment_fingerprint = str(os.environ.get("WOLFYSTOCK_ENV_FINGERPRINT") or "")
+        if expected_environment_fingerprint and observed_environment_fingerprint != expected_environment_fingerprint:
+            identity_errors.append("environment_fingerprint_mismatch")
         if runtime_cwd and Path(runtime_cwd).resolve() != repo_root:
             identity_errors.append("runtime_cwd_mismatch")
         elif not runtime_cwd and not is_windows():
@@ -1548,8 +1609,8 @@ def run_harness(
             client=client,
             git_head=source["gitSha"],
             local_build_result=local_build,
-            admin_status_payload=None,
-            surface_readiness_payload=None,
+            admin_status_payload=read_runtime_json(client, base_url, "/api/v1/admin/ops/status"),
+            surface_readiness_payload=read_runtime_json(client, base_url, "/api/v1/admin/ops/surface-readiness"),
             auth_headers=None,
         )
         runtime = {
@@ -1561,7 +1622,23 @@ def run_harness(
             "processStartTime": process_start_time(process.pid),
             "ownedByHarness": True,
         }
-        if smoke_report.get("checks", {}).get("runtimeBundle", {}).get("status") != "PASS":
+        smoke_checks = smoke_report.get("checks") if isinstance(smoke_report.get("checks"), dict) else {}
+        if smoke_report.get("summaryStatus") != "PASS" or smoke_report.get("exitCode") != EXIT_OK:
+            identity_errors.append("smoke_aggregate_not_pass")
+        for check_name in (
+            "localBuild",
+            "runtimeBundle",
+            "publicRoutes",
+            "runtimeAuthMode",
+            "authenticatedRoutes",
+            "adminOpsStatus",
+            "surfaceReadiness",
+        ):
+            check = smoke_checks.get(check_name) if isinstance(smoke_checks.get(check_name), dict) else {}
+            if check.get("status") != "PASS":
+                identity_errors.append(f"smoke_{check_name}_not_pass")
+        runtime_bundle_check = smoke_checks.get("runtimeBundle")
+        if not isinstance(runtime_bundle_check, dict) or runtime_bundle_check.get("status") != "PASS":
             identity_errors.append("served_asset_identity_unverified")
 
         evidence = _base_evidence(repo_root, base_url, source, status="PASS" if not identity_errors else "FAIL")
@@ -1613,8 +1690,11 @@ def run_harness(
                 "identityErrors": identity_errors,
             }
         )
-        evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
+        evidence["evidencePath"] = str(run_context.evidence_path)
         evidence["run"]["evidencePath"] = evidence["evidencePath"]
+        if sanitize_for_release:
+            evidence = sanitize_release_evidence(evidence, repo_root)
+        write_evidence(evidence_dir, evidence, run_context=run_context)
         return (EXIT_OK if not identity_errors else EXIT_FAILED), evidence
     finally:
         if stop_runtime_after:
@@ -1664,6 +1744,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--stop-runtime-after", action="store_true", help="Stop only the runtime started by this harness.")
     parser.add_argument("--readiness-timeout", type=float, default=DEFAULT_READINESS_TIMEOUT_SECONDS)
+    parser.add_argument(
+        "--expected-environment-fingerprint",
+        default=None,
+        help="Fail when the managed environment fingerprint differs from the qualified candidate.",
+    )
+    parser.add_argument(
+        "--sanitize-release-evidence",
+        action="store_true",
+        help="Normalize reviewed local roots and reject remaining private user paths in release evidence.",
+    )
     parser.add_argument("--json", action="store_true", help="Print full JSON evidence to stdout.")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -1744,6 +1834,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         prepare_uat_accounts=bool(args.prepare_uat_accounts),
         stop_runtime_after=bool(args.stop_runtime_after),
         readiness_timeout_seconds=float(args.readiness_timeout),
+        expected_environment_fingerprint=args.expected_environment_fingerprint,
+        sanitize_for_release=bool(args.sanitize_release_evidence),
     )
 
     if args.json:
@@ -1759,6 +1851,7 @@ def _base_evidence(repo_root: Path, base_url: str, source: Mapping[str, Any], *,
         "contract": "wolfystock_uat_runtime_harness_v1",
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "status": status,
+        "environmentFingerprint": str(os.environ.get("WOLFYSTOCK_ENV_FINGERPRINT") or "") or None,
         "worktreePath": str(repo_root),
         "baseUrl": base_url,
         "source": dict(source),

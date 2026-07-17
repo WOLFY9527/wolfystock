@@ -9,6 +9,11 @@ BASE_REF="${RELEASE_SECRET_SCAN_BASE_REF:-origin/main}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 LOCAL_ONLY=0
 FILES_FROM=""
+CANDIDATE_REF=""
+EVIDENCE_PATH=""
+EVIDENCE_ROOTS=()
+SCANNED_COUNT=0
+PRIVATE_PATH_FINDINGS=0
 
 cd "${ROOT_DIR}"
 
@@ -21,12 +26,16 @@ WORKTREE_FILES="${TMP_DIR}/worktree_files.txt"
 UNTRACKED_FILES="${TMP_DIR}/untracked_files.txt"
 FINDINGS="${TMP_DIR}/findings.txt"
 FILES_FROM_LIST="${TMP_DIR}/files_from.txt"
+CANDIDATE_FILES="${TMP_DIR}/candidate_files.txt"
+CANDIDATE_TREE="${TMP_DIR}/candidate-tree"
+CANDIDATE_SUMMARY="${TMP_DIR}/candidate-summary.json"
 
-touch "${BRANCH_FILES}" "${STAGED_FILES}" "${WORKTREE_FILES}" "${UNTRACKED_FILES}" "${FINDINGS}" "${FILES_FROM_LIST}"
+touch "${BRANCH_FILES}" "${STAGED_FILES}" "${WORKTREE_FILES}" "${UNTRACKED_FILES}" "${FINDINGS}" "${FILES_FROM_LIST}" "${CANDIDATE_FILES}"
 
 usage() {
   cat <<'EOF'
-Usage: scripts/release_secret_scan.sh [--local-only] [--files-from PATH] [--base-ref REF]
+Usage: scripts/release_secret_scan.sh [--candidate-ref REF] [--evidence-root PATH]... [--evidence PATH]
+       scripts/release_secret_scan.sh [--local-only] [--files-from PATH] [--base-ref REF]
 
 Conservative release secret scan. By default, scans committed branch changes from
 the release base ref plus staged, unstaged, and untracked text files. Findings are
@@ -34,6 +43,13 @@ redacted; inspect the reported file and line locally.
 
 Options:
   --local-only       Scan only staged, unstaged, and untracked files.
+  --candidate-ref REF
+                     Scan every eligible tracked text file in the exact commit.
+                     This is the required release mode and ignores untracked files.
+  --evidence PATH    Write sanitized JSON evidence with commit and file count.
+  --evidence-root PATH
+                     Recursively scan one generated candidate/evidence tree,
+                     including nested tar/gzip/OCI members. May be repeated.
   --files-from PATH  Scan only newline-delimited paths from PATH ("-" for stdin).
                      Paths are still filtered to skip generated/static/binary,
                      build, cache, dependency, and other non-source artifacts.
@@ -47,6 +63,30 @@ while [[ "$#" -gt 0 ]]; do
     --local-only)
       LOCAL_ONLY=1
       shift
+      ;;
+    --candidate-ref)
+      if [[ "$#" -lt 2 ]]; then
+        echo "[FAIL] --candidate-ref requires a ref" >&2
+        exit 2
+      fi
+      CANDIDATE_REF="$2"
+      shift 2
+      ;;
+    --evidence)
+      if [[ "$#" -lt 2 ]]; then
+        echo "[FAIL] --evidence requires a path" >&2
+        exit 2
+      fi
+      EVIDENCE_PATH="$2"
+      shift 2
+      ;;
+    --evidence-root)
+      if [[ "$#" -lt 2 ]]; then
+        echo "[FAIL] --evidence-root requires a path" >&2
+        exit 2
+      fi
+      EVIDENCE_ROOTS+=("$2")
+      shift 2
       ;;
     --files-from)
       if [[ "$#" -lt 2 ]]; then
@@ -75,6 +115,11 @@ while [[ "$#" -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "${CANDIDATE_REF}" && ( "${LOCAL_ONLY}" -eq 1 || -n "${FILES_FROM}" ) ]]; then
+  echo "[FAIL] --candidate-ref cannot be combined with --local-only or --files-from" >&2
+  exit 2
+fi
 
 print_step() {
   echo "==> release-secret-scan: $1"
@@ -146,6 +191,7 @@ is_safe_placeholder_value() {
   value="$(normalize_value "$1")"
   local lower
   lower="$(printf '%s' "${value}" | tr '[:upper:]' '[:lower:]')"
+  local github_expression_re='^\$\{\{[[:space:]]*(github|secrets|inputs|needs|steps|env|vars)\.[A-Za-z_][A-Za-z0-9_.-]*[[:space:]]*\}\}$'
 
   [[ -z "${value}" ]] && return 0
   [[ "${lower}" == "none" || "${lower}" == "null" || "${lower}" == "nil" ]] && return 0
@@ -159,6 +205,7 @@ is_safe_placeholder_value() {
   [[ "${lower}" == *"unit-test"* || "${lower}" == *"test-only"* || "${lower}" == *"not-a-real"* ]] && return 0
   [[ "${lower}" == *"redacted"* || "${lower}" == *"masked"* || "${lower}" == "<"*">" ]] && return 0
   [[ "${value}" =~ ^[$][{]?[A-Za-z_][A-Za-z0-9_]*[}]?$ ]] && return 0
+  [[ "${value}" =~ ${github_expression_re} ]] && return 0
   [[ "${value}" =~ ^[*xX_./-]{4,}$ ]] && return 0
 
   return 1
@@ -240,6 +287,29 @@ record_finding() {
   printf '[FAIL] %s:%s [%s] %s\n' "${file_path}" "${line_no}" "${source_label}" "${rule}" >>"${FINDINGS}"
 }
 
+private_path_scan_applies() {
+  local file_path="$1"
+  case "${file_path}" in
+    tests/*|*/tests/*|*/__tests__/*|*.test.*|*.spec.*)
+      return 1
+      ;;
+    main.py|server.py|api/*|src/*|data_provider/*|bot/*|apps/dsa-web/src/*|apps/dsa-desktop/src/*|docker/*|.github/workflows/*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+is_reviewed_topology_test_id() {
+  local file_path="$1"
+  local trimmed_line="$2"
+
+  [[ "${file_path}" == "validation/domain_test_topology.json" ]] || return 1
+  [[ "${trimmed_line}" =~ ^\"id\"[[:space:]]*:[[:space:]]*\" ]] && return 0
+  [[ "${trimmed_line}" =~ ^\"tests/.*\",?$ ]] && return 0
+  return 1
+}
+
 scan_line() {
   local source_label="$1"
   local file_path="$2"
@@ -250,10 +320,16 @@ scan_line() {
 
   [[ -z "${trimmed_line}" ]] && return 0
   [[ "${trimmed_line}" == \#* || "${trimmed_line}" == //* ]] && return 0
+  is_reviewed_topology_test_id "${file_path}" "${trimmed_line}" && return 0
 
   if [[ "${line}" =~ BEGIN[[:space:]]+(RSA[[:space:]]+|DSA[[:space:]]+|EC[[:space:]]+|OPENSSH[[:space:]]+|PGP[[:space:]]+)?PRIVATE[[:space:]]+KEY ]]; then
     record_finding "${source_label}" "${file_path}" "${line_no}" "private key material"
     return 0
+  fi
+
+  if private_path_scan_applies "${file_path}" && [[ "${line}" =~ /Users/[^/[:space:]\"\']+|/home/[^/[:space:]\"\']+|[A-Za-z]:\\Users\\[^\\[:space:]\"\']+ ]]; then
+    record_finding "${source_label}" "${file_path}" "${line_no}" "private absolute path"
+    PRIVATE_PATH_FINDINGS=$((PRIVATE_PATH_FINDINGS + 1))
   fi
 
   if [[ "${line}" =~ (^|[^A-Za-z0-9_])(AKIA|ASIA)[0-9A-Z]{16}([^A-Za-z0-9_]|$) ]]; then
@@ -282,7 +358,7 @@ scan_line() {
     fi
   fi
 
-  if [[ "${line}" =~ (^|[^A-Za-z0-9_.-])([A-Za-z0-9_.-]*(api[_-]?key|token|secret|password|passwd|credential|credentials|client[_-]?secret|access[_-]?key|secret[_-]?key|private[_-]?key|session[_-]?token|bearer)[A-Za-z0-9_.-]*)[[:space:]]*[:=][[:space:]]*([^[:space:]#][^#]*) ]]; then
+  if [[ "${line}" =~ (^|[^A-Za-z0-9_.-])\"?([A-Za-z0-9_.-]*(api[_-]?key|token|secret|password|passwd|credential|credentials|client[_-]?secret|access[_-]?key|secret[_-]?key|private[_-]?key|session[_-]?token|bearer)[A-Za-z0-9_.-]*)\"?[[:space:]]*[:=][[:space:]]*([^[:space:]#][^#]*) ]]; then
     local key="${BASH_REMATCH[2]}"
     local value="${BASH_REMATCH[4]}"
     local lower_key
@@ -322,6 +398,8 @@ scan_file_content() {
     return 0
   fi
 
+  SCANNED_COUNT=$((SCANNED_COUNT + 1))
+
   local line_no=0
   local line
   while IFS= read -r line || [[ -n "${line}" ]]; do
@@ -354,6 +432,21 @@ scan_git_blob() {
 collect_changed_files() {
   print_step "collect changed files"
 
+  if [[ -n "${CANDIDATE_REF}" ]]; then
+    local candidate_commit
+    if ! candidate_commit="$(git rev-parse --verify "${CANDIDATE_REF}^{commit}" 2>/dev/null)"; then
+      echo "[FAIL] Candidate ref is not an available commit: ${CANDIDATE_REF}" >&2
+      exit 1
+    fi
+    git ls-tree -r --name-only "${candidate_commit}" >"${CANDIDATE_FILES}"
+    mkdir -p "${CANDIDATE_TREE}"
+    git archive "${candidate_commit}" | tar -xf - -C "${CANDIDATE_TREE}"
+    CANDIDATE_REF="${candidate_commit}"
+    echo "[INFO] Included tracked candidate tree at ${CANDIDATE_REF}"
+    echo "[INFO]   candidate tracked files: $(wc -l <"${CANDIDATE_FILES}" | tr -d ' ')"
+    return 0
+  fi
+
   if [[ -n "${FILES_FROM}" ]]; then
     collect_files --files-from "${FILES_FROM}" --existing >"${FILES_FROM_LIST}"
     echo "[INFO] Included explicit files from ${FILES_FROM}"
@@ -385,6 +478,25 @@ collect_changed_files() {
 scan_changed_files() {
   print_step "scan changed text files"
 
+  if [[ -n "${CANDIDATE_REF}" ]]; then
+    "${PYTHON_BIN}" "${ROOT_DIR}/scripts/release_secret_scan_candidate.py" \
+      --root "${CANDIDATE_TREE}" \
+      --files "${CANDIDATE_FILES}" \
+      --findings "${FINDINGS}" \
+      --summary "${CANDIDATE_SUMMARY}"
+    read -r SCANNED_COUNT PRIVATE_PATH_FINDINGS < <(
+      "${PYTHON_BIN}" - "${CANDIDATE_SUMMARY}" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+print(payload["fileCount"], payload["privatePathFindings"])
+PY
+    )
+    scan_evidence_roots
+    return 0
+  fi
+
   if [[ -n "${FILES_FROM}" ]]; then
     local file_path
     while IFS= read -r file_path; do
@@ -392,6 +504,7 @@ scan_changed_files() {
       [[ -f "${file_path}" ]] || continue
       scan_file_content "files-from" "${file_path}" "${file_path}"
     done <"${FILES_FROM_LIST}"
+    scan_evidence_roots
     return 0
   fi
 
@@ -417,6 +530,67 @@ scan_changed_files() {
     [[ -f "${file_path}" ]] || continue
     scan_file_content "untracked" "${file_path}" "${file_path}"
   done <"${UNTRACKED_FILES}"
+  scan_evidence_roots
+}
+
+scan_evidence_roots() {
+  if [[ "${#EVIDENCE_ROOTS[@]}" -eq 0 ]]; then
+    return 0
+  fi
+  local index=0
+  local root
+  for root in "${EVIDENCE_ROOTS[@]}"; do
+    index=$((index + 1))
+    local extra_findings="${TMP_DIR}/evidence-findings-${index}.txt"
+    local extra_summary="${TMP_DIR}/evidence-summary-${index}.json"
+    : >"${extra_findings}"
+    "${PYTHON_BIN}" "${ROOT_DIR}/scripts/release_secret_scan_candidate.py" \
+      --root "${root}" \
+      --scan-tree \
+      --findings "${extra_findings}" \
+      --summary "${extra_summary}"
+    cat "${extra_findings}" >>"${FINDINGS}"
+    local extra_count
+    local extra_private
+    read -r extra_count extra_private < <(
+      "${PYTHON_BIN}" - "${extra_summary}" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+print(payload["fileCount"], payload["privatePathFindings"])
+PY
+    )
+    SCANNED_COUNT=$((SCANNED_COUNT + extra_count))
+    PRIVATE_PATH_FINDINGS=$((PRIVATE_PATH_FINDINGS + extra_private))
+  done
+}
+
+write_evidence() {
+  local status="$1"
+  [[ -n "${EVIDENCE_PATH}" ]] || return 0
+  local scanned_commit
+  scanned_commit="${CANDIDATE_REF:-$(git rev-parse HEAD 2>/dev/null || true)}"
+  local scan_mode="local"
+  [[ -n "${CANDIDATE_REF}" ]] && scan_mode="candidate"
+  "${PYTHON_BIN}" - "${EVIDENCE_PATH}" "${status}" "${scanned_commit}" "${SCANNED_COUNT}" "${PRIVATE_PATH_FINDINGS}" "${scan_mode}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path, status, commit, file_count, private_findings, mode = sys.argv[1:7]
+payload = {
+    "schemaVersion": "wolfystock_release_secret_scan_v1",
+    "mode": mode,
+    "status": status,
+    "scannedCommit": commit or None,
+    "fileCount": int(file_count),
+    "privatePathScan": "PASS" if int(private_findings) == 0 else "FAIL",
+}
+output = Path(path)
+output.parent.mkdir(parents=True, exist_ok=True)
+output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
 }
 
 print_step "preflight"
@@ -424,6 +598,8 @@ echo "[INFO] Root: ${ROOT_DIR}"
 echo "[INFO] Base ref: ${BASE_REF}"
 if [[ "${LOCAL_ONLY}" -eq 1 ]]; then
   echo "[INFO] Mode: local-only"
+elif [[ -n "${CANDIDATE_REF}" ]]; then
+  echo "[INFO] Mode: candidate"
 elif [[ -n "${FILES_FROM}" ]]; then
   echo "[INFO] Mode: files-from"
 else
@@ -435,12 +611,22 @@ echo "[INFO] Findings are redacted; inspect the reported file and line locally."
 collect_changed_files
 scan_changed_files
 
+echo "[INFO] Scanned text files: ${SCANNED_COUNT}"
+
+if [[ "${SCANNED_COUNT}" -eq 0 ]]; then
+  write_evidence "FAIL"
+  echo "[FAIL] Secret scan selected zero files." >&2
+  exit 1
+fi
+
 if [[ -s "${FINDINGS}" ]]; then
   print_step "findings"
   sort -u "${FINDINGS}"
+  write_evidence "FAIL"
   echo "[FAIL] High-confidence secret patterns were found in changed files." >&2
   exit 1
 fi
 
 print_step "summary"
+write_evidence "PASS"
 echo "[PASS] No high-confidence secret patterns found in changed text files."

@@ -561,6 +561,17 @@ def test_build_uat_runtime_env_removes_proxy_vars_and_sets_isolation_flags() -> 
     assert "localhost" in env["NO_PROXY"]
 
 
+def test_find_system_command_uses_reviewed_absolute_fallback(monkeypatch, tmp_path: Path) -> None:
+    executable = tmp_path / "lsof"
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o755)
+    monkeypatch.setattr(harness.shutil, "which", lambda _name: None)
+
+    resolved = harness.find_system_command("lsof", extra_candidates=(executable,))
+
+    assert resolved == str(executable)
+
+
 def test_direct_http_client_reads_full_raw_response_bytes() -> None:
     body = b"x" * (1024 * 1024 + 37)
     read_args: list[tuple[object, ...]] = []
@@ -724,7 +735,9 @@ def test_run_harness_fails_closed_for_invalid_prebuilt_web_artifact(monkeypatch,
 
 def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(monkeypatch, tmp_path: Path) -> None:
     _write_static(tmp_path)
+    monkeypatch.setenv("WOLFYSTOCK_ENV_FINGERPRINT", "a" * 64)
     fake_process = _FakeProcess()
+    failed_process = _FakeProcess()
     monkeypatch.setattr(harness, "validate_source", lambda _repo_root, _expected_sha: _valid_source())
     monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
     monkeypatch.setattr(
@@ -743,17 +756,47 @@ def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(mo
     monkeypatch.setattr(harness, "run_frontend_build", lambda _repo_root: 0)
     monkeypatch.setattr(harness, "verify_frontend_static_build", lambda **_kwargs: _local_build())
     monkeypatch.setattr(harness, "read_backend_info", lambda _repo_root: object())
-    monkeypatch.setattr(harness, "start_runtime", lambda *_args, **_kwargs: fake_process)
+    processes = iter((fake_process, failed_process))
+    monkeypatch.setattr(harness, "start_runtime", lambda *_args, **_kwargs: next(processes))
     monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path.resolve()))
     monkeypatch.setattr(harness, "process_executable", lambda _pid: str(Path(sys.executable).resolve()))
     monkeypatch.setattr(harness, "process_command", lambda _pid: "python main.py --serve-only --host 127.0.0.1 --port 8000")
     monkeypatch.setattr(harness, "process_start_time", lambda _pid: "Sun Jul  5 00:00:00 2026")
     monkeypatch.setattr(harness, "DirectNoProxyHttpClient", lambda: _FakeClient())
-    monkeypatch.setattr(
-        harness,
-        "run_runtime_smoke",
-        lambda **_kwargs: {"checks": {"runtimeBundle": {"status": "PASS"}}, "summaryStatus": "PARTIAL"},
+    smoke_reports = iter(
+        (
+            {
+                "summaryStatus": "PASS",
+                "exitCode": 0,
+                "checks": {
+                    name: {"status": "PASS"}
+                    for name in (
+                        "localBuild",
+                        "runtimeBundle",
+                        "publicRoutes",
+                        "runtimeAuthMode",
+                        "authenticatedRoutes",
+                        "adminOpsStatus",
+                        "surfaceReadiness",
+                    )
+                },
+            },
+            {
+                "summaryStatus": "PARTIAL",
+                "exitCode": 1,
+                "checks": {
+                    "localBuild": {"status": "PASS"},
+                    "runtimeBundle": "PASS",
+                    "publicRoutes": {"status": "FAIL"},
+                    "runtimeAuthMode": {"status": "PASS"},
+                    "authenticatedRoutes": {"status": "PASS"},
+                    "adminOpsStatus": {"status": "PARTIAL"},
+                    "surfaceReadiness": {"status": "PASS"},
+                },
+            },
+        )
     )
+    monkeypatch.setattr(harness, "run_runtime_smoke", lambda **_kwargs: next(smoke_reports))
 
     exit_code, evidence = harness.run_harness(
         repo_root=tmp_path,
@@ -763,6 +806,7 @@ def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(mo
         evidence_dir=tmp_path / "output" / "runtime-verification",
         skip_build=True,
         stop_runtime_after=True,
+        expected_environment_fingerprint="a" * 64,
     )
 
     assert exit_code == 0
@@ -776,6 +820,7 @@ def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(mo
     assert Path(evidence["runtimeLog"]["path"]).name.startswith(evidence["run"]["runId"])
     assert evidence["frontendDependencyBootstrap"]["action"] == "skipped"
     assert evidence["status"] == "PASS"
+    assert evidence["environmentFingerprint"] == "a" * 64
     assert evidence["runtime"]["pid"] == 43210
     assert evidence["runtime"]["cwd"] == str(tmp_path.resolve())
     assert evidence["runtime"]["interpreter"]["status"] == "verified"
@@ -795,6 +840,52 @@ def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(mo
     assert written["contract"] == "wolfystock_uat_runtime_harness_v1"
     assert written["workbuddyHandoff"]["expectedGitSha"] == "45b6965d"
     assert written["run"]["evidencePath"] == evidence["evidencePath"]
+
+    failed_exit_code, failed_evidence = harness.run_harness(
+        repo_root=tmp_path,
+        expected_sha="45b6965d",
+        host="127.0.0.1",
+        port=8001,
+        evidence_dir=tmp_path / "output" / "runtime-verification-failed",
+        skip_build=True,
+        stop_runtime_after=True,
+        expected_environment_fingerprint="a" * 64,
+    )
+
+    assert failed_exit_code == 1
+    assert failed_process.terminated is True
+    assert failed_evidence["status"] == "FAIL"
+    assert "smoke_aggregate_not_pass" in failed_evidence["identityErrors"]
+    assert "smoke_runtimeBundle_not_pass" in failed_evidence["identityErrors"]
+    assert "served_asset_identity_unverified" in failed_evidence["identityErrors"]
+    assert "smoke_publicRoutes_not_pass" in failed_evidence["identityErrors"]
+    assert "smoke_adminOpsStatus_not_pass" in failed_evidence["identityErrors"]
+
+
+def test_release_evidence_sanitizer_normalizes_reviewed_roots_and_rejects_unknown_private_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "worktree"
+    cache_root = tmp_path / "cache"
+    repo_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setenv("WOLFYSTOCK_ENV_CACHE", str(cache_root))
+    payload = {
+        "cwd": str(repo_root),
+        "python": str(cache_root / "snapshots/python/bin/python"),
+        "home": str(Path.home() / "safe-local-file"),
+    }
+
+    sanitized = harness.sanitize_release_evidence(payload, repo_root)
+
+    assert sanitized == {
+        "cwd": "$WORKTREE",
+        "python": "$CACHE/snapshots/python/bin/python",
+        "home": "$HOME/safe-local-file",
+    }
+    with pytest.raises(ValueError, match="release_evidence_private_path_remaining"):
+        harness.sanitize_release_evidence({"cwd": "/Users/unreviewed/private"}, repo_root)
 
 
 def test_run_harness_fails_closed_for_wrong_process_cwd(monkeypatch, tmp_path: Path) -> None:

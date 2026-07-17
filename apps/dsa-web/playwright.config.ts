@@ -100,11 +100,19 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      testIgnore: '**/*.release.spec.ts',
       use: { ...devices['Desktop Chrome'], channel: 'chromium' },
     },
     {
       name: 'chromium-mobile',
+      testIgnore: '**/*.release.spec.ts',
       use: { ...devices['Pixel 5'], channel: 'chromium' },
+    },
+    {
+      name: 'release-real-runtime',
+      testMatch: '**/release-real-runtime.release.spec.ts',
+      retries: 0,
+      use: { ...devices['Desktop Chrome'], channel: 'chromium', trace: 'retain-on-failure' },
     },
   ],
 });

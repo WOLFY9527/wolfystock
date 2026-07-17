@@ -16,6 +16,7 @@ _SAFE_DSN = re.compile(
     r"^postgresql(?:\+[a-z0-9_]+)?://[^\s@]+@(?:localhost|127\.0\.0\.1):[0-9]+/"
     r"wolfystock_destructive_test_[a-z0-9_]+$"
 )
+_RELEASE_SHA = re.compile(r"^[0-9a-f]{40}$")
 
 
 @dataclass(frozen=True)
@@ -130,6 +131,24 @@ def project_test_environment(
     }
     if source.get("APP_ENV"):
         preserved["APP_ENV"] = source["APP_ENV"]
+    release_sha = source.get("WOLFYSTOCK_RELEASE_CANDIDATE_SHA")
+    if release_sha:
+        if _RELEASE_SHA.fullmatch(release_sha) is None:
+            raise EnvironmentFailure("release_control_invalid", "release candidate SHA must be a full lowercase SHA")
+        preserved["WOLFYSTOCK_RELEASE_CANDIDATE_SHA"] = release_sha
+    external_server = source.get("DSA_WEB_PLAYWRIGHT_EXTERNAL_SERVER")
+    if external_server:
+        if external_server != "1":
+            raise EnvironmentFailure("release_control_invalid", "external Playwright server mode must equal 1")
+        preserved["DSA_WEB_PLAYWRIGHT_EXTERNAL_SERVER"] = external_server
+    for name in ("PLAYWRIGHT_JSON_OUTPUT_NAME", "PLAYWRIGHT_OUTPUT_DIR"):
+        value = source.get(name)
+        if not value:
+            continue
+        path = Path(value)
+        if path.is_absolute() or ".." in path.parts:
+            raise EnvironmentFailure("release_control_invalid", f"{name} must be a repository-relative path")
+        preserved[name] = value
     preserved.update(
         {
             "PATH": os.pathsep.join((str(managed_python.parent), str(node_bin), "/usr/bin", "/bin")),

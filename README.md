@@ -181,7 +181,11 @@ npm run build
 
 - Backend (POSIX shell): `./scripts/ci_gate.sh`, or at minimum
   `python -m py_compile <changed_python_files>` plus focused tests.
-- Web: `cd apps/dsa-web && npm ci && npm run lint && npm run build`.
+- Web: after `./wolfy bootstrap --ensure`, run Vitest/lint through managed npm;
+  run typecheck and the production artifact build through
+  `./wolfy exec --profile test -- python scripts/web_build_artifact.py
+  <typecheck|build>`. These commands never write the immutable dependency
+  snapshot or install dependencies.
 - Desktop: build Web first, then build the Electron app when feasible.
 - AI/docs governance: `python scripts/build_ai_project_manual.py --check` and
   `python scripts/check_ai_assets.py`.
@@ -205,18 +209,19 @@ explicit CLI gates: `python -m pytest -m network --allow-test-network
 Local UAT runtime (POSIX shell / Git Bash):
 
 ```bash
-python scripts/uat_runtime_harness.py --expected-sha "$(git rev-parse HEAD)"
+./wolfy bootstrap --ensure
+./wolfy exec --profile test -- python scripts/uat_runtime_harness.py --expected-sha "$(git rev-parse HEAD)"
 ```
 
 Local UAT runtime (PowerShell):
 
 ```powershell
-python scripts/uat_runtime_harness.py --expected-sha "$(git rev-parse HEAD)"
+./wolfy bootstrap --ensure
+./wolfy exec --profile test -- python scripts/uat_runtime_harness.py --expected-sha "$(git rev-parse HEAD)"
 ```
 
 This canonical local harness validates a clean source tree and expected SHA,
-bootstraps missing Web toolchain dependencies through the deterministic
-`npm --prefix apps/dsa-web ci` path, builds `apps/dsa-web`, launches
+uses the verified Web dependency snapshot when invoked through `./wolfy`, builds `apps/dsa-web`, launches
 `main.py --serve-only` from the current worktree, checks localhost with an
 explicit no-proxy HTTP client, and writes run-scoped JSON evidence plus a
 per-run runtime log under `output/runtime-verification/`. It fails closed on
@@ -225,6 +230,21 @@ stale frontend asset identity, or non-WolfyStock HTML. The runtime it starts use
 `CRYPTO_REALTIME_ENABLED=false`, `WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS=true`,
 `WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED=false`, and
 `WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED=false`.
+
+### Qualified immutable release
+
+`.github/workflows/release.yml` is the sole publication authority. It builds
+one source/Web/multi-architecture OCI candidate, binds the exact source SHA,
+nested environment evidence, reviewed Python lock, Web build identity, and
+amd64/arm64 image digests, then records twelve explicit qualification gates.
+Missing, skipped, cancelled, neutral, unknown, or failed gates remain NO-GO.
+Promotion consumes the qualified manifest and copies the existing registry
+digest; it does not rebuild or resolve dependencies.
+
+The Electron desktop build is not in this qualified graph because its current
+legacy scripts still install dependencies independently. Desktop publication
+must remain disabled until those inputs are owned by `./wolfy`; the release
+workflow does not preserve that obsolete second dependency authority.
 
 To verify a current run for WorkBuddy or another browser validator, use the
 read-only machine-readable preflight against the run evidence:

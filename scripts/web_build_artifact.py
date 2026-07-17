@@ -14,7 +14,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Sequence
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -199,9 +199,43 @@ def generate_manifest(repo_root: Path | str) -> ArtifactResult:
     return ArtifactResult(True, manifest)
 
 
+def run_typecheck(repo_root: Path | str) -> ArtifactResult:
+    repo = Path(repo_root).resolve()
+    commands = (
+        (
+            "npm",
+            "--prefix",
+            str(WEB_RELATIVE),
+            "exec",
+            "--",
+            "tsc",
+            "--noEmit",
+            "-p",
+            str(WEB_RELATIVE / "tsconfig.app.json"),
+        ),
+        (
+            "npm",
+            "--prefix",
+            str(WEB_RELATIVE),
+            "exec",
+            "--",
+            "tsc",
+            "--noEmit",
+            "-p",
+            str(WEB_RELATIVE / "tsconfig.node.json"),
+        ),
+    )
+    command_log: list[dict[str, Any]] = []
+    for command in commands:
+        result = _run(repo, *command, capture=False)
+        command_log.append({"command": " ".join(command), "exitCode": result.returncode})
+        if result.returncode != 0:
+            return ArtifactResult(False, {"commands": command_log}, ["web_typecheck_failed"])
+    return ArtifactResult(True, {"commands": command_log})
+
+
 def build_artifact(repo_root: Path | str, artifact_path: Path | str | None = None) -> ArtifactResult:
     repo = Path(repo_root).resolve()
-    web_root = repo / WEB_RELATIVE
     static_root = repo / STATIC_RELATIVE
     artifact = Path(artifact_path) if artifact_path else static_root / ARTIFACT_FILENAME
     candidate, errors = _candidate(repo)
@@ -211,11 +245,11 @@ def build_artifact(repo_root: Path | str, artifact_path: Path | str | None = Non
         return ArtifactResult(False, {"candidate": candidate, "dependencyIntegrity": integrity}, sorted(set(errors)))
 
     _make_writable(static_root)
-    commands = (
-        ("npm", "--prefix", str(WEB_RELATIVE), "run", "typecheck"),
-        ("npm", "--prefix", str(WEB_RELATIVE), "run", "build:bundle"),
-    )
-    command_log: list[dict[str, Any]] = []
+    typecheck = run_typecheck(repo)
+    command_log = list(typecheck.payload.get("commands", []))
+    if not typecheck.ok:
+        return ArtifactResult(False, {"candidate": candidate, "commands": command_log}, typecheck.error_codes)
+    commands = (("npm", "--prefix", str(WEB_RELATIVE), "run", "build:bundle"),)
     for command in commands:
         result = _run(repo, *command, capture=False)
         command_log.append({"command": " ".join(command), "exitCode": result.returncode})
@@ -291,7 +325,7 @@ def verify_artifact(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Create or verify an immutable Web build artifact.")
-    parser.add_argument("action", choices=("build", "manifest", "verify"))
+    parser.add_argument("action", choices=("build", "manifest", "typecheck", "verify"))
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--artifact", type=Path, default=None)
     parser.add_argument("--expected-sha", default=None)
@@ -302,6 +336,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = build_artifact(args.repo_root, artifact)
     elif args.action == "manifest":
         result = generate_manifest(args.repo_root)
+    elif args.action == "typecheck":
+        result = run_typecheck(args.repo_root)
     else:
         result = verify_artifact(args.repo_root, artifact, expected_sha=args.expected_sha)
     if args.json:

@@ -66,6 +66,31 @@ def test_app_env_is_preserved_only_when_explicitly_present(tmp_path: Path) -> No
     assert project_test_environment({"APP_ENV": "production"}, **common)["APP_ENV"] == "production"
 
 
+def test_release_projection_preserves_only_non_secret_identity_controls(tmp_path: Path) -> None:
+    context = create_run_context(tmp_path, run_id="run-release-controls")
+    source = {
+        "WOLFYSTOCK_RELEASE_CANDIDATE_SHA": "a" * 40,
+        "DSA_WEB_PLAYWRIGHT_EXTERNAL_SERVER": "1",
+        "PLAYWRIGHT_JSON_OUTPUT_NAME": "output/release/playwright.json",
+        "PLAYWRIGHT_OUTPUT_DIR": "output/release/results",
+        "DOCKERHUB_TOKEN": "must-not-survive",
+    }
+
+    projected = project_test_environment(
+        source,
+        context,
+        managed_python=Path("/managed/.venv/bin/python"),
+        node_bin=Path("/managed/node/bin"),
+        command=["npm", "exec", "playwright"],
+    )
+
+    assert projected["WOLFYSTOCK_RELEASE_CANDIDATE_SHA"] == "a" * 40
+    assert projected["DSA_WEB_PLAYWRIGHT_EXTERNAL_SERVER"] == "1"
+    assert projected["PLAYWRIGHT_JSON_OUTPUT_NAME"] == "output/release/playwright.json"
+    assert projected["PLAYWRIGHT_OUTPUT_DIR"] == "output/release/results"
+    assert "DOCKERHUB_TOKEN" not in projected
+
+
 def test_destructive_postgres_dsn_requires_full_explicit_command_contract(tmp_path: Path) -> None:
     context = create_run_context(tmp_path, run_id="run-pg")
     source = {

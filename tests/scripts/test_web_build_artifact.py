@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 from scripts import web_build_artifact as artifact
@@ -68,6 +69,47 @@ def test_manifest_regeneration_is_deterministic(monkeypatch, tmp_path: Path) -> 
     assert first.ok is True
     assert second.ok is True
     assert first.payload == second.payload
+
+
+def test_release_typecheck_uses_non_incremental_configs_without_snapshot_writes(monkeypatch, tmp_path: Path) -> None:
+    repo, _artifact_path = _write_fixture(tmp_path)
+    commands: list[list[str]] = []
+
+    def run(_repo: Path, *args: str, capture: bool = True) -> subprocess.CompletedProcess[str]:
+        commands.append(list(args))
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(artifact, "_run", run)
+
+    result = artifact.run_typecheck(repo)
+
+    assert result.ok is True
+    assert commands == [
+        [
+            "npm",
+            "--prefix",
+            "apps/dsa-web",
+            "exec",
+            "--",
+            "tsc",
+            "--noEmit",
+            "-p",
+            "apps/dsa-web/tsconfig.app.json",
+        ],
+        [
+            "npm",
+            "--prefix",
+            "apps/dsa-web",
+            "exec",
+            "--",
+            "tsc",
+            "--noEmit",
+            "-p",
+            "apps/dsa-web/tsconfig.node.json",
+        ],
+    ]
+    assert all("node_modules/.tmp" not in " ".join(command) for command in commands)
+    assert str(repo) not in json.dumps(result.payload)
 
 
 def test_verify_artifact_rejects_dirty_tree_and_wrong_sha(monkeypatch, tmp_path: Path) -> None:

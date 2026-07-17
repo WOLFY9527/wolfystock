@@ -1,0 +1,501 @@
+name: Qualified Immutable Release Promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing annotated semver tag to qualify and promote
+        required: true
+        type: string
+      operator_evidence_run_id:
+        description: Run containing release-operator-evidence-<candidate SHA>
+        required: true
+        type: string
+
+concurrency:
+  group: qualified-release-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  identity:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.identity.outputs.sha }}
+      tag: ${{ steps.identity.outputs.tag }}
+      tag_object: ${{ steps.identity.outputs.tag_object }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Resolve immutable annotated release identity
+        id: identity
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          OPERATOR_EVIDENCE_RUN_ID: ${{ inputs.operator_evidence_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "${OPERATOR_EVIDENCE_RUN_ID}" =~ ^[0-9]+$ ]]
+          git fetch origin main --tags --force
+          test "$(git cat-file -t "refs/tags/${RELEASE_TAG}")" = tag
+          sha="$(git rev-list -n 1 "refs/tags/${RELEASE_TAG}")"
+          tag_object="$(git rev-parse "refs/tags/${RELEASE_TAG}")"
+          git merge-base --is-ancestor "${sha}" origin/main
+          echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "tag_object=${tag_object}" >> "${GITHUB_OUTPUT}"
+
+  build-candidate:
+    needs: identity
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      candidateDigest: ${{ steps.manifest.outputs.candidateDigest }}
+      imageIndexDigest: ${{ steps.manifest.outputs.imageIndexDigest }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.identity.outputs.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Online managed candidate bootstrap
+        run: |
+          set -euo pipefail
+          mkdir -p dist/candidate dist/build-evidence
+          ./wolfy lock python --check > dist/build-evidence/python-lock.json
+          ./wolfy bootstrap --ensure
+      - name: Capture nested environment evidence
+        run: |
+          set -euo pipefail
+          ./wolfy qualify-env --output dist/build-evidence/environment.json
+          ./wolfy exec --profile test -- python - <<'PY'
+          import json
+          evidence = json.load(open("dist/build-evidence/environment.json", encoding="utf-8"))
+          assert evidence["status"] == "PASS"
+          assert evidence["environmentEvidence"]["operational"]["bootstrapNetworkUsed"] is False
+          PY
+      - name: Build source and Web candidate once
+        env:
+          CANDIDATE_SHA: ${{ needs.identity.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git archive --format=tar --prefix="wolfystock-${CANDIDATE_SHA}/" "${CANDIDATE_SHA}" | gzip -n > dist/candidate/source.tar.gz
+          ./wolfy exec --profile test -- python scripts/web_build_artifact.py build --expected-sha "${CANDIDATE_SHA}"
+          ./wolfy exec --profile test -- python scripts/web_build_artifact.py verify --expected-sha "${CANDIDATE_SHA}" --json > dist/build-evidence/web-build.json
+          tar -czf dist/candidate/web-static.tar.gz -C static .
+      - name: Build multi-platform image candidate once
+        env:
+          CANDIDATE_SHA: ${{ needs.identity.outputs.sha }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          candidate_tag="candidate-${CANDIDATE_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --file docker/Dockerfile \
+            --tag "${image}:${candidate_tag}" \
+            --metadata-file dist/build-evidence/docker-metadata.json \
+            --output type=registry \
+            --output type=oci,dest=dist/candidate/docker-multiarch.oci.tar \
+            .
+          index_digest="$(jq -er '."containerimage.digest"' dist/build-evidence/docker-metadata.json)"
+          ./wolfy exec --profile test -- python scripts/release_candidate.py inspect-image \
+            --archive dist/candidate/docker-multiarch.oci.tar \
+            --source-reference "${image}@${index_digest}" \
+            --output dist/build-evidence/image.json
+      - name: Assemble immutable candidate graph
+        id: manifest
+        env:
+          CANDIDATE_SHA: ${{ needs.identity.outputs.sha }}
+          RELEASE_TAG: ${{ needs.identity.outputs.tag }}
+          TAG_OBJECT: ${{ needs.identity.outputs.tag_object }}
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg workflowRef "${GITHUB_WORKFLOW_REF}" \
+            --arg workflowSha "${CANDIDATE_SHA}" \
+            --arg runId "${GITHUB_RUN_ID}" \
+            --arg runAttempt "${GITHUB_RUN_ATTEMPT}" \
+            --arg releaseTag "${RELEASE_TAG}" \
+            --arg tagObjectSha "${TAG_OBJECT}" \
+            '{repository:$repository,workflowRef:$workflowRef,workflowSha:$workflowSha,runId:$runId,runAttempt:$runAttempt,releaseTag:$releaseTag,tagObjectSha:$tagObjectSha}' \
+            > dist/build-evidence/workflow.json
+          ./wolfy exec --profile test -- python scripts/release_candidate.py build \
+            --commit-sha "${CANDIDATE_SHA}" \
+            --environment-evidence dist/build-evidence/environment.json \
+            --python-lock-report dist/build-evidence/python-lock.json \
+            --web-build-report dist/build-evidence/web-build.json \
+            --image-evidence dist/build-evidence/image.json \
+            --workflow-identity dist/build-evidence/workflow.json \
+            --artifact source.tar.gz=dist/candidate/source.tar.gz \
+            --artifact web-static.tar.gz=dist/candidate/web-static.tar.gz \
+            --artifact docker-multiarch.oci.tar=dist/candidate/docker-multiarch.oci.tar \
+            --output dist/candidate/release-candidate.json
+          ./wolfy exec --profile test -- python scripts/release_candidate.py verify \
+            --manifest dist/candidate/release-candidate.json \
+            --artifact-dir dist/candidate \
+            --expected-sha "${CANDIDATE_SHA}"
+          candidate_digest="$(jq -er '.candidateDigest' dist/candidate/release-candidate.json)"
+          image_digest="$(jq -er '.images.indexDigest' dist/candidate/release-candidate.json)"
+          echo "candidateDigest=${candidate_digest}" >> "${GITHUB_OUTPUT}"
+          echo "imageIndexDigest=${image_digest}" >> "${GITHUB_OUTPUT}"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: release-candidate-${{ needs.identity.outputs.sha }}
+          path: dist/candidate/*
+          if-no-files-found: error
+          retention-days: 30
+
+  qualification:
+    if: always()
+    needs: [identity, build-candidate]
+    runs-on: ubuntu-latest
+    environment: release-approval
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.identity.outputs.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-candidate-${{ needs.identity.outputs.sha }}
+          path: output/release/candidate
+      - name: Online qualification bootstrap
+        run: |
+          set -euo pipefail
+          ./wolfy bootstrap --ensure
+          ./wolfy exec --profile test -- bash -c 'cd apps/dsa-web && export PLAYWRIGHT_BROWSERS_PATH="$PWD/../../output/release/playwright-browsers" && npm exec -- playwright install chromium'
+      - name: Capture and match qualification environment
+        env:
+          CANDIDATE_SHA: ${{ needs.identity.outputs.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p output/release/evidence output/release/raw output/release/qualification
+          ./wolfy lock python --check > output/release/python-lock.json
+          ./wolfy qualify-env --output output/release/environment.json
+          ./wolfy exec --profile test -- python scripts/release_candidate.py verify \
+            --manifest output/release/candidate/release-candidate.json \
+            --artifact-dir output/release/candidate \
+            --expected-sha "${CANDIDATE_SHA}" \
+            --environment-evidence output/release/environment.json \
+            --python-lock-report output/release/python-lock.json
+          mkdir -p static
+          tar -xzf output/release/candidate/web-static.tar.gz -C static
+      - name: Initialize all twelve gates as FAIL
+        run: |
+          set -euo pipefail
+          for gate in backend-canonical authoritative-topology full-vitest frontend-lint frontend-typecheck production-build playwright-real-runtime runtime-uat auth-rbac operator-evidence secret-private-path-scan artifact-provenance; do
+            ./wolfy exec --profile test -- python scripts/release_gate_summary.py record \
+              --candidate output/release/candidate/release-candidate.json \
+              --gate-id "${gate}" \
+              --status FAIL \
+              --output "output/release/evidence/${gate}.json"
+          done
+      - name: Gate - backend-canonical
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ./scripts/ci_gate.sh
+          ./wolfy exec --profile test -- python scripts/release_gate_summary.py record --candidate output/release/candidate/release-candidate.json --gate-id backend-canonical --detail commandExitCode=0 --output output/release/evidence/backend-canonical.json
+      - name: Gate - authoritative-topology
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ./wolfy exec --profile test -- python scripts/domain_test_topology.py verify-all
+          ./wolfy exec --profile test -- python scripts/release_gate_summary.py record --candidate output/release/candidate/release-candidate.json --gate-id authoritative-topology --detail commandExitCode=0 --output output/release/evidence/authoritative-topology.json
+      - name: Gate - full-vitest
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ./wolfy exec --profile test -- npm --prefix apps/dsa-web test -- --maxWorkers=1
+          ./wolfy exec --profile test -- python scripts/release_gate_summary.py record --candidate output/release/candidate/release-candidate.json --gate-id full-vitest --detail commandExitCode=0 --output output/release/evidence/full-vitest.json
+      - name: Gate - frontend-lint
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ./wolfy exec --profile test -- npm --prefix apps/dsa-web run lint
+          ./wolfy exec --profile test -- python scripts/release_gate_summary.py record --candidate output/release/candidate/release-candidate.json --gate-id frontend-lint --detail commandExitCode=0 --output output/release/evidence/frontend-lint.json
+      - name: Gate - frontend-typecheck
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ./wolfy exec --profile test -- python scripts/web_build_artifact.py typecheck
+          ./wolfy exec --profile test -- python scripts/release_gate_summary.py record --candidate output/release/candidate/release-candidate.json --gate-id frontend-typecheck --detail commandExitCode=0 --output output/release/evidence/frontend-typecheck.json
+      - name: Gate - production-build
+        continue-on-error: true
+        env:
+          CANDIDATE_SHA: ${{ needs.identity.outputs.sha }}
+        run: |
+          set -euo pipefail
+          ./wolfy exec --profile test -- python scripts/web_build_artifact.py verify --expected-sha "${CANDIDATE_SHA}" --json > output/release/raw/web-build.json
+          ./wolfy exec --profile test -- python scripts/release_gate_summary.py record --candidate output/release/candidate/release-candidate.json --gate-id production-build --source-report output/release/raw/web-build.json --output output/release/evidence/production-build.json
+      - name: Gate - playwright-real-runtime
+        continue-on-error: true
+        env:
+          DSA_WEB_PLAYWRIGHT_EXTERNAL_SERVER: '1'
+          PLAYWRIGHT_JSON_OUTPUT_NAME: output/release/raw/playwright.json
+          PLAYWRIGHT_OUTPUT_DIR: output/release/raw/playwright-results
+          WOLFYSTOCK_RELEASE_CANDIDATE_SHA: ${{ needs.identity.outputs.sha }}
+        run: |
+          set -euo pipefail
+          ./wolfy exec --profile test -- bash -c 'cd apps/dsa-web && export PLAYWRIGHT_BROWSERS_PATH="$PWD/../../output/release/playwright-browsers" && npm exec -- playwright test --project=release-real-runtime --reporter=json'
+          ./wolfy exec --profile test -- python scripts/release_gate_summary.py record --candidate output/release/candidate/release-candidate.json --gate-id playwright-real-runtime --source-report output/release/raw/playwright.json --browser-spec apps/dsa-web/e2e/release-real-runtime.release.spec.ts --output output/release/evidence/playwright-real-runtime.json
+      - name: Gate - runtime-uat
+        continue-on-error: true
+        env:
+          CANDIDATE_SHA: ${{ needs.identity.outputs.sha }}
+        run: |
+          set -euo pipefail
+          environment_fingerprint="$(jq -er '.environment.fingerprint' output/release/candidate/release-candidate.json)"
+          ./wolfy exec --profile test -- bash -c '
+            set -euo pipefail
+            candidate_sha="$1"
+            environment_fingerprint="$2"
+            runtime_dir="$(mktemp -d)"
+            cleanup() { rm -rf "${runtime_dir}"; }
+            trap cleanup EXIT
+            export ADMIN_AUTH_ENABLED=false
+            export APP_ENV=uat
+            export DATABASE_PATH="${runtime_dir}/release-uat.sqlite"
+            export ENV_FILE="${runtime_dir}/release-uat.env"
+            export LOG_DIR="${runtime_dir}/logs"
+            export POSTGRES_PHASE_A_URL=""
+            export WOLFYSTOCK_RELEASE_ADMIN_USERNAME=admin
+            export WOLFYSTOCK_RELEASE_ADMIN_PASSWORD="$(python -c "import secrets; print(secrets.token_urlsafe(32))")"
+            export WOLFYSTOCK_RELEASE_MEMBER_USERNAME=release_uat_member
+            export WOLFYSTOCK_RELEASE_MEMBER_PASSWORD="$(python -c "import secrets; print(secrets.token_urlsafe(32))")"
+            printf "%s\n" \
+              "APP_ENV=uat" \
+              "ADMIN_AUTH_ENABLED=false" \
+              "CRYPTO_REALTIME_ENABLED=false" \
+              "WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS=true" \
+              "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED=false" \
+              "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED=false" \
+              > "${ENV_FILE}"
+            python scripts/release_runtime_fixture.py > output/release/raw/runtime-uat-fixture.json
+            python scripts/uat_runtime_harness.py \
+              --expected-sha "${candidate_sha}" \
+              --expected-environment-fingerprint "${environment_fingerprint}" \
+              --web-artifact static/.wolfystock-web-build-artifact.json \
+              --sanitize-release-evidence \
+              --stop-runtime-after \
+              --evidence-dir output/runtime-verification \
+              --json
+          ' _ "${CANDIDATE_SHA}" "${environment_fingerprint}" > output/release/raw/runtime-uat.json
+          ./wolfy exec --profile test -- python scripts/release_gate_summary.py record --candidate output/release/candidate/release-candidate.json --gate-id runtime-uat --source-report output/release/raw/runtime-uat.json --output output/release/evidence/runtime-uat.json
+      - name: Gate - auth-rbac
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ./wolfy exec --profile test -- python scripts/auth_rbac_release_audit.py --offline > output/release/raw/auth-rbac.json
+          ./wolfy exec --profile test -- python scripts/release_gate_summary.py record --candidate output/release/candidate/release-candidate.json --gate-id auth-rbac --source-report output/release/raw/auth-rbac.json --output output/release/evidence/auth-rbac.json
+      - name: Download operator evidence
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: release-operator-evidence-${{ needs.identity.outputs.sha }}
+          path: output/release/operator-evidence
+          run-id: ${{ inputs.operator_evidence_run_id }}
+          github-token: ${{ github.token }}
+      - name: Gate - operator-evidence
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ./wolfy exec --profile test -- python scripts/operator_evidence_bundle_check.py output/release/operator-evidence > output/release/raw/operator-evidence.json
+          ./wolfy exec --profile test -- python scripts/release_gate_summary.py record --candidate output/release/candidate/release-candidate.json --gate-id operator-evidence --source-report output/release/raw/operator-evidence.json --operator-evidence-dir output/release/operator-evidence --detail environment=release-approval --output output/release/evidence/operator-evidence.json
+      - uses: actions/attest-build-provenance@v3
+        id: provenance
+        continue-on-error: true
+        with:
+          subject-path: output/release/candidate/*
+      - name: Gate - artifact-provenance
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          test "${{ steps.provenance.outcome }}" = success
+          ./wolfy exec --profile test -- python scripts/release_gate_summary.py record --candidate output/release/candidate/release-candidate.json --gate-id artifact-provenance --detail provenanceAttested=true --output output/release/evidence/artifact-provenance.json
+      - name: Gate - secret-private-path-scan
+        continue-on-error: true
+        env:
+          CANDIDATE_SHA: ${{ needs.identity.outputs.sha }}
+        run: |
+          set -euo pipefail
+          ./wolfy exec --profile test -- bash scripts/release_secret_scan.sh \
+            --candidate-ref "${CANDIDATE_SHA}" \
+            --evidence-root output/release/candidate \
+            --evidence-root output/release/evidence \
+            --evidence output/release/raw/secret-scan.json
+          ./wolfy exec --profile test -- python scripts/release_gate_summary.py record --candidate output/release/candidate/release-candidate.json --gate-id secret-private-path-scan --source-report output/release/raw/secret-scan.json --output output/release/evidence/secret-private-path-scan.json
+      - name: Authoritative GO or NO-GO
+        if: always()
+        run: |
+          ./wolfy exec --profile test -- python scripts/release_gate_summary.py qualify \
+            --candidate output/release/candidate/release-candidate.json \
+            --evidence-dir output/release/evidence \
+            --environment-evidence output/release/environment.json \
+            --python-lock-report output/release/python-lock.json \
+            --output output/release/qualification/release-qualification.json
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: release-qualification-${{ needs.identity.outputs.sha }}
+          path: output/release/qualification/release-qualification.json
+          if-no-files-found: error
+          retention-days: 30
+
+  promotion-ready:
+    needs: [identity, build-candidate, qualification]
+    runs-on: ubuntu-latest
+    outputs:
+      candidateDigest: ${{ steps.verify.outputs.candidateDigest }}
+      imageSource: ${{ steps.verify.outputs.imageSource }}
+      imageIndexDigest: ${{ steps.verify.outputs.imageIndexDigest }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.identity.outputs.sha }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-candidate-${{ needs.identity.outputs.sha }}
+          path: output/release/candidate
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-qualification-${{ needs.identity.outputs.sha }}
+          path: output/release/qualification
+      - name: Reverify exact candidate and qualified manifest
+        id: verify
+        env:
+          RELEASE_TAG: ${{ needs.identity.outputs.tag }}
+          TAG_OBJECT: ${{ needs.identity.outputs.tag_object }}
+          CANDIDATE_SHA: ${{ needs.identity.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main --tags --force
+          test "$(git rev-parse "refs/tags/${RELEASE_TAG}")" = "${TAG_OBJECT}"
+          test "$(git rev-list -n 1 "refs/tags/${RELEASE_TAG}")" = "${CANDIDATE_SHA}"
+          python scripts/release_gate_summary.py verify-promotion \
+            --candidate output/release/candidate/release-candidate.json \
+            --qualification output/release/qualification/release-qualification.json \
+            --artifact-dir output/release/candidate \
+            --expected-sha "${CANDIDATE_SHA}"
+          echo "candidateDigest=$(jq -er '.candidateDigest' output/release/candidate/release-candidate.json)" >> "${GITHUB_OUTPUT}"
+          echo "imageSource=$(jq -er '.images.sourceReference' output/release/candidate/release-candidate.json)" >> "${GITHUB_OUTPUT}"
+          echo "imageIndexDigest=$(jq -er '.images.indexDigest' output/release/candidate/release-candidate.json)" >> "${GITHUB_OUTPUT}"
+
+  promote-github-release:
+    needs: [identity, promotion-ready]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.identity.outputs.sha }}
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-candidate-${{ needs.identity.outputs.sha }}
+          path: output/release/candidate
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-qualification-${{ needs.identity.outputs.sha }}
+          path: output/release/qualification
+      - name: Promote exact qualified files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.identity.outputs.tag }}
+          CANDIDATE_SHA: ${{ needs.identity.outputs.sha }}
+        run: |
+          set -euo pipefail
+          python scripts/release_gate_summary.py verify-promotion --candidate output/release/candidate/release-candidate.json --qualification output/release/qualification/release-qualification.json --artifact-dir output/release/candidate --expected-sha "${CANDIDATE_SHA}"
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "[NO-GO] immutable release already exists" >&2
+            exit 1
+          fi
+          gh release create "${RELEASE_TAG}" --verify-tag --title "${RELEASE_TAG}" --generate-notes \
+            output/release/candidate/release-candidate.json \
+            output/release/candidate/source.tar.gz \
+            output/release/candidate/web-static.tar.gz \
+            output/release/qualification/release-qualification.json
+
+  promote-docker-multiarch:
+    needs: [identity, promotion-ready]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.identity.outputs.sha }}
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-candidate-${{ needs.identity.outputs.sha }}
+          path: output/release/candidate
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-qualification-${{ needs.identity.outputs.sha }}
+          path: output/release/qualification
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Copy exact qualified multi-platform digest
+        env:
+          RELEASE_TAG: ${{ needs.identity.outputs.tag }}
+          CANDIDATE_SHA: ${{ needs.identity.outputs.sha }}
+          IMAGE_SOURCE: ${{ needs.promotion-ready.outputs.imageSource }}
+          IMAGE_INDEX_DIGEST: ${{ needs.promotion-ready.outputs.imageIndexDigest }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          set -euo pipefail
+          python scripts/release_gate_summary.py verify-promotion --candidate output/release/candidate/release-candidate.json --qualification output/release/qualification/release-qualification.json --artifact-dir output/release/candidate --expected-sha "${CANDIDATE_SHA}"
+          destinations=(
+            "ghcr.io/${GITHUB_REPOSITORY,,}:${RELEASE_TAG}"
+            "docker.io/${DOCKERHUB_USERNAME}/${GITHUB_REPOSITORY#*/}:${RELEASE_TAG}"
+          )
+          for destination in "${destinations[@]}"; do
+            if docker buildx imagetools inspect "${destination}" >/dev/null 2>&1; then
+              echo "[NO-GO] immutable image destination already exists" >&2
+              exit 1
+            fi
+            docker buildx imagetools create --tag "${destination}" "${IMAGE_SOURCE}"
+            observed="$(docker buildx imagetools inspect "${destination}" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+            test "${observed}" = "${IMAGE_INDEX_DIGEST}"
+          done

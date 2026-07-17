@@ -59,7 +59,7 @@
     "path": "scripts/build_ai_project_manual.py",
     "readsProductionDataPaths": false,
     "requiresApiKeys": false,
-    "sha256": "8c49aae0cc49611e63f828bab50cf597091b448d05503719d1febc0662282431",
+    "sha256": "22c730b2a9861d8d414615c5a4b6d1eb2394efb0b58d74e20cf850853b40971b",
     "version": 5
   },
   "includedSources": [
@@ -76,15 +76,15 @@
       "title": "AGENTS.md"
     },
     {
-      "bytes": 11847,
+      "bytes": 13025,
       "categories": [
         "onboarding",
         "product"
       ],
-      "lineCount": 270,
+      "lineCount": 290,
       "path": "README.md",
       "purpose": "human product entrypoint and supported run commands",
-      "sha256": "6524a2d65cc248ef3da75c71a0d7858bf6d72593758027982c55d63717292e0c",
+      "sha256": "8fa23bad5eb6131418db5fcab15c8ee0f0f5c31b8c96a1cd96cf361e775996ee",
       "title": "WolfyStock"
     },
     {
@@ -103,7 +103,7 @@
   "outputs": {
     "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
     "manual": "docs/AI_PROJECT_MANUAL.md",
-    "manualSha256": "830c1f24eb1889550f4e89a4689a4173cfba574eeb6a045521f7037600eebb4c"
+    "manualSha256": "881f12f003d1858bee654490d3c2511e91bb766150cd526080684e75b2c2d17a"
   },
   "schemaVersion": 2,
   "sections": [

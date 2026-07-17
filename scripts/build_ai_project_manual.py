@@ -389,7 +389,13 @@ SECTIONS = [
             "or resolves the lock. Environment evidence records lock schema/policy, content and input hashes, resolver "
             "identity, normalized target/profile/lock/projection, distribution, artifact, source-build and hash counts, and "
             "hash-verification status. Static marker, wheel-tag, ABI, and source-build validation is not real-platform "
-            "execution."
+            "execution.\n\n"
+            "`.github/workflows/release.yml` is the sole publication authority. It builds one source/Web/multi-platform "
+            "OCI candidate, binds the exact source, nested environment, reviewed lock, Web artifact, OCI index, amd64 and "
+            "arm64 identities, and produces twelve fail-closed gate records. The qualified manifest binds every gate "
+            "evidence digest. Promotion copies the already-qualified registry digest and never rebuilds or resolves "
+            "dependencies. Electron desktop artifacts remain outside this graph while their legacy scripts retain "
+            "independent install behavior; they must not be published by a parallel workflow."
         ),
         source_paths=("README.md", "AGENTS.md"),
         update_trigger="Python requirement intent, lock schema/family, resolver, supported target matrix, or bootstrap install authority changes.",
@@ -657,8 +663,8 @@ SECTIONS = [
             "- Shadow test topology: `python scripts/domain_test_topology.py verify-all`; run the single-startup backend aggregate with `python scripts/domain_test_topology.py run-backend --output-dir output/domain-test-topology --retry-failures 1`; list ownership with `list-backend --domain <domain>` and audited network tests with `list-network`. These commands add parity evidence and do not replace the existing gates.\n"
             "- Audited external-network tests: the standard offline/LAND tier always skips them. An explicit run requires marker fields `owner`, `reason`, and `audit`, plus `python -m pytest -m network --allow-test-network --network-audit <audit-id>`.\n"
             "- API/schema/auth/provider/protected contracts: backend focused tests, compatibility review, redaction/leakage checks, and wider gates when shared contracts are touched.\n"
-            "- Web frontend: from `apps/dsa-web`, run dependency install only when needed, then `npm run lint`, `npm run build`, and concrete Vitest paths. Use browser/screenshot smoke when layout or visible UX changes.\n"
-            "- Local UAT runtime harness: `python scripts/uat_runtime_harness.py --expected-sha \"$(git rev-parse HEAD)\"`, then use `python scripts/uat_runtime_harness.py --preflight --expected-sha \"$(git rev-parse HEAD)\" --evidence-path <run-evidence> --json` for read-only WorkBuddy qualification and `--stop-from-evidence --evidence-path <run-evidence> --json` for task-owned cleanup.\n\n"
+            "- Web frontend: after `./wolfy bootstrap --ensure`, run Vitest/lint through managed npm and run non-incremental typecheck/production build through `./wolfy exec --profile test -- python scripts/web_build_artifact.py <typecheck|build>` so validation never writes the immutable dependency snapshot. Use browser/screenshot smoke when layout or visible UX changes.\n"
+            "- Local UAT runtime harness: run `./wolfy exec --profile test -- python scripts/uat_runtime_harness.py --expected-sha \"$(git rev-parse HEAD)\"`, then use the same managed command with `--preflight --expected-sha \"$(git rev-parse HEAD)\" --evidence-path <run-evidence> --json` for read-only WorkBuddy qualification and `--stop-from-evidence --evidence-path <run-evidence> --json` for task-owned cleanup.\n\n"
             "> Shell note: commands using `./scripts/*.sh` and `$(git rev-parse HEAD)` are\n"
             "> POSIX-shell (bash/sh) syntax. On Windows run them from Git Bash, WSL, or any\n"
             "> shell providing a POSIX `sh` (e.g. `bash scripts/ci_gate.sh`). PowerShell uses\n"
