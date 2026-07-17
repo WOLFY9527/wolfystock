@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import os
 from datetime import datetime, timedelta
 from unittest.mock import patch
 from pathlib import Path
@@ -87,14 +88,48 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
         capabilities = self.db.list_admin_role_capabilities(SUPER_ADMIN_ROLE)
         self.assertEqual(set(ADMIN_RBAC_CAPABILITIES), set(capabilities))
 
+        self.db.create_or_update_app_user(
+            user_id="explicit-super-admin",
+            username="explicit-super-admin",
+            display_name="Explicit Super Admin",
+            role=ROLE_ADMIN,
+            password_hash=None,
+            is_active=True,
+        )
+        with self.db.get_session() as session:
+            session.add(AdminUserRole(user_id="explicit-super-admin", role_key=SUPER_ADMIN_ROLE))
+            session.commit()
+        explicit_super_admin = CurrentUser(
+            user_id="explicit-super-admin",
+            username="explicit-super-admin",
+            display_name="Explicit Super Admin",
+            role=ROLE_ADMIN,
+            is_admin=True,
+            is_authenticated=True,
+            transitional=False,
+            auth_enabled=True,
+        )
+        self.assertEqual(set(ADMIN_RBAC_CAPABILITIES), expand_admin_capabilities(explicit_super_admin))
+
     def test_legacy_admin_expands_to_super_admin_equivalent_capabilities(self) -> None:
-        user = _current_user(role=ROLE_ADMIN, is_admin=True)
+        role_only_admin = _current_user(role=ROLE_ADMIN, is_admin=True)
+        legacy_admin = _current_user(role=ROLE_ADMIN, is_admin=True, legacy_admin=True)
 
-        capabilities = expand_admin_capabilities(user)
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED", None)
+            self.assertEqual(set(), expand_admin_capabilities(role_only_admin))
+            self.assertEqual(set(), expand_admin_capabilities(legacy_admin))
 
-        self.assertEqual(set(ADMIN_RBAC_CAPABILITIES), capabilities)
-        self.assertTrue(has_admin_capability(user, "users:read"))
-        self.assertTrue(has_admin_capability(user, "quant:admin:write"))
+        with patch.dict(
+            os.environ,
+            {"WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED": "true"},
+            clear=False,
+        ):
+            self.assertEqual(set(), expand_admin_capabilities(role_only_admin))
+            capabilities = expand_admin_capabilities(legacy_admin)
+            self.assertEqual(set(ADMIN_RBAC_CAPABILITIES), capabilities)
+            self.assertTrue(has_admin_capability(legacy_admin, "users:read"))
+            self.assertTrue(has_admin_capability(legacy_admin, "quant:admin:write"))
 
     def test_non_admin_has_no_admin_capabilities(self) -> None:
         user = _current_user(role=ROLE_USER, is_admin=False)
@@ -256,8 +291,13 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
         admin = _current_user(role=ROLE_ADMIN, is_admin=True, legacy_admin=True)
         dependency = require_admin_capability("users:read")
 
-        self.assertTrue(admin.legacy_admin)
-        self.assertIs(dependency(admin), admin)
+        with patch.dict(
+            os.environ,
+            {"WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED": "true"},
+            clear=False,
+        ):
+            self.assertTrue(admin.legacy_admin)
+            self.assertIs(dependency(admin), admin)
 
     def test_coarse_fallback_can_be_disabled_without_weakening_explicit_payloads(self) -> None:
         from api.deps import require_admin_capability
@@ -376,6 +416,9 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
             password_hash=None,
             is_active=True,
         )
+        with self.db.get_session() as session:
+            session.add(AdminUserRole(user_id="admin-only", role_key=SUPER_ADMIN_ROLE))
+            session.commit()
         self.db.create_or_update_app_user(
             user_id=BOOTSTRAP_ADMIN_USER_ID,
             username="admin",
@@ -409,6 +452,14 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
             password_hash=None,
             is_active=True,
         )
+        with self.db.get_session() as session:
+            session.add_all(
+                [
+                    AdminUserRole(user_id="admin-1", role_key=SUPER_ADMIN_ROLE),
+                    AdminUserRole(user_id="admin-2", role_key=SUPER_ADMIN_ROLE),
+                ]
+            )
+            session.commit()
 
         self.assertIsNone(assert_not_last_super_admin("admin-1"))
 

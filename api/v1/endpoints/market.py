@@ -780,6 +780,7 @@ def _scenario_baseline_snapshot_error_is_storage_unavailable(message: str) -> bo
 
 @router.post(
     "/scenario-lab",
+    dependencies=[Depends(get_current_user)],
     response_model=MarketScenarioLabResponse,
     response_model_exclude_none=True,
     summary="Compare a market regime against bounded research-planning scenarios",

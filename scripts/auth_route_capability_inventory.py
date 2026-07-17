@@ -34,15 +34,12 @@ ADMIN_CAPABILITIES_PATH = Path("apps/dsa-web/src/utils/adminCapabilities.ts")
 APP_TSX_PATH = Path("apps/dsa-web/src/App.tsx")
 
 SURFACE_CLASSIFICATION_VOCABULARY = [
-    "public_market_read",
-    "public_static_docs",
-    "public_fixture_analysis",
+    "public_consumer_safe_read",
     "authenticated_member",
-    "admin_role_only_legacy",
-    "admin_capability_required",
+    "admin_capability",
     "operator_diagnostic",
-    "debug_or_schema_surface",
-    "unclassified",
+    "bounded_auth_endpoint",
+    "bounded_health_docs_surface",
 ]
 
 DOCS_AND_SCHEMA_SURFACES = [
@@ -50,30 +47,30 @@ DOCS_AND_SCHEMA_SURFACES = [
         "route_id": "docs.swagger_ui",
         "path": "/docs",
         "method": "GET",
-        "surface_classification": "debug_or_schema_surface",
+        "surface_classification": "bounded_health_docs_surface",
         "auth_dependency_label": "admin_user",
         "capability_label": None,
-        "no_go_marker": "TODO/NO-GO: root Swagger UI is not public product ingress when auth is enabled; api.app gates it to admins.",
+        "no_go_marker": None,
         "transitional_note": "Root Swagger UI is gated by api.app._require_docs_admin_user when auth is enabled; when auth is disabled it is available only in non-production environments and fails closed with HTTP 403 in production.",
     },
     {
         "route_id": "docs.redoc",
         "path": "/redoc",
         "method": "GET",
-        "surface_classification": "debug_or_schema_surface",
+        "surface_classification": "bounded_health_docs_surface",
         "auth_dependency_label": "admin_user",
         "capability_label": None,
-        "no_go_marker": "TODO/NO-GO: root ReDoc is not public product ingress when auth is enabled; api.app gates it to admins.",
+        "no_go_marker": None,
         "transitional_note": "Root ReDoc is gated by api.app._require_docs_admin_user when auth is enabled; when auth is disabled it is available only in non-production environments and fails closed with HTTP 403 in production.",
     },
     {
         "route_id": "docs.openapi_schema",
         "path": "/openapi.json",
         "method": "GET",
-        "surface_classification": "debug_or_schema_surface",
+        "surface_classification": "bounded_health_docs_surface",
         "auth_dependency_label": "admin_user",
         "capability_label": None,
-        "no_go_marker": "TODO/NO-GO: root OpenAPI schema exposure is admin-gated when auth is enabled and must not be treated as product public ingress.",
+        "no_go_marker": None,
         "transitional_note": "Root OpenAPI schema is app-level and guarded by api.app._require_docs_admin_user when auth is enabled; when auth is disabled it is available only in non-production environments and fails closed with HTTP 403 in production.",
     },
 ]
@@ -120,6 +117,10 @@ ROUTE_GROUP_SPECS = [
     ("user_alerts.member_surface", "user_alerts", "authenticated_user", None, "^/api/v1/user-alerts/(?:rules(?:/\\{rule_id\\}(?:/dry-run)?)?|events)$", ["GET", "POST", "PATCH", "DELETE"], None),
     ("watchlist.member_surface", "watchlist", "authenticated_user", None, "^/api/v1/watchlist/(?:$|research-overlay|items(?:/\\{item_id\\})?|items/from-scanner-candidate|refresh-scores|refresh-status)$", ["GET", "POST", "DELETE"], None),
     ("stock.member_surface", "stock", "authenticated_user", None, "^/api/v1/stocks/(?:structure-decisions/batch|\\{stock_code\\}/structure-decision)$", ["GET", "POST"], "Consumer stock structure diagnostics are authenticated-user scoped and not public."),
+    ("stock.research_surface", "stock", "authenticated_user", None, "^/api/v1/stocks/(?:extract-from-image|parse-import|\\{stock_code\\}/(?:validate|research-packet|evidence|intraday|history))$", ["GET", "POST"], "Stock research, import, and history routes are authenticated-member surfaces; only the quote route is explicitly public."),
+    ("options.member_surface", "options", "authenticated_user", None, "^/api/v1/options/", ["GET", "POST"], "Options fixture/demo analysis is member-gated by route-local dependency; production Options decisioning still requires accepted real-provider evidence."),
+    ("leveraged_etf_mapper.member_surface", "leveraged_etf_mapper", "authenticated_user", None, "^/api/v1/leveraged-etf-mapper/(?:mappings|calculate)$", ["GET", "POST"], "Leveraged ETF observation tooling is scoped to the authenticated Watchlist workflow."),
+    ("market.scenario_evaluation.member_surface", "market_scenario", "authenticated_user", None, "^/api/v1/market/scenario-lab$", ["POST"], "Scenario evaluation is an authenticated-member research surface."),
     ("usage.admin_summary", "usage_admin", "admin_capability", "cost:observability:read", "^/api/v1/usage/summary$", ["GET"], None),
     ("quant.duckdb.read", "quant_duckdb_admin", "admin_capability", "quant:admin:read", "^/api/v1/quant/duckdb/(?:health|factor-snapshot|validate-factor-path|compare-runtime-context|coverage|benchmark)$", ["GET", "POST"], None),
     ("quant.duckdb.write", "quant_duckdb_admin", "admin_capability", "quant:admin:write", "^/api/v1/quant/duckdb/(?:init|ingest-ohlcv|build-factors)$", ["POST"], None),
@@ -146,13 +147,9 @@ ROUTE_GROUP_SPECS = [
     ("system.provider_tests.write", "system_provider_tests", "admin_capability", "ops:providers:write", "^/api/v1/system/config/(?:llm/test-channel|data-source/test|data-source/test-builtin)$", ["POST"], None),
 ]
 
-OPTION_FIXTURE_MARKER = (
-    "TODO/NO-GO: authenticated Options research surface remains fixture/demo analysis only; "
-    "production Options decisioning needs accepted real provider evidence before launch."
-)
 OPTION_POLICY_NOTE = (
-    "Member-gated by production app-level AuthMiddleware and frontend RegisteredSurfaceRoute; "
-    "route-local fixture handlers remain read-only observation-only contracts."
+    "Member-gated by a route-local dependency and frontend RegisteredSurfaceRoute; fixture/demo analysis remains "
+    "read-only and production Options decisioning needs accepted real provider evidence before launch."
 )
 
 
@@ -318,64 +315,44 @@ def _surface_classification_for_route(route: dict[str, str | None]) -> tuple[str
     method = str(route["method"])
     path = str(route["path"])
     auth_label = route["auth_dependency_label"]
-    if path.startswith("/api/v1/options/"):
-        return "authenticated_member", OPTION_FIXTURE_MARKER, OPTION_POLICY_NOTE
-    if path.startswith("/api/v1/agent/"):
-        if path in {"/api/v1/agent/status", "/api/v1/agent/models", "/api/v1/agent/provider-health"}:
-            if auth_label == "admin_capability":
-                return "operator_diagnostic", None, "Provider-read admin capability gate preserves agent operator diagnostics outside member product surfaces."
-            if auth_label is None:
-                return "operator_diagnostic", f"TODO/NO-GO: {path} metadata is not public-ingress safe while route-level auth remains absent.", "Classifies readiness metadata only; no agent behavior changes."
-        if auth_label is None:
-            return "unclassified", "TODO/NO-GO: decide whether agent skill discovery is public metadata, member-only product metadata, or operator diagnostic metadata.", "Listed explicitly so unknown agent metadata is not silently treated as safe."
+    if path.startswith("/api/v1/auth/"):
+        return "bounded_auth_endpoint", None, "Auth routes retain their explicit request-local public or current-user guard contract."
     if auth_label == "admin_capability":
         if path in {
+            "/api/v1/agent/status",
+            "/api/v1/agent/models",
+            "/api/v1/agent/provider-health",
             "/api/v1/market/data-readiness",
             "/api/v1/market/data-source-gap-registry",
             "/api/v1/market/cn-provider-health",
         }:
             return "operator_diagnostic", None, "Provider-read admin gate preserves operator diagnostics outside consumer market responses."
-        return "admin_capability_required", None, "Capability-gated route projected from live FastAPI dependency metadata."
+        return "admin_capability", None, "Capability-gated route projected from live FastAPI dependency metadata."
     if auth_label == "authenticated_user":
+        if path.startswith("/api/v1/options/"):
+            return "authenticated_member", None, OPTION_POLICY_NOTE
         return "authenticated_member", None, None
-    if method == "GET" and path == "/api/v1/stocks/{stock_code}/quote":
-        return "unclassified", "TODO/NO-GO: stock quote route-level public policy is recorded explicitly here; do not treat it as a beta-safe authenticated member route without a separate quote auth decision.", "Inventory records the current route-level public stock quote policy without changing provider runtime or quote auth behavior."
     if is_public_baseline_read(method, path):
         return (
-            "public_market_read",
+            "public_consumer_safe_read",
             None,
-            "Canonical route-access policy declares this consumer-safe Market read public while app-level auth continues to protect every non-listed route.",
+            "Canonical route-access policy explicitly allowlists this consumer-safe public route while every non-listed route fails closed.",
         )
-    return "unclassified", "TODO/NO-GO: route requires explicit surface classification before it can be treated as public-safe.", None
-
-
-def _include_surface_route(path: str) -> bool:
-    return (
-        path.startswith("/api/v1/agent/")
-        or path.startswith("/api/v1/scanner/")
-        or path.startswith("/api/v1/options/")
-        or path.startswith("/api/v1/research/")
-        or path.startswith("/api/v1/user-alerts/")
-        or path.startswith("/api/v1/stocks/")
-        or path.startswith("/api/v1/watchlist/")
-        or path == "/api/v1/usage/summary"
-        or path.startswith("/api/v1/admin/")
-        or path.startswith("/api/v1/system/")
-        or path.startswith("/api/v1/market/")
-        or path.startswith("/api/v1/quant/duckdb/")
-    )
+    raise RuntimeError(f"route lacks explicit local authority or public allowlist classification: {method} {path}")
 
 
 def _build_surface_classifications(live_routes: dict[tuple[str, str], dict[str, str | None]]) -> list[dict[str, Any]]:
     entries = list(DOCS_AND_SCHEMA_SURFACES)
+    auth_guards = {
+        (entry["method"], entry["path"]): entry["guard_kind"]
+        for entry in _collect_auth_route_source_inventory()
+    }
     for (method, path), route in live_routes.items():
-        if not _include_surface_route(path):
-            continue
         classification, no_go, note = _surface_classification_for_route(route)
         auth_label = _public_dependency_label(method, path, route["auth_dependency_label"])
-        if path.startswith("/api/v1/options/") and classification == "authenticated_member":
-            auth_label = "authenticated_user"
-        elif classification in {"public_fixture_analysis", "public_market_read"}:
+        if classification == "bounded_auth_endpoint":
+            auth_label = auth_guards[(method, path)]
+        elif classification == "public_consumer_safe_read":
             auth_label = "public"
         entries.append(
             _surface_entry(
@@ -433,8 +410,8 @@ def build_backend_inventory(repo_root: Path | str = REPO_ROOT) -> dict[str, Any]
                 "api/route_access_policy.py",
                 "api/app.py docs gate",
             ],
-            "runtimeBehaviorChanged": False,
-            "authBehaviorChanged": False,
+            "runtimeBehaviorChanged": True,
+            "authBehaviorChanged": True,
         },
     }
 

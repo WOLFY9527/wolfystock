@@ -7,6 +7,7 @@ import pandas as pd
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import stocks
 from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE
 
@@ -22,8 +23,23 @@ class _FailingStockService:
         raise RuntimeError(self.message)
 
 
-def test_stock_history_endpoint_reads_cached_us_bars_without_provider_network() -> None:
+def _member_app() -> FastAPI:
     app = FastAPI()
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="stock-member",
+        username="stock-member",
+        display_name="Stock Member",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
+    return app
+
+
+def test_stock_history_endpoint_reads_cached_us_bars_without_provider_network() -> None:
+    app = _member_app()
     app.include_router(stocks.router, prefix="/api/v1/stocks")
     client = TestClient(app)
     cached_frame = pd.DataFrame(
@@ -100,7 +116,7 @@ def test_stock_history_endpoint_reads_cached_us_bars_without_provider_network() 
 
 
 def test_stock_history_endpoint_exposes_90_bar_ohlcv_readiness_when_cache_sufficient() -> None:
-    app = FastAPI()
+    app = _member_app()
     app.include_router(stocks.router, prefix="/api/v1/stocks")
     client = TestClient(app)
     cached_frame = pd.DataFrame(
@@ -140,7 +156,7 @@ def test_stock_history_endpoint_exposes_90_bar_ohlcv_readiness_when_cache_suffic
 
 
 def test_stock_history_endpoint_reports_insufficient_coverage_without_provider_missing() -> None:
-    app = FastAPI()
+    app = _member_app()
     app.include_router(stocks.router, prefix="/api/v1/stocks")
     client = TestClient(app)
     cached_frame = pd.DataFrame(
@@ -178,7 +194,7 @@ def test_stock_history_endpoint_reports_insufficient_coverage_without_provider_m
 
 
 def test_stock_intraday_internal_error_does_not_echo_provider_exception() -> None:
-    app = FastAPI()
+    app = _member_app()
     app.include_router(stocks.router, prefix="/api/v1/stocks")
     client = TestClient(app)
     marker = "Traceback provider token secret raw failure"
@@ -195,7 +211,7 @@ def test_stock_intraday_internal_error_does_not_echo_provider_exception() -> Non
 
 
 def test_stock_history_internal_error_does_not_echo_provider_exception() -> None:
-    app = FastAPI()
+    app = _member_app()
     app.include_router(stocks.router, prefix="/api/v1/stocks")
     client = TestClient(app)
     marker = "Traceback provider token secret raw failure"

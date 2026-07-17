@@ -11,6 +11,7 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import options
 from api.v1.schemas.options import OptionChainResponse, OptionContract, OptionGreeks, OptionsMetadata
 from src.services.consumer_api_diagnostic_redaction import project_consumer_api_payload
@@ -93,6 +94,16 @@ SAFETY_BLOCKED_MARKERS = [
 
 def _client() -> TestClient:
     app = FastAPI()
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="options-member",
+        username="options-member",
+        display_name="Options Member",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
     app.include_router(options.router, prefix="/api/v1/options")
     return TestClient(app)
 
@@ -2424,6 +2435,7 @@ def test_decision_endpoint_matches_service_alias_contract() -> None:
         )
     finally:
         client.close()
+
 
 def test_decision_endpoint_no_trade_payload_matches_service_alias_contract(tmp_path: Path) -> None:
     fixture = json.loads(Path("tests/fixtures/options/tem_chain.json").read_text(encoding="utf-8"))

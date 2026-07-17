@@ -103,7 +103,7 @@ def _make_user(user_id: str, username: str = "scenario-user") -> CurrentUser:
 def _client(
     *,
     snapshot_db_manager: DatabaseManager | None = None,
-    current_user: CurrentUser | None = None,
+    current_user: CurrentUser | None = _make_user("scenario-member"),
 ) -> TestClient:
     app = FastAPI()
     if snapshot_db_manager is not None:
@@ -304,7 +304,8 @@ def test_market_scenario_lab_durable_baseline_route_metadata_requires_current_us
         assert get_optional_current_user not in dependency_calls, signature
 
     evaluation_dependency_calls = _route_dependency_calls(scenario_routes[SCENARIO_EVALUATION_ROUTE_SIGNATURE])
-    assert get_current_user not in evaluation_dependency_calls
+    assert get_current_user in evaluation_dependency_calls
+    assert get_optional_current_user not in evaluation_dependency_calls
 
 
 def _serialized_values(payload: object) -> str:
@@ -851,7 +852,7 @@ def test_market_scenario_lab_baseline_snapshot_requires_current_user_without_mid
 ) -> None:
     db = _snapshot_db(tmp_path)
     monkeypatch.setattr(api_deps, "is_auth_enabled", lambda: True)
-    client = _client(snapshot_db_manager=db)
+    client = _client(snapshot_db_manager=db, current_user=None)
 
     create_response = client.post(
         "/api/v1/market/scenario-lab/baseline-snapshots",
@@ -911,7 +912,7 @@ def test_market_scenario_lab_baseline_snapshot_auth_disabled_uses_bootstrap_owne
 ) -> None:
     db = _snapshot_db(tmp_path)
     monkeypatch.setattr(api_deps, "is_auth_enabled", lambda: False)
-    client = _client(snapshot_db_manager=db)
+    client = _client(snapshot_db_manager=db, current_user=None)
 
     create_response = client.post(
         "/api/v1/market/scenario-lab/baseline-snapshots",

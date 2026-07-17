@@ -125,27 +125,24 @@ FRONTEND_ADMIN_READ_CAPABILITY_LABELS = {
     "ops:system_config:read",
 }
 SURFACE_CLASSIFICATION_VOCABULARY = {
-    "public_market_read",
-    "public_static_docs",
-    "public_fixture_analysis",
+    "public_consumer_safe_read",
     "authenticated_member",
-    "admin_role_only_legacy",
-    "admin_capability_required",
+    "admin_capability",
     "operator_diagnostic",
-    "debug_or_schema_surface",
-    "unclassified",
+    "bounded_auth_endpoint",
+    "bounded_health_docs_surface",
 }
 DOCS_AND_SCHEMA_ROUTE_CLASSIFICATIONS = {
-    ("GET", "/docs"): "debug_or_schema_surface",
-    ("GET", "/redoc"): "debug_or_schema_surface",
-    ("GET", "/openapi.json"): "debug_or_schema_surface",
+    ("GET", "/docs"): "bounded_health_docs_surface",
+    ("GET", "/redoc"): "bounded_health_docs_surface",
+    ("GET", "/openapi.json"): "bounded_health_docs_surface",
 }
 EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/market/data-readiness"): "operator_diagnostic",
     ("GET", "/api/v1/market/data-source-gap-registry"): "operator_diagnostic",
     ("GET", "/api/v1/market/cn-provider-health"): "operator_diagnostic",
-    ("GET", "/api/v1/market/provider-fit-advisor"): "admin_capability_required",
-    ("GET", "/api/v1/market/professional-data-capabilities/admin"): "admin_capability_required",
+    ("GET", "/api/v1/market/provider-fit-advisor"): "admin_capability",
+    ("GET", "/api/v1/market/professional-data-capabilities/admin"): "admin_capability",
     ("GET", "/api/v1/agent/status"): "operator_diagnostic",
     ("GET", "/api/v1/agent/models"): "operator_diagnostic",
     ("GET", "/api/v1/agent/provider-health"): "operator_diagnostic",
@@ -156,11 +153,11 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/agent/chat/sessions/{session_id}"): "authenticated_member",
     ("DELETE", "/api/v1/agent/chat/sessions/{session_id}"): "authenticated_member",
     ("POST", "/api/v1/agent/chat/stream"): "authenticated_member",
-    ("POST", "/api/v1/agent/chat/send"): "admin_capability_required",
+    ("POST", "/api/v1/agent/chat/send"): "admin_capability",
     ("GET", "/api/v1/research/radar"): "authenticated_member",
     ("GET", "/api/v1/research/queue"): "authenticated_member",
     ("POST", "/api/v1/user-alerts/rules/{rule_id}/dry-run"): "authenticated_member",
-    ("GET", "/api/v1/stocks/{stock_code}/quote"): "unclassified",
+    ("GET", "/api/v1/stocks/{stock_code}/quote"): "public_consumer_safe_read",
     ("GET", "/api/v1/stocks/{stock_code}/structure-decision"): "authenticated_member",
     ("POST", "/api/v1/stocks/structure-decisions/batch"): "authenticated_member",
     ("POST", "/api/v1/scanner/run"): "authenticated_member",
@@ -168,9 +165,9 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/scanner/strategy-simulation"): "authenticated_member",
     ("GET", "/api/v1/scanner/runs/{run_id}"): "authenticated_member",
     ("GET", "/api/v1/scanner/runs/{run_id}/research-overlay"): "authenticated_member",
-    ("GET", "/api/v1/scanner/watchlists/today"): "admin_capability_required",
-    ("GET", "/api/v1/scanner/watchlists/recent"): "admin_capability_required",
-    ("GET", "/api/v1/scanner/status"): "admin_capability_required",
+    ("GET", "/api/v1/scanner/watchlists/today"): "admin_capability",
+    ("GET", "/api/v1/scanner/watchlists/recent"): "admin_capability",
+    ("GET", "/api/v1/scanner/status"): "admin_capability",
     ("GET", "/api/v1/scanner/themes"): "authenticated_member",
     ("POST", "/api/v1/scanner/themes"): "authenticated_member",
     ("GET", "/api/v1/watchlist/"): "authenticated_member",
@@ -181,7 +178,7 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/watchlist/research-overlay"): "authenticated_member",
     ("GET", "/api/v1/watchlist/refresh-status"): "authenticated_member",
     ("POST", "/api/v1/watchlist/refresh-scores"): "authenticated_member",
-    ("GET", "/api/v1/usage/summary"): "admin_capability_required",
+    ("GET", "/api/v1/usage/summary"): "admin_capability",
     ("GET", "/api/v1/options/lab"): "authenticated_member",
     ("GET", "/api/v1/options/gamma"): "authenticated_member",
     ("GET", "/api/v1/options/underlyings/{symbol}/summary"): "authenticated_member",
@@ -193,27 +190,27 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("POST", "/api/v1/options/scenario"): "authenticated_member",
     ("POST", "/api/v1/options/strategies/compare"): "authenticated_member",
     ("POST", "/api/v1/options/strategies/analyze"): "authenticated_member",
-    ("GET", "/api/v1/admin/logs/storage/summary"): "admin_capability_required",
-    ("POST", "/api/v1/admin/users/onboard"): "admin_capability_required",
-    ("GET", "/api/v1/admin/ops/status"): "admin_capability_required",
-    ("GET", "/api/v1/admin/ops/surface-readiness"): "admin_capability_required",
-    ("GET", "/api/v1/admin/mission-control"): "admin_capability_required",
-    ("GET", "/api/v1/admin/cost/duplicate-summary"): "admin_capability_required",
-    ("GET", "/api/v1/admin/cost/summary"): "admin_capability_required",
-    ("POST", "/api/v1/admin/cost/quota-dry-run"): "admin_capability_required",
-    ("GET", "/api/v1/admin/cost/llm-ledger-summary"): "admin_capability_required",
-    ("GET", "/api/v1/admin/provider-circuits"): "admin_capability_required",
-    ("GET", "/api/v1/admin/providers/quota-windows"): "admin_capability_required",
-    ("GET", "/api/v1/admin/providers/sla-readiness"): "admin_capability_required",
-    ("GET", "/api/v1/admin/providers/operations-matrix"): "admin_capability_required",
-    ("GET", "/api/v1/admin/provider-usage-ledger"): "admin_capability_required",
-    ("GET", "/api/v1/admin/market-providers/operations"): "admin_capability_required",
-    ("GET", "/api/v1/admin/market-provider-operations"): "admin_capability_required",
-    ("GET", "/api/v1/admin/provider-activation-verifier"): "admin_capability_required",
-    ("GET", "/api/v1/admin/historical-ohlcv/cache-preflight"): "admin_capability_required",
-    ("POST", "/api/v1/admin/historical-ohlcv/cache-preflight/seed"): "admin_capability_required",
-    ("GET", "/api/v1/quant/duckdb/health"): "admin_capability_required",
-    ("GET", "/api/v1/system/config"): "admin_capability_required",
+    ("GET", "/api/v1/admin/logs/storage/summary"): "admin_capability",
+    ("POST", "/api/v1/admin/users/onboard"): "admin_capability",
+    ("GET", "/api/v1/admin/ops/status"): "admin_capability",
+    ("GET", "/api/v1/admin/ops/surface-readiness"): "admin_capability",
+    ("GET", "/api/v1/admin/mission-control"): "admin_capability",
+    ("GET", "/api/v1/admin/cost/duplicate-summary"): "admin_capability",
+    ("GET", "/api/v1/admin/cost/summary"): "admin_capability",
+    ("POST", "/api/v1/admin/cost/quota-dry-run"): "admin_capability",
+    ("GET", "/api/v1/admin/cost/llm-ledger-summary"): "admin_capability",
+    ("GET", "/api/v1/admin/provider-circuits"): "admin_capability",
+    ("GET", "/api/v1/admin/providers/quota-windows"): "admin_capability",
+    ("GET", "/api/v1/admin/providers/sla-readiness"): "admin_capability",
+    ("GET", "/api/v1/admin/providers/operations-matrix"): "admin_capability",
+    ("GET", "/api/v1/admin/provider-usage-ledger"): "admin_capability",
+    ("GET", "/api/v1/admin/market-providers/operations"): "admin_capability",
+    ("GET", "/api/v1/admin/market-provider-operations"): "admin_capability",
+    ("GET", "/api/v1/admin/provider-activation-verifier"): "admin_capability",
+    ("GET", "/api/v1/admin/historical-ohlcv/cache-preflight"): "admin_capability",
+    ("POST", "/api/v1/admin/historical-ohlcv/cache-preflight/seed"): "admin_capability",
+    ("GET", "/api/v1/quant/duckdb/health"): "admin_capability",
+    ("GET", "/api/v1/system/config"): "admin_capability",
 }
 EXPECTED_OPERATOR_DIAGNOSTIC_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/market/data-readiness"),
@@ -743,25 +740,12 @@ def test_backend_route_surface_classification_vocabulary_and_no_go_markers_are_e
             "no_go_marker",
             "transitional_note",
         }
-        if classification in {"unclassified", "debug_or_schema_surface", "public_fixture_analysis"}:
-            marker = entry.get("no_go_marker")
-            assert marker and "TODO/NO-GO" in marker, entry["route_id"]
-        if classification == "public_market_read":
+        assert entry["no_go_marker"] is None, entry["route_id"]
+        if classification == "public_consumer_safe_read":
             assert entry["auth_dependency_label"] == "public", entry["route_id"]
             assert entry["capability_label"] is None, entry["route_id"]
-            assert entry["no_go_marker"] is None, entry["route_id"]
             assert "route-access policy" in str(entry["transitional_note"]), entry["route_id"]
-        if classification == "operator_diagnostic" and entry["auth_dependency_label"] == "public":
-            marker = entry.get("no_go_marker")
-            assert marker and "TODO/NO-GO" in marker, entry["route_id"]
-        if classification == "public_fixture_analysis":
-            marker_text = str(entry.get("no_go_marker") or "").lower()
-            note_text = str(entry.get("transitional_note") or "").lower()
-            assert entry["auth_dependency_label"] == "public", entry["route_id"]
-            assert entry["capability_label"] is None, entry["route_id"]
-            assert "fixture" in marker_text and "production" in marker_text, entry["route_id"]
-            assert "route-local" in note_text and "app-level auth" in note_text, entry["route_id"]
-        if classification in {"public_static_docs", "debug_or_schema_surface"}:
+        if classification == "bounded_health_docs_surface":
             assert not entry["path"].startswith("/api/v1/"), entry["route_id"]
 
 
@@ -770,7 +754,8 @@ def test_backend_route_surface_classification_covers_target_live_surfaces() -> N
     live_routes = _collect_live_routes()
     classifications = _surface_classification_by_signature(fixture)
 
-    assert set(DOCS_AND_SCHEMA_ROUTE_CLASSIFICATIONS).issubset(classifications)
+    assert set(classifications) == set(live_routes) | set(DOCS_AND_SCHEMA_ROUTE_CLASSIFICATIONS)
+    assert len(classifications) == len(live_routes) + len(DOCS_AND_SCHEMA_ROUTE_CLASSIFICATIONS)
     for signature, expected_classification in EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS.items():
         assert classifications[signature]["surface_classification"] == expected_classification
 
@@ -781,12 +766,9 @@ def test_backend_route_surface_classification_covers_target_live_surfaces() -> N
         entry = classifications[signature]
         live = live_routes[signature]
         expected_dependency = entry["auth_dependency_label"]
-        if signature[1].startswith("/api/v1/options/"):
-            assert expected_dependency == "authenticated_user"
-            assert live["auth_dependency_label"] is None
-        elif entry["surface_classification"] == "public_fixture_analysis":
-            assert live["auth_dependency_label"] is None
-        elif entry["surface_classification"] == "public_market_read":
+        if entry["surface_classification"] == "bounded_auth_endpoint":
+            assert signature[1].startswith("/api/v1/auth/")
+        elif entry["surface_classification"] == "public_consumer_safe_read":
             assert live["auth_dependency_label"] in {None, "optional_current_user"}
         else:
             assert live["auth_dependency_label"] == (None if expected_dependency == "public" else expected_dependency)
@@ -814,23 +796,19 @@ def test_docs_openapi_and_operator_diagnostic_surfaces_are_not_product_routes() 
 
     for signature, expected_capability in EXPECTED_T1463_MIGRATED_ROUTE_CAPABILITIES.items():
         entry = classifications[signature]
-        assert entry["surface_classification"] == "admin_capability_required"
+        assert entry["surface_classification"] == "admin_capability"
         assert entry["auth_dependency_label"] == "admin_capability"
         assert entry["capability_label"] == expected_capability
         assert entry["no_go_marker"] is None
         assert entry["transitional_note"]
 
-    for signature in EXPECTED_LEGACY_ROUTE_SURFACE_CLASSIFICATIONS:
-        entry = classifications[signature]
-        assert entry["surface_classification"] == "admin_role_only_legacy"
-        assert entry["auth_dependency_label"] == "admin_user"
-        assert "NO-GO" in entry["no_go_marker"]
+    assert EXPECTED_LEGACY_ROUTE_SURFACE_CLASSIFICATIONS == set()
 
     api_v1_doc_like_labels = [
         entry
         for entry in classifications.values()
         if entry["path"].startswith("/api/v1/")
-        and entry["surface_classification"] in {"public_static_docs", "debug_or_schema_surface"}
+        and entry["surface_classification"] == "bounded_health_docs_surface"
     ]
     assert api_v1_doc_like_labels == []
 
@@ -843,17 +821,16 @@ def test_options_inventory_matches_auth_required_fixture_only_frontend_gate_cont
     assert len(EXPECTED_OPTIONS_AUTH_REQUIRED_ROUTE_CLASSIFICATIONS) == 11
     for signature in EXPECTED_OPTIONS_AUTH_REQUIRED_ROUTE_CLASSIFICATIONS:
         entry = classifications[signature]
-        marker = str(entry["no_go_marker"])
         note = str(entry["transitional_note"])
         note_text = note.lower()
         assert entry["surface_classification"] == "authenticated_member"
         assert entry["auth_dependency_label"] == "authenticated_user"
         assert entry["capability_label"] is None
-        assert "TODO/NO-GO" in marker
-        assert "fixture/demo" in marker
-        assert "production Options decisioning" in marker
+        assert entry["no_go_marker"] is None
+        assert "fixture/demo" in note
+        assert "production Options decisioning" in note
         assert "member-gated" in note_text
-        assert "app-level auth" in note_text
+        assert "route-local dependency" in note_text
         assert "registeredsurfaceroute" in note_text
         assert "policy_adjudication_required" not in note_text
         if signature[0] == "GET":

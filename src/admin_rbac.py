@@ -165,10 +165,14 @@ def _is_legacy_admin(user: Any) -> bool:
 
 
 def is_coarse_admin_fallback_enabled() -> bool:
-    """Return whether legacy admin role expansion is still allowed."""
+    """Return whether the bounded legacy-admin migration fallback is enabled.
+
+    Remove this opt-in after every active legacy administrator has an explicit
+    ``admin_user_roles`` assignment and the migration inventory stays empty.
+    """
     raw = os.getenv("WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED")
     if raw is None:
-        return True
+        return False
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
@@ -184,7 +188,7 @@ def expand_admin_capabilities(user: Any) -> set[str]:
     capabilities = set(db.list_admin_capabilities_for_user(user_id)) if user_id else set()
     if capabilities:
         return capabilities
-    if not is_coarse_admin_fallback_enabled():
+    if not bool(getattr(user, "legacy_admin", False)) or not is_coarse_admin_fallback_enabled():
         return set()
     return set(db.list_admin_role_capabilities(SUPER_ADMIN_ROLE))
 

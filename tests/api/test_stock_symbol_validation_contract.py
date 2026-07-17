@@ -10,11 +10,22 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import stocks as stocks_endpoint
 
 
 def _client() -> TestClient:
     app = FastAPI()
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="stock-member",
+        username="stock-member",
+        display_name="Stock Member",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
     app.include_router(stocks_endpoint.router, prefix="/api/v1/stocks")
     return TestClient(app)
 

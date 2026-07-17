@@ -76,6 +76,7 @@ def _safe_error(error: str, message: str, status: int) -> dict[str, object]:
         "consumerSafeMessage": message,
     }
 
+
 PRIVATE_SURFACES = (
     ("GET", "/api/v1/system/config"),
     ("GET", "/api/v1/portfolio/accounts"),
@@ -252,7 +253,7 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "POST",
         "/api/v1/agent/chat/send",
         "/api/v1/agent/chat/send",
-        "admin_capability_required",
+        "admin_capability",
         "admin_capability",
         "ops:notifications:write",
         AGENT_SEND_REQUEST,
@@ -282,7 +283,7 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "GET",
         "/api/v1/scanner/status",
         "/api/v1/scanner/status",
-        "admin_capability_required",
+        "admin_capability",
         "admin_capability",
         "scanner:admin:read",
         None,
@@ -292,7 +293,7 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "GET",
         "/api/v1/scanner/watchlists/today",
         "/api/v1/scanner/watchlists/today",
-        "admin_capability_required",
+        "admin_capability",
         "admin_capability",
         "scanner:admin:read",
         None,
@@ -302,7 +303,7 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "GET",
         "/api/v1/scanner/watchlists/recent",
         "/api/v1/scanner/watchlists/recent",
-        "admin_capability_required",
+        "admin_capability",
         "admin_capability",
         "scanner:admin:read",
         None,
@@ -312,7 +313,7 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "GET",
         "/api/v1/usage/summary",
         "/api/v1/usage/summary",
-        "admin_capability_required",
+        "admin_capability",
         "admin_capability",
         "cost:observability:read",
         None,
@@ -322,7 +323,7 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "GET",
         "/api/v1/system/config",
         "/api/v1/system/config",
-        "admin_capability_required",
+        "admin_capability",
         "admin_capability",
         "ops:system_config:read",
         None,
@@ -332,7 +333,7 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "GET",
         "/api/v1/admin/ops/status",
         "/api/v1/admin/ops/status",
-        "admin_capability_required",
+        "admin_capability",
         "admin_capability",
         "ops:logs:read",
         None,
@@ -342,7 +343,7 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "GET",
         "/api/v1/admin/providers/quota-windows",
         "/api/v1/admin/providers/quota-windows",
-        "admin_capability_required",
+        "admin_capability",
         "admin_capability",
         "ops:providers:read",
         None,
@@ -352,7 +353,7 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "GET",
         "/api/v1/market/provider-fit-advisor",
         "/api/v1/market/provider-fit-advisor",
-        "admin_capability_required",
+        "admin_capability",
         "admin_capability",
         "ops:providers:read",
         None,
@@ -362,7 +363,7 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "POST",
         "/api/v1/admin/cost/quota-dry-run",
         "/api/v1/admin/cost/quota-dry-run",
-        "admin_capability_required",
+        "admin_capability",
         "admin_capability",
         "cost:observability:read",
         QUOTA_DRY_RUN_REQUEST,
@@ -519,14 +520,14 @@ def test_options_release_contract_is_auth_required_fixture_research_not_launch_a
         start=60,
     ):
         entry = inventory[(method, path)]
-        marker = str(entry["no_go_marker"])
+        note = str(entry["transitional_note"])
         assert entry["surface_classification"] == "authenticated_member", label
         assert entry["auth_dependency_label"] == "authenticated_user", label
         assert entry["capability_label"] is None, label
-        assert "TODO/NO-GO" in marker, label
-        assert "fixture/demo" in marker, label
-        assert "production Options decisioning" in marker, label
-        assert "provider evidence" in marker, label
+        assert entry["no_go_marker"] is None, label
+        assert "fixture/demo" in note, label
+        assert "production Options decisioning" in note, label
+        assert "provider evidence" in note, label
         _assert_public_error_safe(entry)
 
         kwargs = {"headers": {"X-Forwarded-For": f"203.0.113.{index}"}}
@@ -712,7 +713,7 @@ def test_admin_without_matching_capabilities_cannot_access_diagnostic_surfaces(
         _assert_public_error_safe(response.json(), dict(response.headers))
 
 
-def test_explicit_local_auth_disabled_mode_preserves_transitional_admin(
+def test_explicit_local_auth_disabled_mode_keeps_admin_surfaces_bounded(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -743,10 +744,10 @@ def test_explicit_local_auth_disabled_mode_preserves_transitional_admin(
         }
         assert evidence == {
             "profile": "development",
-            "storageStatus": 200,
-            "providerStatus": 200,
-            "usageStatus": 200,
-            "transitionalAdminObserved": True,
+            "storageStatus": 403,
+            "providerStatus": 403,
+            "usageStatus": 403,
+            "transitionalAdminObserved": False,
         }
         _assert_public_error_safe(evidence)
     finally:

@@ -111,6 +111,7 @@ def _stock_validation_response(
 
 @router.post(
     "/extract-from-image",
+    dependencies=[Depends(get_current_user)],
     response_model=ExtractFromImageResponse,
     responses={
         200: {"description": "提取的股票代码"},
@@ -188,6 +189,7 @@ def extract_from_image(
 
 @router.post(
     "/parse-import",
+    dependencies=[Depends(get_current_user)],
     response_model=ExtractFromImageResponse,
     responses={
         200: {"description": "解析结果"},
@@ -308,6 +310,7 @@ async def parse_import(request: Request) -> ExtractFromImageResponse:
 
 @router.get(
     "/{stock_code}/validate",
+    dependencies=[Depends(get_current_user)],
     response_model=StockValidationResponse,
     responses={
         200: {"description": "股票代码真实性校验结果"},
@@ -367,6 +370,7 @@ def _validate_stock_ticker(
 
 @router.get(
     "/{stock_code}/research-packet",
+    dependencies=[Depends(get_current_user)],
     response_model=SymbolResearchPacketResponse,
     response_model_exclude_none=False,
     responses={
@@ -439,6 +443,7 @@ def get_stock_structure_decisions_batch(
 
 @router.get(
     "/{stock_code}/evidence",
+    dependencies=[Depends(get_current_user)],
     response_model=StockEvidenceResponse,
     response_model_exclude_none=True,
     responses={
@@ -548,24 +553,24 @@ def get_stock_quote(
 ) -> StockQuote:
     """
     获取股票实时行情
-    
+
     获取指定股票的最新行情数据
-    
+
     Args:
         stock_code: 股票代码（如 600519、00700、AAPL）
-        
+
     Returns:
         StockQuote: 实时行情数据
-        
+
     Raises:
         HTTPException: 404 - 股票不存在
     """
     try:
         service = StockService()
-        
+
         # 使用 def 而非 async def，FastAPI 自动在线程池中执行
         result = service.get_realtime_quote(stock_code)
-        
+
         if result is None:
             raise HTTPException(
                 status_code=404,
@@ -574,7 +579,7 @@ def get_stock_quote(
                     "message": f"未找到股票 {stock_code} 的行情数据"
                 }
             )
-        
+
         return StockQuote(
             stock_code=result.get("stock_code", stock_code),
             stock_name=result.get("stock_name"),
@@ -605,7 +610,7 @@ def get_stock_quote(
             quote_readiness=result.get("quoteReadiness") or result.get("quote_readiness"),
             source_confidence=result.get("sourceConfidence") or result.get("source_confidence"),
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -621,6 +626,7 @@ def get_stock_quote(
 
 @router.get(
     "/{stock_code}/intraday",
+    dependencies=[Depends(get_current_user)],
     response_model=StockIntradayResponse,
     responses={
         200: {"description": "日内行情数据"},
@@ -690,6 +696,7 @@ def get_stock_intraday(
 
 @router.get(
     "/{stock_code}/history",
+    dependencies=[Depends(get_current_user)],
     response_model=StockHistoryResponse,
     responses={
         200: {"description": "历史行情数据"},
@@ -706,27 +713,27 @@ def get_stock_history(
 ) -> StockHistoryResponse:
     """
     获取股票历史行情
-    
+
     获取指定股票的历史 K 线数据
-    
+
     Args:
         stock_code: 股票代码
         period: K 线周期 (daily/weekly/monthly/yearly)
         days: 获取天数
-        
+
     Returns:
         StockHistoryResponse: 历史行情数据
     """
     try:
         service = StockService()
-        
+
         # 使用 def 而非 async def，FastAPI 自动在线程池中执行
         result = service.get_history_data(
             stock_code=stock_code,
             period=period,
             days=days
         )
-        
+
         # 转换为响应模型
         data = [
             KLineData(
@@ -741,7 +748,7 @@ def get_stock_history(
             )
             for item in result.get("data", [])
         ]
-        
+
         return StockHistoryResponse(
             stock_code=stock_code,
             stock_name=result.get("stock_name"),
@@ -752,7 +759,7 @@ def get_stock_history(
             historical_ohlcv_readiness=result.get("historicalOhlcvReadiness") or result.get("historical_ohlcv_readiness"),
             source_confidence=result.get("sourceConfidence") or result.get("source_confidence"),
         )
-    
+
     except ValueError as e:
         # period 参数不支持的错误（如 weekly/monthly）
         raise HTTPException(

@@ -399,6 +399,16 @@ def test_options_decision_endpoint_omits_debug_ref_and_provider_reason_codes() -
     from api.v1.endpoints import options
 
     app = FastAPI()
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="options-member",
+        username="options-member",
+        display_name="Options Member",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
     app.include_router(options.router, prefix="/api/v1/options")
     response = TestClient(app).post(
         "/api/v1/options/decision/evaluate",

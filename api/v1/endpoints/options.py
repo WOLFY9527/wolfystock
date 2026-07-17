@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from api.deps import get_current_user
 from api.v1.consumer_safe_response import consumer_safe_json_response
 from api.v1.schemas.options import (
     OptionChainResponse,
@@ -91,7 +92,7 @@ from src.services.options_lab_service import (
 )
 from src.services.options_structure_service import OptionsStructureService
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 def _service() -> OptionsLabService:

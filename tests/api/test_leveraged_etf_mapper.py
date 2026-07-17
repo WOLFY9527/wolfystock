@@ -10,10 +10,21 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import api.v1.endpoints.leveraged_etf_mapper as leveraged_etf_mapper
+from api.deps import CurrentUser, get_current_user
 
 
 def _client() -> TestClient:
     app = FastAPI()
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="watchlist-member",
+        username="watchlist-member",
+        display_name="Watchlist Member",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
     app.include_router(leveraged_etf_mapper.router, prefix="/api/v1/leveraged-etf-mapper")
     return TestClient(app)
 

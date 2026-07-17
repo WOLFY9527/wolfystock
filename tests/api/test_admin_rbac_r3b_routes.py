@@ -362,6 +362,7 @@ def test_notification_reads_and_state_changes_use_notification_capabilities(monk
 
 def test_legacy_admin_still_passes_r3b_compatibility(monkeypatch) -> None:
     monkeypatch.setattr("api.v1.endpoints.admin_logs.AdminLogsRetentionService", FakeAdminLogsRetentionService)
+    monkeypatch.setenv("WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED", "true")
     client = _client(_user(legacy_admin=True))
 
     response = client.get("/api/v1/admin/logs/storage/summary")

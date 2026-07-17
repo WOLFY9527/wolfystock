@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from api.deps import get_current_user
 from api.v1.schemas.leveraged_etf_mapper import (
     LeveragedEtfMapperCalculateRequest,
     LeveragedEtfMapperCalculateResponse,
@@ -16,7 +17,7 @@ from src.services.leveraged_etf_mapper_service import (
 )
 
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 def _service() -> LeveragedEtfMapperService:

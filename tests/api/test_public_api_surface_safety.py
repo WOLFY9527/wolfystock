@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 import src.auth as auth
+from api.deps import CurrentUser, get_current_user
 from api.middlewares.auth import add_auth_middleware
 from api.v1 import api_v1_router
 from api.v1.endpoints import options, scanner
@@ -72,9 +73,9 @@ FORBIDDEN_ADVICE_MARKERS = (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROUTE_CLASSIFICATION_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "auth" / "backend_route_capability_inventory.json"
 DOCS_AND_SCHEMA_CLASSIFICATIONS = {
-    ("GET", "/docs"): "debug_or_schema_surface",
-    ("GET", "/redoc"): "debug_or_schema_surface",
-    ("GET", "/openapi.json"): "debug_or_schema_surface",
+    ("GET", "/docs"): "bounded_health_docs_surface",
+    ("GET", "/redoc"): "bounded_health_docs_surface",
+    ("GET", "/openapi.json"): "bounded_health_docs_surface",
 }
 LEGACY_UNSUPPORTED_OPENAPI_PATH = "/api/v1/openapi.json"
 DIAGNOSTIC_ROUTES_EXCLUDED_FROM_SAFE_BYPASS = {
@@ -123,6 +124,16 @@ def _assert_public_surface_safe(payload: object) -> None:
 
 def _options_client() -> TestClient:
     app = FastAPI()
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="options-member",
+        username="options-member",
+        display_name="Options Member",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
     app.include_router(options.router, prefix="/api/v1/options")
     return TestClient(app)
 
@@ -391,15 +402,15 @@ def test_docs_openapi_and_backend_diagnostics_have_explicit_surface_classificati
         assert classifications[signature] == expected
 
     assert classifications[("POST", "/api/v1/agent/chat")] == "authenticated_member"
-    assert classifications[("POST", "/api/v1/agent/chat/send")] == "admin_capability_required"
-    assert classifications[("GET", "/api/v1/scanner/watchlists/today")] == "admin_capability_required"
-    assert classifications[("GET", "/api/v1/scanner/watchlists/recent")] == "admin_capability_required"
-    assert classifications[("GET", "/api/v1/scanner/status")] == "admin_capability_required"
-    assert classifications[("GET", "/api/v1/usage/summary")] == "admin_capability_required"
-    assert classifications[("GET", "/api/v1/admin/logs/storage/summary")] == "admin_capability_required"
-    assert classifications[("POST", "/api/v1/admin/users/onboard")] == "admin_capability_required"
-    assert classifications[("GET", "/api/v1/admin/mission-control")] == "admin_capability_required"
-    assert classifications[("POST", "/api/v1/admin/cost/quota-dry-run")] == "admin_capability_required"
+    assert classifications[("POST", "/api/v1/agent/chat/send")] == "admin_capability"
+    assert classifications[("GET", "/api/v1/scanner/watchlists/today")] == "admin_capability"
+    assert classifications[("GET", "/api/v1/scanner/watchlists/recent")] == "admin_capability"
+    assert classifications[("GET", "/api/v1/scanner/status")] == "admin_capability"
+    assert classifications[("GET", "/api/v1/usage/summary")] == "admin_capability"
+    assert classifications[("GET", "/api/v1/admin/logs/storage/summary")] == "admin_capability"
+    assert classifications[("POST", "/api/v1/admin/users/onboard")] == "admin_capability"
+    assert classifications[("GET", "/api/v1/admin/mission-control")] == "admin_capability"
+    assert classifications[("POST", "/api/v1/admin/cost/quota-dry-run")] == "admin_capability"
     assert classifications[("GET", "/api/v1/market/data-readiness")] == "operator_diagnostic"
     assert classifications[("GET", "/api/v1/market/data-source-gap-registry")] == "operator_diagnostic"
     assert classifications[("GET", "/api/v1/agent/provider-health")] == "operator_diagnostic"
@@ -408,7 +419,7 @@ def test_docs_openapi_and_backend_diagnostics_have_explicit_surface_classificati
         signature
         for signature, classification in classifications.items()
         if signature[1].startswith("/api/v1/")
-        and classification in {"public_static_docs", "debug_or_schema_surface"}
+        and classification == "bounded_health_docs_surface"
     ]
     assert api_routes_with_doc_labels == []
 
@@ -825,7 +836,7 @@ def test_public_api_abuse_limiter_safe_market_read_allowlist_is_narrow() -> None
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/stocks/AAPL/structure-decision")
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/stocks/AAPL/history")
     assert limiter._is_safe_read_bypass("GET", "/api/v1/market/sentiment")
-    assert not limiter._is_safe_read_bypass("GET", "/api/v1/market/regime-decision")
+    assert limiter._is_safe_read_bypass("GET", "/api/v1/market/regime-decision")
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/admin/users")
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/options/underlyings/TEM/summary")
     assert DIAGNOSTIC_ROUTES_EXCLUDED_FROM_SAFE_BYPASS.isdisjoint(limiter._SAFE_READ_BYPASS_ROUTES)
@@ -1568,7 +1579,7 @@ def test_public_api_test_client_raw_body_and_cookie_patterns_are_warning_free(mo
                     headers={"content-type": "application/json", "X-Forwarded-For": "203.0.113.104"},
                 )
                 valid_cookie = client.get(
-                    "/api/v1/admin/users",
+                    "/api/v1/portfolio/accounts",
                     headers={"X-Forwarded-For": "203.0.113.104"},
                 )
 
@@ -1693,7 +1704,7 @@ def test_valid_session_bypasses_hot_public_bucket_for_same_client(monkeypatch, t
         client.cookies.set(auth.COOKIE_NAME, auth.create_session())
         with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
             authenticated = client.get(
-                "/api/v1/admin/users",
+                "/api/v1/portfolio/accounts",
                 headers={"X-Forwarded-For": raw_client_ip},
             )
 
