@@ -21,6 +21,7 @@ from scripts.environment.manager import (
 from scripts.environment.identity import ToolchainIdentity
 from scripts.environment.snapshots import SnapshotResult
 from scripts.environment.runtime import create_run_context
+from tests.scripts.test_wolfy_python_lock import write_lock_repository
 
 
 def snapshot(cache_root: Path, component: str, input_id: str, installed_id: str) -> SnapshotResult:
@@ -48,8 +49,7 @@ def make_root(tmp_path: Path) -> Path:
 
 def make_dependency_root(tmp_path: Path) -> Path:
     root = make_root(tmp_path)
-    (root / "requirements.txt").write_text("runtime==1\n", encoding="utf-8")
-    (root / "requirements-dev.txt").write_text("-r requirements.txt\n", encoding="utf-8")
+    write_lock_repository(root)
     (root / "apps" / "dsa-web" / "package.json").write_text('{"name":"fixture"}\n', encoding="utf-8")
     (root / "apps" / "dsa-web" / "package-lock.json").write_text(
         '{"name":"fixture","lockfileVersion":3,"packages":{}}\n', encoding="utf-8"
@@ -59,6 +59,26 @@ def make_dependency_root(tmp_path: Path) -> Path:
 
 def fixture_toolchain() -> ToolchainIdentity:
     return ToolchainIdentity("Darwin", "arm64", "CPython", "3.11.15", "20.20.2", "10.8.2", "fixture")
+
+
+def test_linux_arm64_manager_selects_normalized_runtime_projection(
+    tmp_path: Path,
+) -> None:
+    root = make_dependency_root(tmp_path)
+    arm64 = ToolchainIdentity(
+        "Linux", "arm64", "CPython", "3.11.15", "20.20.2", "10.8.2", "fixture"
+    )
+    aarch64 = ToolchainIdentity(
+        "Linux", "aarch64", "CPython", "3.11.15", "20.20.2", "10.8.2", "fixture"
+    )
+
+    first = EnvironmentManager(root, cache_root=tmp_path / "cache-one", toolchain=arm64)
+    second = EnvironmentManager(root, cache_root=tmp_path / "cache-two", toolchain=aarch64)
+
+    assert first.python_lock.profile == second.python_lock.profile == "runtime"
+    assert first.python_lock.target == second.python_lock.target
+    assert first.python_lock.target["architecture"] == "aarch64"
+    assert first.python_lock.projection_hash == second.python_lock.projection_hash
 
 
 def test_migration_replaces_legacy_dependencies_only_after_snapshots_exist(tmp_path: Path) -> None:
@@ -149,6 +169,11 @@ def test_environment_evidence_redacts_cache_paths_and_credentials(tmp_path: Path
         python=python,
         web=web,
         manifest_hashes={"requirements.txt": "f" * 64},
+        python_lock_evidence={
+            "schemaVersion": "wolfystock_python_lock_v1",
+            "contentHash": "1" * 64,
+            "hashVerification": True,
+        },
         toolchain={"pythonVersion": "3.11.15", "credential": "must-not-appear"},
         run_id="run-evidence",
         network_used=False,
@@ -160,7 +185,9 @@ def test_environment_evidence_redacts_cache_paths_and_credentials(tmp_path: Path
     assert "private-owner" not in encoded
     assert "must-not-appear" not in encoded
     assert evidence["snapshots"]["python"].startswith("$CACHE/")
-    assert evidence["environmentIdentity"]["bootstrapImplementationVersion"] == "wolfystock_bootstrap_v5"
+    assert evidence["environmentIdentity"]["bootstrapImplementationVersion"] == "wolfystock_bootstrap_v7"
+    assert evidence["pythonLock"]["contentHash"] == "1" * 64
+    assert evidence["pythonLock"]["hashVerification"] is True
 
 
 @pytest.mark.parametrize(

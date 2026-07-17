@@ -42,6 +42,7 @@ Use the repository-owned environment command from every checkout and worktree:
 
 ```bash
 ./wolfy bootstrap --ensure
+./wolfy lock python --check
 ./wolfy env verify
 ./wolfy exec --profile test -- python -m pytest -q tests/test_offline_network_policy.py
 ./wolfy qualify-env
@@ -62,10 +63,42 @@ The comparison reports new, unchanged, and removed findings separately. It
 never adds findings to a baseline automatically, and an unchanged release
 blocker remains a failure.
 
+`requirements.txt` and `requirements-dev.txt` preserve direct runtime and test
+intent. `requirements-lock.json` plus the related CPython 3.11/3.12 lock files
+are the reviewed install authority. Every target/profile projection exact-pins
+its selected distributions and compatible artifact filenames with SHA-256
+coverage. A selected source distribution also records its reviewed build
+backend and exact locked build requirements. Check the contract without
+installing dependencies:
+
+```bash
+./wolfy lock python --check
+```
+
+Only a deliberate dependency review may run `./wolfy lock python --update`.
+That command requires resolver `uv 0.11.19`, reports direct and transitive
+changes separately, and never runs from bootstrap, tests, development, CI, or
+release qualification. The resolver does not install the runtime environment;
+normal bootstrap remains pip-based and uses the selected lock with
+`--no-deps --require-hashes`.
+
+The reviewed target matrix is CPython 3.11 on Linux x86_64 for runtime and
+development, Linux aarch64 for runtime, macOS arm64/x86_64 for runtime and
+development, and Windows AMD64 for runtime and development. It also includes
+CPython 3.12 on macOS arm64/x86_64 and Windows AMD64 for runtime and
+development. Docker `linux/arm64` and Python-detected Linux `aarch64` normalize
+to the same `manylinux_2_36_aarch64` runtime projection; Linux aarch64 does not
+have a development projection. Other target/profile combinations fail before
+snapshot installation. Static marker, wheel-tag, ABI, and source-build
+validation is not a claim of real-platform execution.
+
 `bootstrap --ensure` is the only command that may install dependencies. Use
 `./wolfy bootstrap --ensure --offline` to require verified snapshots and local
-package-manager caches; an offline material miss fails without attempting the
-network. Python and Web snapshots live under the OS cache root, or the absolute
+package-manager caches; an offline locked-artifact miss fails without attempting
+the network. Online and offline Python bootstrap select the same normalized
+target/profile graph and artifact projection and never resolve floating
+requirements or rewrite lock files. Python and Web snapshots
+live under the OS cache root, or the absolute
 `WOLFYSTOCK_ENV_CACHE` override, as separate input and installed-content
 fingerprints. `.venv` and `apps/dsa-web/node_modules` link to those verified
 snapshots rather than another checkout.

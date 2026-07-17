@@ -13,6 +13,7 @@ from typing import Any, Sequence
 
 from .errors import EnvironmentFailure
 from .manager import EnvironmentManager, managed_python_path, require_managed_python
+from .python_lock import check_python_lock, update_python_lock
 from .qualification import compare_findings, normalize_findings
 from .runtime import cleanup_run, create_run_context, project_test_environment, write_run_json
 
@@ -51,6 +52,12 @@ def _parser() -> argparse.ArgumentParser:
     development = subparsers.add_parser("dev", help="start isolated frontend and backend services")
     development.add_argument("--json", action="store_true", required=True)
     development.add_argument("--stop", metavar="RUN_ID")
+    lock = subparsers.add_parser("lock", help="inspect or explicitly update reviewed dependency locks")
+    lock_families = lock.add_subparsers(dest="lock_family", required=True)
+    python_lock = lock_families.add_parser("python", help="manage the authoritative Python lock family")
+    lock_actions = python_lock.add_mutually_exclusive_group(required=True)
+    lock_actions.add_argument("--check", dest="lock_action", action="store_const", const="check")
+    lock_actions.add_argument("--update", dest="lock_action", action="store_const", const="update")
     return parser
 
 
@@ -202,6 +209,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = parser.parse_args(raw)
         root = _root()
+        if args.command == "lock":
+            payload = (
+                check_python_lock(root)
+                if args.lock_action == "check"
+                else update_python_lock(root)
+            )
+            _emit(payload)
+            return 0
         baseline = _validate_baseline(args) if args.command == "qualify-env" else None
         if args.command != "bootstrap":
             _managed_reexec(root, raw)

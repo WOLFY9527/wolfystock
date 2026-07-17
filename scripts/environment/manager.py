@@ -25,6 +25,11 @@ from .identity import (
     stable_hash,
 )
 from .runtime import ENVIRONMENT_POLICY_VERSION
+from .python_lock import (
+    PythonLockContract,
+    bootstrap_profile_for_target,
+    load_python_lock,
+)
 from .snapshots import SnapshotResult, ensure_snapshot, verify_cached_snapshot
 
 
@@ -201,6 +206,7 @@ def build_environment_evidence(
     python: SnapshotResult,
     web: SnapshotResult,
     manifest_hashes: dict[str, str],
+    python_lock_evidence: dict[str, Any],
     toolchain: Mapping[str, Any],
     run_id: str | None,
     network_used: bool,
@@ -223,6 +229,7 @@ def build_environment_evidence(
             "web": {"input": web.input_fingerprint, "installed": web.installed_fingerprint},
         },
         "manifestHashes": dict(sorted(manifest_hashes.items())),
+        "pythonLock": python_lock_evidence,
         "toolchain": _toolchain_evidence(toolchain),
         "snapshots": {
             "python": _cache_relative(root, python.path),
@@ -256,11 +263,31 @@ class EnvironmentManager:
                     "environment_cache_permissions_invalid", "unable to restrict environment cache permissions"
                 ) from exc
         self.toolchain = toolchain or detect_toolchain()
+        python_profile = bootstrap_profile_for_target(
+            os_name=self.toolchain.os_name,
+            architecture=self.toolchain.architecture,
+            python_version=self.toolchain.python_version,
+            python_implementation=self.toolchain.python_implementation,
+        )
+        self.python_lock: PythonLockContract = load_python_lock(
+            self.root,
+            os_name=self.toolchain.os_name,
+            architecture=self.toolchain.architecture,
+            python_version=self.toolchain.python_version,
+            python_implementation=self.toolchain.python_implementation,
+            profile=python_profile,
+        )
         self.identity = calculate_environment_identity(self.root, self.toolchain)
 
     def _components(self) -> tuple[PythonComponent, WebComponent]:
         return (
-            PythonComponent(self.root, self.identity.python_input_fingerprint, self.toolchain),
+            PythonComponent(
+                self.root,
+                self.identity.python_input_fingerprint,
+                self.toolchain,
+                lock_contract=self.python_lock,
+                artifact_cache_root=self.cache_root / "artifacts" / "python",
+            ),
             WebComponent(self.root, self.identity.web_input_fingerprint, self.toolchain),
         )
 
@@ -278,6 +305,7 @@ class EnvironmentManager:
             python=python,
             web=web,
             manifest_hashes=self.identity.manifest_hashes,
+            python_lock_evidence=self.python_lock.evidence(),
             toolchain=asdict(self.toolchain),
             run_id=run_id,
             network_used=network_used,

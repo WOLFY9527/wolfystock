@@ -11,10 +11,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from .python_lock import LOCK_MANIFEST, LOCK_PATHS, REQUIREMENT_INPUTS
+
 
 ENVIRONMENT_SCHEMA_VERSION = "wolfystock_environment_v1"
-BOOTSTRAP_IMPLEMENTATION_VERSION = "wolfystock_bootstrap_v5"
-PYTHON_INPUTS = ("requirements.txt", "requirements-dev.txt")
+BOOTSTRAP_IMPLEMENTATION_VERSION = "wolfystock_bootstrap_v7"
+PYTHON_INPUTS = (*REQUIREMENT_INPUTS, LOCK_MANIFEST, *sorted(set(LOCK_PATHS.values())))
 WEB_INPUTS = ("apps/dsa-web/package.json", "apps/dsa-web/package-lock.json")
 
 
@@ -98,7 +100,7 @@ def detect_toolchain() -> ToolchainIdentity:
         python_version=platform.python_version(),
         node_version=_tool_version(["node", "--version"], "Node"),
         npm_version=_tool_version(npm_command("--version"), "npm"),
-        install_mode="pip-requirements+npm-ci",
+        install_mode="pip-hash-lock+npm-ci",
     )
 
 

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import csv
 import hashlib
-import html
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -16,6 +16,7 @@ from typing import Any, Callable, Iterator
 
 from .errors import EnvironmentFailure, OfflineMaterialUnavailable
 from .identity import ToolchainIdentity, file_hash, npm_command, stable_hash
+from .python_lock import PythonLockContract
 
 
 CommandRunner = Callable[..., subprocess.CompletedProcess[str]]
@@ -185,11 +186,15 @@ class PythonComponent:
         input_fingerprint: str,
         toolchain: ToolchainIdentity,
         *,
+        lock_contract: PythonLockContract,
+        artifact_cache_root: Path,
         command_runner: CommandRunner = _run,
     ) -> None:
         self.root = root
         self.input_fingerprint = input_fingerprint
         self.toolchain = toolchain
+        self.lock_contract = lock_contract
+        self.artifact_cache_root = artifact_cache_root
         self.command_runner = command_runner
 
     @staticmethod
@@ -200,56 +205,139 @@ class PythonComponent:
                 return candidate
         raise EnvironmentFailure("managed_python_missing", "managed Python interpreter is missing")
 
-    def _offline_wheel_arguments(self, destination: Path) -> list[str]:
-        with _bootstrap_environment(offline=True) as environment:
-            cache_result = self.command_runner(
-                [sys.executable, "-m", "pip", "cache", "dir"], env=environment
-            )
-        if cache_result.returncode != 0:
-            return []
-        cache = Path(cache_result.stdout.strip()) / "wheels"
-        wheels = sorted(cache.glob("**/*.whl")) if cache.is_dir() else []
-        if not wheels:
-            return []
-        links = destination / ".offline-wheels"
-        links.mkdir()
-        index = links / "index.html"
-        anchors = [
-            f'<a href="{html.escape(wheel.resolve(strict=True).as_uri())}">{html.escape(wheel.name)}</a>'
-            for wheel in wheels
-        ]
-        index.write_text("\n".join(anchors) + "\n", encoding="utf-8")
-        return ["--find-links", index.as_uri()]
+    def _artifact_directory(self) -> Path:
+        target = self.lock_contract.target
+        label = (
+            f"{target['os'].lower()}-{target['architecture'].lower()}-"
+            f"cpython{target['pythonVersion'].replace('.', '')}-{self.lock_contract.profile}"
+        )
+        return self.artifact_cache_root / self.lock_contract.content_hash / label
 
-    def build(self, destination: Path, *, offline: bool) -> None:
-        with _bootstrap_environment(offline=offline) as environment:
-            create = self.command_runner(
-                [sys.executable, "-m", "venv", str(destination)], env=environment
-            )
-        if create.returncode != 0:
-            raise EnvironmentFailure("python_environment_creation_failed", "managed Python environment creation failed")
-        python = self.python_path(destination)
-        offline_args = self._offline_wheel_arguments(destination) if offline else []
+    def _locked_artifact_arguments(self) -> list[str]:
+        directory = self._artifact_directory()
+        directory.mkdir(parents=True, exist_ok=True)
+        return ["--no-index", "--find-links", str(directory)]
+
+    @staticmethod
+    def _is_hash_mismatch(result: subprocess.CompletedProcess[str]) -> bool:
+        output = (result.stdout + "\n" + result.stderr).lower()
+        return "do not match the hashes" in output or "hashes from the requirements file" in output
+
+    def _download_locked_artifacts(self, python: Path) -> None:
+        directory = self._artifact_directory()
+        directory.mkdir(parents=True, exist_ok=True)
         command = [
             str(python),
             "-I",
+            "-B",
+            "-m",
+            "pip",
+            "download",
+            "--no-input",
+            "--no-deps",
+            "--require-hashes",
+            "--dest",
+            str(directory),
+            "-r",
+            str(self.lock_contract.lock_path),
+        ]
+        with _bootstrap_environment(offline=False) as environment:
+            downloaded = self.command_runner(command, cwd=self.root, env=environment)
+        if downloaded.returncode == 0:
+            return
+        if self._is_hash_mismatch(downloaded):
+            raise EnvironmentFailure(
+                "python_locked_artifact_hash_mismatch", "locked Python artifact hash mismatch"
+            )
+        raise EnvironmentFailure(
+            "python_locked_artifact_download_failed", "locked Python artifact download failed"
+        )
+
+    def _verify_artifact_cache(self) -> None:
+        allowed = self.lock_contract.artifact_files
+        directory = self._artifact_directory()
+        directory.mkdir(parents=True, exist_ok=True)
+        for path in directory.iterdir():
+            if not path.is_file() or allowed.get(path.name) != file_hash(path):
+                raise EnvironmentFailure(
+                    "python_locked_artifact_hash_mismatch", "locked Python artifact hash mismatch"
+                )
+
+    def _install_build_backends(self, python: Path, *, offline: bool) -> None:
+        requirements = [
+            f"{name}=={version}"
+            for name, version in sorted(self.lock_contract.build_requirements.items())
+        ]
+        if not requirements:
+            return
+        command = [
+            str(python),
+            "-I",
+            "-B",
             "-m",
             "pip",
             "install",
             "--no-input",
-            *offline_args,
-            "-r",
-            str(self.root / "requirements-dev.txt"),
+            "--no-deps",
+            *self._locked_artifact_arguments(),
+            *requirements,
         ]
-        with _bootstrap_environment(offline=offline) as environment:
-            install = self.command_runner(command, cwd=self.root, env=environment)
-        shutil.rmtree(destination / ".offline-wheels", ignore_errors=True)
-        if install.returncode != 0:
+        with _bootstrap_environment(offline=True) as environment:
+            installed = self.command_runner(command, cwd=self.root, env=environment)
+        if installed.returncode != 0:
             if offline:
                 raise OfflineMaterialUnavailable(
-                    "offline_python_material_unavailable", "offline_python_material_unavailable"
+                    "offline_python_locked_artifact_missing",
+                    "offline_python_locked_artifact_missing",
                 )
-            raise EnvironmentFailure("python_dependency_install_failed", "Python dependency installation failed")
+            raise EnvironmentFailure(
+                "python_locked_build_backend_install_failed",
+                "locked Python build backend installation failed",
+            )
+
+    def build(self, destination: Path, *, offline: bool) -> None:
+        with _bootstrap_environment(offline=offline) as environment:
+            create = self.command_runner(
+                [sys.executable, "-I", "-B", "-m", "venv", str(destination)], env=environment
+            )
+        if create.returncode != 0:
+            raise EnvironmentFailure("python_environment_creation_failed", "managed Python environment creation failed")
+        python = self.python_path(destination)
+        if not offline:
+            self._download_locked_artifacts(python)
+        self._verify_artifact_cache()
+        self._install_build_backends(python, offline=offline)
+        command = [
+            str(python),
+            "-I",
+            "-B",
+            "-m",
+            "pip",
+            "install",
+            "--no-input",
+            "--no-deps",
+            "--no-build-isolation",
+            "--require-hashes",
+            *self._locked_artifact_arguments(),
+            "-r",
+            str(self.lock_contract.lock_path),
+        ]
+        with _bootstrap_environment(offline=True) as environment:
+            existing_path = environment.get("PATH")
+            environment["PATH"] = str(python.parent)
+            if existing_path:
+                environment["PATH"] += os.pathsep + existing_path
+            install = self.command_runner(command, cwd=self.root, env=environment)
+        if install.returncode != 0:
+            if self._is_hash_mismatch(install):
+                raise EnvironmentFailure(
+                    "python_locked_artifact_hash_mismatch", "locked Python artifact hash mismatch"
+                )
+            if offline:
+                raise OfflineMaterialUnavailable(
+                    "offline_python_locked_artifact_missing", "offline_python_locked_artifact_missing"
+                )
+            raise EnvironmentFailure("python_locked_install_failed", "locked Python dependency installation failed")
         _remove_python_bytecode(destination)
         _normalize_distribution_records(destination)
 
@@ -296,6 +384,31 @@ class PythonComponent:
         )
         if check.returncode != 0:
             raise EnvironmentFailure("python_dependency_metadata_inconsistent", "pip check rejected dependency metadata")
+        listed = self.command_runner(
+            [str(python), "-I", "-B", "-m", "pip", "list", "--format=json"],
+            env={"PYTHONDONTWRITEBYTECODE": "1"},
+        )
+        try:
+            rows = json.loads(listed.stdout)
+            installed = {
+                re.sub(r"[-_.]+", "-", row["name"]).lower(): str(row["version"])
+                for row in rows
+                if isinstance(row, dict)
+                and isinstance(row.get("name"), str)
+                and isinstance(row.get("version"), str)
+            }
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise EnvironmentFailure(
+                "python_installed_distribution_invalid", "installed Python distributions are unreadable"
+            ) from exc
+        expected = {
+            name: next(iter(versions)) for name, versions in self.lock_contract.distributions.items()
+        }
+        if listed.returncode != 0 or installed != expected:
+            raise EnvironmentFailure(
+                "python_locked_distribution_mismatch",
+                "installed Python distributions do not match the selected lock",
+            )
         return {
             "implementation": probe["implementation"],
             "version": probe["version"],
@@ -303,6 +416,7 @@ class PythonComponent:
             "distributionMetadata": _metadata_hashes(snapshot),
             "contentTree": _content_tree_identity(snapshot, _python_site_packages(snapshot)),
             "criticalImports": list(self.critical_imports),
+            "lockedDistributions": dict(sorted(installed.items())),
         }
 
     def verify(self, snapshot: Path, manifest: dict[str, object]) -> None:

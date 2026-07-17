@@ -59,32 +59,32 @@
     "path": "scripts/build_ai_project_manual.py",
     "readsProductionDataPaths": false,
     "requiresApiKeys": false,
-    "sha256": "d3ec950aadd9555520d21025bf09ae6c43c7c4ae8a4241a170a4e0176ad51a6a",
-    "version": 4
+    "sha256": "4ddd77828c956c1a69e9fb3ff965c8fe6f84c97a02a2f28f6c1a897b6691aa89",
+    "version": 5
   },
   "includedSources": [
     {
-      "bytes": 5488,
+      "bytes": 6668,
       "categories": [
         "governance",
         "workflow"
       ],
-      "lineCount": 105,
+      "lineCount": 108,
       "path": "AGENTS.md",
       "purpose": "repository AI-agent rules and hard safety boundaries",
-      "sha256": "eaa4b88a73412cc6ab6fc30d51a8ca9690351e46e8bc5bede5dcb6bdcaccc3aa",
+      "sha256": "a13210666861c85d3654e29d4a2234ed502d2c23ef35fdb8a2bfa7c104d20e51",
       "title": "AGENTS.md"
     },
     {
-      "bytes": 9594,
+      "bytes": 11387,
       "categories": [
         "onboarding",
         "product"
       ],
-      "lineCount": 230,
+      "lineCount": 263,
       "path": "README.md",
       "purpose": "human product entrypoint and supported run commands",
-      "sha256": "72cbffa6762d8eaea776302729b3863a721bc0b13079d44d1d3e05aaa87719a0",
+      "sha256": "d2e0e307b5be9d36ae8545ee0cc63255fe82db955aea774cc60538e4e6787a99",
       "title": "WolfyStock"
     },
     {
@@ -103,7 +103,7 @@
   "outputs": {
     "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
     "manual": "docs/AI_PROJECT_MANUAL.md",
-    "manualSha256": "c1f14bde5fca2f65985e46d2436f40673352e7745c04f6a4af9c0b011b8cdd28"
+    "manualSha256": "f5ef07f82b1a7a73e74237080854e3038debff7117df1f9a96ebe760841dfeb9"
   },
   "schemaVersion": 2,
   "sections": [
@@ -126,6 +126,16 @@
       "title": "Architecture Overview",
       "updateTrigger": "Runtime entrypoints, module ownership, public contracts, or high-risk boundary rules change.",
       "validation": "Run the focused gate for the touched module plus `python scripts/check_ai_assets.py` for AI-governance edits."
+    },
+    {
+      "key": "dependency-environment-authority",
+      "sources": [
+        "README.md",
+        "AGENTS.md"
+      ],
+      "title": "Dependency Environment Authority",
+      "updateTrigger": "Python requirement intent, lock schema/family, resolver, supported target matrix, or bootstrap install authority changes.",
+      "validation": "Python lock check, focused wolfy lock/component/identity/manager/CLI tests, offline ensure, manual freshness, and AI asset checks."
     },
     {
       "key": "frontend-surfaces",

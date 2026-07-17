@@ -14,6 +14,14 @@ def dependency_repo(tmp_path: Path) -> Path:
     (tmp_path / "apps" / "dsa-web").mkdir(parents=True)
     (tmp_path / "requirements.txt").write_text("runtime-package==1.0\n", encoding="utf-8")
     (tmp_path / "requirements-dev.txt").write_text("-r requirements.txt\npytest==8.0\n", encoding="utf-8")
+    for name in (
+        "requirements-lock.json",
+        "requirements-python311-runtime.lock",
+        "requirements-python311-dev.lock",
+        "requirements-python312-runtime.lock",
+        "requirements-python312-dev.lock",
+    ):
+        (tmp_path / name).write_text(f"{name}\n", encoding="utf-8")
     (tmp_path / "apps" / "dsa-web" / "package.json").write_text(
         '{"name":"fixture","devDependencies":{"vite":"1.0.0"}}\n', encoding="utf-8"
     )
@@ -46,6 +54,11 @@ def test_identical_manifests_and_toolchains_produce_identical_fingerprints(
     assert set(first.manifest_hashes) == {
         "requirements.txt",
         "requirements-dev.txt",
+        "requirements-lock.json",
+        "requirements-python311-runtime.lock",
+        "requirements-python311-dev.lock",
+        "requirements-python312-runtime.lock",
+        "requirements-python312-dev.lock",
         "apps/dsa-web/package.json",
         "apps/dsa-web/package-lock.json",
     }
@@ -61,6 +74,19 @@ def test_lockfile_content_change_produces_new_web_and_combined_fingerprints(
 
     assert after.python_input_fingerprint == before.python_input_fingerprint
     assert after.web_input_fingerprint != before.web_input_fingerprint
+    assert after.combined_input_fingerprint != before.combined_input_fingerprint
+
+
+def test_python_lock_content_change_produces_new_python_and_combined_fingerprints(
+    dependency_repo: Path, toolchain: ToolchainIdentity
+) -> None:
+    before = calculate_environment_identity(dependency_repo, toolchain)
+    lock = dependency_repo / "requirements-python311-dev.lock"
+    lock.write_text(lock.read_text(encoding="utf-8") + "changed\n", encoding="utf-8")
+    after = calculate_environment_identity(dependency_repo, toolchain)
+
+    assert after.python_input_fingerprint != before.python_input_fingerprint
+    assert after.web_input_fingerprint == before.web_input_fingerprint
     assert after.combined_input_fingerprint != before.combined_input_fingerprint
 
 

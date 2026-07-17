@@ -14,6 +14,7 @@ Do not use as: launch approval, protected-domain authorization, stale audit auth
 
 - [Project Identity And Product Purpose](#project-identity-and-product-purpose)
 - [Architecture Overview](#architecture-overview)
+- [Dependency Environment Authority](#dependency-environment-authority)
 - [Frontend Surfaces](#frontend-surfaces)
 - [Backend API And Service Structure](#backend-api-and-service-structure)
 - [Data Providers And Data Reality Boundaries](#data-providers-and-data-reality-boundaries)
@@ -49,6 +50,16 @@ Maintain bounded contexts. Consumers should call public facades, API clients, sc
 Shared contracts, schema changes, root config, CI, dependency files, auth, provider runtime, broker/accounting, DB migrations, and frontend route-entry behavior are high-risk and require explicit task scope.
 
 Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md).
+
+## Dependency Environment Authority
+
+`./wolfy` is the repository-owned dependency environment authority. `requirements.txt` and `requirements-dev.txt` preserve direct runtime and development/test intent; they are not install locks. `requirements-lock.json` binds their normalized SHA-256 hashes to a reviewed family of CPython 3.11/3.12 pip locks and target/profile artifact projections. Each selected distribution is exact-pinned; compatible artifact filenames carry SHA-256 coverage, and source distributions record their reviewed build backend and exact locked build requirements.
+
+Run `./wolfy lock python --check` for a no-install freshness, schema, pin, hash, resolver, target-matrix, and normalization check. Only an explicit dependency review may run `./wolfy lock python --update`. The update command uses `uv 0.11.19` only as a universal resolver and reports direct and transitive changes separately; it never runs implicitly. Runtime installation remains pip-based through `./wolfy bootstrap --ensure`, which selects the reviewed target/profile projection and installs with `--no-deps --require-hashes`.
+
+The reviewed targets are CPython 3.11 on Linux x86_64 for runtime/development, Linux aarch64 for runtime, macOS arm64/x86_64 for runtime/development, and Windows AMD64 for runtime/development, plus CPython 3.12 on macOS arm64/x86_64 and Windows AMD64 for runtime/development. Docker `linux/arm64` and Python-detected Linux `aarch64` select the same `manylinux_2_36_aarch64` runtime projection; Linux aarch64 has no development projection. Unsupported target/profile combinations fail before installation. Online and offline bootstrap use the same graph and artifact projection; offline mode fails on missing artifacts and neither mode rewrites or resolves the lock. Environment evidence records lock schema/policy, content and input hashes, resolver identity, normalized target/profile/lock/projection, distribution, artifact, source-build and hash counts, and hash-verification status. Static marker, wheel-tag, ABI, and source-build validation is not real-platform execution.
+
+Source provenance: [`README.md`](../README.md), [`AGENTS.md`](../AGENTS.md).
 
 ## Frontend Surfaces
 
@@ -289,6 +300,7 @@ This map is generated from the hard-collapse source set. The manual contains abs
 | --- | --- | --- | --- |
 | Project Identity And Product Purpose | `README.md`<br>`AGENTS.md` | Product positioning, target audience, or no-advice posture changes. | Docs-only validation plus no-advice grep when user-visible wording changes. |
 | Architecture Overview | `AGENTS.md`<br>`README.md` | Runtime entrypoints, module ownership, public contracts, or high-risk boundary rules change. | Run the focused gate for the touched module plus `python scripts/check_ai_assets.py` for AI-governance edits. |
+| Dependency Environment Authority | `README.md`<br>`AGENTS.md` | Python requirement intent, lock schema/family, resolver, supported target matrix, or bootstrap install authority changes. | Python lock check, focused wolfy lock/component/identity/manager/CLI tests, offline ensure, manual freshness, and AI asset checks. |
 | Frontend Surfaces | `README.md`<br>`AGENTS.md` | Route map, page ownership, consumer copy, route IA, or visual system changes. | Frontend tests/lint/build plus browser or screenshot evidence when UI source changes. |
 | Backend API And Service Structure | `AGENTS.md`<br>`README.md` | API families, service boundaries, schema contracts, report payloads, or validation routing changes. | Backend gate or closest pytest/py_compile evidence; wider gates for protected/shared contracts. |
 | Data Providers And Data Reality Boundaries | `AGENTS.md`<br>`README.md` | Provider routing, source authority, data readiness, freshness, lineage, or professional-roadmap changes. | Provider/cache/freshness tests, no-live-call proof when relevant, and raw-provider leakage scans. |

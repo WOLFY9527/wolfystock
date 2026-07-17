@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-from scripts.environment.cli import _execute
+from scripts.environment.cli import _execute, _parser
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -46,8 +46,18 @@ def test_cli_help_exposes_single_canonical_command_surface() -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    for command in ("bootstrap", "env", "exec", "qualify-env", "dev"):
+    for command in ("bootstrap", "env", "exec", "qualify-env", "dev", "lock"):
         assert command in result.stdout
+
+
+def test_lock_command_has_one_bounded_python_check_and_update_surface() -> None:
+    parser = _parser()
+
+    check = parser.parse_args(["lock", "python", "--check"])
+    update = parser.parse_args(["lock", "python", "--update"])
+
+    assert (check.command, check.lock_family, check.lock_action) == ("lock", "python", "check")
+    assert (update.command, update.lock_family, update.lock_action) == ("lock", "python", "update")
 
 
 def test_existing_worktree_entrypoints_are_thin_wolfy_delegates() -> None:

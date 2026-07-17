@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 MANUAL_PATH = ROOT / "docs" / "AI_PROJECT_MANUAL.md"
 MANIFEST_PATH = ROOT / "docs" / "AI_PROJECT_MANUAL_SOURCES.json"
 GENERATOR_PATH = "scripts/build_ai_project_manual.py"
-GENERATOR_VERSION = 4
+GENERATOR_VERSION = 5
 SCHEMA_VERSION = 2
 
 PRUNED_DIR_NAMES = {
@@ -360,6 +360,36 @@ SECTIONS = [
         source_paths=("AGENTS.md", "README.md"),
         update_trigger="Runtime entrypoints, module ownership, public contracts, or high-risk boundary rules change.",
         validation="Run the focused gate for the touched module plus `python scripts/check_ai_assets.py` for AI-governance edits.",
+    ),
+    ManualSection(
+        key="dependency-environment-authority",
+        title="Dependency Environment Authority",
+        body=(
+            "`./wolfy` is the repository-owned dependency environment authority. `requirements.txt` and "
+            "`requirements-dev.txt` preserve direct runtime and development/test intent; they are not install locks. "
+            "`requirements-lock.json` binds their normalized SHA-256 hashes to a reviewed family of CPython 3.11/3.12 "
+            "pip locks and target/profile artifact projections. Each selected distribution is exact-pinned; compatible "
+            "artifact filenames carry SHA-256 coverage, and source distributions record their reviewed build backend and "
+            "exact locked build requirements.\n\n"
+            "Run `./wolfy lock python --check` for a no-install freshness, schema, pin, hash, resolver, target-matrix, and "
+            "normalization check. Only an explicit dependency review may run `./wolfy lock python --update`. The update "
+            "command uses `uv 0.11.19` only as a universal resolver and reports direct and transitive changes separately; "
+            "it never runs implicitly. Runtime installation remains pip-based through `./wolfy bootstrap --ensure`, which "
+            "selects the reviewed target/profile projection and installs with `--no-deps --require-hashes`.\n\n"
+            "The reviewed targets are CPython 3.11 on Linux x86_64 for runtime/development, Linux aarch64 for runtime, "
+            "macOS arm64/x86_64 for runtime/development, and Windows AMD64 for runtime/development, plus CPython 3.12 on "
+            "macOS arm64/x86_64 and Windows AMD64 for runtime/development. Docker `linux/arm64` and Python-detected Linux "
+            "`aarch64` select the same `manylinux_2_36_aarch64` runtime projection; Linux aarch64 has no development "
+            "projection. Unsupported target/profile combinations fail before installation. Online and offline bootstrap "
+            "use the same graph and artifact projection; offline mode fails on missing artifacts and neither mode rewrites "
+            "or resolves the lock. Environment evidence records lock schema/policy, content and input hashes, resolver "
+            "identity, normalized target/profile/lock/projection, distribution, artifact, source-build and hash counts, and "
+            "hash-verification status. Static marker, wheel-tag, ABI, and source-build validation is not real-platform "
+            "execution."
+        ),
+        source_paths=("README.md", "AGENTS.md"),
+        update_trigger="Python requirement intent, lock schema/family, resolver, supported target matrix, or bootstrap install authority changes.",
+        validation="Python lock check, focused wolfy lock/component/identity/manager/CLI tests, offline ensure, manual freshness, and AI asset checks.",
     ),
     ManualSection(
         key="frontend-surfaces",
