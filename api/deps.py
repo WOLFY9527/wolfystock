@@ -25,6 +25,7 @@ from src.auth import (
     get_admin_unlock_identity,
     get_session_identity,
     is_auth_enabled,
+    is_production_mode,
 )
 from src.multi_user import ROLE_ADMIN
 from src.storage import DatabaseManager
@@ -136,7 +137,7 @@ def resolve_current_user(request: Request) -> CurrentUser | None:
                 state.current_user = current_user
             return current_user
 
-    if not auth_enabled:
+    if not auth_enabled and not is_production_mode():
         bootstrap_user = db.ensure_bootstrap_admin_user()
         current_user = CurrentUser(
             user_id=str(bootstrap_user.id),

@@ -19,6 +19,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import src.auth as auth
+from api.app import create_app
 from api.middlewares.auth import add_auth_middleware
 from api.v1 import api_v1_router
 from src.admin_rbac import OPS_ADMIN_ROLE, SECURITY_ADMIN_ROLE
@@ -711,22 +712,22 @@ def test_admin_without_matching_capabilities_cannot_access_diagnostic_surfaces(
         _assert_public_error_safe(response.json(), dict(response.headers))
 
 
-def test_auth_disabled_mode_exposes_transitional_admin_and_is_not_public_safe(
+def test_explicit_local_auth_disabled_mode_preserves_transitional_admin(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _reset_auth_globals()
     DatabaseManager.reset_instance()
     db_path = tmp_path / "auth-disabled-surface.db"
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("ADMIN_AUTH_ENABLED", "false")
     monkeypatch.setenv("DATABASE_PATH", str(db_path))
     monkeypatch.setattr(auth, "_get_data_dir", lambda: tmp_path)
     monkeypatch.setattr(auth, "_is_auth_enabled_from_env", lambda: False)
     auth._auth_enabled = False
 
     DatabaseManager(db_url=f"sqlite:///{db_path}")
-    app = FastAPI()
-    add_auth_middleware(app)
-    app.include_router(api_v1_router)
+    app = create_app(static_dir=tmp_path / "missing-static")
     client = TestClient(app)
     try:
         storage = client.get("/api/v1/admin/logs/storage/summary")
@@ -734,16 +735,14 @@ def test_auth_disabled_mode_exposes_transitional_admin_and_is_not_public_safe(
         usage = client.get("/api/v1/usage/summary")
 
         evidence = {
-            "authDisabledPublicIngressSafe": False,
-            "surfaceClassification": "launch_blocker",
+            "profile": "development",
             "storageStatus": storage.status_code,
             "providerStatus": provider.status_code,
             "usageStatus": usage.status_code,
             "transitionalAdminObserved": all(response.status_code == 200 for response in (storage, provider, usage)),
         }
         assert evidence == {
-            "authDisabledPublicIngressSafe": False,
-            "surfaceClassification": "launch_blocker",
+            "profile": "development",
             "storageStatus": 200,
             "providerStatus": 200,
             "usageStatus": 200,

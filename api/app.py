@@ -32,17 +32,17 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from sqlalchemy import text
 
 from api.deps import resolve_current_user
-from api.v1 import api_v1_router
 from api.v1.errors import build_safe_error_payload
 from api.middlewares.auth import add_auth_middleware
 from api.middlewares.error_handler import add_error_handlers
 from api.security_headers import apply_security_headers
 from api.v1.schemas.common import HealthResponse
 from src.storage import get_db
-from src.auth import is_auth_enabled, is_production_mode
+from src.auth import _is_admin_auth_enabled_value, is_auth_enabled, is_production_mode
 from src.config import get_config
 from src.logging_config import ensure_runtime_file_logging
 from src.runtime.composition import RuntimeContainer
+from src.runtime.settings import RuntimeSettings, SettingSource
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,24 @@ _RUNTIME_LOGGING_CONFIGURED = False
 
 def _iso_now() -> str:
     return datetime.now().isoformat()
+
+
+def _require_production_auth(settings: RuntimeSettings) -> None:
+    """Reject production ingress before constructing application resources."""
+    if settings.profile != "production":
+        return
+    auth_source = settings.provenance["ADMIN_AUTH_ENABLED"].source
+    auth_value = settings._raw_environment.get("ADMIN_AUTH_ENABLED")
+    if auth_source is SettingSource.DEFAULT or not _is_admin_auth_enabled_value(auth_value):
+        raise RuntimeError("Production requires ADMIN_AUTH_ENABLED=true")
+
+
+def _resolve_contained_path(root: Path, candidate: Path) -> Path | None:
+    """Resolve a static path and retain it only when it remains under root."""
+    resolved_candidate = candidate.resolve(strict=False)
+    if not resolved_candidate.is_relative_to(root):
+        return None
+    return resolved_candidate
 
 
 def _ensure_api_runtime_file_logging_once() -> dict[str, Any]:
@@ -105,13 +123,6 @@ def _docs_auth_error_response(request: Request, *, status_code: int, error: str,
 def _require_docs_admin_user(request: Request):
     auth_enabled = is_auth_enabled()
     if not auth_enabled:
-        if is_production_mode():
-            return _docs_auth_error_response(
-                request,
-                status_code=403,
-                error="admin_auth_required",
-                message="Admin authentication must be enabled for production API docs",
-            )
         return None
 
     current_user = resolve_current_user(request)
@@ -304,12 +315,19 @@ def create_app(
     Returns:
         配置完成的 FastAPI 应用实例
     """
+    runtime_settings = RuntimeSettings.load()
+    _require_production_auth(runtime_settings)
+
+    from api.v1 import api_v1_router
+
     if container is None:
         container = RuntimeContainer()
 
     # 默认静态文件目录
     if static_dir is None:
         static_dir = Path(__file__).parent.parent / "static"
+    static_root = static_dir.resolve(strict=False)
+    index_path = _resolve_contained_path(static_root, static_root / "index.html")
     
     # 创建 FastAPI 实例
     app = FastAPI(
@@ -330,7 +348,7 @@ def create_app(
         openapi_url=None,
     )
     app.state.runtime_container = container
-    app.state.frontend_static_dir = static_dir
+    app.state.frontend_static_dir = static_root
     app.state.backend_runtime_started_at = _iso_now()
     
     # ============================================================
@@ -417,14 +435,14 @@ def create_app(
     # 根路由和健康检查
     # ============================================================
     
-    has_frontend = static_dir.exists() and (static_dir / "index.html").exists()
+    has_frontend = index_path is not None and index_path.is_file()
     app.state.frontend_static_mode = "static_dist" if has_frontend else "unavailable"
     
     if has_frontend:
         @app.get("/", include_in_schema=False)
         async def root():
             """根路由 - 返回前端页面"""
-            return FileResponse(static_dir / "index.html")
+            return FileResponse(index_path)
     else:
         _FRONTEND_NOT_BUILT_HTML = """<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -502,8 +520,8 @@ def create_app(
     
     if has_frontend:
         # 挂载静态资源目录
-        assets_dir = static_dir / "assets"
-        if assets_dir.exists():
+        assets_dir = _resolve_contained_path(static_root, static_root / "assets")
+        if assets_dir is not None and assets_dir.is_dir():
             app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
         
         # SPA 路由回退
@@ -516,14 +534,19 @@ def create_app(
                     content={"error": "not_found", "message": f"API endpoint /{full_path} not found"}
                 )
 
-            file_path = static_dir / full_path
-            if file_path.exists() and file_path.is_file():
+            file_path = _resolve_contained_path(static_root, static_root / full_path)
+            if file_path is None:
+                return JSONResponse(
+                    status_code=404,
+                    content={"error": "not_found", "message": "Static asset not found"},
+                )
+            if file_path.is_file():
                 # Issue #520: Explicitly resolve MIME type to avoid
                 # browsers rejecting JS modules served as text/plain.
                 content_type, _ = mimetypes.guess_type(str(file_path))
                 return FileResponse(file_path, media_type=content_type)
 
-            return FileResponse(static_dir / "index.html")
+            return FileResponse(index_path)
     
     return app
 
