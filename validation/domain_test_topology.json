@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7840,
-      "sha256": "15ee6e0fb0f1adf47c4a501eaf80833490d9aca9bd3a725b96933211fa6a39de"
+      "count": 7845,
+      "sha256": "bb4e04c673208b47217cbefb3c69d0d844b51e367f799a0fa06df5818ba162b2"
     },
     "tests": [
       {
@@ -34527,6 +34527,31 @@
         "id": "tests/test_rule_backtest_universe_service.py::RuleBacktestUniverseServiceTestCase::test_universe_metric_leaders_are_bounded_and_sorted",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_runtime_container.py::test_app_lifespan_has_no_parallel_runtime_construction_or_cleanup_path",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_runtime_container.py::test_dependency_overrides_remain_isolated_between_apps",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_runtime_container.py::test_independent_test_clients_do_not_share_container_state",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_runtime_container.py::test_runtime_container_preserves_start_order_and_closes_in_reverse_once",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_runtime_container.py::test_runtime_container_rolls_back_partial_startup_failure",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
       },
       {
         "id": "tests/test_runtime_settings.py::test_runtime_settings_inventory_preserves_all_344_names",
