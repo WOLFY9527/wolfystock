@@ -14,12 +14,19 @@
 - CircuitBreaker 管理各数据源的熔断状态
 """
 
+from __future__ import annotations
+
 import logging
 import math
 import time
-from dataclasses import dataclass, field
-from typing import Optional, Dict, Any, Union
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Optional, Dict, Any
 from enum import Enum
+
+if TYPE_CHECKING:
+    from src.contracts.evidence import SourceObservationFacts
+    from src.providers.ports import QuoteData
+    from src.providers.types import ProviderCacheIdentity, ProviderDataResult
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +195,46 @@ class UnifiedRealtimeQuote:
     high_52w: Optional[float] = None        # 52周最高
     low_52w: Optional[float] = None         # 52周最低
     market_timestamp: Optional[str] = None  # 行情时间（ISO 8601）
+
+    def to_provider_data_result(
+        self,
+        facts: SourceObservationFacts,
+        *,
+        cache_identity: ProviderCacheIdentity | None = None,
+    ) -> ProviderDataResult[QuoteData]:
+        """Project the legacy transport object without changing its consumer contract."""
+        from src.providers.ports import QuoteData
+        from src.providers.types import ProviderCapability, ProviderDataResult
+
+        quote = QuoteData(
+            symbol=self.code,
+            name=self.name or None,
+            price=self.price,
+            change_pct=self.change_pct,
+            change_amount=self.change_amount,
+            volume=self.volume,
+            amount=self.amount,
+            volume_ratio=self.volume_ratio,
+            turnover_rate=self.turnover_rate,
+            amplitude=self.amplitude,
+            open_price=self.open_price,
+            high=self.high,
+            low=self.low,
+            pre_close=self.pre_close,
+            pe_ratio=self.pe_ratio,
+            pb_ratio=self.pb_ratio,
+            total_mv=self.total_mv,
+            circ_mv=self.circ_mv,
+            change_60d=self.change_60d,
+            high_52w=self.high_52w,
+            low_52w=self.low_52w,
+        )
+        return ProviderDataResult.observed(
+            ProviderCapability.QUOTE,
+            quote,
+            facts,
+            cache_identity=cache_identity,
+        )
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典（过滤 None 值）"""

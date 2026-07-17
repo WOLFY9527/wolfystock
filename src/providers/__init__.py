@@ -19,7 +19,11 @@ from src.providers.errors import (
     reason_from_http_status,
 )
 from src.providers.types import (
+    PROVIDER_DATA_RESULT_VERSION,
+    ProviderCacheIdentity,
     ProviderCapability,
+    ProviderDataResult,
+    ProviderDataState,
     ProviderReason,
     ProviderResult,
     ProviderSourceType,
@@ -27,9 +31,13 @@ from src.providers.types import (
 )
 
 __all__ = [
+    "PROVIDER_DATA_RESULT_VERSION",
+    "ProviderCacheIdentity",
     "ProviderCapability",
     "ProviderCircuitOpen",
     "ProviderError",
+    "ProviderDataResult",
+    "ProviderDataState",
     "ProviderForbidden",
     "ProviderInvalidPayload",
     "ProviderMissingCredentials",

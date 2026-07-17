@@ -7,15 +7,31 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Callable, Generic, Mapping, Optional, TypeVar
 
+from src.contracts.evidence import RawAvailability, SourceObservationFacts
 from src.utils.security import sanitize_message, sanitize_metadata
+
+
+PROVIDER_DATA_RESULT_VERSION = "provider_data_result_v1"
+
+_DataT = TypeVar("_DataT")
 
 
 class ProviderStatus(str, Enum):
     SUCCESS = "success"
     FAILED = "failed"
     SKIPPED = "skipped"
+
+
+class ProviderDataState(str, Enum):
+    """Raw provider outcome without consumer interpretation."""
+
+    OBSERVED = "observed"
+    EMPTY = "empty"
+    MISSING = "missing"
+    UNAVAILABLE = "unavailable"
+    ERROR = "error"
 
 
 class ProviderReason(str, Enum):
@@ -65,6 +81,262 @@ class ProviderSourceType(str, Enum):
     FALLBACK = "fallback"
     MOCK = "mock"
     INTERNAL = "internal"
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderCacheIdentity:
+    """Opaque cache entry identity supplied by an existing cache contract."""
+
+    key: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.key, str) or not self.key.strip():
+            raise ValueError("cache identity key must be a non-empty string")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ProviderCacheIdentity":
+        payload = _strict_mapping(value, expected={"key"}, context="cache identity")
+        return cls(key=_strict_string(payload["key"], field="cache identity key"))
+
+    def to_dict(self) -> dict[str, str]:
+        return {"key": self.key}
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderDataResult(Generic[_DataT]):
+    """Single immutable result authority for normalized provider data."""
+
+    capability: ProviderCapability
+    state: ProviderDataState
+    data: _DataT | None
+    facts: SourceObservationFacts
+    reason: ProviderReason | None = None
+    error_message: str | None = None
+    cache_identity: ProviderCacheIdentity | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.capability, ProviderCapability):
+            raise TypeError("capability must be a ProviderCapability")
+        if not isinstance(self.state, ProviderDataState):
+            raise TypeError("state must be a ProviderDataState")
+        if not isinstance(self.facts, SourceObservationFacts):
+            raise TypeError("facts must be SourceObservationFacts")
+        if self.reason is not None and not isinstance(self.reason, ProviderReason):
+            raise TypeError("reason must be a ProviderReason or None")
+        if self.cache_identity is not None and not isinstance(self.cache_identity, ProviderCacheIdentity):
+            raise TypeError("cache_identity must be a ProviderCacheIdentity or None")
+        if self.cache_identity is not None and not self.facts.is_cached:
+            raise ValueError("cache identity requires cached facts")
+
+        available_states = {ProviderDataState.OBSERVED, ProviderDataState.EMPTY}
+        if self.state in available_states and self.facts.raw_availability is not RawAvailability.AVAILABLE:
+            raise ValueError(f"{self.state.value} result requires available facts")
+        if self.state is ProviderDataState.MISSING and self.facts.raw_availability is not RawAvailability.MISSING:
+            raise ValueError("missing result requires missing facts")
+        unavailable_states = {ProviderDataState.UNAVAILABLE, ProviderDataState.ERROR}
+        if self.state in unavailable_states and self.facts.raw_availability is not RawAvailability.UNAVAILABLE:
+            raise ValueError(f"{self.state.value} result requires unavailable facts")
+
+        if self.state is ProviderDataState.OBSERVED:
+            if self.data is None:
+                raise ValueError("observed result requires data")
+        elif self.data is not None:
+            raise ValueError(f"{self.state.value} result cannot contain data")
+
+        if self.state is ProviderDataState.ERROR:
+            if self.reason is None:
+                raise ValueError("error result requires a classified reason")
+            object.__setattr__(
+                self,
+                "error_message",
+                sanitize_message(self.error_message) if self.error_message else None,
+            )
+        elif self.error_message is not None:
+            raise ValueError("only error results may contain an error message")
+
+    @classmethod
+    def observed(
+        cls,
+        capability: ProviderCapability,
+        data: _DataT,
+        facts: SourceObservationFacts,
+        *,
+        cache_identity: ProviderCacheIdentity | None = None,
+    ) -> "ProviderDataResult[_DataT]":
+        return cls(capability, ProviderDataState.OBSERVED, data, facts, cache_identity=cache_identity)
+
+    @classmethod
+    def authoritative_empty(
+        cls,
+        capability: ProviderCapability,
+        facts: SourceObservationFacts,
+        *,
+        cache_identity: ProviderCacheIdentity | None = None,
+    ) -> "ProviderDataResult[_DataT]":
+        return cls(capability, ProviderDataState.EMPTY, None, facts, cache_identity=cache_identity)
+
+    @classmethod
+    def missing(
+        cls,
+        capability: ProviderCapability,
+        facts: SourceObservationFacts,
+        *,
+        reason: ProviderReason | None = None,
+        cache_identity: ProviderCacheIdentity | None = None,
+    ) -> "ProviderDataResult[_DataT]":
+        return cls(
+            capability,
+            ProviderDataState.MISSING,
+            None,
+            facts,
+            reason=reason,
+            cache_identity=cache_identity,
+        )
+
+    @classmethod
+    def unavailable(
+        cls,
+        capability: ProviderCapability,
+        facts: SourceObservationFacts,
+        *,
+        reason: ProviderReason | None = None,
+        cache_identity: ProviderCacheIdentity | None = None,
+    ) -> "ProviderDataResult[_DataT]":
+        return cls(
+            capability,
+            ProviderDataState.UNAVAILABLE,
+            None,
+            facts,
+            reason=reason,
+            cache_identity=cache_identity,
+        )
+
+    @classmethod
+    def error(
+        cls,
+        capability: ProviderCapability,
+        facts: SourceObservationFacts,
+        *,
+        reason: ProviderReason,
+        error_message: str | None = None,
+        cache_identity: ProviderCacheIdentity | None = None,
+    ) -> "ProviderDataResult[_DataT]":
+        return cls(
+            capability,
+            ProviderDataState.ERROR,
+            None,
+            facts,
+            reason=reason,
+            error_message=error_message,
+            cache_identity=cache_identity,
+        )
+
+    @classmethod
+    def from_dict(
+        cls,
+        value: Mapping[str, Any],
+        *,
+        data_loader: Callable[[Mapping[str, Any]], _DataT],
+    ) -> "ProviderDataResult[_DataT]":
+        payload = _strict_mapping(
+            value,
+            expected={
+                "contractVersion",
+                "capability",
+                "state",
+                "data",
+                "sourceObservation",
+                "reason",
+                "errorMessage",
+                "cacheIdentity",
+            },
+            context="provider data result",
+        )
+        if payload["contractVersion"] != PROVIDER_DATA_RESULT_VERSION:
+            raise ValueError("unsupported provider data result contractVersion")
+        data_payload = payload["data"]
+        data = None
+        if data_payload is not None:
+            if not isinstance(data_payload, Mapping):
+                raise TypeError("provider data must be a mapping or null")
+            data = data_loader(data_payload)
+        facts_payload = payload["sourceObservation"]
+        if not isinstance(facts_payload, Mapping):
+            raise TypeError("sourceObservation must be a mapping")
+        cache_payload = payload["cacheIdentity"]
+        if cache_payload is not None and not isinstance(cache_payload, Mapping):
+            raise TypeError("cacheIdentity must be a mapping or null")
+        reason_value = payload["reason"]
+        return cls(
+            capability=_strict_enum(ProviderCapability, payload["capability"], field="capability"),
+            state=_strict_enum(ProviderDataState, payload["state"], field="state"),
+            data=data,
+            facts=SourceObservationFacts.from_dict(facts_payload),
+            reason=(
+                None
+                if reason_value is None
+                else _strict_enum(ProviderReason, reason_value, field="reason")
+            ),
+            error_message=_strict_optional_string(payload["errorMessage"], field="errorMessage"),
+            cache_identity=(
+                None if cache_payload is None else ProviderCacheIdentity.from_dict(cache_payload)
+            ),
+        )
+
+    def to_dict(self, *, data_serializer: Callable[[_DataT], Mapping[str, Any]]) -> dict[str, Any]:
+        return {
+            "contractVersion": PROVIDER_DATA_RESULT_VERSION,
+            "capability": self.capability.value,
+            "state": self.state.value,
+            "data": None if self.data is None else dict(data_serializer(self.data)),
+            "sourceObservation": self.facts.to_dict(),
+            "reason": None if self.reason is None else self.reason.value,
+            "errorMessage": self.error_message,
+            "cacheIdentity": None if self.cache_identity is None else self.cache_identity.to_dict(),
+        }
+
+
+def _strict_mapping(
+    value: Mapping[str, Any],
+    *,
+    expected: set[str],
+    context: str,
+) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise TypeError(f"{context} must be a mapping")
+    payload = dict(value)
+    actual = set(payload)
+    if actual != expected:
+        missing = sorted(expected - actual)
+        unexpected = sorted(actual - expected)
+        details = []
+        if missing:
+            details.append(f"missing {missing}")
+        if unexpected:
+            details.append(f"unexpected {context} fields {unexpected}")
+        raise ValueError("; ".join(details))
+    return payload
+
+
+def _strict_string(value: Any, *, field: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{field} must be a string")
+    return value
+
+
+def _strict_optional_string(value: Any, *, field: str) -> str | None:
+    if value is None:
+        return None
+    return _strict_string(value, field=field)
+
+
+def _strict_enum(enum_type: type[Enum], value: Any, *, field: str) -> Any:
+    if not isinstance(value, str):
+        raise TypeError(f"{field} must be a string")
+    try:
+        return enum_type(value)
+    except ValueError as exc:
+        raise ValueError(f"invalid {field}: {value}") from exc
 
 
 def _value(value: Any) -> Any:
