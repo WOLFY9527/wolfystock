@@ -12,23 +12,29 @@ WORKFLOW_SCRIPT = REPO_ROOT / "scripts" / "operator_evidence_workflow_run.py"
 MANIFEST_SCRIPT = REPO_ROOT / "scripts" / "operator_evidence_manifest_check.py"
 
 EXPECTED_TEMPLATE_FILES = {
+    "api_abuse_safety_evidence.json",
     "provider_operator_evidence.json",
     "provider_sla_licensing_evidence.json",
+    "notification_delivery_rehearsal_evidence.json",
     "restore_pitr_operator_evidence.json",
     "security_operator_acceptance.json",
     "quota_budget_operator_evidence.json",
     "staging_ingress_operator_evidence.json",
+    "ws2_target_environment_evidence.json",
     "ws2_sse_operator_decision_evidence.json",
     "config_snapshot_evidence.json",
     "manual_release_approval_review_record.json",
 }
 EXPECTED_TEMPLATE_CATEGORIES = {
+    "api-abuse-request-safety",
     "provider",
     "provider-sla-licensing",
+    "notification-delivery-rehearsal",
     "restore-pitr",
     "security",
     "quota-budget",
     "staging-ingress",
+    "ws2-target-environment",
     "ws2-sse",
     "config-snapshot",
     "manual-release-approval",
@@ -134,8 +140,9 @@ def test_operator_evidence_workflow_smoke_generates_review_required_outputs(tmp_
     assert bundle["advisories"] == []
     assert "unknown-extra-artifact" not in json.dumps(bundle)
     assert "Advisories:" not in rendered_report
-    for category in EXPECTED_TEMPLATE_CATEGORIES:
+    for category in EXPECTED_TEMPLATE_CATEGORIES - {"api-abuse-request-safety"}:
         assert f"| {category} | needs-review |" in rendered_report
+    assert "| [redacted] | needs-review | api_abuse_safety_evidence.json |" in rendered_report
     assert "Manual operator review is required before any release decision." in rendered_report
     assert "This report is informational only and does not approve launch." in rendered_report
     assert "rawArtifactBodiesIncluded" not in rendered_report

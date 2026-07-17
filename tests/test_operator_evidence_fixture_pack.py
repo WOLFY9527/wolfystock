@@ -22,6 +22,7 @@ EXPECTED_FILES = {
     "security_operator_acceptance.json",
     "quota_budget_operator_evidence.json",
     "staging_ingress_operator_evidence.json",
+    "ws2_target_environment_evidence.json",
     "ws2_sse_operator_decision_evidence.json",
     "config_snapshot_evidence.json",
     "manual_release_approval_review_record.json",
@@ -45,6 +46,10 @@ SANITIZED_FORBIDDEN_MARKERS = (
     "@",
     *UNSAFE_FIXTURE_VALUES,
 )
+WS2_TARGET_REVIEW_REASONS = [
+    "acceptedStagingEvidenceComplete:false",
+    "manualReviewAndRollbackRecorded:false",
+]
 
 
 def _run_workflow(artifact_dir: Path, output_dir: Path) -> subprocess.CompletedProcess[str]:
@@ -100,7 +105,12 @@ def test_sanitized_complete_fixture_pack_runs_offline_as_review_required(tmp_pat
     assert bundle["runtimeBehaviorChanged"] is False
     assert bundle["networkCallsExecutedByValidator"] is False
     assert bundle["rawArtifactBodiesIncluded"] is False
-    assert {artifact["status"] for artifact in bundle["artifacts"]} == {"needs-review"}
+    assert {artifact["status"] for artifact in bundle["artifacts"]} == {"accepted", "needs-review"}
+    ws2_target = next(
+        artifact for artifact in bundle["artifacts"] if artifact["category"] == "ws2-target-environment"
+    )
+    assert ws2_target["status"] == "needs-review"
+    assert ws2_target["blockingReasonSummaries"] == WS2_TARGET_REVIEW_REASONS
     assert "Manual operator review is required before any release decision." in report
     assert "does not approve launch" in report
     _assert_report_never_approves_launch(result.stdout + result.stderr + json.dumps(bundle) + report)
@@ -117,6 +127,11 @@ def test_unsafe_rejected_fixture_pack_fails_without_leaking_raw_values(tmp_path:
     combined = result.stdout + result.stderr + json.dumps(bundle) + report
     assert bundle["bundleStatus"] == "rejected-no-go"
     assert "unsafe_marker" in combined
+    ws2_target = next(
+        artifact for artifact in bundle["artifacts"] if artifact["category"] == "ws2-target-environment"
+    )
+    assert ws2_target["status"] == "needs-review"
+    assert ws2_target["blockingReasonSummaries"] == WS2_TARGET_REVIEW_REASONS
     for unsafe_value in UNSAFE_FIXTURE_VALUES:
         assert unsafe_value not in combined
     _assert_report_never_approves_launch(combined)

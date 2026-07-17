@@ -18,6 +18,7 @@ EXPECTED_TEMPLATE_FILES = {
     "security_operator_acceptance.json",
     "quota_budget_operator_evidence.json",
     "staging_ingress_operator_evidence.json",
+    "ws2_target_environment_evidence.json",
     "ws2_sse_operator_decision_evidence.json",
     "config_snapshot_evidence.json",
     "manual_release_approval_review_record.json",

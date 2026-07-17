@@ -17,6 +17,7 @@ EXPECTED_MANIFEST_CATEGORIES = {
     "security",
     "quota-budget",
     "staging-ingress",
+    "ws2-target-environment",
     "ws2-sse",
     "config-snapshot",
     "manual-release-approval",
@@ -74,6 +75,10 @@ def _write_artifact_dir(tmp_path: Path, *, unsafe_value: str = "raw-body-value-n
             "artifactVersion": "wolfystock_staging_ingress_operator_evidence_v1",
             "outcome": "accepted",
             "evidenceRedactionVersion": "staging_ingress_operator_redaction_v1",
+        },
+        "ws2_target_environment_evidence.json": {
+            "artifactVersion": "wolfystock_ws2_target_environment_evidence_v1",
+            "evidenceRedactionVersion": "ws2_target_environment_evidence_redaction_v1",
         },
         "ws2_sse_operator_decision_evidence.json": {
             "artifactVersion": "wolfystock_ws2_sse_operator_decision_evidence_v1",
@@ -167,7 +172,7 @@ def test_create_manifest_for_sanitized_fixture_directory(tmp_path: Path) -> None
     payload = _read_manifest(manifest)
     entries = payload["entries"]
     assert isinstance(entries, list)
-    assert len(entries) == 11
+    assert len(entries) == 12
     assert {entry["category"] for entry in entries} == EXPECTED_MANIFEST_CATEGORIES
     assert all(Path(entry["fileLabel"]).name == entry["fileLabel"] for entry in entries)
     assert all(set(entry) <= {"category", "fileLabel", "sha256", "byteSize", "generatedAt", "validatorName", "redactionVersion"} for entry in entries)
