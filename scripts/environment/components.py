@@ -175,24 +175,16 @@ def _normalize_distribution_records(snapshot: Path) -> None:
                 csv.writer(handle, lineterminator="\n").writerows(normalized)
 
 
-class PythonComponent:
-    name = "python"
-    immutable = True
-    critical_imports = ("fastapi", "pytest", "sqlalchemy")
-
+class LockedPythonInstaller:
     def __init__(
         self,
         root: Path,
-        input_fingerprint: str,
-        toolchain: ToolchainIdentity,
         *,
         lock_contract: PythonLockContract,
         artifact_cache_root: Path,
         command_runner: CommandRunner = _run,
     ) -> None:
         self.root = root
-        self.input_fingerprint = input_fingerprint
-        self.toolchain = toolchain
         self.lock_contract = lock_contract
         self.artifact_cache_root = artifact_cache_root
         self.command_runner = command_runner
@@ -264,26 +256,53 @@ class PythonComponent:
                 )
 
     def _install_build_backends(self, python: Path, *, offline: bool) -> None:
-        requirements = [
-            f"{name}=={version}"
-            for name, version in sorted(self.lock_contract.build_requirements.items())
-        ]
-        if not requirements:
+        if not self.lock_contract.build_requirements:
             return
-        command = [
-            str(python),
-            "-I",
-            "-B",
-            "-m",
-            "pip",
-            "install",
-            "--no-input",
-            "--no-deps",
-            *self._locked_artifact_arguments(),
-            *requirements,
-        ]
-        with _bootstrap_environment(offline=True) as environment:
-            installed = self.command_runner(command, cwd=self.root, env=environment)
+        lines: list[str] = []
+        for name, version in sorted(self.lock_contract.build_requirements.items()):
+            hashes = sorted(self.lock_contract.artifact_hashes.get(name, ()))
+            if not hashes:
+                raise EnvironmentFailure(
+                    "python_locked_build_backend_missing",
+                    f"locked Python build backend artifact is missing: {name}",
+                )
+            lines.append(f"{name}=={version} \\")
+            for index, digest in enumerate(hashes):
+                suffix = " \\" if index < len(hashes) - 1 else ""
+                lines.append(f"    --hash=sha256:{digest}{suffix}")
+        directory = self._artifact_directory()
+        requirements_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                prefix="build-backends-",
+                suffix=".requirements.txt",
+                dir=directory,
+                delete=False,
+            ) as handle:
+                handle.write("\n".join(lines) + "\n")
+                requirements_path = Path(handle.name)
+            command = [
+                str(python),
+                "-I",
+                "-B",
+                "-m",
+                "pip",
+                "install",
+                "--no-input",
+                "--no-deps",
+                "--no-build-isolation",
+                "--require-hashes",
+                *self._locked_artifact_arguments(),
+                "-r",
+                str(requirements_path),
+            ]
+            with _bootstrap_environment(offline=True) as environment:
+                installed = self.command_runner(command, cwd=self.root, env=environment)
+        finally:
+            if requirements_path is not None:
+                requirements_path.unlink(missing_ok=True)
         if installed.returncode != 0:
             if offline:
                 raise OfflineMaterialUnavailable(
@@ -340,6 +359,31 @@ class PythonComponent:
             raise EnvironmentFailure("python_locked_install_failed", "locked Python dependency installation failed")
         _remove_python_bytecode(destination)
         _normalize_distribution_records(destination)
+
+
+class PythonComponent(LockedPythonInstaller):
+    name = "python"
+    immutable = True
+    critical_imports = ("fastapi", "pytest", "sqlalchemy")
+
+    def __init__(
+        self,
+        root: Path,
+        input_fingerprint: str,
+        toolchain: ToolchainIdentity,
+        *,
+        lock_contract: PythonLockContract,
+        artifact_cache_root: Path,
+        command_runner: CommandRunner = _run,
+    ) -> None:
+        super().__init__(
+            root,
+            lock_contract=lock_contract,
+            artifact_cache_root=artifact_cache_root,
+            command_runner=command_runner,
+        )
+        self.input_fingerprint = input_fingerprint
+        self.toolchain = toolchain
 
     def _probe(self, snapshot: Path) -> dict[str, Any]:
         python = self.python_path(snapshot)

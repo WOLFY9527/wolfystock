@@ -56,6 +56,7 @@
 - Python direct intent 由 `requirements.txt` 与 `requirements-dev.txt` 保存；`requirements-lock.json` 及其 CPython 3.11/3.12 lock family 是唯一 install authority。权威矩阵支持 CPython 3.11 Linux x86_64 runtime/development、Linux aarch64 runtime（Docker `linux/arm64` 归一化身份）、macOS arm64/x86_64 与 Windows AMD64 runtime/development，以及 CPython 3.12 macOS arm64/x86_64 与 Windows AMD64 runtime/development；不在矩阵内的 target/profile 必须在安装前失败。运行 `./wolfy lock python --check` 检查 freshness、pins、target artifact filenames/hashes、sdist build requirements、resolver 和完整 target matrix。
 - 只有显式依赖审查可运行 `./wolfy lock python --update`；该命令固定使用 `uv 0.11.19` 作为 resolver，必须审查 direct/transitive diff，且 bootstrap、test、dev、CI、release qualification 不得隐式更新 lock。
 - 无网络模式使用 `./wolfy bootstrap --ensure --offline`；缺少已验证 snapshot 或 locked artifact cache material 时必须显式失败。Linux `arm64` 与 `aarch64` 必须归一到同一 reviewed runtime projection。在线/离线 bootstrap 必须选择同一 target/profile graph 和 artifact projection，并使用 hash verification，禁止回退到 requirements resolution。
+- Release container 必须按 BuildKit `TARGETARCH` 复用同一 Python lock authority：`amd64` 选择 Linux x86_64 CPython 3.11 runtime，`arm64` 选择 Linux aarch64 CPython 3.11 runtime；只允许 `--no-deps --require-hashes --no-build-isolation` 的 reviewed lock 安装，禁止 requirements intent、development lock、uv 或其他 resolver 进入镜像依赖安装路径。
 - `bash scripts/bootstrap_worktree.sh --check` 与 `--apply` 仅是 `./wolfy env verify` 和 `./wolfy bootstrap --ensure` 的兼容 delegate，不拥有独立 fingerprint、安装或链接逻辑。
 
 ## 常用命令

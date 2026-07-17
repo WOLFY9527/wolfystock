@@ -92,6 +92,13 @@ have a development projection. Other target/profile combinations fail before
 snapshot installation. Static marker, wheel-tag, ABI, and source-build
 validation is not a claim of real-platform execution.
 
+Release containers use BuildKit `TARGETARCH` to select only the reviewed
+CPython 3.11 Linux runtime projection: `amd64` selects Linux x86_64 and `arm64`
+selects Linux aarch64. Their dependency builder reuses the same Wolfy locked
+installer with `--no-deps --require-hashes --no-build-isolation`; it never
+installs from the requirements intent, invokes uv, or selects a development
+projection. Unsupported or missing Docker architectures fail before pip runs.
+
 `bootstrap --ensure` is the only command that may install dependencies. Use
 `./wolfy bootstrap --ensure --offline` to require verified snapshots and local
 package-manager caches; an offline locked-artifact miss fails without attempting

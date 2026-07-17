@@ -359,14 +359,20 @@ def test_locked_setuptools_is_installed_before_source_builds(tmp_path: Path) -> 
     }
     contract.build_requirements = {"setuptools": "82.0.1"}
     commands: list[list[str]] = []
+    backend_requirements = ""
 
     def runner(command: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
+        nonlocal backend_requirements
         commands.append(command)
         if "venv" in command:
             python = destination / "bin" / "python"
             python.parent.mkdir(parents=True)
             python.write_bytes(b"fixture-python")
             (destination / "lib" / "python3.11" / "site-packages").mkdir(parents=True)
+        if "install" in command and "-r" in command:
+            requirements = Path(command[command.index("-r") + 1])
+            if requirements != contract.lock_path:
+                backend_requirements = requirements.read_text(encoding="utf-8")
         return completed(command)
 
     component = PythonComponent(
@@ -380,9 +386,27 @@ def test_locked_setuptools_is_installed_before_source_builds(tmp_path: Path) -> 
 
     component.build(destination, offline=True)
 
-    backend = next(command for command in commands if "setuptools==82.0.1" in command)
-    install = next(command for command in commands if "-r" in command)
+    backend = next(
+        command
+        for command in commands
+        if "install" in command
+        and "-r" in command
+        and Path(command[command.index("-r") + 1]) != contract.lock_path
+    )
+    install = next(
+        command
+        for command in commands
+        if "install" in command
+        and "-r" in command
+        and Path(command[command.index("-r") + 1]) == contract.lock_path
+    )
     assert commands.index(backend) < commands.index(install)
+    assert backend_requirements == (
+        f"setuptools==82.0.1 \\\n    --hash=sha256:{'b' * 64}\n"
+    )
+    assert "--no-deps" in backend
+    assert "--require-hashes" in backend
+    assert "--no-build-isolation" in backend
     assert "--no-build-isolation" in install
 
 
@@ -472,7 +496,11 @@ def test_missing_offline_build_backend_is_an_artifact_miss(tmp_path: Path) -> No
             python.parent.mkdir(parents=True)
             python.write_bytes(b"fixture-python")
             return completed(command)
-        if "setuptools==82.0.1" in command:
+        if (
+            "install" in command
+            and "-r" in command
+            and Path(command[command.index("-r") + 1]) != contract.lock_path
+        ):
             return subprocess.CompletedProcess(command, 1, "", "No matching distribution found")
         return completed(command)
 

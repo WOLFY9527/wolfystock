@@ -641,6 +641,21 @@ def load_python_lock(
     lock_path = root / LOCK_PATHS[(profile, version)]
     projection_key = _projection_key(target, profile)
     projection = projections[projection_key]
+    selected_artifacts = {
+        name: projection.artifacts[name]
+        for name in selected.distributions
+        if name in projection.artifacts
+    }
+    if set(selected_artifacts) != set(selected.distributions):
+        raise EnvironmentFailure(
+            "python_lock_artifact_missing",
+            "target projection omits a marker-selected distribution",
+        )
+    selected_hash_count = sum(len(artifacts) for artifacts in selected_artifacts.values())
+    selected_source_build_count = sum(
+        any(artifact.artifact_type == "sdist" for artifact in artifacts)
+        for artifacts in selected_artifacts.values()
+    )
     return PythonLockContract(
         profile=profile,
         target=target,
@@ -649,22 +664,22 @@ def load_python_lock(
         input_hashes=dict(manifest["inputHashes"]),
         direct_requirements=_direct_requirements(root, PROFILE_INPUTS[profile]),
         distributions=selected.distributions,
-        artifacts=projection.artifacts,
+        artifacts=selected_artifacts,
         artifact_hashes={
             name: frozenset(artifact.sha256 for artifact in artifacts)
-            for name, artifacts in projection.artifacts.items()
+            for name, artifacts in selected_artifacts.items()
         },
         artifact_files={
             artifact.filename: artifact.sha256
-            for artifacts in projection.artifacts.values()
+            for artifacts in selected_artifacts.values()
             for artifact in artifacts
         },
         build_requirements=projection.build_requirements,
-        hash_count=projection.hash_count,
+        hash_count=selected_hash_count,
         hash_verification=True,
         projection=projection_key,
         projection_hash=projection.projection_hash,
-        source_build_count=projection.source_build_count,
+        source_build_count=selected_source_build_count,
         resolver=dict(manifest["resolver"]),
         lock_files={path: _file_hash(root / path) for path in sorted(set(LOCK_PATHS.values()))},
     )

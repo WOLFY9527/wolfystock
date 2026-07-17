@@ -59,32 +59,32 @@
     "path": "scripts/build_ai_project_manual.py",
     "readsProductionDataPaths": false,
     "requiresApiKeys": false,
-    "sha256": "4ddd77828c956c1a69e9fb3ff965c8fe6f84c97a02a2f28f6c1a897b6691aa89",
+    "sha256": "8c49aae0cc49611e63f828bab50cf597091b448d05503719d1febc0662282431",
     "version": 5
   },
   "includedSources": [
     {
-      "bytes": 6668,
+      "bytes": 7051,
       "categories": [
         "governance",
         "workflow"
       ],
-      "lineCount": 108,
+      "lineCount": 109,
       "path": "AGENTS.md",
       "purpose": "repository AI-agent rules and hard safety boundaries",
-      "sha256": "a13210666861c85d3654e29d4a2234ed502d2c23ef35fdb8a2bfa7c104d20e51",
+      "sha256": "a29307868de0569e81a97c2779f4aed5d17f1455b82cf993f45d56dfabce53ad",
       "title": "AGENTS.md"
     },
     {
-      "bytes": 11387,
+      "bytes": 11847,
       "categories": [
         "onboarding",
         "product"
       ],
-      "lineCount": 263,
+      "lineCount": 270,
       "path": "README.md",
       "purpose": "human product entrypoint and supported run commands",
-      "sha256": "d2e0e307b5be9d36ae8545ee0cc63255fe82db955aea774cc60538e4e6787a99",
+      "sha256": "6524a2d65cc248ef3da75c71a0d7858bf6d72593758027982c55d63717292e0c",
       "title": "WolfyStock"
     },
     {
@@ -103,7 +103,7 @@
   "outputs": {
     "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
     "manual": "docs/AI_PROJECT_MANUAL.md",
-    "manualSha256": "f5ef07f82b1a7a73e74237080854e3038debff7117df1f9a96ebe760841dfeb9"
+    "manualSha256": "830c1f24eb1889550f4e89a4689a4173cfba574eeb6a045521f7037600eebb4c"
   },
   "schemaVersion": 2,
   "sections": [

@@ -14,7 +14,7 @@ COPY apps/dsa-web/ ./
 RUN npm run build
 
 # Pin to bookworm: wkhtmltopdf was removed from Debian testing (2025)
-FROM python:3.11-slim-bookworm
+FROM python:3.11-slim-bookworm AS runtime-base
 
 # 设置工作目录
 WORKDIR /app
@@ -34,11 +34,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制依赖文件
-COPY requirements.txt .
+# 依赖构建阶段严格消费 reviewed runtime lock；应用源码变化不会失效该层。
+FROM runtime-base AS python-dependencies
 
-# 安装 Python 依赖
-RUN pip install --no-cache-dir -r requirements.txt
+ARG TARGETARCH
+
+WORKDIR /lock-authority
+
+COPY requirements.txt requirements-dev.txt requirements-lock.json ./
+COPY requirements-python311-runtime.lock requirements-python311-dev.lock ./
+COPY requirements-python312-runtime.lock requirements-python312-dev.lock ./
+COPY scripts/__init__.py ./scripts/__init__.py
+COPY scripts/environment/ ./scripts/environment/
+
+RUN python -m scripts.environment.docker_python \
+    --target-arch "${TARGETARCH}" \
+    --destination /opt/wolfystock-python \
+    --artifact-cache /tmp/wolfystock-python-artifacts
+
+FROM runtime-base
+
+WORKDIR /app
+
+COPY --from=python-dependencies /opt/wolfystock-python /opt/wolfystock-python
+ENV PATH=/opt/wolfystock-python/bin:$PATH
 
 # 复制应用代码
 COPY *.py ./
