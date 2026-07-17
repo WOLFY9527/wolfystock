@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7845,
-      "sha256": "bb4e04c673208b47217cbefb3c69d0d844b51e367f799a0fa06df5818ba162b2"
+      "count": 7891,
+      "sha256": "7acff4cafb53968648dcb7f49a45f2137942872c17fe8f04394f1e4ae82cbf1e"
     },
     "tests": [
       {
@@ -1644,9 +1644,9 @@
         "baseline": true
       },
       {
-        "id": "tests/api/test_auth_rbac_release_contracts.py::test_auth_disabled_mode_exposes_transitional_admin_and_is_not_public_safe",
+        "id": "tests/api/test_auth_rbac_release_contracts.py::test_explicit_local_auth_disabled_mode_keeps_admin_surfaces_bounded",
         "domain": "auth_security",
-        "baseline": true
+        "baseline": false
       },
       {
         "id": "tests/api/test_auth_rbac_release_contracts.py::test_offline_auth_rbac_release_audit_cli_outputs_bounded_json",
@@ -3999,14 +3999,14 @@
         "baseline": true
       },
       {
-        "id": "tests/api/test_openapi_docs_auth_gate.py::test_existing_api_v1_openapi_surface_stays_unsupported_when_auth_disabled[docs_auth_disabled_client]",
+        "id": "tests/api/test_openapi_docs_auth_gate.py::test_existing_api_v1_openapi_surface_stays_unsupported_when_auth_disabled",
         "domain": "auth_security",
-        "baseline": true
+        "baseline": false
       },
       {
-        "id": "tests/api/test_openapi_docs_auth_gate.py::test_existing_api_v1_openapi_surface_stays_unsupported_when_auth_disabled[docs_auth_disabled_production_client]",
+        "id": "tests/api/test_openapi_docs_auth_gate.py::test_root_docs_share_production_ingress_fail_closed_invariant",
         "domain": "auth_security",
-        "baseline": true
+        "baseline": false
       },
       {
         "id": "tests/api/test_openapi_docs_auth_gate.py::test_root_docs_surfaces_allow_admin_users_when_auth_enabled[/docs-Swagger UI]",
@@ -4020,21 +4020,6 @@
       },
       {
         "id": "tests/api/test_openapi_docs_auth_gate.py::test_root_docs_surfaces_allow_admin_users_when_auth_enabled[/redoc-ReDoc]",
-        "domain": "auth_security",
-        "baseline": true
-      },
-      {
-        "id": "tests/api/test_openapi_docs_auth_gate.py::test_root_docs_surfaces_fail_closed_in_production_when_auth_disabled[/docs]",
-        "domain": "auth_security",
-        "baseline": true
-      },
-      {
-        "id": "tests/api/test_openapi_docs_auth_gate.py::test_root_docs_surfaces_fail_closed_in_production_when_auth_disabled[/openapi.json]",
-        "domain": "auth_security",
-        "baseline": true
-      },
-      {
-        "id": "tests/api/test_openapi_docs_auth_gate.py::test_root_docs_surfaces_fail_closed_in_production_when_auth_disabled[/redoc]",
         "domain": "auth_security",
         "baseline": true
       },
@@ -4412,6 +4397,56 @@
         "id": "tests/api/test_portfolio_structure_review_endpoint.py::test_portfolio_structure_review_endpoint_returns_read_only_projection",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_production_ingress_static_containment.py::test_canonical_candidate_outside_static_root_is_rejected_with_bounded_404",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_production_ingress_static_containment.py::test_contained_static_file_and_spa_index_are_served",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_production_ingress_static_containment.py::test_explicit_local_development_remains_usable_with_auth_disabled",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_production_ingress_static_containment.py::test_production_app_creation_fails_closed_when_auth_configuration_is_missing",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_production_ingress_static_containment.py::test_production_app_creation_fails_closed_when_auth_is_disabled_before_runtime_start",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_production_ingress_static_containment.py::test_production_app_creation_succeeds_with_explicit_auth_configuration",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_production_ingress_static_containment.py::test_production_auth_snapshot_cannot_be_overridden_by_cached_auth_state",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_production_ingress_static_containment.py::test_production_module_import_fails_before_route_import_when_auth_is_missing",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_production_ingress_static_containment.py::test_production_never_projects_anonymous_transitional_admin",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_production_ingress_static_containment.py::test_spa_index_outside_static_root_preserves_missing_asset_degradation",
+        "domain": "api_schema_contracts",
+        "baseline": false
       },
       {
         "id": "tests/api/test_professional_data_capability_registry.py::test_professional_data_capability_admin_route_includes_bounded_diagnostics",
@@ -6309,6 +6344,16 @@
         "baseline": true
       },
       {
+        "id": "tests/scripts/test_bootstrap_worktree.py::test_qualification_accepts_repository_python",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_bootstrap_worktree.py::test_qualification_rejects_wrong_python_interpreter",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_bootstrap_worktree.py::test_rejects_linked_manifest_mismatch_without_mutation",
         "domain": "runtime_operator_tooling",
         "baseline": true
@@ -6627,6 +6672,16 @@
         "id": "tests/scripts/test_private_beta_critical_path_smoke.py::test_script_keeps_output_bounded_and_avoids_privileged_or_advice_text",
         "domain": "runtime_operator_tooling",
         "baseline": true
+      },
+      {
+        "id": "tests/scripts/test_pytest_discovery_isolation.py::test_environment_diagnostic_import_has_no_setup_side_effect",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_pytest_discovery_isolation.py::test_pytest_discovers_only_authoritative_test_root",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
       },
       {
         "id": "tests/scripts/test_quote_snapshot_operator_verifier.py::test_cli_execute_without_execute_flag_exits_failed_closed",
@@ -14999,6 +15054,26 @@
         "baseline": true
       },
       {
+        "id": "tests/test_destructive_postgres_policy.py::test_destructive_qualification_with_zero_nodes_fails",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_destructive_postgres_policy.py::test_explicit_opt_in_refuses_unsafe_or_ambiguous_identity",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_destructive_postgres_policy.py::test_inherited_dsn_alone_skips_destructive_test_body",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_destructive_postgres_policy.py::test_mocked_disposable_target_generates_run_scoped_schema",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
         "id": "tests/test_domain_normalization_contracts.py::test_market_payload_classification_golden_parity",
         "domain": "api_schema_contracts",
         "baseline": false
@@ -21469,17 +21544,17 @@
         "baseline": true
       },
       {
+        "id": "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_informational_mode_does_not_claim_qualification",
+        "domain": "market",
+        "baseline": false
+      },
+      {
         "id": "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_keeps_polygon_breadth_probe_failure_fail_closed",
         "domain": "market",
         "baseline": true
       },
       {
         "id": "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_live_smoke_is_explicit_opt_in",
-        "domain": "market",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_main_returns_zero_when_probe_times_out",
         "domain": "market",
         "baseline": true
       },
@@ -21572,6 +21647,21 @@
         "id": "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_projects_expiration_source_registry_candidate_safely",
         "domain": "market",
         "baseline": true
+      },
+      {
+        "id": "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_qualification_fails_when_requested_probe_is_unavailable",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_qualification_fails_without_requested_probes",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_qualification_returns_nonzero_when_probe_times_out",
+        "domain": "market",
+        "baseline": false
       },
       {
         "id": "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_sanitizes_endpoint_and_provider_output",
@@ -25774,6 +25864,11 @@
         "baseline": false
       },
       {
+        "id": "tests/test_offline_network_policy.py::test_child_environment_projection_removes_credentials_and_production_dsn",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
         "id": "tests/test_offline_network_policy.py::test_network_guard_classifies_only_loopback_destinations_as_local[0.0.0.0-True]",
         "domain": "provider_external_network",
         "baseline": false
@@ -28429,6 +28524,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_all_broker_import_routes_enforce_exact_upload_byte_boundary",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_broker_connection_api_flow",
         "domain": "portfolio_broker",
         "baseline": true
@@ -28439,9 +28539,24 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_broker_import_parser_budgets_reject_csv_and_xml_excess",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_broker_import_parser_timeout_is_bounded",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_broker_import_preview_and_commit_redact_browser_artifact_identifiers",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_broker_import_rejects_declared_type_filename_and_signature_mismatch",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_create_cash_ledger_busy_returns_409",
@@ -28579,6 +28694,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_import_internal_error_log_does_not_include_raw_parser_exception",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_import_internal_errors_use_safe_envelope_without_traceback_or_provider_url",
         "domain": "portfolio_broker",
         "baseline": true
@@ -28592,6 +28712,11 @@
         "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_oversell_trade_returns_409_with_business_error",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_oversized_upload_is_rejected_before_parser_invocation",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_risk_api_returns_account_attribution_block",
@@ -28824,9 +28949,19 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_broker_parser_capacity_is_bounded",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_concentration_uses_cny_normalized_exposure",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_concurrent_duplicate_ibkr_import_has_one_complete_winner",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_fx_refresh_disabled_returns_real_pair_count_without_fetching",
@@ -28859,6 +28994,16 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_ibkr_completion_failure_rolls_back_fingerprint_and_children",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_ibkr_failure_on_later_trade_rolls_back_entire_import",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_ibkr_flex_currency_gate_is_all_or_nothing_and_corrected_retry_is_idempotent",
         "domain": "portfolio_broker",
         "baseline": false
@@ -28874,6 +29019,11 @@
         "baseline": false
       },
       {
+        "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_ibkr_historical_replay_does_not_duplicate_cash_or_actions",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_ibkr_import_rejects_malformed_xml",
         "domain": "portfolio_broker",
         "baseline": true
@@ -28882,6 +29032,16 @@
         "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_ibkr_open_positions_seed_when_trades_absent",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_ibkr_parser_rejection_prevents_valid_prefix_commit",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_ibkr_persistence_failure_rolls_back_entire_import",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_import_allows_identical_split_fills_without_trade_uid",
@@ -30592,6 +30752,66 @@
         "id": "tests/test_provider_credentials.py::ProviderCredentialsTestCase::test_twelve_data_empty_and_whitespace_values_remain_missing",
         "domain": "auth_security",
         "baseline": true
+      },
+      {
+        "id": "tests/test_provider_data_ports.py::test_existing_provider_manager_close_remains_idempotent",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_data_ports.py::test_history_port_preserves_success_sparse_empty_stale_and_unavailable",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_data_ports.py::test_macro_port_preserves_delayed_proxy_cached_and_unavailable_facts",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_data_ports.py::test_port_layer_has_one_result_authority_and_no_domain_policy",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_data_ports.py::test_port_protocols_are_narrow_and_request_values_are_immutable",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_data_ports.py::test_quote_port_preserves_success_empty_zero_missing_and_unavailable",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_data_ports.py::test_quote_transport_adapter_returns_immutable_data_without_reclassifying_facts",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_data_ports.py::test_result_rejects_fact_upgrades_and_cache_identity_without_cached_fact",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_data_ports.py::test_source_facts_survive_json_transport_to_port_round_trip[history]",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_data_ports.py::test_source_facts_survive_json_transport_to_port_round_trip[macro]",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_data_ports.py::test_source_facts_survive_json_transport_to_port_round_trip[quote]",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_data_ports.py::test_transport_error_is_classified_and_distinct_from_authoritative_empty",
+        "domain": "provider_external_network",
+        "baseline": false
       },
       {
         "id": "tests/test_provider_evidence_snapshot.py::test_provider_evidence_snapshot_helper_is_pure_deterministic_and_inert",
@@ -34564,6 +34784,11 @@
         "baseline": false
       },
       {
+        "id": "tests/test_runtime_settings.py::test_runtime_settings_owns_validated_portfolio_import_limits",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/test_runtime_settings.py::test_runtime_settings_preserves_complete_default_value_and_type_contract",
         "domain": "runtime_operator_tooling",
         "baseline": false
@@ -34590,6 +34815,11 @@
       },
       {
         "id": "tests/test_runtime_settings.py::test_runtime_settings_records_alias_origin_when_values_agree",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_runtime_settings.py::test_runtime_settings_rejects_invalid_portfolio_import_limits",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -39290,7 +39520,14 @@
       }
     ],
     "baselineCollectionGaps": [
-      "tests/test_auth_api.py::AuthApiTestCase::test_logout_requires_session_when_auth_enabled"
+      "tests/api/test_auth_rbac_release_contracts.py::test_auth_disabled_mode_exposes_transitional_admin_and_is_not_public_safe",
+      "tests/api/test_openapi_docs_auth_gate.py::test_existing_api_v1_openapi_surface_stays_unsupported_when_auth_disabled[docs_auth_disabled_client]",
+      "tests/api/test_openapi_docs_auth_gate.py::test_existing_api_v1_openapi_surface_stays_unsupported_when_auth_disabled[docs_auth_disabled_production_client]",
+      "tests/api/test_openapi_docs_auth_gate.py::test_root_docs_surfaces_fail_closed_in_production_when_auth_disabled[/docs]",
+      "tests/api/test_openapi_docs_auth_gate.py::test_root_docs_surfaces_fail_closed_in_production_when_auth_disabled[/openapi.json]",
+      "tests/api/test_openapi_docs_auth_gate.py::test_root_docs_surfaces_fail_closed_in_production_when_auth_disabled[/redoc]",
+      "tests/test_auth_api.py::AuthApiTestCase::test_logout_requires_session_when_auth_enabled",
+      "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_main_returns_zero_when_probe_times_out"
     ],
     "networkTests": [],
     "knownBaselineFailures": [
@@ -39422,8 +39659,6 @@
       "tests/test_operator_evidence_command_docs.py::test_operator_evidence_command_examples_use_safe_placeholders",
       "tests/test_operator_evidence_command_docs.py::test_operator_evidence_command_scripts_support_safe_help",
       "tests/test_operator_evidence_command_docs.py::test_operator_evidence_docs_reference_existing_scripts",
-      "tests/test_operator_evidence_fixture_pack.py::test_sanitized_complete_fixture_pack_runs_offline_as_review_required",
-      "tests/test_operator_evidence_fixture_pack.py::test_unsafe_rejected_fixture_pack_fails_without_leaking_raw_values",
       "tests/test_operator_evidence_gap_analyzer.py::test_complete_synthetic_fixture_produces_review_required_with_no_unsafe_leak",
       "tests/test_operator_evidence_manifest_check.py::test_create_manifest_for_sanitized_fixture_directory",
       "tests/test_operator_evidence_manifest_check.py::test_manifest_output_does_not_leak_raw_artifact_body_values",

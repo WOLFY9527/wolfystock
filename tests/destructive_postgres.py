@@ -7,7 +7,6 @@ import os
 import re
 import secrets
 from dataclasses import dataclass
-from typing import Any
 
 import pytest
 from sqlalchemy import create_engine, text

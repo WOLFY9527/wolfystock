@@ -53,6 +53,7 @@ def test_child_environment_projection_removes_credentials_and_production_dsn(
     monkeypatch.setenv("ALPACA_API_KEY", "provider-secret")
     monkeypatch.setenv("POSTGRES_PHASE_A_REAL_DSN", "postgresql://user:secret@db.example/production")
     monkeypatch.setenv("UNRELATED_PRIVATE_VALUE", "private")
+    monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("WOLFYSTOCK_TEST_RUN_ID", "fixture-run")
 
     projected = project_child_environment()
@@ -60,6 +61,7 @@ def test_child_environment_projection_removes_credentials_and_production_dsn(
     assert "ALPACA_API_KEY" not in projected
     assert "POSTGRES_PHASE_A_REAL_DSN" not in projected
     assert "UNRELATED_PRIVATE_VALUE" not in projected
+    assert projected["APP_ENV"] == "production"
     assert projected["WOLFYSTOCK_TEST_RUN_ID"] == "fixture-run"
     assert projected["WOLFYSTOCK_TEST_OFFLINE"] == "1"
 
@@ -75,6 +77,7 @@ def test_child_environment_projection_removes_credentials_and_production_dsn(
     assert "ALPACA_API_KEY" not in child_environment
     assert "POSTGRES_PHASE_A_REAL_DSN" not in child_environment
     assert "UNRELATED_PRIVATE_VALUE" not in child_environment
+    assert child_environment["APP_ENV"] == "production"
     assert child_environment["WOLFYSTOCK_TEST_RUN_ID"] == "fixture-run"
 
 

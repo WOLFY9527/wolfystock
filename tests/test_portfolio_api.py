@@ -1829,7 +1829,7 @@ class PortfolioApiTestCase(unittest.TestCase):
         )
         self.assertEqual(create_resp.status_code, 200)
         account_id = create_resp.json()["id"]
-        secret_like_trade_uid = "sk-proj-portfolio-secret-token"
+        secret_like_trade_uid = "portfolio-secret-token-fixture"
         payload = {
             "account_id": account_id,
             "symbol": "600519",
@@ -2147,7 +2147,7 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(detail.get("error"), "portfolio_busy")
 
     def test_create_trade_rejects_unrecognized_secret_like_reason_code(self) -> None:
-        leaked_reason_code = "sk-proj-portfolio-reason-code"
+        leaked_reason_code = "portfolio-secret-reason-fixture"
         with patch(
             "api.v1.endpoints.portfolio.PortfolioService.record_trade",
             side_effect=PortfolioConflictError(

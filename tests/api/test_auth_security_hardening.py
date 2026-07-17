@@ -16,8 +16,10 @@ from fastapi.testclient import TestClient
 
 import src.auth as auth
 from api.middlewares.auth import add_auth_middleware
+from src.admin_rbac import SECURITY_ADMIN_ROLE
 from src.auth import hash_password_for_storage
-from src.storage import AppUserSession, DatabaseManager, ExecutionLogSession
+from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
+from src.storage import AdminUserRole, AppUserSession, DatabaseManager, ExecutionLogSession
 
 
 def _reset_auth_globals() -> None:
@@ -80,6 +82,14 @@ class AuthSecurityHardeningTestCase(unittest.TestCase):
         self.addCleanup(self.data_dir_patch.stop)
         auth._auth_enabled = True
         auth.set_initial_password("adminpass123")
+        with self.db.get_session() as session:
+            session.add(
+                AdminUserRole(
+                    user_id=BOOTSTRAP_ADMIN_USER_ID,
+                    role_key=SECURITY_ADMIN_ROLE,
+                )
+            )
+            session.commit()
         self.user_hash = hash_password_for_storage("userpass123")
         self.db.create_or_update_app_user(
             user_id="user-1",
