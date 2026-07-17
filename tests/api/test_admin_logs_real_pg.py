@@ -12,8 +12,8 @@ from pathlib import Path
 import sys
 from unittest.mock import MagicMock
 
+import pytest
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import make_url
 
 try:
     import litellm  # noqa: F401
@@ -25,28 +25,9 @@ from api.v1.endpoints import admin_logs
 from api.v1.schemas.admin_logs import AdminLogCleanupRequest
 from src.config import Config
 from src.storage import DatabaseManager
+from tests.destructive_postgres import current_target
 
-REAL_PG_DSN = str(
-    os.getenv("POSTGRES_PHASE_A_REAL_DSN") or ""
-).strip()
-
-
-def _real_pg_dsn_available(dsn: str) -> bool:
-    if not dsn:
-        return False
-    try:
-        parsed = make_url(dsn)
-        if str(parsed.host or "") not in {"127.0.0.1", "localhost"}:
-            return False
-        if int(parsed.port or 0) != 55432:
-            return False
-        probe_engine = create_engine(dsn, echo=False, pool_pre_ping=True)
-        with probe_engine.connect() as conn:
-            conn.execute(text("select 1"))
-        probe_engine.dispose()
-        return True
-    except Exception:
-        return False
+pytestmark = pytest.mark.destructive_postgres
 
 
 def _admin_user() -> CurrentUser:
@@ -62,10 +43,6 @@ def _admin_user() -> CurrentUser:
     )
 
 
-@unittest.skipUnless(
-    _real_pg_dsn_available(REAL_PG_DSN),
-    "A reachable POSTGRES_PHASE_A_REAL_DSN is required for real PostgreSQL validation",
-)
 class AdminLogsRealPgQuotaTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -73,8 +50,7 @@ class AdminLogsRealPgQuotaTestCase(unittest.TestCase):
         self.env_path = self.data_dir / ".env"
         self.sqlite_db_path = self.data_dir / "legacy.sqlite"
 
-        self.base_url = make_url(REAL_PG_DSN)
-        self.pg_test_dsn = str(self.base_url)
+        self.pg_test_dsn = current_target().scoped_dsn
         self.pg_engine = create_engine(
             self.pg_test_dsn,
             echo=False,

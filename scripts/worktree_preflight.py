@@ -487,6 +487,36 @@ def bootstrap(mode: str) -> dict[str, Any]:
     }
 
 
+def repository_python_path(root: Path) -> Path:
+    candidates = (
+        root / ".venv" / "bin" / "python",
+        root / ".venv" / "Scripts" / "python.exe",
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve(strict=True)
+    raise PreflightError("repository .venv Python is missing; run the single worktree bootstrap path first")
+
+
+def require_repository_python(root: Path, *, repo_python: Path | None = None) -> Path:
+    expected = (repo_python or repository_python_path(root)).resolve(strict=True)
+    actual = Path(sys.executable).resolve(strict=False)
+    if actual != expected:
+        raise PreflightError(
+            f"wrong Python interpreter: qualification requires repository .venv Python at {expected}"
+        )
+    return expected
+
+
+def qualify_worktree() -> dict[str, Any]:
+    root = Path.cwd().resolve(strict=True)
+    python = require_repository_python(root)
+    payload = bootstrap("--check")
+    payload["qualification"] = "passed"
+    payload["python"] = {"executable": str(python), "version": platform.python_version()}
+    return payload
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -496,6 +526,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     mode.add_argument("--apply", action="store_true")
     fingerprint_parser = subparsers.add_parser("fingerprint")
     fingerprint_parser.add_argument("--root", type=Path, default=Path.cwd())
+    subparsers.add_parser("qualify")
     return parser.parse_args(argv)
 
 
@@ -504,6 +535,8 @@ def main(argv: list[str] | None = None) -> int:
         args = parse_args(argv or sys.argv[1:])
         if args.command == "bootstrap":
             emit(bootstrap("--check" if args.check else "--apply"))
+        elif args.command == "qualify":
+            emit(qualify_worktree())
         else:
             root = args.root.resolve(strict=True)
             config = {"isolated": False, "env_file_opt_in": False, "mutable_local_paths": MUTABLE_LOCAL_PATHS}

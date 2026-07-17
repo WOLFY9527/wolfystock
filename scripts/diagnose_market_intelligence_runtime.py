@@ -1953,6 +1953,11 @@ def collect_diagnostic_bundle(
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--qualification",
+        action="store_true",
+        help="Treat requested probes as a fail-closed qualification instead of an informational report.",
+    )
+    parser.add_argument(
         "--base-url",
         default=os.environ.get(BASE_URL_ENV_VAR),
         help=f"Optional local backend base URL. Defaults to ${BASE_URL_ENV_VAR} when set.",
@@ -2080,11 +2085,52 @@ def main(argv: list[str] | None = None) -> int:
                 )
             ),
         }
+        fallback["qualification"] = {
+            "requested": bool(args.qualification),
+            "status": "failed" if args.qualification else "not_requested",
+            "reasonCodes": ["diagnostic_error"] if args.qualification else [],
+        }
         print(json.dumps(fallback, ensure_ascii=False, sort_keys=True))
         return 1
 
+    requested_probe_count = int(bool(args.live_smoke)) * 3 + int(bool(args.options_live_probe))
+    qualification_reasons: list[str] = []
+    if args.qualification:
+        if requested_probe_count == 0:
+            qualification_reasons.append("zero_qualifying_probes")
+        execution = payload.get("diagnosticExecution", {})
+        if int(execution.get("timedOutProbeCount", 0)) > 0:
+            qualification_reasons.append("probe_timeout")
+        probes = execution.get("probes", [])
+        if any(probe.get("status") not in {"completed"} for probe in probes):
+            qualification_reasons.append("probe_unavailable_or_error")
+        if args.live_smoke and any(
+            not bool(payload.get(key, {}).get("probePassed", False))
+            for key in (
+                "officialMacroDiagnostic",
+                "alpacaRotationDiagnostic",
+                "polygonUsBreadthDiagnostic",
+            )
+        ):
+            qualification_reasons.append("probe_unavailable_or_error")
+        if args.options_live_probe:
+            providers = payload.get("optionsLabProviderPreflight", {}).get("providers", [])
+            selected = next(
+                (provider for provider in providers if provider.get("providerId") == args.options_provider),
+                None,
+            )
+            options_status = (selected or {}).get("liveProbe", {}).get("status")
+            if options_status == "timeout":
+                qualification_reasons.append("probe_timeout")
+            elif options_status != "passed":
+                qualification_reasons.append("probe_unavailable_or_error")
+    payload["qualification"] = {
+        "requested": bool(args.qualification),
+        "status": "failed" if qualification_reasons else "passed" if args.qualification else "not_requested",
+        "reasonCodes": list(dict.fromkeys(qualification_reasons)),
+    }
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
-    return 0
+    return 1 if qualification_reasons else 0
 
 
 if __name__ == "__main__":

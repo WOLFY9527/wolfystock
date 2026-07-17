@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import socket
 import subprocess
@@ -42,6 +43,39 @@ def test_python_subprocess_inherits_offline_socket_guard() -> None:
 
     assert result.returncode != 0
     assert "OutboundNetworkBlocked" in result.stderr
+
+
+def test_child_environment_projection_removes_credentials_and_production_dsn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.offline_network import project_child_environment
+
+    monkeypatch.setenv("ALPACA_API_KEY", "provider-secret")
+    monkeypatch.setenv("POSTGRES_PHASE_A_REAL_DSN", "postgresql://user:secret@db.example/production")
+    monkeypatch.setenv("UNRELATED_PRIVATE_VALUE", "private")
+    monkeypatch.setenv("WOLFYSTOCK_TEST_RUN_ID", "fixture-run")
+
+    projected = project_child_environment()
+
+    assert "ALPACA_API_KEY" not in projected
+    assert "POSTGRES_PHASE_A_REAL_DSN" not in projected
+    assert "UNRELATED_PRIVATE_VALUE" not in projected
+    assert projected["WOLFYSTOCK_TEST_RUN_ID"] == "fixture-run"
+    assert projected["WOLFYSTOCK_TEST_OFFLINE"] == "1"
+
+    child = subprocess.run(
+        [sys.executable, "-c", "import json, os; print(json.dumps(dict(os.environ)))"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    child_environment = json.loads(child.stdout)
+
+    assert child.returncode == 0, child.stderr
+    assert "ALPACA_API_KEY" not in child_environment
+    assert "POSTGRES_PHASE_A_REAL_DSN" not in child_environment
+    assert "UNRELATED_PRIVATE_VALUE" not in child_environment
+    assert child_environment["WOLFYSTOCK_TEST_RUN_ID"] == "fixture-run"
 
 
 @pytest.mark.parametrize(

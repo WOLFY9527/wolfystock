@@ -10,6 +10,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 try:
     import litellm  # noqa: F401
 except ModuleNotFoundError:
@@ -26,8 +28,9 @@ from src.postgres_phase_c import (
     PhaseCSymbolMaster,
 )
 from src.storage import DatabaseManager
+from tests.destructive_postgres import current_target
 
-REAL_PG_DSN = str(os.getenv("POSTGRES_PHASE_A_REAL_DSN") or "").strip()
+pytestmark = pytest.mark.destructive_postgres
 
 
 def _reset_auth_globals() -> None:
@@ -38,7 +41,6 @@ def _reset_auth_globals() -> None:
     auth._rate_limit = {}
 
 
-@unittest.skipUnless(REAL_PG_DSN, "POSTGRES_PHASE_A_REAL_DSN is required for real PostgreSQL validation")
 class PostgresPhaseCRealPgTestCase(unittest.TestCase):
     def setUp(self) -> None:
         _reset_auth_globals()
@@ -46,7 +48,8 @@ class PostgresPhaseCRealPgTestCase(unittest.TestCase):
         self.data_dir = Path(self.temp_dir.name)
         self.env_path = self.data_dir / ".env"
         self.sqlite_db_path = self.data_dir / "legacy.sqlite"
-        self.pg_engine = create_engine(REAL_PG_DSN, echo=False, pool_pre_ping=True)
+        self.real_pg_dsn = current_target().scoped_dsn
+        self.pg_engine = create_engine(self.real_pg_dsn, echo=False, pool_pre_ping=True)
         self._drop_phase_c_tables()
         self._configure_environment()
 
@@ -67,13 +70,13 @@ class PostgresPhaseCRealPgTestCase(unittest.TestCase):
             "GEMINI_API_KEY=test",
             "ADMIN_AUTH_ENABLED=true",
             f"DATABASE_PATH={self.sqlite_db_path}",
-            f"POSTGRES_PHASE_A_URL={REAL_PG_DSN}",
+            f"POSTGRES_PHASE_A_URL={self.real_pg_dsn}",
             "POSTGRES_PHASE_A_APPLY_SCHEMA=true",
         ]
         self.env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.sqlite_db_path)
-        os.environ["POSTGRES_PHASE_A_URL"] = REAL_PG_DSN
+        os.environ["POSTGRES_PHASE_A_URL"] = self.real_pg_dsn
         os.environ["POSTGRES_PHASE_A_APPLY_SCHEMA"] = "true"
         Config.reset_instance()
         DatabaseManager.reset_instance()

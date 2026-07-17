@@ -2665,7 +2665,7 @@ def test_runtime_diagnostic_global_timeout_skips_later_live_smoke_probes(monkeyp
     assert payload["diagnosticExecution"]["timedOutProbeCount"] == 3
 
 
-def test_runtime_diagnostic_main_returns_zero_when_probe_times_out(
+def test_runtime_diagnostic_qualification_returns_nonzero_when_probe_times_out(
     monkeypatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -2712,6 +2712,7 @@ def test_runtime_diagnostic_main_returns_zero_when_probe_times_out(
 
     exit_code = module.main(
         [
+            "--qualification",
             "--live-smoke",
             "--probe-timeout-seconds",
             "0.02",
@@ -2721,6 +2722,83 @@ def test_runtime_diagnostic_main_returns_zero_when_probe_times_out(
     )
     payload = json.loads(capsys.readouterr().out)
 
-    assert exit_code == 0
+    assert exit_code != 0
     assert payload["officialMacroDiagnostic"]["status"] == "timeout"
     assert payload["diagnosticExecution"]["timedOutProbeCount"] == 1
+    assert payload["qualification"]["status"] == "failed"
+
+
+def test_runtime_diagnostic_qualification_fails_without_requested_probes(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module = _load_script_module()
+
+    exit_code = module.main(["--qualification"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code != 0
+    assert payload["qualification"] == {
+        "requested": True,
+        "status": "failed",
+        "reasonCodes": ["zero_qualifying_probes"],
+    }
+
+
+def test_runtime_diagnostic_qualification_fails_when_requested_probe_is_unavailable(
+    monkeypatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module = _load_script_module()
+    monkeypatch.setattr(
+        module,
+        "collect_diagnostic_bundle",
+        lambda **kwargs: {
+            "officialMacroDiagnostic": {"probePassed": False, "reason": "credentials_missing"},
+            "alpacaRotationDiagnostic": {"probePassed": True, "reason": "ok"},
+            "polygonUsBreadthDiagnostic": {"probePassed": True, "reasonCodes": []},
+            "diagnosticExecution": {
+                "probeCount": 3,
+                "timedOutProbeCount": 0,
+                "probes": [
+                    {"id": "officialMacroDiagnostic", "status": "completed"},
+                    {"id": "alpacaRotationDiagnostic", "status": "completed"},
+                    {"id": "polygonUsBreadthDiagnostic", "status": "completed"},
+                ],
+            },
+        },
+    )
+
+    exit_code = module.main(["--qualification", "--live-smoke"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code != 0
+    assert payload["qualification"]["status"] == "failed"
+    assert payload["qualification"]["reasonCodes"] == ["probe_unavailable_or_error"]
+
+
+def test_runtime_diagnostic_informational_mode_does_not_claim_qualification(
+    monkeypatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module = _load_script_module()
+    monkeypatch.setattr(
+        module,
+        "collect_diagnostic_bundle",
+        lambda **kwargs: {
+            "diagnosticExecution": {
+                "probeCount": 1,
+                "timedOutProbeCount": 1,
+                "probes": [{"id": "informationalProbe", "status": "timeout"}],
+            }
+        },
+    )
+
+    exit_code = module.main([])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["qualification"] == {
+        "requested": False,
+        "status": "not_requested",
+        "reasonCodes": [],
+    }

@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from starlette.requests import Request
@@ -28,8 +29,9 @@ from api.deps import resolve_current_user
 from src.config import Config
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, BOOTSTRAP_ADMIN_USERNAME, ROLE_ADMIN
 from src.storage import AnalysisHistory, AppUser, AppUserSession, DatabaseManager
+from tests.destructive_postgres import current_target
 
-REAL_PG_DSN = str(os.getenv("POSTGRES_PHASE_A_REAL_DSN") or "").strip()
+pytestmark = pytest.mark.destructive_postgres
 
 
 def _reset_auth_globals() -> None:
@@ -62,7 +64,6 @@ def _make_request(*, cookies: dict[str, str] | None = None) -> Request:
     return Request(scope)
 
 
-@unittest.skipUnless(REAL_PG_DSN, "POSTGRES_PHASE_A_REAL_DSN is required for real PostgreSQL validation")
 class PostgresPhaseARealPgTestCase(unittest.TestCase):
     def setUp(self) -> None:
         _reset_auth_globals()
@@ -70,7 +71,9 @@ class PostgresPhaseARealPgTestCase(unittest.TestCase):
         self.data_dir = Path(self.temp_dir.name)
         self.env_path = self.data_dir / ".env"
         self.sqlite_db_path = self.data_dir / "legacy.sqlite"
-        self.pg_engine = create_engine(REAL_PG_DSN, echo=False, pool_pre_ping=True)
+        self.pg_target = current_target()
+        self.real_pg_dsn = self.pg_target.scoped_dsn
+        self.pg_engine = create_engine(self.real_pg_dsn, echo=False, pool_pre_ping=True)
         self._drop_phase_a_tables()
         self._configure_environment(auth_enabled=True, enable_phase_a=True)
 
@@ -95,7 +98,7 @@ class PostgresPhaseARealPgTestCase(unittest.TestCase):
         if enable_phase_a:
             lines.extend(
                 [
-                    f"POSTGRES_PHASE_A_URL={REAL_PG_DSN}",
+                    f"POSTGRES_PHASE_A_URL={self.real_pg_dsn}",
                     "POSTGRES_PHASE_A_APPLY_SCHEMA=true",
                 ]
             )
@@ -104,7 +107,7 @@ class PostgresPhaseARealPgTestCase(unittest.TestCase):
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.sqlite_db_path)
         if enable_phase_a:
-            os.environ["POSTGRES_PHASE_A_URL"] = REAL_PG_DSN
+            os.environ["POSTGRES_PHASE_A_URL"] = self.real_pg_dsn
             os.environ["POSTGRES_PHASE_A_APPLY_SCHEMA"] = "true"
         else:
             os.environ.pop("POSTGRES_PHASE_A_URL", None)
@@ -149,7 +152,7 @@ class PostgresPhaseARealPgTestCase(unittest.TestCase):
                     """
                     select table_name
                     from information_schema.tables
-                    where table_schema = 'public'
+                    where table_schema = :schema
                       and table_name in (
                         'app_users',
                         'app_user_sessions',
@@ -157,7 +160,8 @@ class PostgresPhaseARealPgTestCase(unittest.TestCase):
                         'user_preferences',
                         'notification_targets'
                       )
-                    """
+                    """,
+                    schema=self.pg_target.schema,
                 )
             }
             self.assertEqual(

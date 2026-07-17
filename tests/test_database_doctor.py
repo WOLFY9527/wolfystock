@@ -403,13 +403,14 @@ class DatabaseDoctorReportTestCase(unittest.TestCase):
         markdown_path = self.data_dir / "real-pg-bundle.md"
         json_path = self.data_dir / "real-pg-bundle.json"
         self._configure_environment(postgres_url=None)
-        os.environ["POSTGRES_PHASE_A_REAL_DSN"] = f"sqlite:///{self.phase_db_path}"
 
         completed = subprocess.run(
             [
                 sys.executable,
                 "scripts/database_doctor.py",
                 "--real-pg-bundle",
+                "--real-pg-dsn",
+                f"sqlite:///{self.phase_db_path}",
                 "--write",
                 "--format",
                 "json",

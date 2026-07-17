@@ -382,7 +382,7 @@
     },
     {
       "id": "backend-tests",
-      "include": ["test_env.py", "tests/**"],
+      "include": ["conftest.py", "tests/**"],
       "owners": {
         "direct_owner": ["direct.pytest.changed"],
         "bounded_integration": ["bounded.backend.focused"],
@@ -577,14 +577,14 @@
         ".gitignore",
         "LICENSE",
         "apps/dsa-desktop/**",
+        "conftest.py",
         "docker/**",
         "patch/**",
         "rust/**",
         "sources/**",
         "strategies/**",
         "templates/**",
-        "test.sh",
-        "test_env.py"
+        "test.sh"
       ],
       "protected": true,
       "reason": "existing_gate_unknown_full_gate_baseline_no_downgrade",

@@ -11,6 +11,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
 from sqlalchemy import create_engine
 
 try:
@@ -21,19 +22,20 @@ except ModuleNotFoundError:
 from src.config import Config
 from src.postgres_schema_bootstrap import list_bootstrap_records
 from src.storage import DatabaseManager
+from tests.destructive_postgres import current_target
 
-REAL_PG_DSN = str(os.getenv("POSTGRES_PHASE_A_REAL_DSN") or "").strip()
+pytestmark = pytest.mark.destructive_postgres
 _EXPECTED_SCHEMA_KEYS = ("phase_a", "phase_b", "phase_c", "phase_d", "phase_e", "phase_f", "phase_g")
 
 
-@unittest.skipUnless(REAL_PG_DSN, "POSTGRES_PHASE_A_REAL_DSN is required for real PostgreSQL validation")
 class PostgresRuntimeRealPgAuditTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.data_dir = Path(self.temp_dir.name)
         self.env_path = self.data_dir / ".env"
         self.sqlite_db_path = self.data_dir / "legacy.sqlite"
-        self.pg_engine = create_engine(REAL_PG_DSN, echo=False, pool_pre_ping=True)
+        self.real_pg_dsn = current_target().scoped_dsn
+        self.pg_engine = create_engine(self.real_pg_dsn, echo=False, pool_pre_ping=True)
         self._configure_environment(auto_apply_schema=True)
 
     def tearDown(self) -> None:
@@ -51,13 +53,13 @@ class PostgresRuntimeRealPgAuditTestCase(unittest.TestCase):
             "STOCK_LIST=600519",
             "GEMINI_API_KEY=test",
             f"DATABASE_PATH={self.sqlite_db_path}",
-            f"POSTGRES_PHASE_A_URL={REAL_PG_DSN}",
+            f"POSTGRES_PHASE_A_URL={self.real_pg_dsn}",
             f"POSTGRES_PHASE_A_APPLY_SCHEMA={'true' if auto_apply_schema else 'false'}",
         ]
         self.env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.sqlite_db_path)
-        os.environ["POSTGRES_PHASE_A_URL"] = REAL_PG_DSN
+        os.environ["POSTGRES_PHASE_A_URL"] = self.real_pg_dsn
         os.environ["POSTGRES_PHASE_A_APPLY_SCHEMA"] = "true" if auto_apply_schema else "false"
         Config.reset_instance()
         DatabaseManager.reset_instance()

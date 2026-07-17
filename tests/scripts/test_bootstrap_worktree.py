@@ -102,6 +102,29 @@ def resolved(path: Path) -> Path:
     return path.resolve(strict=True)
 
 
+def test_qualification_rejects_wrong_python_interpreter(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import scripts.worktree_preflight as preflight
+
+    repo_python = tmp_path / ".venv" / "bin" / "python"
+    repo_python.parent.mkdir(parents=True)
+    repo_python.write_text("", encoding="utf-8")
+    monkeypatch.setattr(preflight.sys, "executable", str(tmp_path / "other" / "python"))
+
+    with pytest.raises(preflight.PreflightError, match="repository .venv Python"):
+        preflight.require_repository_python(tmp_path, repo_python=repo_python)
+
+
+def test_qualification_accepts_repository_python(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import scripts.worktree_preflight as preflight
+
+    repo_python = tmp_path / ".venv" / "bin" / "python"
+    repo_python.parent.mkdir(parents=True)
+    repo_python.write_text("", encoding="utf-8")
+    monkeypatch.setattr(preflight.sys, "executable", str(repo_python))
+
+    assert preflight.require_repository_python(tmp_path, repo_python=repo_python) == repo_python.resolve()
+
+
 def add_lock_package(
     canonical: Path,
     lock_path: str,
@@ -518,7 +541,9 @@ def test_powershell_entrypoint_delegates_to_the_shared_core() -> None:
 def test_posix_entrypoint_delegates_to_the_shared_core() -> None:
     content = SCRIPT_PATH.read_text(encoding="utf-8")
     assert "worktree_preflight.py" in content
-    assert "python3" in content
+    assert ".venv/bin/python" in content
+    assert "command -v python" not in content
+    assert "command -v python3" not in content
 
 
 def test_entrypoints_run_shared_core_in_isolated_mode() -> None:

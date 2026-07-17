@@ -12,20 +12,16 @@ A股自选股智能分析系统 - 环境验证测试
 5. 通知推送测试
 
 使用方法：
-    python test_env.py              # 运行所有测试
-    python test_env.py --db         # 仅查看数据库
-    python test_env.py --llm        # 仅测试 LLM
-    python test_env.py --fetch      # 仅测试数据获取
-    python test_env.py --notify     # 仅测试通知
+    python scripts/diagnose_environment.py              # 运行所有测试
+    python scripts/diagnose_environment.py --db         # 仅查看数据库
+    python scripts/diagnose_environment.py --llm        # 仅测试 LLM
+    python scripts/diagnose_environment.py --fetch      # 仅测试数据获取
+    python scripts/diagnose_environment.py --notify     # 仅测试通知
 
 """
-import os
-from src.config import setup_env
-
-setup_env()
-
 import argparse
 import logging
+import os
 import sys
 from datetime import datetime, date, timedelta
 from typing import Optional
@@ -430,6 +426,9 @@ def query_stock_data(stock_code: str, days: int = 10):
 
 
 def main():
+    from src.config import setup_env
+
+    setup_env()
     parser = argparse.ArgumentParser(
         description='A股自选股智能分析系统 - 环境验证测试',
         formatter_class=argparse.RawDescriptionHelpFormatter,
