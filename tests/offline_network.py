@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from scripts.environment.runtime import ENVIRONMENT_POLICY_VERSION
 from tests.offline_socket_guard import (
     OutboundNetworkBlocked,
     SocketGuard as _SocketGuard,
@@ -50,6 +51,20 @@ CHILD_ENVIRONMENT_ALLOWLIST = {
     "WOLFYSTOCK_TEST_OFFLINE",
     "no_proxy",
 }
+RUN_SCOPED_ENVIRONMENT_ALLOWLIST = {
+    "COVERAGE_FILE",
+    "DATABASE_PATH",
+    "DUCKDB_DATABASE_PATH",
+    "ENV_FILE",
+    "LOG_DIR",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONHASHSEED",
+    "WOLFYSTOCK_ENV_POLICY_VERSION",
+    "WOLFYSTOCK_ENV_CACHE",
+    "WOLFYSTOCK_FRONTEND_OUTPUT_DIR",
+    "WOLFYSTOCK_SERVICE_STATE_DIR",
+    "XDG_CACHE_HOME",
+}
 CHILD_ENVIRONMENT_PREFIX_ALLOWLIST = (
     "PYTEST_",
     "WOLFYSTOCK_TEST_",
@@ -71,6 +86,13 @@ def project_child_environment(source: dict[str, str] | None = None) -> dict[str,
         for key, value in environment.items()
         if key in CHILD_ENVIRONMENT_ALLOWLIST or key.startswith(CHILD_ENVIRONMENT_PREFIX_ALLOWLIST)
     }
+    if (
+        environment.get("WOLFYSTOCK_ENV_POLICY_VERSION") == ENVIRONMENT_POLICY_VERSION
+        and environment.get("WOLFYSTOCK_TEST_RUN_ID")
+    ):
+        projected.update(
+            {key: environment[key] for key in RUN_SCOPED_ENVIRONMENT_ALLOWLIST if environment.get(key)}
+        )
     destructive_dsn = environment.get("POSTGRES_PHASE_A_REAL_DSN", "")
     if _LOOPBACK_DESTRUCTIVE_DSN.fullmatch(destructive_dsn):
         projected["POSTGRES_PHASE_A_REAL_DSN"] = destructive_dsn

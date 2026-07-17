@@ -55,6 +55,12 @@ def test_child_environment_projection_removes_credentials_and_production_dsn(
     monkeypatch.setenv("UNRELATED_PRIVATE_VALUE", "private")
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("WOLFYSTOCK_TEST_RUN_ID", "fixture-run")
+    monkeypatch.setenv("DATABASE_PATH", "/tmp/wolfy-fixture/test.sqlite3")
+    monkeypatch.setenv("DUCKDB_DATABASE_PATH", "/tmp/wolfy-fixture/test.duckdb")
+    monkeypatch.setenv("ENV_FILE", "/tmp/wolfy-fixture/empty.env")
+    monkeypatch.setenv("LOG_DIR", "/tmp/wolfy-fixture/logs")
+    monkeypatch.setenv("XDG_CACHE_HOME", "/tmp/wolfy-fixture/cache")
+    monkeypatch.setenv("WOLFYSTOCK_ENV_POLICY_VERSION", "wolfystock_test_environment_policy_v1")
 
     projected = project_child_environment()
 
@@ -64,6 +70,9 @@ def test_child_environment_projection_removes_credentials_and_production_dsn(
     assert projected["APP_ENV"] == "production"
     assert projected["WOLFYSTOCK_TEST_RUN_ID"] == "fixture-run"
     assert projected["WOLFYSTOCK_TEST_OFFLINE"] == "1"
+    assert projected["DATABASE_PATH"] == "/tmp/wolfy-fixture/test.sqlite3"
+    assert projected["ENV_FILE"] == "/tmp/wolfy-fixture/empty.env"
+    assert projected["WOLFYSTOCK_ENV_POLICY_VERSION"] == "wolfystock_test_environment_policy_v1"
 
     child = subprocess.run(
         [sys.executable, "-c", "import json, os; print(json.dumps(dict(os.environ)))"],
@@ -79,6 +88,8 @@ def test_child_environment_projection_removes_credentials_and_production_dsn(
     assert "UNRELATED_PRIVATE_VALUE" not in child_environment
     assert child_environment["APP_ENV"] == "production"
     assert child_environment["WOLFYSTOCK_TEST_RUN_ID"] == "fixture-run"
+    assert child_environment["DATABASE_PATH"] == "/tmp/wolfy-fixture/test.sqlite3"
+    assert child_environment["ENV_FILE"] == "/tmp/wolfy-fixture/empty.env"
 
 
 @pytest.mark.parametrize(

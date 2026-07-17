@@ -5,6 +5,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+if [[ -z "${WOLFYSTOCK_TEST_RUN_ID:-}" ]]; then
+  exec "${ROOT_DIR}/wolfy" exec --profile test -- bash "${BASH_SOURCE[0]}" "$@"
+fi
+
 cd "${ROOT_DIR}"
 
 PYTHON_BIN="${PYTHON_BIN:-}"

@@ -36,7 +36,7 @@ wheels/
 venv/
 ENV/
 env/
-.venv/
+/.venv
 
 # IDE
 .idea/
@@ -161,3 +161,6 @@ cache/
 
 # Local Codex app environment/config
 .codex/
+
+# Hermetic environment provenance pointer (dependency snapshots live outside the repository)
+/.wolfy/

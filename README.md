@@ -38,16 +38,57 @@ AI project manual.
 
 ## Local Development
 
-Backend:
+Use the repository-owned environment command from every checkout and worktree:
 
 ```bash
-pip install -r requirements.txt
-pip install flake8 pytest
-cp .env.example .env
-python main.py
+./wolfy bootstrap --ensure
+./wolfy env verify
+./wolfy exec --profile test -- python -m pytest -q tests/test_offline_network_policy.py
+./wolfy qualify-env
 ```
 
-Useful variants:
+`qualify-env` emits redacted environment evidence with non-null operation
+identity. For baseline-delta qualification, first capture normalized findings
+from an explicitly clean baseline checkout, then compare a changed checkout
+using the same environment fingerprint:
+
+```bash
+./wolfy qualify-env --findings baseline-findings.json --output baseline-evidence.json
+./wolfy qualify-env --baseline-commit <full-clean-baseline-sha> \
+  --baseline-evidence baseline-evidence.json --findings current-findings.json
+```
+
+The comparison reports new, unchanged, and removed findings separately. It
+never adds findings to a baseline automatically, and an unchanged release
+blocker remains a failure.
+
+`bootstrap --ensure` is the only command that may install dependencies. Use
+`./wolfy bootstrap --ensure --offline` to require verified snapshots and local
+package-manager caches; an offline material miss fails without attempting the
+network. Python and Web snapshots live under the OS cache root, or the absolute
+`WOLFYSTOCK_ENV_CACHE` override, as separate input and installed-content
+fingerprints. `.venv` and `apps/dsa-web/node_modules` link to those verified
+snapshots rather than another checkout.
+
+The `test` profile removes credentials, production DSNs, admin bootstrap flags,
+Python/Node startup modifiers, proxy settings, and user data paths. It allocates
+one run-scoped SQLite database, cache, logs, uploads, temporary files, coverage,
+pytest cache, frontend output, and service metadata directory. Successful runs
+are removed; a bounded number of failed run directories are retained for local
+diagnosis.
+
+Start isolated local services without fixed ports or live financial providers:
+
+```bash
+./wolfy dev --json
+./wolfy dev --stop <run-id> --json
+```
+
+The start command reports the environment fingerprint, run ID, URLs, process
+IDs, log paths, and readiness. The stop command verifies the run identity and is
+idempotent.
+
+Product entrypoint variants, when invoked by an explicitly configured runtime:
 
 ```bash
 python main.py --debug
@@ -76,13 +117,10 @@ bound successfully but reports readiness 503 is operationally not ready; it is
 not mislabeled as an import, lifespan, or bind failure. Normal returns and
 interactive shutdown request uvicorn shutdown and wait for its managed thread.
 
-Web:
+Web commands use the verified `node_modules` snapshot:
 
 ```bash
-cd apps/dsa-web
-npm ci
-npm run lint
-npm run build
+./wolfy exec --profile test -- npm --prefix apps/dsa-web run lint
 ```
 
 Desktop:

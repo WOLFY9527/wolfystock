@@ -64,27 +64,27 @@
   },
   "includedSources": [
     {
-      "bytes": 5192,
+      "bytes": 5488,
       "categories": [
         "governance",
         "workflow"
       ],
-      "lineCount": 103,
+      "lineCount": 105,
       "path": "AGENTS.md",
       "purpose": "repository AI-agent rules and hard safety boundaries",
-      "sha256": "c9a803ee079ad5f1eeca390b72d5ab6cc8b408ce2c080c4d77336d74bb9dc144",
+      "sha256": "eaa4b88a73412cc6ab6fc30d51a8ca9690351e46e8bc5bede5dcb6bdcaccc3aa",
       "title": "AGENTS.md"
     },
     {
-      "bytes": 7413,
+      "bytes": 9594,
       "categories": [
         "onboarding",
         "product"
       ],
-      "lineCount": 192,
+      "lineCount": 230,
       "path": "README.md",
       "purpose": "human product entrypoint and supported run commands",
-      "sha256": "48c98ccab027f3751545bc31a019c8f2537b38edf801b9a338afc67b0841b27f",
+      "sha256": "72cbffa6762d8eaea776302729b3863a721bc0b13079d44d1d3e05aaa87719a0",
       "title": "WolfyStock"
     },
     {

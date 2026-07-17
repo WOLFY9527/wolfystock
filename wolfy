@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+
+if [[ -n "${WOLFYSTOCK_BOOTSTRAP_PYTHON:-}" ]]; then
+  CANDIDATES=("${WOLFYSTOCK_BOOTSTRAP_PYTHON}")
+else
+  CANDIDATES=(python3.11 python3.11.exe)
+fi
+
+for candidate in "${CANDIDATES[@]}"; do
+  if command -v "${candidate}" >/dev/null 2>&1 && "${candidate}" -E -s -B -c 'import platform,sys; raise SystemExit(0 if platform.python_implementation() == "CPython" and sys.version_info[:2] == (3, 11) else 1)' 2>/dev/null; then
+    exec "${candidate}" -E -s -B "${ROOT_DIR}/scripts/wolfy.py" "$@"
+  fi
+done
+
+printf '%s\n' '{"status":"error","reasonCode":"supported_bootstrap_python_missing","message":"CPython 3.11 is required; set WOLFYSTOCK_BOOTSTRAP_PYTHON explicitly."}' >&2
+exit 1

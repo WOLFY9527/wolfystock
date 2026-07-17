@@ -8,6 +8,10 @@ BASE_REF="${CI_GATE_BASE_REF:-origin/main}"
 MAX_FOCUSED_TESTS="${CI_GATE_FAST_MAX_TESTS:-24}"
 COLLECTOR="${ROOT_DIR}/scripts/validation_changed_files.py"
 
+if [[ -z "${WOLFYSTOCK_TEST_RUN_ID:-}" ]]; then
+  exec "${ROOT_DIR}/wolfy" exec --profile test -- bash "${BASH_SOURCE[0]}" "$@"
+fi
+
 usage() {
   cat <<'EOF'
 Usage: scripts/ci_gate_fast.sh [--base-ref REF]

@@ -52,8 +52,9 @@
 
 ## Worktree 环境
 
-- 普通 linked worktree 可先运行 `bash scripts/bootstrap_worktree.sh --check`，确认后运行 `--apply` 复用 canonical main worktree 的 `.venv` 与 Web `node_modules`；仅在显式设置 `WORKTREE_BOOTSTRAP_ENV_FILE` 时链接 repo-external `.env`。
-- 处理依赖或 lockfile 变更时，设置 `WORKTREE_BOOTSTRAP_ISOLATED=1` 跳过共享链接并使用隔离环境。
+- 在任意 checkout 运行 `./wolfy bootstrap --ensure`，构建或复用 OS cache root 下经过验证的 content-addressed Python 与 Web snapshots；worktree 不得链接另一个 checkout 的 mutable dependency 目录。
+- 无网络模式使用 `./wolfy bootstrap --ensure --offline`；缺少已验证 snapshot 或 package-manager cache material 时必须显式失败。
+- `bash scripts/bootstrap_worktree.sh --check` 与 `--apply` 仅是 `./wolfy env verify` 和 `./wolfy bootstrap --ensure` 的兼容 delegate，不拥有独立 fingerprint、安装或链接逻辑。
 
 ## 常用命令
 
@@ -75,9 +76,10 @@ uvicorn server:app --reload --host 0.0.0.0 --port 8000
 
 ```bash
 ./scripts/ci_gate.sh
-python -m pytest -m "not network"
+./wolfy exec --profile test -- python -m pytest -m "not network"
 python -m py_compile <changed_python_files>
-cd apps/dsa-web && npm ci && npm run lint && npm run build
+./wolfy exec --profile test -- npm --prefix apps/dsa-web run lint
+./wolfy exec --profile test -- npm --prefix apps/dsa-web run build
 cd apps/dsa-desktop && npm install && npm run build
 python scripts/build_ai_project_manual.py --check
 python scripts/check_ai_assets.py

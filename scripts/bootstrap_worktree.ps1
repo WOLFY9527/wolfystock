@@ -7,6 +7,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$mode = if ($Check) { '--check' } else { '--apply' }
-& python (Join-Path $PSScriptRoot 'worktree_preflight.py') bootstrap $mode
+$root = Split-Path -Parent $PSScriptRoot
+$command = if ($Check) { @('env', 'verify') } else { @('bootstrap', '--ensure') }
+& (Join-Path $root 'wolfy.ps1') @command
 exit $LASTEXITCODE
