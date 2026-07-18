@@ -426,6 +426,7 @@ class DurableTaskStateTestCase(unittest.TestCase):
         completed = self.db.complete_claimed_durable_task_state(
             task_id="task-progress-no-provider-leak",
             worker_id="worker-a",
+            claim_attempt=claim["attempt_count"],
             metadata={
                 "result_ref": "fixture:ws2-safe-result",
                 "raw_result_payload": {"token": "not-a-real-token"},

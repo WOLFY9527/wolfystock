@@ -148,12 +148,14 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
             self.db.complete_claimed_durable_task_state(
                 task_id="task-single-claim",
                 worker_id="worker-a",
+                claim_attempt=first_claim["attempt_count"],
             )
         )
         self.assertIsNone(
             self.db.complete_claimed_durable_task_state(
                 task_id="task-single-claim",
                 worker_id="worker-b",
+                claim_attempt=first_claim["attempt_count"],
             )
         )
 
@@ -180,6 +182,76 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
         self.assertEqual(state["lease_owner"], "worker-a")
         self.assertEqual(state["attempt_count"], 1)
 
+    def test_reclaimed_failure_is_not_published_by_stale_worker(self) -> None:
+        self._create_task("task-stale-failure", failure_mode="non_retryable")
+        reclaimed = {}
+
+        def reclaim_after_first_stage(stage: str, _task: dict) -> None:
+            if stage != "stage_1":
+                return
+            state = self.db.get_durable_task_state(
+                task_id="task-stale-failure",
+                owner_user_id="user-a",
+            )
+            reclaimed["claim"] = self.db.claim_next_durable_task_state(
+                worker_id="worker-b",
+                task_type=SYNTHETIC_TASK_TYPE,
+                now=datetime.fromisoformat(state["lease_expires_at"]) + timedelta(seconds=1),
+            )
+
+        worker = DurableTaskWorkerPrototype(
+            db=self.db,
+            worker_id="worker-a",
+            lease_seconds=1,
+            stage_hook=reclaim_after_first_stage,
+        )
+
+        result = worker.run_once()
+        state = self.db.get_durable_task_state(
+            task_id="task-stale-failure",
+            owner_user_id="user-a",
+        )
+        events = self.db.list_durable_task_progress_events(
+            task_id="task-stale-failure",
+            owner_user_id="user-a",
+        )
+
+        self.assertIsNotNone(reclaimed["claim"])
+        self.assertEqual(result.status, "lost_lease")
+        self.assertEqual(state["lease_owner"], "worker-b")
+        self.assertEqual(state["status"], "leased")
+        self.assertEqual([event["event_type"] for event in events], ["claimed", "progress"])
+
+    def test_reclaimed_worker_stops_before_next_stage(self) -> None:
+        self._create_task("task-stop-after-reclaim")
+        observed_stages = []
+
+        def reclaim_after_first_stage(stage: str, _task: dict) -> None:
+            observed_stages.append(stage)
+            if stage != "stage_1":
+                return
+            state = self.db.get_durable_task_state(
+                task_id="task-stop-after-reclaim",
+                owner_user_id="user-a",
+            )
+            self.db.claim_next_durable_task_state(
+                worker_id="worker-b",
+                task_type=SYNTHETIC_TASK_TYPE,
+                now=datetime.fromisoformat(state["lease_expires_at"]) + timedelta(seconds=1),
+            )
+
+        worker = DurableTaskWorkerPrototype(
+            db=self.db,
+            worker_id="worker-a",
+            lease_seconds=1,
+            stage_hook=reclaim_after_first_stage,
+        )
+
+        result = worker.run_once()
+
+        self.assertEqual(result.status, "lost_lease")
+        self.assertEqual(observed_stages, ["stage_1"])
+
     def test_expired_lease_can_be_reclaimed_by_another_worker(self) -> None:
         self._create_task("task-expired-lease")
         first_claim = self.db.claim_next_durable_task_state(
@@ -192,6 +264,7 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
         self.db.heartbeat_durable_task_state(
             task_id="task-expired-lease",
             worker_id="worker-a",
+            claim_attempt=first_claim["attempt_count"],
             lease_seconds=1,
             progress=25,
             current_step="Worker stalled",
@@ -207,6 +280,7 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
         stale_complete = self.db.complete_claimed_durable_task_state(
             task_id="task-expired-lease",
             worker_id="worker-a",
+            claim_attempt=first_claim["attempt_count"],
             now=expired_time,
         )
 
@@ -261,10 +335,12 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
         repeated_complete = self.db.complete_claimed_durable_task_state(
             task_id="task-repeat-complete",
             worker_id="worker-a",
+            claim_attempt=1,
         )
         stale_failure = self.db.fail_claimed_durable_task_state(
             task_id="task-repeat-complete",
             worker_id="worker-a",
+            claim_attempt=1,
             error_code="late_failure",
             error_summary="Late failure should not overwrite completion",
             retryable=False,
@@ -276,6 +352,7 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
         repeated_failure = self.db.fail_claimed_durable_task_state(
             task_id="task-repeat-failure",
             worker_id="worker-a",
+            claim_attempt=1,
             error_code="late_failure",
             error_summary="Late failure should not overwrite terminal failure",
             retryable=False,
@@ -283,6 +360,7 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
         stale_complete = self.db.complete_claimed_durable_task_state(
             task_id="task-repeat-failure",
             worker_id="worker-a",
+            claim_attempt=1,
         )
         failed_state = self.db.get_durable_task_state(task_id="task-repeat-failure", owner_user_id="user-a")
 

@@ -24,6 +24,10 @@ class NonRetryableSyntheticTaskError(Exception):
     """Terminal fixture failure used by the WS2 worker prototype."""
 
 
+class LostDurableTaskClaim(Exception):
+    """The worker's fenced claim is no longer active."""
+
+
 @dataclass(frozen=True)
 class WorkerRunResult:
     status: str
@@ -86,16 +90,21 @@ class DurableTaskWorkerPrototype:
             message="Synthetic task claimed",
         )
         try:
-            self._run_synthetic_handler(task)
+            self._run_synthetic_handler(task, claim_attempt=attempt_count)
+        except LostDurableTaskClaim:
+            return WorkerRunResult(status="lost_lease", task_id=task_id, attempt_count=attempt_count)
         except TransientSyntheticTaskError as exc:
             failed = self.db.fail_claimed_durable_task_state(
                 task_id=task_id,
                 worker_id=self.worker_id,
+                claim_attempt=attempt_count,
                 error_code="transient_synthetic_error",
                 error_summary=str(exc),
                 retryable=True,
                 current_step="Synthetic task queued for retry",
             )
+            if failed is None:
+                return WorkerRunResult(status="lost_lease", task_id=task_id, attempt_count=attempt_count)
             status = "retry_queued" if failed and failed.get("status") == "queued" else "failed"
             self._append_event(
                 task_id,
@@ -111,11 +120,14 @@ class DurableTaskWorkerPrototype:
             failed = self.db.fail_claimed_durable_task_state(
                 task_id=task_id,
                 worker_id=self.worker_id,
+                claim_attempt=attempt_count,
                 error_code="non_retryable_synthetic_error",
                 error_summary=str(exc),
                 retryable=False,
                 current_step="Synthetic task failed",
             )
+            if failed is None:
+                return WorkerRunResult(status="lost_lease", task_id=task_id, attempt_count=attempt_count)
             self._append_event(
                 task_id,
                 owner_user_id=owner_user_id,
@@ -130,11 +142,14 @@ class DurableTaskWorkerPrototype:
             failed = self.db.fail_claimed_durable_task_state(
                 task_id=task_id,
                 worker_id=self.worker_id,
+                claim_attempt=attempt_count,
                 error_code="worker_error",
                 error_summary=str(exc),
                 retryable=False,
                 current_step="Synthetic task failed",
             )
+            if failed is None:
+                return WorkerRunResult(status="lost_lease", task_id=task_id, attempt_count=attempt_count)
             self._append_event(
                 task_id,
                 owner_user_id=owner_user_id,
@@ -152,6 +167,7 @@ class DurableTaskWorkerPrototype:
         completed = self.db.complete_claimed_durable_task_state(
             task_id=task_id,
             worker_id=self.worker_id,
+            claim_attempt=attempt_count,
             current_step="Synthetic task complete",
             metadata={"result_ref": "fixture:ws2-synthetic"},
         )
@@ -176,11 +192,16 @@ class DurableTaskWorkerPrototype:
                 return last_result
         return last_result
 
-    def _run_synthetic_handler(self, task: Dict[str, Any]) -> None:
+    def _run_synthetic_handler(self, task: Dict[str, Any], *, claim_attempt: int) -> None:
         metadata = task.get("metadata") if isinstance(task.get("metadata"), dict) else {}
         task_id = str(task["task_id"])
 
-        self._heartbeat(task_id, progress=20, current_step="Synthetic stage 1")
+        self._heartbeat(
+            task_id,
+            claim_attempt=claim_attempt,
+            progress=20,
+            current_step="Synthetic stage 1",
+        )
         self._emit_stage("stage_1", task)
         if self._shutdown_requested:
             return
@@ -193,19 +214,26 @@ class DurableTaskWorkerPrototype:
         if failure_mode == "transient" and remaining_transient_failures > 0:
             self._heartbeat(
                 task_id,
+                claim_attempt=claim_attempt,
                 progress=30,
                 current_step="Synthetic transient failure",
                 metadata={"transient_failures_remaining": remaining_transient_failures - 1},
             )
             raise TransientSyntheticTaskError("Synthetic transient failure")
 
-        self._heartbeat(task_id, progress=70, current_step="Synthetic stage 2")
+        self._heartbeat(
+            task_id,
+            claim_attempt=claim_attempt,
+            progress=70,
+            current_step="Synthetic stage 2",
+        )
         self._emit_stage("stage_2", task)
 
     def _heartbeat(
         self,
         task_id: str,
         *,
+        claim_attempt: int,
         progress: int,
         current_step: str,
         metadata: Optional[Dict[str, Any]] = None,
@@ -213,21 +241,23 @@ class DurableTaskWorkerPrototype:
         state = self.db.heartbeat_durable_task_state(
             task_id=task_id,
             worker_id=self.worker_id,
+            claim_attempt=claim_attempt,
             lease_seconds=self.lease_seconds,
             progress=progress,
             current_step=current_step,
             metadata=metadata,
         )
-        if state is not None:
-            self._append_event(
-                task_id,
-                owner_user_id=str(state.get("owner_user_id") or ""),
-                event_type="progress",
-                stage=current_step,
-                progress=progress,
-                message=current_step,
-                metadata=metadata,
-            )
+        if state is None:
+            raise LostDurableTaskClaim
+        self._append_event(
+            task_id,
+            owner_user_id=str(state.get("owner_user_id") or ""),
+            event_type="progress",
+            stage=current_step,
+            progress=progress,
+            message=current_step,
+            metadata=metadata,
+        )
 
     def _emit_stage(self, stage: str, task: Dict[str, Any]) -> None:
         if self.stage_hook is not None:

@@ -124,11 +124,13 @@ class DurableRuntimeV1RecoveryTestCase(unittest.TestCase):
         stale_complete = fresh_db.complete_claimed_durable_task_state(
             task_id="runtime-expired-recover",
             worker_id="worker-a",
+            claim_attempt=stalled["attempt_count"],
             now=expired_time,
         )
         recovered_complete = fresh_db.complete_claimed_durable_task_state(
             task_id="runtime-expired-recover",
             worker_id="worker-b",
+            claim_attempt=recovered_claim["attempt_count"],
             current_step="Recovered fixture complete",
             metadata={"result_ref": "fixture:analysis_fixture:synthetic_success"},
             now=expired_time,

@@ -191,6 +191,20 @@ _POSTGRES_PHASE_STORE_SPECS = tuple(
 # SQLAlchemy ORM 基类
 Base = declarative_base()
 
+
+class DurableTaskStateCorruptError(RuntimeError):
+    """Raised when persisted durable task state cannot be decoded safely."""
+
+
+class PartialFactoryResetError(RuntimeError):
+    """Report a destructive reset that failed after an earlier store committed."""
+
+    def __init__(self, report: Dict[str, Any]):
+        self.report = report
+        failed_stage = str(report.get("failed_stage") or "unknown")
+        super().__init__(f"Factory reset partially failed at {failed_stage}")
+
+
 DURABLE_TASK_ACTIVE_STATUSES = frozenset(
     {
         "queued",
@@ -687,9 +701,10 @@ class DurableTaskState(Base):
     )
 
     def to_dict(self) -> Dict[str, Any]:
-        metadata = DatabaseManager._safe_json_loads(self.metadata_json, {}) if self.metadata_json else {}
-        if not isinstance(metadata, dict):
-            metadata = {}
+        metadata = DatabaseManager._load_durable_task_metadata(
+            self.metadata_json,
+            task_id=self.task_id,
+        )
         return {
             'task_id': self.task_id,
             'owner_user_id': self.owner_user_id,
@@ -4120,6 +4135,37 @@ class DatabaseManager:
         return sanitized if isinstance(sanitized, dict) else {}
 
     @staticmethod
+    def _load_durable_task_metadata(value: Any, *, task_id: str) -> Dict[str, Any]:
+        if value in (None, ""):
+            return {}
+        try:
+            decoded = json.loads(value)
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise DurableTaskStateCorruptError(
+                f"Durable task metadata is corrupt for task {task_id}"
+            ) from exc
+        if not isinstance(decoded, dict):
+            raise DurableTaskStateCorruptError(
+                f"Durable task metadata is corrupt for task {task_id}"
+            )
+        return decoded
+
+    @staticmethod
+    def _dump_durable_task_metadata(value: Dict[str, Any], *, task_id: str) -> str:
+        try:
+            encoded = json.dumps(value, ensure_ascii=False, allow_nan=False)
+            decoded = json.loads(encoded)
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise DurableTaskStateCorruptError(
+                f"Durable task replacement is corrupt for task {task_id}"
+            ) from exc
+        if not isinstance(decoded, dict):
+            raise DurableTaskStateCorruptError(
+                f"Durable task replacement is corrupt for task {task_id}"
+            )
+        return encoded
+
+    @staticmethod
     def _sanitize_task_error_summary(value: Any) -> Optional[str]:
         text = sanitize_message(str(value or "").strip())
         if not text:
@@ -4243,7 +4289,10 @@ class DatabaseManager:
             row.idempotency_key_hash = self._hash_optional_key(idempotency_key)
             row.dedupe_key_hash = dedupe_key_hash
             row.active_dedupe_key_hash = active_dedupe_key_hash
-            row.metadata_json = self._safe_json_dumps(safe_metadata)
+            row.metadata_json = self._dump_durable_task_metadata(
+                safe_metadata,
+                task_id=normalized_task_id,
+            )
             row.updated_at = now
             if row.status in {"processing", "running"} and row.started_at is None:
                 row.started_at = now
@@ -4396,7 +4445,10 @@ class DatabaseManager:
                 stage=sanitize_message(str(stage or "").strip())[:64] or None,
                 progress=safe_progress,
                 message_safe=self._sanitize_task_progress_message(message),
-                metadata_json=self._safe_json_dumps(safe_metadata),
+                metadata_json=self._dump_durable_task_metadata(
+                    safe_metadata,
+                    task_id=normalized_task_id,
+                ),
                 created_at=current_time,
             )
             session.add(row)
@@ -4503,6 +4555,8 @@ class DatabaseManager:
             row = session.execute(query.limit(1)).scalar_one_or_none()
             if row is None:
                 return None
+            if status is not None and row.lease_owner:
+                return None
             if status is not None:
                 row.status = str(status or "")[:32]
                 row.active_dedupe_key_hash = self._active_dedupe_key_hash_for_row(
@@ -4514,11 +4568,15 @@ class DatabaseManager:
             if current_step is not None:
                 row.current_step = sanitize_message(str(current_step or ""))[:500] or None
             if metadata is not None:
-                prior = self._safe_json_loads(row.metadata_json, {})
-                if not isinstance(prior, dict):
-                    prior = {}
+                prior = self._load_durable_task_metadata(
+                    row.metadata_json,
+                    task_id=normalized_task_id,
+                )
                 prior.update(self._sanitize_task_metadata(metadata))
-                row.metadata_json = self._safe_json_dumps(prior)
+                row.metadata_json = self._dump_durable_task_metadata(
+                    prior,
+                    task_id=normalized_task_id,
+                )
             if started_at is not None:
                 row.started_at = started_at
             if completed_at is not None:
@@ -4550,51 +4608,102 @@ class DatabaseManager:
         lease_seconds = max(1, min(int(lease_seconds or 60), 3600))
         current_time = now or datetime.now()
         claimable_statuses = ("queued", "pending", "waiting_retry")
-        recoverable_statuses = ("leased", "processing")
-        with self.session_scope() as session:
-            row = session.execute(
-                select(DurableTaskState)
+        recoverable_statuses = ("leased", "processing", "running")
+
+        claimable_predicate = or_(
+            and_(
+                DurableTaskState.status.in_(claimable_statuses),
+                or_(
+                    DurableTaskState.lease_expires_at.is_(None),
+                    DurableTaskState.lease_expires_at <= current_time,
+                ),
+            ),
+            and_(
+                DurableTaskState.status.in_(recoverable_statuses),
+                DurableTaskState.lease_expires_at.is_not(None),
+                DurableTaskState.lease_expires_at <= current_time,
+            ),
+        )
+        with self.get_session() as read_session:
+            candidate = read_session.execute(
+                select(DurableTaskState.id, DurableTaskState.status)
                 .where(
                     DurableTaskState.task_type == normalized_task_type,
-                    or_(
-                        and_(
-                            DurableTaskState.status.in_(claimable_statuses),
-                            or_(
-                                DurableTaskState.lease_expires_at.is_(None),
-                                DurableTaskState.lease_expires_at <= current_time,
-                            ),
-                        ),
-                        and_(
-                            DurableTaskState.status.in_(recoverable_statuses),
-                            DurableTaskState.lease_expires_at <= current_time,
-                        ),
-                    ),
+                    claimable_predicate,
                 )
                 .order_by(asc(DurableTaskState.created_at), asc(DurableTaskState.id))
                 .limit(1)
-            ).scalar_one_or_none()
-            if row is None:
-                return None
-            row.status = "leased"
-            row.lease_owner = normalized_worker
-            row.lease_expires_at = current_time + timedelta(seconds=lease_seconds)
-            row.active_dedupe_key_hash = self._active_dedupe_key_hash_for_row(
-                row.dedupe_key_hash,
-                row.status,
+            ).one_or_none()
+        if candidate is None:
+            return None
+
+        candidate_id, candidate_status = candidate
+        recovered_abandoned_claim = candidate_status in recoverable_statuses
+        with self.session_scope() as session:
+            result = session.execute(
+                update(DurableTaskState)
+                .where(
+                    DurableTaskState.id == candidate_id,
+                    DurableTaskState.task_type == normalized_task_type,
+                    claimable_predicate,
+                )
+                .values(
+                    status="leased",
+                    lease_owner=normalized_worker,
+                    lease_expires_at=current_time + timedelta(seconds=lease_seconds),
+                    active_dedupe_key_hash=DurableTaskState.dedupe_key_hash,
+                    attempt_count=func.coalesce(DurableTaskState.attempt_count, 0) + 1,
+                    updated_at=current_time,
+                    started_at=func.coalesce(DurableTaskState.started_at, current_time),
+                    current_step=(
+                        f"Recovered abandoned {candidate_status} claim"
+                        if recovered_abandoned_claim
+                        else DurableTaskState.current_step
+                    ),
+                    error_code=(
+                        "abandoned_claim"
+                        if recovered_abandoned_claim
+                        else DurableTaskState.error_code
+                    ),
+                    error_summary=(
+                        "Previous worker lease expired; task reclaimed for retry"
+                        if recovered_abandoned_claim
+                        else DurableTaskState.error_summary
+                    ),
+                )
             )
-            row.attempt_count = max(0, int(row.attempt_count or 0)) + 1
-            row.max_attempts = max(1, int(row.max_attempts or 1))
-            row.updated_at = current_time
-            if row.started_at is None:
-                row.started_at = current_time
-            session.flush()
+            if int(result.rowcount or 0) != 1:
+                return None
+            row = session.execute(
+                select(DurableTaskState)
+                .where(DurableTaskState.id == candidate_id)
+                .limit(1)
+            ).scalar_one()
             return self._durable_task_payload(row)
+
+    @staticmethod
+    def _active_claim_predicate(
+        *,
+        task_id: str,
+        worker_id: str,
+        claim_attempt: int,
+        current_time: datetime,
+    ):
+        return and_(
+            DurableTaskState.task_id == task_id,
+            DurableTaskState.lease_owner == worker_id,
+            DurableTaskState.attempt_count == claim_attempt,
+            DurableTaskState.status.in_(("leased", "processing", "running")),
+            DurableTaskState.lease_expires_at.is_not(None),
+            DurableTaskState.lease_expires_at > current_time,
+        )
 
     def heartbeat_durable_task_state(
         self,
         *,
         task_id: str,
         worker_id: str,
+        claim_attempt: int,
         lease_seconds: int = 60,
         status: str = "processing",
         progress: Optional[int] = None,
@@ -4602,40 +4711,67 @@ class DatabaseManager:
         metadata: Optional[Dict[str, Any]] = None,
         now: Optional[datetime] = None,
     ) -> Optional[Dict[str, Any]]:
+        normalized_task_id = str(task_id or "").strip()
         normalized_worker = sanitize_message(str(worker_id or "").strip())[:128]
-        if not normalized_worker:
+        normalized_status = str(status or "processing").strip()[:32]
+        normalized_attempt = int(claim_attempt or 0)
+        if (
+            not normalized_task_id
+            or not normalized_worker
+            or normalized_attempt <= 0
+            or normalized_status not in {"processing", "running"}
+        ):
             return None
         current_time = now or datetime.now()
         with self.session_scope() as session:
             row = session.execute(
                 select(DurableTaskState)
-                .where(
-                    DurableTaskState.task_id == str(task_id or "").strip(),
-                    DurableTaskState.lease_owner == normalized_worker,
-                    DurableTaskState.status.in_(("leased", "processing")),
-                )
+                .where(DurableTaskState.task_id == normalized_task_id)
                 .limit(1)
             ).scalar_one_or_none()
             if row is None:
                 return None
-            row.status = str(status or "processing")[:32]
-            row.active_dedupe_key_hash = self._active_dedupe_key_hash_for_row(
-                row.dedupe_key_hash,
-                row.status,
-            )
-            row.lease_expires_at = current_time + timedelta(seconds=max(1, min(int(lease_seconds or 60), 3600)))
+            values: Dict[str, Any] = {
+                "status": normalized_status,
+                "active_dedupe_key_hash": row.dedupe_key_hash,
+                "lease_expires_at": current_time + timedelta(
+                    seconds=max(1, min(int(lease_seconds or 60), 3600))
+                ),
+                "updated_at": current_time,
+            }
             if progress is not None:
-                row.progress = max(0, min(int(progress or 0), 100))
+                values["progress"] = max(0, min(int(progress or 0), 100))
             if current_step is not None:
-                row.current_step = sanitize_message(str(current_step or ""))[:500] or None
+                values["current_step"] = sanitize_message(str(current_step or ""))[:500] or None
             if metadata is not None:
-                prior = self._safe_json_loads(row.metadata_json, {})
-                if not isinstance(prior, dict):
-                    prior = {}
+                prior = self._load_durable_task_metadata(
+                    row.metadata_json,
+                    task_id=normalized_task_id,
+                )
                 prior.update(self._sanitize_task_metadata(metadata))
-                row.metadata_json = self._safe_json_dumps(prior)
-            row.updated_at = current_time
-            session.flush()
+                values["metadata_json"] = self._dump_durable_task_metadata(
+                    prior,
+                    task_id=normalized_task_id,
+                )
+            result = session.execute(
+                update(DurableTaskState)
+                .where(
+                    self._active_claim_predicate(
+                        task_id=normalized_task_id,
+                        worker_id=normalized_worker,
+                        claim_attempt=normalized_attempt,
+                        current_time=current_time,
+                    )
+                )
+                .values(**values)
+            )
+            if int(result.rowcount or 0) != 1:
+                return None
+            row = session.execute(
+                select(DurableTaskState)
+                .where(DurableTaskState.task_id == normalized_task_id)
+                .limit(1)
+            ).scalar_one()
             return self._durable_task_payload(row)
 
     def complete_claimed_durable_task_state(
@@ -4643,39 +4779,68 @@ class DatabaseManager:
         *,
         task_id: str,
         worker_id: str,
+        claim_attempt: int,
         current_step: str = "Task complete",
         metadata: Optional[Dict[str, Any]] = None,
         now: Optional[datetime] = None,
     ) -> Optional[Dict[str, Any]]:
+        normalized_task_id = str(task_id or "").strip()
         normalized_worker = sanitize_message(str(worker_id or "").strip())[:128]
+        normalized_attempt = int(claim_attempt or 0)
+        if not normalized_task_id or not normalized_worker or normalized_attempt <= 0:
+            return None
         current_time = now or datetime.now()
         with self.session_scope() as session:
             row = session.execute(
                 select(DurableTaskState)
-                .where(
-                    DurableTaskState.task_id == str(task_id or "").strip(),
-                    DurableTaskState.lease_owner == normalized_worker,
-                    DurableTaskState.status.in_(("leased", "processing")),
-                )
+                .where(DurableTaskState.task_id == normalized_task_id)
                 .limit(1)
             ).scalar_one_or_none()
             if row is None:
                 return None
+            values: Dict[str, Any] = {}
             if metadata is not None:
-                prior = self._safe_json_loads(row.metadata_json, {})
-                if not isinstance(prior, dict):
-                    prior = {}
+                prior = self._load_durable_task_metadata(
+                    row.metadata_json,
+                    task_id=normalized_task_id,
+                )
                 prior.update(self._sanitize_task_metadata(metadata))
-                row.metadata_json = self._safe_json_dumps(prior)
-            row.status = "completed"
-            row.active_dedupe_key_hash = None
-            row.progress = 100
-            row.current_step = sanitize_message(str(current_step or ""))[:500] or None
-            row.completed_at = current_time
-            row.lease_owner = None
-            row.lease_expires_at = None
-            row.updated_at = current_time
-            session.flush()
+                values["metadata_json"] = self._dump_durable_task_metadata(
+                    prior,
+                    task_id=normalized_task_id,
+                )
+            values.update(
+                status="completed",
+                active_dedupe_key_hash=None,
+                progress=100,
+                current_step=sanitize_message(str(current_step or ""))[:500] or None,
+                completed_at=current_time,
+                failed_at=None,
+                error_code=None,
+                error_summary=None,
+                lease_owner=None,
+                lease_expires_at=None,
+                updated_at=current_time,
+            )
+            result = session.execute(
+                update(DurableTaskState)
+                .where(
+                    self._active_claim_predicate(
+                        task_id=normalized_task_id,
+                        worker_id=normalized_worker,
+                        claim_attempt=normalized_attempt,
+                        current_time=current_time,
+                    )
+                )
+                .values(**values)
+            )
+            if int(result.rowcount or 0) != 1:
+                return None
+            row = session.execute(
+                select(DurableTaskState)
+                .where(DurableTaskState.task_id == normalized_task_id)
+                .limit(1)
+            ).scalar_one()
             return self._durable_task_payload(row)
 
     def fail_claimed_durable_task_state(
@@ -4683,6 +4848,7 @@ class DatabaseManager:
         *,
         task_id: str,
         worker_id: str,
+        claim_attempt: int,
         error_code: str,
         error_summary: str,
         retryable: bool,
@@ -4690,45 +4856,70 @@ class DatabaseManager:
         metadata: Optional[Dict[str, Any]] = None,
         now: Optional[datetime] = None,
     ) -> Optional[Dict[str, Any]]:
+        normalized_task_id = str(task_id or "").strip()
         normalized_worker = sanitize_message(str(worker_id or "").strip())[:128]
+        normalized_attempt = int(claim_attempt or 0)
+        if not normalized_task_id or not normalized_worker or normalized_attempt <= 0:
+            return None
         current_time = now or datetime.now()
         with self.session_scope() as session:
             row = session.execute(
                 select(DurableTaskState)
-                .where(
-                    DurableTaskState.task_id == str(task_id or "").strip(),
-                    DurableTaskState.lease_owner == normalized_worker,
-                    DurableTaskState.status.in_(("leased", "processing")),
-                )
+                .where(DurableTaskState.task_id == normalized_task_id)
                 .limit(1)
             ).scalar_one_or_none()
             if row is None:
                 return None
+            values: Dict[str, Any] = {}
             if metadata is not None:
-                prior = self._safe_json_loads(row.metadata_json, {})
-                if not isinstance(prior, dict):
-                    prior = {}
+                prior = self._load_durable_task_metadata(
+                    row.metadata_json,
+                    task_id=normalized_task_id,
+                )
                 prior.update(self._sanitize_task_metadata(metadata))
-                row.metadata_json = self._safe_json_dumps(prior)
+                values["metadata_json"] = self._dump_durable_task_metadata(
+                    prior,
+                    task_id=normalized_task_id,
+                )
             attempts = max(0, int(row.attempt_count or 0))
             max_attempts = max(1, int(row.max_attempts or 1))
             should_retry = bool(retryable) and attempts < max_attempts
-            row.status = "queued" if should_retry else "failed"
-            row.active_dedupe_key_hash = self._active_dedupe_key_hash_for_row(
-                row.dedupe_key_hash,
-                row.status,
+            next_status = "queued" if should_retry else "failed"
+            values.update(
+                status=next_status,
+                active_dedupe_key_hash=self._active_dedupe_key_hash_for_row(
+                    row.dedupe_key_hash,
+                    next_status,
+                ),
+                progress=0 if should_retry else 100,
+                current_step=sanitize_message(str(current_step or ""))[:500] or None,
+                error_code=str(error_code or "worker_error")[:64] or None,
+                error_summary=self._sanitize_task_error_summary(error_summary),
+                lease_owner=None,
+                lease_expires_at=None,
+                failed_at=None if should_retry else current_time,
+                completed_at=None,
+                updated_at=current_time,
             )
-            row.progress = 0 if should_retry else 100
-            row.current_step = sanitize_message(str(current_step or ""))[:500] or None
-            row.error_code = str(error_code or "worker_error")[:64] or None
-            row.error_summary = self._sanitize_task_error_summary(error_summary)
-            row.lease_owner = None
-            row.lease_expires_at = None
-            if not should_retry:
-                row.failed_at = current_time
-                row.completed_at = current_time
-            row.updated_at = current_time
-            session.flush()
+            result = session.execute(
+                update(DurableTaskState)
+                .where(
+                    self._active_claim_predicate(
+                        task_id=normalized_task_id,
+                        worker_id=normalized_worker,
+                        claim_attempt=normalized_attempt,
+                        current_time=current_time,
+                    )
+                )
+                .values(**values)
+            )
+            if int(result.rowcount or 0) != 1:
+                return None
+            row = session.execute(
+                select(DurableTaskState)
+                .where(DurableTaskState.task_id == normalized_task_id)
+                .limit(1)
+            ).scalar_one()
             return self._durable_task_payload(row)
 
     def mark_durable_task_completed(
@@ -6185,6 +6376,8 @@ class DatabaseManager:
         user_ids = self._collect_known_user_ids()
         if not user_ids:
             return {
+                "success": True,
+                "partial": False,
                 "cleared": [],
                 "counts": {},
             }
@@ -6324,8 +6517,31 @@ class DatabaseManager:
                 delete(AppUser).where(AppUser.id.in_(user_ids))
             ).rowcount or 0
 
+        completed_stages = ["sqlite"]
+
+        def run_external_reset_stage(stage: str, operation):
+            try:
+                result = operation()
+            except Exception as exc:
+                cleared = [key for key, value in counts.items() if int(value or 0) > 0]
+                raise PartialFactoryResetError(
+                    {
+                        "success": False,
+                        "partial": True,
+                        "failed_stage": stage,
+                        "completed_stages": list(completed_stages),
+                        "cleared": cleared,
+                        "counts": dict(counts),
+                    }
+                ) from exc
+            completed_stages.append(stage)
+            return result
+
         if self._phase_b_enabled and self._phase_b_store is not None:
-            phase_b_counts = self._phase_b_store.clear_non_bootstrap_state(user_ids)
+            phase_b_counts = run_external_reset_stage(
+                "phase_b",
+                lambda: self._phase_b_store.clear_non_bootstrap_state(user_ids),
+            )
             counts["conversation_messages"] = counts.get("conversation_messages", 0) + int(
                 phase_b_counts.get("chat_messages", 0)
             )
@@ -6337,7 +6553,10 @@ class DatabaseManager:
             )
             counts["analysis_sessions"] = int(phase_b_counts.get("analysis_sessions", 0))
         if self._phase_d_enabled and self._phase_d_store is not None:
-            phase_d_counts = self._phase_d_store.clear_non_bootstrap_state(user_ids)
+            phase_d_counts = run_external_reset_stage(
+                "phase_d",
+                lambda: self._phase_d_store.clear_non_bootstrap_state(user_ids),
+            )
             counts["scanner_candidates"] = counts.get("scanner_candidates", 0) + int(
                 phase_d_counts.get("scanner_candidates", 0)
             )
@@ -6347,7 +6566,10 @@ class DatabaseManager:
             counts["watchlist_items"] = int(phase_d_counts.get("watchlist_items", 0))
             counts["watchlists"] = int(phase_d_counts.get("watchlists", 0))
         if self._phase_e_enabled and self._phase_e_store is not None:
-            phase_e_counts = self._phase_e_store.clear_non_bootstrap_state(user_ids)
+            phase_e_counts = run_external_reset_stage(
+                "phase_e",
+                lambda: self._phase_e_store.clear_non_bootstrap_state(user_ids),
+            )
             counts["backtest_runs"] = counts.get("backtest_runs", 0) + int(
                 phase_e_counts.get("backtest_runs", 0)
             )
@@ -6356,7 +6578,10 @@ class DatabaseManager:
                 phase_e_counts.get("market_data_usage_refs", 0)
             )
         if self._phase_f_enabled and self._phase_f_store is not None:
-            phase_f_counts = self._phase_f_store.clear_non_bootstrap_state(user_ids)
+            phase_f_counts = run_external_reset_stage(
+                "phase_f",
+                lambda: self._phase_f_store.clear_non_bootstrap_state(user_ids),
+            )
             counts["portfolio_accounts"] = counts.get("portfolio_accounts", 0) + int(
                 phase_f_counts.get("portfolio_accounts", 0)
             )
@@ -6377,9 +6602,15 @@ class DatabaseManager:
             )
             counts["portfolio_ledger"] = int(phase_f_counts.get("portfolio_ledger", 0))
         if self._phase_g_enabled and self._phase_g_store is not None:
-            self._phase_g_store.nullify_user_references(user_ids)
+            run_external_reset_stage(
+                "phase_g",
+                lambda: self._phase_g_store.nullify_user_references(user_ids),
+            )
         if self._phase_a_enabled and self._phase_a_store is not None:
-            phase_a_counts = self._phase_a_store.clear_non_bootstrap_state(user_ids)
+            phase_a_counts = run_external_reset_stage(
+                "phase_a",
+                lambda: self._phase_a_store.clear_non_bootstrap_state(user_ids),
+            )
             counts["user_preferences"] = counts.get("user_preferences", 0) + int(
                 phase_a_counts.get("user_preferences", 0)
             )
@@ -6395,6 +6626,8 @@ class DatabaseManager:
 
         cleared = [key for key, value in counts.items() if int(value or 0) > 0]
         return {
+            "success": True,
+            "partial": False,
             "cleared": cleared,
             "counts": counts,
         }

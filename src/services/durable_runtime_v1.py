@@ -24,6 +24,10 @@ class TerminalFixtureError(Exception):
     """Non-retryable local fixture failure."""
 
 
+class LostDurableRuntimeClaim(Exception):
+    """The worker's fenced claim is no longer active."""
+
+
 @dataclass(frozen=True)
 class DurableRuntimeRunResult:
     status: str
@@ -121,16 +125,29 @@ class DurableRuntimeV1PrototypeWorker:
         )
 
         try:
-            result_ref = self._run_fixture(task)
+            result_ref = self._run_fixture(task, claim_attempt=attempt_count)
+        except LostDurableRuntimeClaim:
+            return DurableRuntimeRunResult(
+                status="lost_lease",
+                task_id=task_id,
+                attempt_count=attempt_count,
+            )
         except RetryableFixtureError as exc:
             failed = self.db.fail_claimed_durable_task_state(
                 task_id=task_id,
                 worker_id=self.worker_id,
+                claim_attempt=attempt_count,
                 error_code="durable_runtime_retryable_fixture",
                 error_summary=str(exc),
                 retryable=True,
                 current_step="Durable Runtime v1 task queued for retry",
             )
+            if failed is None:
+                return DurableRuntimeRunResult(
+                    status="lost_lease",
+                    task_id=task_id,
+                    attempt_count=attempt_count,
+                )
             status = "retry_queued" if failed and failed.get("status") == "queued" else "failed"
             self._append_event(
                 task_id,
@@ -146,11 +163,18 @@ class DurableRuntimeV1PrototypeWorker:
             failed = self.db.fail_claimed_durable_task_state(
                 task_id=task_id,
                 worker_id=self.worker_id,
+                claim_attempt=attempt_count,
                 error_code="durable_runtime_terminal_fixture",
                 error_summary=str(exc),
                 retryable=False,
                 current_step="Durable Runtime v1 task failed",
             )
+            if failed is None:
+                return DurableRuntimeRunResult(
+                    status="lost_lease",
+                    task_id=task_id,
+                    attempt_count=attempt_count,
+                )
             self._append_event(
                 task_id,
                 owner_user_id=owner_user_id,
@@ -168,6 +192,7 @@ class DurableRuntimeV1PrototypeWorker:
         completed = self.db.complete_claimed_durable_task_state(
             task_id=task_id,
             worker_id=self.worker_id,
+            claim_attempt=attempt_count,
             current_step="Durable Runtime v1 fixture complete",
             metadata={"result_ref": result_ref, "artifact_kind": "synthetic_fixture"},
         )
@@ -184,14 +209,19 @@ class DurableRuntimeV1PrototypeWorker:
         )
         return DurableRuntimeRunResult(status="completed", task_id=task_id, attempt_count=attempt_count)
 
-    def _run_fixture(self, task: Dict[str, Any]) -> str:
+    def _run_fixture(self, task: Dict[str, Any], *, claim_attempt: int) -> str:
         metadata = task.get("metadata") if isinstance(task.get("metadata"), dict) else {}
         task_id = str(task["task_id"])
         job_kind = str(metadata.get("job_kind") or "").strip()
         fixture_name = str(metadata.get("fixture_name") or "").strip()
         result_ref = f"fixture:{job_kind}:{fixture_name}"
 
-        self._heartbeat(task_id, progress=20, current_step=f"{job_kind} fixture prepare")
+        self._heartbeat(
+            task_id,
+            claim_attempt=claim_attempt,
+            progress=20,
+            current_step=f"{job_kind} fixture prepare",
+        )
         self._emit_stage("prepare", task)
         if self._shutdown_requested:
             return result_ref
@@ -203,13 +233,19 @@ class DurableRuntimeV1PrototypeWorker:
         if fixture_name == "transient_failure" and remaining_transient_failures > 0:
             self._heartbeat(
                 task_id,
+                claim_attempt=claim_attempt,
                 progress=35,
                 current_step="Durable Runtime v1 transient fixture failure",
                 metadata={"transient_failures_remaining": remaining_transient_failures - 1},
             )
             raise RetryableFixtureError("Durable Runtime v1 transient fixture failure")
 
-        self._heartbeat(task_id, progress=70, current_step=f"{job_kind} fixture execute")
+        self._heartbeat(
+            task_id,
+            claim_attempt=claim_attempt,
+            progress=70,
+            current_step=f"{job_kind} fixture execute",
+        )
         self._emit_stage("execute", task)
         return result_ref
 
@@ -217,6 +253,7 @@ class DurableRuntimeV1PrototypeWorker:
         self,
         task_id: str,
         *,
+        claim_attempt: int,
         progress: int,
         current_step: str,
         metadata: Optional[Dict[str, Any]] = None,
@@ -224,21 +261,23 @@ class DurableRuntimeV1PrototypeWorker:
         state = self.db.heartbeat_durable_task_state(
             task_id=task_id,
             worker_id=self.worker_id,
+            claim_attempt=claim_attempt,
             lease_seconds=self.lease_seconds,
             progress=progress,
             current_step=current_step,
             metadata=metadata,
         )
-        if state is not None:
-            self._append_event(
-                task_id,
-                owner_user_id=str(state.get("owner_user_id") or ""),
-                event_type="progress",
-                stage=current_step,
-                progress=progress,
-                message=current_step,
-                metadata=metadata,
-            )
+        if state is None:
+            raise LostDurableRuntimeClaim
+        self._append_event(
+            task_id,
+            owner_user_id=str(state.get("owner_user_id") or ""),
+            event_type="progress",
+            stage=current_step,
+            progress=progress,
+            message=current_step,
+            metadata=metadata,
+        )
 
     def _emit_stage(self, stage: str, task: Dict[str, Any]) -> None:
         if self.stage_hook is not None:

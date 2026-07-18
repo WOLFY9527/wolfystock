@@ -178,6 +178,7 @@ class Ws2MultiInstanceSmokeTestCase(unittest.TestCase):
         worker_b_complete = worker_b_db.complete_claimed_durable_task_state(
             task_id="ws2-smoke-worker-b-task",
             worker_id="worker-b",
+            claim_attempt=second_claim["attempt_count"],
             metadata={"result_ref": "fixture:worker-b"},
             now=claimed_at,
         )
@@ -185,6 +186,7 @@ class Ws2MultiInstanceSmokeTestCase(unittest.TestCase):
         worker_a_complete = worker_a_complete_db.complete_claimed_durable_task_state(
             task_id="ws2-smoke-worker-a-task",
             worker_id="worker-a",
+            claim_attempt=first_claim["attempt_count"],
             metadata={"result_ref": "fixture:worker-a"},
             now=claimed_at,
         )
@@ -224,6 +226,7 @@ class Ws2MultiInstanceSmokeTestCase(unittest.TestCase):
         worker_a_db.heartbeat_durable_task_state(
             task_id="ws2-smoke-stale-lease",
             worker_id="worker-a",
+            claim_attempt=first_claim["attempt_count"],
             lease_seconds=1,
             progress=35,
             current_step="Synthetic worker stalled",
@@ -244,11 +247,13 @@ class Ws2MultiInstanceSmokeTestCase(unittest.TestCase):
         stale_complete = worker_b_db.complete_claimed_durable_task_state(
             task_id="ws2-smoke-stale-lease",
             worker_id="worker-a",
+            claim_attempt=first_claim["attempt_count"],
             now=expired_time,
         )
         recovered_complete = worker_b_db.complete_claimed_durable_task_state(
             task_id="ws2-smoke-stale-lease",
             worker_id="worker-b",
+            claim_attempt=second_claim["attempt_count"],
             current_step="Recovered by worker B",
             metadata={"result_ref": "fixture:ws2-recovered"},
             now=expired_time,
@@ -278,6 +283,7 @@ class Ws2MultiInstanceSmokeTestCase(unittest.TestCase):
         worker_a_db.heartbeat_durable_task_state(
             task_id="ws2-smoke-handoff",
             worker_id="worker-a",
+            claim_attempt=first_claim["attempt_count"],
             lease_seconds=1,
             progress=22,
             current_step="Worker A progress",
@@ -311,6 +317,7 @@ class Ws2MultiInstanceSmokeTestCase(unittest.TestCase):
         worker_b_db.heartbeat_durable_task_state(
             task_id="ws2-smoke-handoff",
             worker_id="worker-b",
+            claim_attempt=second_claim["attempt_count"],
             lease_seconds=1,
             progress=61,
             current_step="Worker B resumed",
@@ -319,6 +326,7 @@ class Ws2MultiInstanceSmokeTestCase(unittest.TestCase):
         recovered_complete = worker_b_db.complete_claimed_durable_task_state(
             task_id="ws2-smoke-handoff",
             worker_id="worker-b",
+            claim_attempt=second_claim["attempt_count"],
             current_step="Recovered by worker B",
             metadata={"result_ref": "fixture:ws2-replayed"},
             now=expired_time,
@@ -373,6 +381,7 @@ class Ws2MultiInstanceSmokeTestCase(unittest.TestCase):
         worker_b_db.complete_claimed_durable_task_state(
             task_id="ws2-smoke-owner-lock",
             worker_id="worker-b",
+            claim_attempt=second_claim["attempt_count"],
             now=expired_time,
         )
 
