@@ -18,6 +18,7 @@ import src.auth as auth
 from api.app import create_app
 from api.v1.schemas.liquidity_monitor import LiquidityMonitorResponse
 from src.config import Config
+from src.runtime.composition import RuntimeContainer
 from src.services.cn_hk_flow_contracts import AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID
 from src.services.market_cache import market_cache
 from src.services.market_overview_service import MarketOverviewService
@@ -185,15 +186,13 @@ def authenticated_client() -> Iterator[TestClient]:
             "ADMIN_AUTH_ENABLED": "true",
         }
         with patch.dict(os.environ, env_overrides, clear=False), patch(
-            "api.app.should_auto_start_crypto_realtime",
-            return_value=False,
-        ), patch(
             "src.services.market_overview_service.ExecutionLogService",
             _NoOpExecutionLogService,
         ):
             Config.reset_instance()
             DatabaseManager.reset_instance()
-            app = create_app(static_dir=static_dir)
+            container = RuntimeContainer(should_start_crypto_realtime=lambda: False)
+            app = create_app(container=container, static_dir=static_dir)
             with TestClient(app, raise_server_exceptions=False) as client:
                 login = client.post(
                     "/api/v1/auth/login",
@@ -313,12 +312,16 @@ def test_authenticated_market_overview_funds_flow_payload_smoke_keeps_proxy_word
     assert payload["sourceType"] == "unofficial_public_api"
     assert payload["sourceLabel"] == "Yahoo Finance"
     assert payload["observationOnly"] is True
-    assert payload["sourceAuthorityAllowed"] is False
-    assert payload["scoreContributionAllowed"] is False
+    assert payload["authorityGrant"] is False
+    assert payload["scoreAuthorityEligible"] is False
+    assert payload["sourceAuthorityState"] == "unavailable"
+    assert "sourceAuthorityAllowed" not in payload
+    assert "scoreContributionAllowed" not in payload
     assert payload["sourceAuthorityReason"] == "quote_derived_etf_flow_proxy"
     assert {item["symbol"] for item in payload["items"]} == {"ETF", "INSTITUTIONAL", "INDUSTRY"}
     assert all(item["observationOnly"] is True for item in payload["items"])
-    assert all(item["scoreContributionAllowed"] is False for item in payload["items"])
+    assert all(item["authorityGrant"] is False for item in payload["items"])
+    assert all(item["scoreAuthorityEligible"] is False for item in payload["items"])
     assert all(item["sourceAuthorityReason"] == "quote_derived_etf_flow_proxy" for item in payload["items"])
 
 

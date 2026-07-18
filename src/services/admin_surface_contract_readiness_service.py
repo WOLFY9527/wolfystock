@@ -5,9 +5,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
-from fastapi.routing import APIRoute
+from api.route_inventory import RouteInventoryEntry, iter_route_inventory
 
 
 _SCHEMA_VERSION_FIELDS = frozenset({"schemaVersion", "schema_version"})
@@ -280,8 +280,8 @@ class AdminSurfaceContractReadinessService:
     )
 
     def build_snapshot(self, *, routes: Sequence[object]) -> dict[str, object]:
-        api_routes = [route for route in routes if isinstance(route, APIRoute)]
-        surfaces = [self._build_surface_snapshot(spec, api_routes) for spec in self._SURFACES]
+        route_inventory = list(iter_route_inventory(routes))
+        surfaces = [self._build_surface_snapshot(spec, route_inventory) for spec in self._SURFACES]
         status_counts: dict[str, int] = {}
         for item in surfaces:
             status = str(item["status"])
@@ -307,7 +307,11 @@ class AdminSurfaceContractReadinessService:
             },
         }
 
-    def _build_surface_snapshot(self, spec: SurfaceSpec, routes: Sequence[APIRoute]) -> dict[str, object]:
+    def _build_surface_snapshot(
+        self,
+        spec: SurfaceSpec,
+        routes: Sequence[RouteInventoryEntry],
+    ) -> dict[str, object]:
         primary = self._route_snapshot(spec.primary_route, routes)
         related = [self._route_snapshot(route_spec, routes) for route_spec in spec.related_routes]
         route_snapshots = [primary, *related]
@@ -432,9 +436,13 @@ class AdminSurfaceContractReadinessService:
             return "present"
         return "missing"
 
-    def _route_snapshot(self, spec: RouteSpec, routes: Sequence[APIRoute]) -> RouteSnapshot:
-        route = self._find_route(routes, method=spec.method, path=spec.path)
-        if route is None:
+    def _route_snapshot(
+        self,
+        spec: RouteSpec,
+        routes: Sequence[RouteInventoryEntry],
+    ) -> RouteSnapshot:
+        entry = self._find_route(routes, method=spec.method, path=spec.path)
+        if entry is None:
             return RouteSnapshot(
                 method=spec.method,
                 path=spec.path,
@@ -444,6 +452,7 @@ class AdminSurfaceContractReadinessService:
                 auth_requirement="unknown",
                 contract_fields=set(spec.manual_fields),
             )
+        route = entry.route
         typed_contract = hasattr(route.response_model, "model_fields")
         contract_fields = self._contract_fields(route)
         if spec.manual_fields:
@@ -462,28 +471,32 @@ class AdminSurfaceContractReadinessService:
         )
 
     @staticmethod
-    def _find_route(routes: Sequence[APIRoute], *, method: str, path: str) -> APIRoute | None:
+    def _find_route(
+        routes: Sequence[RouteInventoryEntry],
+        *,
+        method: str,
+        path: str,
+    ) -> RouteInventoryEntry | None:
         for route in routes:
-            methods = set(route.methods or set())
-            if method in methods and route.path == path:
+            if method in route.methods and route.path == path:
                 return route
         return None
 
     @staticmethod
-    def _contract_fields(route: APIRoute) -> set[str]:
+    def _contract_fields(route: Any) -> set[str]:
         fields: set[str] = set()
         model = route.response_model
         if not hasattr(model, "model_fields"):
             return fields
-        for name, field in model.model_fields.items():
+        for name, model_field in model.model_fields.items():
             fields.add(name)
-            alias = getattr(field, "alias", None)
+            alias = getattr(model_field, "alias", None)
             if alias:
                 fields.add(str(alias))
         return fields
 
     @staticmethod
-    def _auth_requirement(route: APIRoute) -> str:
+    def _auth_requirement(route: Any) -> str:
         labels: list[str] = []
         for dependency in route.dependant.dependencies:
             call = dependency.call

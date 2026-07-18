@@ -96,6 +96,9 @@ def test_runtime_container_preserves_start_order_and_closes_in_reverse_once() ->
     events: list[str] = []
     container, system_config_service, queue, crypto = _build_container("one", events)
 
+    assert container.is_started is False
+    assert events == []
+
     container.start()
 
     assert container.system_config_service is system_config_service
@@ -113,6 +116,23 @@ def test_runtime_container_preserves_start_order_and_closes_in_reverse_once() ->
     assert events[-2:] == ["stop:one:crypto", "stop:one:queue"]
     assert crypto.stop_calls == 1
     assert queue.shutdown_calls == [(False, True)]
+
+
+def test_dependency_access_before_lifespan_start_fails_without_constructing_resources(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+    container, _, _, _ = _build_container("unstarted", events)
+    app = api_app.create_app(container, static_dir=tmp_path / "missing-static")
+    _add_system_config_identity_route(app)
+    client = TestClient(app)
+
+    with pytest.raises(RuntimeError, match="RuntimeContainer is not started"):
+        client.get("/_runtime-test/system-config")
+
+    client.close()
+    container.close()
+    assert events == []
 
 
 def test_runtime_container_rolls_back_partial_startup_failure(tmp_path: Path) -> None:

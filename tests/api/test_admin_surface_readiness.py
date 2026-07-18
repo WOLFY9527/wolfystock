@@ -278,6 +278,15 @@ def test_surface_readiness_returns_read_only_contract_truth_table(tmp_path: Path
     DatabaseManager.reset_instance()
 
 
+def test_surface_readiness_keeps_missing_required_routes_blocked() -> None:
+    payload = AdminSurfaceContractReadinessService().build_snapshot(routes=[])
+
+    assert payload["summary"]["statusCounts"] == {"missing_contract": 10}
+    assert all(surface["status"] == "missing_contract" for surface in payload["surfaces"])
+    assert all(surface["primaryRoute"]["exists"] is False for surface in payload["surfaces"])
+    assert all(surface["gaps"] == ["primary_route_missing"] for surface in payload["surfaces"])
+
+
 def test_market_decision_cockpit_readiness_fails_closed_when_synthesis_contract_is_missing() -> None:
     for missing_field in COCKPIT_SYNTHESIS_FIELDS:
         fields = tuple(field for field in COCKPIT_REQUIRED_CONTRACT_FIELDS if field != missing_field)

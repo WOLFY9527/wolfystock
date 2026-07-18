@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user
+from api.route_inventory import iter_route_inventory
 from api.v1.endpoints import market
 
 
@@ -104,6 +105,7 @@ FORBIDDEN_ENTRY_FIELDS = {
     "secret",
 }
 
+
 def _provider_read_admin() -> CurrentUser:
     return CurrentUser(
         user_id="bootstrap-admin",
@@ -155,15 +157,16 @@ def _client_for(user_factory: Callable[[], CurrentUser]) -> TestClient:
 def test_provider_fit_advisor_route_is_hidden_from_public_openapi() -> None:
     app = FastAPI()
     app.include_router(market.router, prefix="/api/v1/market")
-    routes = {
-        (method, route.path)
-        for route in app.routes
-        if hasattr(route, "methods")
-        for method in (route.methods or set())
-        if method not in {"HEAD", "OPTIONS"}
-    }
+    routes = list(iter_route_inventory(app.routes))
+    route = next(
+        route
+        for route in routes
+        if route.path == "/api/v1/market/provider-fit-advisor" and "GET" in route.methods
+    )
 
-    assert ("GET", "/api/v1/market/provider-fit-advisor") in routes
+    assert route.registered_runtime_route is True
+    assert route.hidden_runtime_route is True
+    assert route.public_openapi_route is False
     assert "/api/v1/market/provider-fit-advisor" not in app.openapi()["paths"]
 
 

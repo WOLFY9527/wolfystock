@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.deps import get_optional_current_user
+from api.route_inventory import iter_route_inventory
 from api.v1.endpoints import market
 
 
@@ -160,9 +161,8 @@ def test_daily_intelligence_route_is_exposed() -> None:
     app.include_router(market.router, prefix="/api/v1/market")
     routes = {
         (method, route.path)
-        for route in app.routes
-        if hasattr(route, "methods")
-        for method in (route.methods or set())
+        for route in iter_route_inventory(app.routes)
+        for method in route.methods
         if method not in {"HEAD", "OPTIONS"}
     }
     assert ("GET", "/api/v1/market/daily-intelligence") in routes
