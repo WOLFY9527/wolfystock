@@ -98,6 +98,11 @@ class NotificationChannelsTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         DatabaseManager.reset_instance()
 
+    def _replace_database(self, db_url: str) -> DatabaseManager:
+        DatabaseManager.reset_instance()
+        self.db = DatabaseManager(db_url=db_url)
+        return self.db
+
     def _app(self, user: CurrentUser | None = None) -> TestClient:
         app = FastAPI()
         app.include_router(api_v1_router)
@@ -568,7 +573,9 @@ class NotificationChannelsTestCase(unittest.TestCase):
 
     def test_api_channel_and_event_surfaces_do_not_expose_raw_notification_secrets(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            db = DatabaseManager(db_url=f"sqlite:///{tmpdir}/notification_channels.sqlite?check_same_thread=False")
+            db = self._replace_database(
+                f"sqlite:///{tmpdir}/notification_channels.sqlite?check_same_thread=False"
+            )
             service = NotificationService(db=db, delivery_client=FakeDeliveryClient())
             service.create_channel(
                 name="ops webhook",
@@ -668,7 +675,9 @@ class NotificationChannelsTestCase(unittest.TestCase):
 
     def test_delete_system_channel_rule_only_unbinds_log_notification_association(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            db = DatabaseManager(db_url=f"sqlite:///{tmpdir}/notification_channels.sqlite?check_same_thread=False")
+            db = self._replace_database(
+                f"sqlite:///{tmpdir}/notification_channels.sqlite?check_same_thread=False"
+            )
             service = NotificationService(db=db, delivery_client=self.delivery)
             channel = service.create_channel(
                 name="System Discord",
@@ -941,7 +950,9 @@ class NotificationChannelsTestCase(unittest.TestCase):
 
     def test_ssl_delivery_failure_is_classified_and_localized_by_request_language(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            db = DatabaseManager(db_url=f"sqlite:///{tmpdir}/notification_channels.sqlite?check_same_thread=False")
+            db = self._replace_database(
+                f"sqlite:///{tmpdir}/notification_channels.sqlite?check_same_thread=False"
+            )
             failing = NotificationService(
                 db=db,
                 delivery_client=FakeDeliveryClient(

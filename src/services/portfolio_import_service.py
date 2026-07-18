@@ -552,14 +552,17 @@ class PortfolioImportService:
         dry_run: bool = False,
     ) -> Dict[str, Any]:
         broker_norm = self._normalize_broker(broker)
+        owner_kwargs = self.portfolio_service._write_owner_kwargs()
         try:
             with self.repo.portfolio_write_session() as session:
                 self.portfolio_service._require_active_account_in_session(
                     session=session,
                     account_id=account_id,
+                    owner_kwargs=owner_kwargs,
                 )
                 result = self._apply_trade_records_in_session(
                     session=session,
+                    owner_kwargs=owner_kwargs,
                     account_id=account_id,
                     broker=broker_norm,
                     records=records,
@@ -624,6 +627,7 @@ class PortfolioImportService:
         broker_connection_id: Optional[int],
     ) -> Dict[str, Any]:
         account = self._require_import_account(account_id)
+        owner_kwargs = self.portfolio_service._write_owner_kwargs()
         metadata = dict(parsed_payload.get("metadata", {}))
         fingerprint = str(metadata.get("file_fingerprint") or "").strip().lower()
         if not re.fullmatch(r"[a-f0-9]{64}", fingerprint):
@@ -643,6 +647,7 @@ class PortfolioImportService:
                 account_row = self.portfolio_service._require_active_account_in_session(
                     session=session,
                     account_id=account_id,
+                    owner_kwargs=owner_kwargs,
                 )
                 owner_id = str(account_row.owner_id)
                 completed = None
@@ -690,6 +695,7 @@ class PortfolioImportService:
                     )
                     trade_result = self._apply_trade_records_in_session(
                         session=session,
+                        owner_kwargs=owner_kwargs,
                         account_id=account_id,
                         broker=broker,
                         records=trade_records,
@@ -698,6 +704,7 @@ class PortfolioImportService:
                     cash_inserted, cash_failed, cash_errors = (
                         self._apply_cash_entries_in_session(
                             session=session,
+                            owner_kwargs=owner_kwargs,
                             account_id=account_id,
                             entries=cash_entries,
                             dry_run=dry_run,
@@ -706,6 +713,7 @@ class PortfolioImportService:
                     action_inserted, action_failed, action_errors = (
                         self._apply_corporate_actions_in_session(
                             session=session,
+                            owner_kwargs=owner_kwargs,
                             account_id=account_id,
                             actions=corporate_actions,
                             dry_run=dry_run,
@@ -923,6 +931,7 @@ class PortfolioImportService:
         self,
         *,
         session: Any,
+        owner_kwargs: Dict[str, Any],
         account_id: int,
         broker: str,
         records: List[Dict[str, Any]],
@@ -948,6 +957,7 @@ class PortfolioImportService:
                     raise ValueError("trade_date is required")
                 self.portfolio_service._record_trade_in_session(
                     session=session,
+                    owner_kwargs=owner_kwargs,
                     account_id=account_id,
                     symbol=str(record["symbol"]),
                     trade_date=trade_date_obj,
@@ -1011,6 +1021,7 @@ class PortfolioImportService:
         self,
         *,
         session: Any,
+        owner_kwargs: Dict[str, Any],
         account_id: int,
         entries: List[Dict[str, Any]],
         dry_run: bool,
@@ -1041,6 +1052,7 @@ class PortfolioImportService:
                 seen_keys.add(key)
                 self.portfolio_service._record_cash_ledger_in_session(
                     session=session,
+                    owner_kwargs=owner_kwargs,
                     account_id=account_id,
                     event_date=event_date_obj,
                     direction=str(entry["direction"]),
@@ -1062,6 +1074,7 @@ class PortfolioImportService:
         self,
         *,
         session: Any,
+        owner_kwargs: Dict[str, Any],
         account_id: int,
         actions: List[Dict[str, Any]],
         dry_run: bool,
@@ -1092,6 +1105,7 @@ class PortfolioImportService:
                 seen_keys.add(key)
                 self.portfolio_service._record_corporate_action_in_session(
                     session=session,
+                    owner_kwargs=owner_kwargs,
                     account_id=account_id,
                     symbol=str(action["symbol"]),
                     effective_date=effective_date_obj,

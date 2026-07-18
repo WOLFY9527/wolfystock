@@ -206,7 +206,7 @@ describe('ConfirmDialog', () => {
     const addEventListenerSpy = vi.spyOn(document, 'addEventListener');
     const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
     const { rerender, unmount } = render(
-      <Drawer isOpen onClose={drawerClose} title="Navigation">
+      <Drawer isOpen onClose={drawerClose} title="Navigation" zIndex={95}>
         <button type="button">Open confirmation</button>
         <ConfirmDialog
           isOpen={false}
@@ -228,7 +228,7 @@ describe('ConfirmDialog', () => {
     opener.focus();
 
     rerender(
-      <Drawer isOpen onClose={drawerClose} title="Navigation">
+      <Drawer isOpen onClose={drawerClose} title="Navigation" zIndex={95}>
         <button type="button">Open confirmation</button>
         <ConfirmDialog
           isOpen
@@ -243,8 +243,11 @@ describe('ConfirmDialog', () => {
     await settleConfirmDialogOpen();
 
     const dialog = screen.getByRole('dialog', { name: 'Delete position' });
+    const dialogRoot = dialog.closest('.confirm-dialog');
+    const drawerRoot = drawer.closest('[role="presentation"]');
     const cancelButton = within(dialog).getByRole('button', { name: 'Cancel' });
     const confirmButton = within(dialog).getByRole('button', { name: 'Delete' });
+    expect(Number((dialogRoot as HTMLElement).style.zIndex)).toBeGreaterThan(Number((drawerRoot as HTMLElement).style.zIndex));
     expect(cancelButton).toHaveFocus();
     expect(opener.closest('[inert]')).not.toBeNull();
     expect(addEventListenerSpy.mock.calls.filter(([type]) => type === 'keydown')).toHaveLength(1);
@@ -260,7 +263,7 @@ describe('ConfirmDialog', () => {
     expect(drawerClose).not.toHaveBeenCalled();
 
     rerender(
-      <Drawer isOpen onClose={drawerClose} title="Navigation">
+      <Drawer isOpen onClose={drawerClose} title="Navigation" zIndex={95}>
         <button type="button">Open confirmation</button>
         <ConfirmDialog
           isOpen={false}

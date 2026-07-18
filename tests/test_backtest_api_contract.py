@@ -407,7 +407,6 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "queue_duration_seconds": None,
                 "run_duration_seconds": None,
             },
-            "run_diagnostics": {},
             "run_diagnostics": {
                 "current_status": status,
                 "terminal_status": status if status in {"completed", "failed", "cancelled"} else None,
@@ -3599,8 +3598,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.code, "600519")
         self.assertEqual(response.status, "completed")
         self.assertEqual(response.timeframe, "daily")
-        self.assertEqual(response.source, "stored_rule_backtest_execution_model_v1_projection")
-        self.assertEqual(response.read_mode, "stored_first_projection")
+        self.assertEqual(response.source, "run.execution_model")
+        self.assertEqual(response.read_mode, "stored_first")
 
         self.assertEqual(response.execution_model["model_id"], "rule_backtest_default_execution_model_v1")
         self.assertEqual(response.execution_model["version"], "v1")

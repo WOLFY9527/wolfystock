@@ -454,7 +454,12 @@ def test_release_workflows_use_managed_environment_and_digest_only_promotion() -
     assert "pip install" not in ci_text
     assert "npm ci" not in ci_text
     assert "./wolfy bootstrap --ensure" in ci_text
-    assert "npm exec -- playwright test --project=chromium --project=chromium-mobile" in ci_text
+    assert (
+        "./wolfy exec --profile test -- npm --prefix apps/dsa-web exec -- "
+        "playwright test --project=chromium --project=chromium-mobile"
+    ) in ci_text
+    assert "playwright install chromium" not in ci_text
+    assert "PLAYWRIGHT_BROWSERS_PATH" not in ci_text
     for command in (
         "npm --prefix apps/dsa-web test -- --maxWorkers=1",
         "npm --prefix apps/dsa-web run lint",

@@ -557,7 +557,7 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["shortlist"], [])
         self.assertEqual(
             detail["diagnostics"]["dataReadiness"]["candidateGenerationBlockers"],
-            ["missing_quote_snapshot"],
+            ["missing_quote_snapshot", "factor_evidence_unavailable"],
         )
         self.assertEqual(detail["diagnostics"]["benchmark_context"]["benchmark_code"], "SPY")
 

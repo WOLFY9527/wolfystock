@@ -281,9 +281,12 @@ EXPECTED_API_SCHEMA_UPWARD_IMPORTS = {
     "src/services/sector_theme_strength_service.py": {"api.v1.schemas.sector_theme_strength"},
     "src/services/source_freshness_summary_service.py": {"api.v1.schemas.source_freshness_summary"},
 }
-# Transitional, owned upward imports from services into API schemas.
+# Transitional, owned upward imports from services into API modules.
 # These are inventory items, not a pattern to copy into new services.
-EXPECTED_SERVICE_API_IMPORTS = EXPECTED_API_SCHEMA_UPWARD_IMPORTS
+EXPECTED_SERVICE_API_IMPORTS = {
+    **EXPECTED_API_SCHEMA_UPWARD_IMPORTS,
+    "src/services/admin_surface_contract_readiness_service.py": {"api.route_inventory"},
+}
 FORBIDDEN_SERVICE_API_PREFIXES = (
     "api.v1.endpoints",
 )

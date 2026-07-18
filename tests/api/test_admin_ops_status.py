@@ -585,6 +585,7 @@ def test_admin_ops_status_exposes_db_retention_and_role_audit_without_sensitive_
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     db = DatabaseManager.get_instance()
+    db.ensure_bootstrap_admin_user()
     now = datetime.now()
     old_started_at = now - timedelta(days=120)
     with db.get_session() as session:

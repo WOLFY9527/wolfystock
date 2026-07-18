@@ -207,6 +207,14 @@ class PortfolioService:
             "include_all_owners": self.include_all_owners,
         }
 
+    def _write_owner_kwargs(self) -> Dict[str, Any]:
+        if self.include_all_owners:
+            return self._owner_kwargs()
+        return {
+            "owner_id": self._resolve_owner_id(),
+            "include_all_owners": False,
+        }
+
     def _resolve_owner_id(self, owner_id: Optional[str] = None) -> str:
         return self.repo.db.require_user_id(self.owner_id if owner_id is None else owner_id)
 
@@ -634,10 +642,12 @@ class PortfolioService:
     ) -> Dict[str, Any]:
         trade_uid_norm = (trade_uid or "").strip() or None
         side_norm = (side or "").strip().lower()
+        owner_kwargs = self._write_owner_kwargs()
         try:
             with self.repo.portfolio_write_session() as session:
                 return self._record_trade_in_session(
                     session=session,
+                    owner_kwargs=owner_kwargs,
                     account_id=account_id,
                     symbol=symbol,
                     trade_date=trade_date,
@@ -669,6 +679,7 @@ class PortfolioService:
         self,
         *,
         session: Any,
+        owner_kwargs: Dict[str, Any],
         account_id: int,
         symbol: str,
         trade_date: date,
@@ -698,6 +709,7 @@ class PortfolioService:
         account = self._require_active_account_in_session(
             session=session,
             account_id=account_id,
+            owner_kwargs=owner_kwargs,
         )
         market_hint = market
         if market_hint is None and str(account.market or "").strip().lower() == "global":
@@ -750,9 +762,11 @@ class PortfolioService:
         currency: Optional[str] = None,
         note: Optional[str] = None,
     ) -> Dict[str, Any]:
+        owner_kwargs = self._write_owner_kwargs()
         with self.repo.portfolio_write_session() as session:
             return self._record_cash_ledger_in_session(
                 session=session,
+                owner_kwargs=owner_kwargs,
                 account_id=account_id,
                 event_date=event_date,
                 direction=direction,
@@ -765,6 +779,7 @@ class PortfolioService:
         self,
         *,
         session: Any,
+        owner_kwargs: Dict[str, Any],
         account_id: int,
         event_date: date,
         direction: str,
@@ -780,6 +795,7 @@ class PortfolioService:
         account = self._require_active_account_in_session(
             session=session,
             account_id=account_id,
+            owner_kwargs=owner_kwargs,
         )
         currency_norm = self._normalize_currency(currency or account.base_currency)
         row = self.repo.add_cash_ledger_in_session(
@@ -806,9 +822,11 @@ class PortfolioService:
         split_ratio: Optional[float] = None,
         note: Optional[str] = None,
     ) -> Dict[str, Any]:
+        owner_kwargs = self._write_owner_kwargs()
         with self.repo.portfolio_write_session() as session:
             return self._record_corporate_action_in_session(
                 session=session,
+                owner_kwargs=owner_kwargs,
                 account_id=account_id,
                 symbol=symbol,
                 effective_date=effective_date,
@@ -824,6 +842,7 @@ class PortfolioService:
         self,
         *,
         session: Any,
+        owner_kwargs: Dict[str, Any],
         account_id: int,
         symbol: str,
         effective_date: date,
@@ -847,6 +866,7 @@ class PortfolioService:
         account = self._require_active_account_in_session(
             session=session,
             account_id=account_id,
+            owner_kwargs=owner_kwargs,
         )
         market_hint = market
         if market_hint is None and str(account.market or "").strip().lower() == "global":
@@ -874,11 +894,12 @@ class PortfolioService:
         return {"id": int(row.id)}
 
     def delete_trade_event(self, trade_id: int) -> bool:
+        owner_kwargs = self._write_owner_kwargs()
         with self.repo.portfolio_write_session() as session:
             return self.repo.delete_trade_in_session(
                 session=session,
                 trade_id=trade_id,
-                **self._owner_kwargs(),
+                **owner_kwargs,
             )
 
     def update_trade_event(
@@ -902,19 +923,24 @@ class PortfolioService:
             for value in (account_id, symbol, trade_date, side, quantity, price, fee, tax, market, currency, note)
         ):
             raise ValueError("No fields provided for update")
+        owner_kwargs = self._write_owner_kwargs()
         with self.repo.portfolio_write_session() as session:
             row = self.repo.get_trade_in_session(
                 session=session,
                 trade_id=trade_id,
                 include_voided=False,
-                **self._owner_kwargs(),
+                **owner_kwargs,
             )
             if row is None:
                 return None
 
             current_account_id = int(row.account_id)
             next_account_id = int(account_id) if account_id is not None else current_account_id
-            account = self._require_active_account_in_session(session=session, account_id=next_account_id)
+            account = self._require_active_account_in_session(
+                session=session,
+                account_id=next_account_id,
+                owner_kwargs=owner_kwargs,
+            )
 
             side_norm = (side or row.side or "").strip().lower()
             if side_norm not in VALID_SIDES:
@@ -983,19 +1009,21 @@ class PortfolioService:
             return self._trade_row_to_dict(row)
 
     def delete_cash_ledger_event(self, entry_id: int) -> bool:
+        owner_kwargs = self._write_owner_kwargs()
         with self.repo.portfolio_write_session() as session:
             return self.repo.delete_cash_ledger_in_session(
                 session=session,
                 entry_id=entry_id,
-                **self._owner_kwargs(),
+                **owner_kwargs,
             )
 
     def delete_corporate_action_event(self, action_id: int) -> bool:
+        owner_kwargs = self._write_owner_kwargs()
         with self.repo.portfolio_write_session() as session:
             return self.repo.delete_corporate_action_in_session(
                 session=session,
                 action_id=action_id,
-                **self._owner_kwargs(),
+                **owner_kwargs,
             )
 
     def list_trade_events(
@@ -5223,12 +5251,18 @@ class PortfolioService:
             raise ValueError(f"Active account not found: {account_id}")
         return account
 
-    def _require_active_account_in_session(self, *, session: Any, account_id: int) -> Any:
+    def _require_active_account_in_session(
+        self,
+        *,
+        session: Any,
+        account_id: int,
+        owner_kwargs: Dict[str, Any],
+    ) -> Any:
         account = self.repo.get_account_in_session(
             session=session,
             account_id=account_id,
             include_inactive=False,
-            **self._owner_kwargs(),
+            **owner_kwargs,
         )
         if account is None:
             raise ValueError(f"Active account not found: {account_id}")

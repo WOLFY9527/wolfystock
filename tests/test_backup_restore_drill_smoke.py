@@ -132,7 +132,7 @@ class BackupRestoreDrillSmokeTestCase(unittest.TestCase):
         restored_db = DatabaseManager(db_url=f"sqlite:///{self.restore_db_path}")
 
         expected_counts = {
-            "app_users": 3,
+            "app_users": 2,
             "app_user_sessions": 2,
             "durable_task_states": 2,
             "durable_task_progress_events": 2,
@@ -144,6 +144,7 @@ class BackupRestoreDrillSmokeTestCase(unittest.TestCase):
             for table_name in expected_counts
         }
         self.assertEqual(observed_counts, expected_counts)
+        self.assertIsNone(restored_db.get_app_user("bootstrap-admin"))
 
         alpha_user = restored_db.get_app_user("owner-alpha")
         beta_session = restored_db.get_app_user_session("session-owner-beta")

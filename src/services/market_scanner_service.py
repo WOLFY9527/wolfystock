@@ -7618,12 +7618,12 @@ class MarketScannerService:
                 profile=profile,
                 history_df=local_df,
                 history_diag={
-                "source": "local_db",
-                "rows": int(len(local_df)),
-                "latest_trade_date": latest_trade_date,
-                "network_used": False,
-                "network_failed": False,
-                "partial_local_fallback": False,
+                    "source": "local_db",
+                    "rows": int(len(local_df)),
+                    "latest_trade_date": latest_trade_date,
+                    "network_used": False,
+                    "network_failed": False,
+                    "partial_local_fallback": False,
                 },
             )
 
@@ -7665,12 +7665,12 @@ class MarketScannerService:
                         profile=profile,
                         history_df=normalized_remote_df,
                         history_diag={
-                        "source": remote_source,
-                        "rows": int(len(normalized_remote_df)),
-                        "latest_trade_date": latest_trade_date,
-                        "network_used": remote_source != "local_us_parquet",
-                        "network_failed": False,
-                        "partial_local_fallback": False,
+                            "source": remote_source,
+                            "rows": int(len(normalized_remote_df)),
+                            "latest_trade_date": latest_trade_date,
+                            "network_used": remote_source != "local_us_parquet",
+                            "network_failed": False,
+                            "partial_local_fallback": False,
                         },
                     )
             except Exception as exc:
@@ -7686,13 +7686,13 @@ class MarketScannerService:
                         profile=profile,
                         history_df=local_df,
                         history_diag={
-                        "source": "local_partial_fallback",
-                        "rows": int(len(local_df)),
-                        "latest_trade_date": latest_trade_date,
-                        "network_used": True,
-                        "network_failed": True,
-                        "partial_local_fallback": True,
-                        "warning": str(exc),
+                            "source": "local_partial_fallback",
+                            "rows": int(len(local_df)),
+                            "latest_trade_date": latest_trade_date,
+                            "network_used": True,
+                            "network_failed": True,
+                            "partial_local_fallback": True,
+                            "warning": str(exc),
                         },
                     )
                 return self._with_historical_ohlcv_readiness(
@@ -7700,12 +7700,12 @@ class MarketScannerService:
                     profile=profile,
                     history_df=pd.DataFrame(),
                     history_diag={
-                    "source": "unavailable",
-                    "rows": int(len(local_df)),
-                    "network_used": True,
-                    "network_failed": True,
-                    "partial_local_fallback": False,
-                    "warning": str(exc),
+                        "source": "unavailable",
+                        "rows": int(len(local_df)),
+                        "network_used": True,
+                        "network_failed": True,
+                        "partial_local_fallback": False,
+                        "warning": str(exc),
                     },
                 )
 
@@ -7728,12 +7728,12 @@ class MarketScannerService:
                     profile=profile,
                     history_df=normalized_remote_df,
                     history_diag={
-                    "source": remote_source,
-                    "rows": int(len(normalized_remote_df)),
-                    "latest_trade_date": latest_trade_date,
-                    "network_used": True,
-                    "network_failed": False,
-                    "partial_local_fallback": False,
+                        "source": remote_source,
+                        "rows": int(len(normalized_remote_df)),
+                        "latest_trade_date": latest_trade_date,
+                        "network_used": True,
+                        "network_failed": False,
+                        "partial_local_fallback": False,
                     },
                 )
         except Exception as exc:
@@ -7749,13 +7749,13 @@ class MarketScannerService:
                     profile=profile,
                     history_df=local_df,
                     history_diag={
-                    "source": "local_partial_fallback",
-                    "rows": int(len(local_df)),
-                    "latest_trade_date": latest_trade_date,
-                    "network_used": True,
-                    "network_failed": True,
-                    "partial_local_fallback": True,
-                    "warning": str(exc),
+                        "source": "local_partial_fallback",
+                        "rows": int(len(local_df)),
+                        "latest_trade_date": latest_trade_date,
+                        "network_used": True,
+                        "network_failed": True,
+                        "partial_local_fallback": True,
+                        "warning": str(exc),
                     },
                 )
             return self._with_historical_ohlcv_readiness(
@@ -7763,12 +7763,12 @@ class MarketScannerService:
                 profile=profile,
                 history_df=pd.DataFrame(),
                 history_diag={
-                "source": "unavailable",
-                "rows": int(len(local_df)),
-                "network_used": True,
-                "network_failed": True,
-                "partial_local_fallback": False,
-                "warning": str(exc),
+                    "source": "unavailable",
+                    "rows": int(len(local_df)),
+                    "network_used": True,
+                    "network_failed": True,
+                    "partial_local_fallback": False,
+                    "warning": str(exc),
                 },
             )
 
@@ -7777,12 +7777,12 @@ class MarketScannerService:
             profile=profile,
             history_df=pd.DataFrame(),
             history_diag={
-            "source": "unavailable",
-            "rows": int(len(local_df)),
-            "network_used": True,
-            "network_failed": True,
-            "partial_local_fallback": False,
-            "warning": "empty_remote_history",
+                "source": "unavailable",
+                "rows": int(len(local_df)),
+                "network_used": True,
+                "network_failed": True,
+                "partial_local_fallback": False,
+                "warning": "empty_remote_history",
             },
         )
 

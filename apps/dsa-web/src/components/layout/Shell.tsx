@@ -359,6 +359,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const accountMenuItemRefs = useRef<Array<HTMLAnchorElement | HTMLButtonElement | null>>([]);
   const accountMenuFocusIndexRef = useRef<number | null>(null);
   const focusRecoveryFrameRef = useRef<number | null>(null);
+  const focusRecoveryInertObserverRef = useRef<MutationObserver | null>(null);
   const focusContextRef = useRef({ isDesktop, loggedIn, pathname });
   const [overlayState, dispatchOverlay] = useReducer(overlayReducer, {
     mobileNavOpen: false,
@@ -428,8 +429,14 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     }
   }, []);
 
+  const cancelFocusRecoveryInertObserver = useCallback(() => {
+    focusRecoveryInertObserverRef.current?.disconnect();
+    focusRecoveryInertObserverRef.current = null;
+  }, []);
+
   const clearFocusRecovery = () => {
     cancelFocusRecoveryFrame();
+    cancelFocusRecoveryInertObserver();
     pendingShellFocusRecovery = null;
   };
 
@@ -442,6 +449,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
       return;
     }
     cancelFocusRecoveryFrame();
+    cancelFocusRecoveryInertObserver();
     pendingShellFocusRecovery = { target, surfaceId, pathname: destinationPathname };
   };
 
@@ -539,12 +547,38 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   }, [cancelFocusRecoveryFrame, restoreFocusForClosedSurface]);
 
   const recoverFocusAfterSurfaceClose = useCallback((surfaceId: string, surfaceDetached = false) => {
+    const request = pendingShellFocusRecovery;
+    if (surfaceDetached && request?.surfaceId === surfaceId) {
+      const { isDesktop: isDesktopNow, loggedIn: loggedInNow } = focusContextRef.current;
+      const target = request.target === 'mobile-navigation-trigger'
+        ? (!isDesktopNow ? mobileMenuTriggerRef.current : null)
+        : request.target === 'account-menu-trigger'
+          ? (isDesktopNow && loggedInNow ? accountTriggerRef.current : null)
+          : document.getElementById(MAIN_CONTENT_ID);
+      const inertAncestor = target?.closest<HTMLElement>('[inert]') ?? null;
+      if (inertAncestor) {
+        cancelFocusRecoveryInertObserver();
+        const observer = new MutationObserver(() => {
+          if (inertAncestor.hasAttribute('inert')) {
+            return;
+          }
+          observer.disconnect();
+          if (focusRecoveryInertObserverRef.current === observer) {
+            focusRecoveryInertObserverRef.current = null;
+          }
+          restoreFocusForClosedSurface(surfaceId, true);
+        });
+        focusRecoveryInertObserverRef.current = observer;
+        observer.observe(inertAncestor, { attributes: true, attributeFilter: ['inert'] });
+        return;
+      }
+    }
     if (pendingShellFocusRecovery?.target === 'main-content') {
       scheduleFocusRecovery(surfaceId);
       return;
     }
     restoreFocusForClosedSurface(surfaceId, surfaceDetached);
-  }, [restoreFocusForClosedSurface, scheduleFocusRecovery]);
+  }, [cancelFocusRecoveryInertObserver, restoreFocusForClosedSurface, scheduleFocusRecovery]);
 
   const mobileNavigationMenuRef = useCallback((node: HTMLDivElement | null) => {
     if (!node) {
@@ -609,11 +643,12 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
 
   useEffect(() => () => {
     cancelFocusRecoveryFrame();
+    cancelFocusRecoveryInertObserver();
     const surfaceId = pendingShellFocusRecovery?.surfaceId;
     if (pendingShellFocusRecovery?.target === 'main-content' && surfaceId) {
       restoreFocusForClosedSurface(surfaceId, true);
     }
-  }, [cancelFocusRecoveryFrame, restoreFocusForClosedSurface]);
+  }, [cancelFocusRecoveryFrame, cancelFocusRecoveryInertObserver, restoreFocusForClosedSurface]);
 
   useEffect(() => {
     if (!accountMenuOpen) {

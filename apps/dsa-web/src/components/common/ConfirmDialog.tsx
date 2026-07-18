@@ -9,6 +9,8 @@ import { Button } from './Button';
 import { Drawer } from './Drawer';
 import { useI18n } from '../../contexts/UiLanguageContext';
 
+const CONFIRM_DIALOG_LAYER = 100;
+
 interface ConfirmDialogProps {
   isOpen: boolean;
   title: string;
@@ -163,7 +165,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       container: surface,
       dismiss: handleCancel,
       returnFocus: previousFocusRef.current,
-      getLayer: () => 50,
+      getLayer: () => CONFIRM_DIALOG_LAYER,
     });
 
     return () => {
@@ -199,9 +201,10 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   const dialog = (
     <div
       ref={overlayRootRef}
-      className={`confirm-dialog fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-200 ease-out ${
+      className={`confirm-dialog fixed inset-0 flex items-center justify-center transition-opacity duration-200 ease-out ${
         uiState === 'open' ? 'opacity-100' : 'opacity-0'
       }`}
+      style={{ zIndex: CONFIRM_DIALOG_LAYER }}
       data-state={uiState}
     >
       <button

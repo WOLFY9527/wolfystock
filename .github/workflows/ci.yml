@@ -33,7 +33,6 @@ jobs:
           mkdir -p output/ci
           ./wolfy lock python --check > output/ci/python-lock-check.json
           ./wolfy bootstrap --ensure
-          ./wolfy exec --profile test -- bash -c 'cd apps/dsa-web && export PLAYWRIGHT_BROWSERS_PATH="$PWD/../../output/ci/playwright-browsers" && npm exec -- playwright install chromium'
       - name: Qualify nested environment evidence
         run: |
           set -euo pipefail
@@ -58,7 +57,7 @@ jobs:
       - name: Production frontend build
         run: ./wolfy exec --profile test -- python scripts/web_build_artifact.py build --expected-sha "${GITHUB_SHA}"
       - name: Playwright smoke
-        run: ./wolfy exec --profile test -- bash -c 'cd apps/dsa-web && export PLAYWRIGHT_BROWSERS_PATH="$PWD/../../output/ci/playwright-browsers" && npm exec -- playwright test --project=chromium --project=chromium-mobile'
+        run: ./wolfy exec --profile test -- npm --prefix apps/dsa-web exec -- playwright test --project=chromium --project=chromium-mobile
 
   docker-build:
     name: docker-build

@@ -105,6 +105,42 @@ def _reset_auth_globals() -> None:
     auth._rate_limit = {}
 
 
+def _complete_scanner_score_diagnostics() -> dict:
+    return {
+        "factorEvidence": {
+            "contractVersion": "scanner_factor_evidence_v1",
+            "overallState": "valid",
+            "rankingEligible": True,
+            "blockers": [],
+            "requiredFactorCount": 1,
+            "validRequiredFactorCount": 1,
+            "factors": [
+                {
+                    "component": "trend",
+                    "required": True,
+                    "state": "valid",
+                    "scoreContributionAllowed": True,
+                }
+            ],
+        },
+        "score_explainability": {
+            "score_grade_allowed": True,
+            "cap_reason": None,
+            "degradation_reason": None,
+            "source_confidence": {
+                "scoreContributionAllowed": True,
+                "sourceAuthorityAllowed": True,
+                "observationOnly": False,
+                "isFallback": False,
+                "isStale": False,
+                "isPartial": False,
+                "isSynthetic": False,
+                "isUnavailable": False,
+            },
+        },
+    }
+
+
 def _make_user(user_id: str, username: str, *, is_admin: bool = False, auth_enabled: bool = True) -> CurrentUser:
     return CurrentUser(
         user_id=user_id,
@@ -872,6 +908,7 @@ class WatchlistApiTestCase(unittest.TestCase):
             rank=2,
             score=71.5,
             reason_summary="Scanner score refreshed.",
+            diagnostics_json=json.dumps(_complete_scanner_score_diagnostics(), ensure_ascii=False),
             created_at=now,
         )
         with self.db.get_session() as session:
@@ -995,6 +1032,7 @@ class WatchlistApiTestCase(unittest.TestCase):
             rank=2,
             score=71.5,
             reason_summary="Scanner score refreshed.",
+            diagnostics_json=json.dumps(_complete_scanner_score_diagnostics(), ensure_ascii=False),
             created_at=now,
         )
         with self.db.get_session() as session:
