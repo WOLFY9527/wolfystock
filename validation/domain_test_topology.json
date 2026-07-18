@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8036,
-      "sha256": "95e0d20f6e77c6ed247c70f2f19fe0d794d39360a52837183febbf74a53611b8"
+      "count": 8081,
+      "sha256": "8569923b0edfa618e19474942a906ee7cf6bdb3ec714debfea0d58cfbd942b05"
     },
     "tests": [
       {
@@ -5067,6 +5067,11 @@
         "id": "tests/api/test_scanner.py::test_crypto_mining_theme_registry_has_11_symbols",
         "domain": "scanner",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_scanner.py::test_scanner_candidate_factor_evidence_is_required_and_survives_serialization",
+        "domain": "scanner",
+        "baseline": false
       },
       {
         "id": "tests/api/test_scanner.py::test_scanner_candidate_research_packet_is_bounded_and_no_advice",
@@ -12294,6 +12299,16 @@
         "baseline": true
       },
       {
+        "id": "tests/test_backtest_api_contract.py::BacktestApiContractTestCase::test_run_rule_backtest_preserves_omitted_and_explicit_zero_cost_fields",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_api_contract.py::BacktestApiContractTestCase::test_run_rule_backtest_rejects_partial_fill_request_before_service",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
         "id": "tests/test_backtest_api_contract.py::BacktestApiContractTestCase::test_run_rule_backtest_rejects_string_v2_execution_model_with_stable_error",
         "domain": "backtest",
         "baseline": true
@@ -12342,6 +12357,16 @@
         "id": "tests/test_backtest_api_contract.py::BacktestApiContractTestCase::test_support_bundle_api_surface_truthfully_closes_missing_trace_contract",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_backtest_api_contract.py::test_backtest_data_basis_schema_preserves_explicit_financial_truth",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_api_contract.py::test_backtest_data_basis_schema_rejects_permissive_boolean_coercion",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_backtest_bounded_grid_runner.py::test_executes_small_accepted_grid_with_supplied_bars_and_aggregates_metrics",
@@ -12689,9 +12714,9 @@
         "baseline": true
       },
       {
-        "id": "tests/test_backtest_execution_model_registry.py::test_registry_exposes_v1_as_current_default_supported_model",
+        "id": "tests/test_backtest_execution_model_registry.py::test_registry_exposes_each_v1_engine_identity_as_an_executable_model",
         "domain": "backtest",
-        "baseline": true
+        "baseline": false
       },
       {
         "id": "tests/test_backtest_execution_model_registry.py::test_registry_marks_v2_as_future_unsupported_fail_closed_model",
@@ -13044,6 +13069,16 @@
         "baseline": true
       },
       {
+        "id": "tests/test_backtest_reproducibility_manifest_contract.py::test_manifest_fails_closed_for_unverified_calendar_and_insufficient_warmup",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_reproducibility_manifest_contract.py::test_manifest_hash_binds_price_basis_calendar_range_and_warmup_truth",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
         "id": "tests/test_backtest_reproducibility_manifest_contract.py::test_manifest_ids_and_hashes_are_deterministic_for_equivalent_inputs",
         "domain": "backtest",
         "baseline": true
@@ -13052,6 +13087,16 @@
         "id": "tests/test_backtest_reproducibility_manifest_contract.py::test_missing_optional_sections_are_explicit_without_placeholder_hashes",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_backtest_reproducibility_manifest_contract.py::test_price_basis_rejects_adjusted_field_under_raw_basis",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_reproducibility_manifest_contract.py::test_price_basis_rejects_strategy_and_benchmark_basis_mismatch",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_backtest_reproducibility_manifest_contract.py::test_sensitive_payloads_prompts_and_runtime_dumps_are_stripped",
@@ -13172,6 +13217,11 @@
         "id": "tests/test_backtest_service.py::BacktestServiceTestCase::test_prepare_samples_surfaces_missing_us_history_without_provider_fallback",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_backtest_service.py::BacktestServiceTestCase::test_result_exposes_raw_basis_and_does_not_invent_verified_sessions",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_backtest_service.py::BacktestServiceTestCase::test_result_fields_correct",
@@ -15737,6 +15787,46 @@
         "id": "tests/test_durable_runtime_v1_worker.py::DurableRuntimeV1WorkerTestCase::test_worker_module_does_not_import_live_runtime_services",
         "domain": "runtime_operator_tooling",
         "baseline": true
+      },
+      {
+        "id": "tests/test_durable_task_atomicity.py::test_abandoned_running_claim_is_explicitly_recovered",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_durable_task_atomicity.py::test_concurrent_claim_is_compare_and_set",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_durable_task_atomicity.py::test_corrupt_durable_metadata_is_not_treated_as_empty",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_durable_task_atomicity.py::test_duplicate_worker_attempt_is_fenced_after_reclaim",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_durable_task_atomicity.py::test_expired_owner_cannot_complete_or_fail_active_claim",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_durable_task_atomicity.py::test_factory_reset_reports_partial_failure",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_durable_task_atomicity.py::test_interrupted_completion_preserves_last_known_good_state",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_durable_task_atomicity.py::test_retry_keeps_task_identity_and_fences_prior_attempt",
+        "domain": "residual_repository_integration",
+        "baseline": false
       },
       {
         "id": "tests/test_durable_task_state.py::DurableTaskStateTestCase::test_active_durable_reservation_honors_legacy_dedupe_hash_rows",
@@ -24124,6 +24214,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_candidate_diagnostics_keep_blocked_candidate_unranked_and_data_failed",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
         "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_corrupt_candidate_evidence_blocks_projection_without_changing_rank_score_or_lineage",
         "domain": "scanner",
         "baseline": false
@@ -24287,6 +24382,11 @@
         "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_operational_status_exposes_recent_quality_summary",
         "domain": "scanner",
         "baseline": true
+      },
+      {
+        "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_prepare_shortlist_excludes_blocked_candidates_without_assigning_rank",
+        "domain": "scanner",
+        "baseline": false
       },
       {
         "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_prepare_shortlist_sorts_by_score_then_symbol_and_assigns_rank_before_ai",
@@ -29279,6 +29379,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_snapshot_api_preserves_performance_and_partial_valuation_contracts",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_snapshot_api_returns_backwards_compatible_analytics_payload",
         "domain": "portfolio_broker",
         "baseline": true
@@ -30002,6 +30107,36 @@
         "id": "tests/test_portfolio_structure_review_service.py::test_structure_review_uses_cached_holdings_and_batch_structure_without_portfolio_writes",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_valuation_truth.py::PortfolioValuationTruthTestCase::test_account_scoped_performance_does_not_mix_other_accounts",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_valuation_truth.py::PortfolioValuationTruthTestCase::test_deposits_and_withdrawals_are_return_and_drawdown_neutral",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_valuation_truth.py::PortfolioValuationTruthTestCase::test_dividend_is_included_once_and_return_uses_documented_denominator",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_valuation_truth.py::PortfolioValuationTruthTestCase::test_missing_fx_is_unavailable_without_one_to_one_or_zero_exposure",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_valuation_truth.py::PortfolioValuationTruthTestCase::test_multicurrency_components_keep_price_income_fees_fx_and_cash_distinct",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_valuation_truth.py::PortfolioValuationTruthTestCase::test_return_is_unavailable_without_positive_denominator",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_postgres_phase_a.py::PostgresPhaseAStorageTestCase::test_auth_disabled_bootstrap_admin_and_legacy_cookie_compatibility_survive_phase_a_enablement",
@@ -34394,12 +34529,62 @@
         "baseline": true
       },
       {
-        "id": "tests/test_rule_backtest_reopen_acceptance.py::RuleBacktestReopenAcceptanceTestCase::test_reopen_acceptance_detail_history_contract_stays_aligned_across_domains",
+        "id": "tests/test_rule_backtest_execution_truth.py::test_bar_close_strategy_signals_never_fill_on_their_signal_bar",
         "domain": "backtest",
-        "baseline": true
+        "baseline": false
       },
       {
-        "id": "tests/test_rule_backtest_reopen_acceptance.py::RuleBacktestReopenAcceptanceTestCase::test_reopen_acceptance_legacy_fallback_surfaces_are_explicit_across_status_detail_history",
+        "id": "tests/test_rule_backtest_execution_truth.py::test_missing_next_open_records_unfilled_without_price_or_cost",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_execution_truth.py::test_omitted_and_explicit_zero_costs_remain_distinct_in_result_evidence",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_execution_truth.py::test_periodic_execution_uses_registered_identity_and_explicit_terminal_policy",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_execution_truth.py::test_periodic_insufficient_cash_preserves_rejected_orders_without_costs",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_execution_truth.py::test_registry_inventory_maps_every_executable_model_to_one_engine_identity",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_execution_truth.py::test_registry_rejects_partial_fill_and_other_unsupported_assumptions",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_execution_truth.py::test_repeated_runs_preserve_identical_model_identity_and_execution_evidence",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_execution_truth.py::test_terminal_liquidation_is_not_recorded_as_an_ordinary_strategy_signal",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_execution_truth.py::test_valid_fill_costs_are_applied_exactly_once_with_explicit_configuration",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_reopen_acceptance.py::RuleBacktestReopenAcceptanceTestCase::test_reopen_acceptance_corrupt_summary_fails_closed_across_status_detail_history",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_reopen_acceptance.py::RuleBacktestReopenAcceptanceTestCase::test_reopen_acceptance_detail_history_contract_stays_aligned_across_domains",
         "domain": "backtest",
         "baseline": true
       },
@@ -34789,14 +34974,19 @@
         "baseline": true
       },
       {
-        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_derives_execution_model_for_legacy_runs_without_structured_config",
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_derives_summary_from_stored_domains_when_snapshot_missing",
         "domain": "backtest",
         "baseline": true
       },
       {
-        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_derives_summary_from_stored_domains_when_snapshot_missing",
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_does_not_derive_execution_model_when_snapshot_missing",
         "domain": "backtest",
-        "baseline": true
+        "baseline": false
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_does_not_promote_legacy_assumptions_to_registered_model",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_marks_comparison_unavailable_when_no_stored_or_legacy_payload_exists",
@@ -34809,11 +34999,6 @@
         "baseline": true
       },
       {
-        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_marks_execution_model_as_derived_when_snapshot_missing",
-        "domain": "backtest",
-        "baseline": true
-      },
-      {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_marks_execution_trace_unavailable_when_trace_and_audit_rows_missing",
         "domain": "backtest",
         "baseline": true
@@ -34822,6 +35007,11 @@
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_marks_parsed_strategy_unavailable_when_snapshot_and_summary_missing",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_marks_partial_stored_execution_model_unavailable",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_marks_partial_stored_trade_rows_with_explicit_repair_provenance",
@@ -34875,11 +35065,6 @@
       },
       {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_repairs_partial_stored_equity_curve_with_provenance",
-        "domain": "backtest",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_repairs_partial_stored_execution_model_with_provenance",
         "domain": "backtest",
         "baseline": true
       },
@@ -35134,6 +35319,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_run_backtest_preserves_cost_configuration_presence_in_result_evidence",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_run_backtest_rejects_out_of_bounds_monte_carlo_simulation_count",
         "domain": "backtest",
         "baseline": true
@@ -35142,6 +35332,11 @@
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_run_backtest_rejects_out_of_bounds_walk_forward_train_window",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_run_backtest_rejects_unsupported_partial_fills_before_engine_or_persistence",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_run_backtest_rejects_v2_execution_model_before_engine_or_persistence",
@@ -35277,6 +35472,11 @@
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_submit_and_process_backtest_records_async_status_history",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_submit_backtest_does_not_invent_model_identity_before_strategy_parse",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_submit_backtest_rejects_unknown_execution_model_before_job_write",
@@ -35652,6 +35852,21 @@
         "id": "tests/test_scanner_factor_observations.py::test_build_scanner_factor_observations_uses_deterministic_ids_and_contract_factor_ids",
         "domain": "scanner",
         "baseline": true
+      },
+      {
+        "id": "tests/test_scanner_factor_observations.py::test_factor_evidence_distinguishes_stale_proxy_rejected_and_official_valid_sources",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_scanner_factor_observations.py::test_factor_warmup_is_explicit_and_sixty_bars_do_not_satisfy_sixty_day_return",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_scanner_factor_observations.py::test_missing_required_factor_is_unavailable_and_cannot_keep_positive_component_score",
+        "domain": "scanner",
+        "baseline": false
       },
       {
         "id": "tests/test_scanner_golden_contracts.py::test_all_scanner_golden_fixtures_exclude_raw_secrets_and_provider_payloads",
@@ -39919,6 +40134,16 @@
         "baseline": true
       },
       {
+        "id": "tests/test_ws2_durable_task_worker.py::DurableTaskWorkerPrototypeTestCase::test_reclaimed_failure_is_not_published_by_stale_worker",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_ws2_durable_task_worker.py::DurableTaskWorkerPrototypeTestCase::test_reclaimed_worker_stops_before_next_stage",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
         "id": "tests/test_ws2_durable_task_worker.py::DurableTaskWorkerPrototypeTestCase::test_synthetic_worker_override_is_fixture_completion_not_analysis_recovery",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -40286,7 +40511,12 @@
       "tests/scripts/test_bootstrap_worktree.py::test_windows_to_posix_path_is_deterministic[posix-C:\\\\\\\\Users\\\\\\\\test\\\\\\\\repo]",
       "tests/scripts/test_bootstrap_worktree.py::test_windows_to_posix_path_is_deterministic[wsl-/mnt/c/Users/test/repo]",
       "tests/test_auth_api.py::AuthApiTestCase::test_logout_requires_session_when_auth_enabled",
-      "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_main_returns_zero_when_probe_times_out"
+      "tests/test_backtest_execution_model_registry.py::test_registry_exposes_v1_as_current_default_supported_model",
+      "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_main_returns_zero_when_probe_times_out",
+      "tests/test_rule_backtest_reopen_acceptance.py::RuleBacktestReopenAcceptanceTestCase::test_reopen_acceptance_legacy_fallback_surfaces_are_explicit_across_status_detail_history",
+      "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_derives_execution_model_for_legacy_runs_without_structured_config",
+      "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_marks_execution_model_as_derived_when_snapshot_missing",
+      "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_repairs_partial_stored_execution_model_with_provenance"
     ],
     "networkTests": [],
     "knownBaselineFailures": [
