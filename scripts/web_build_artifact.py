@@ -12,6 +12,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
@@ -116,9 +117,57 @@ def _config_hashes(web_root: Path) -> tuple[dict[str, str], list[str]]:
     return hashes, errors
 
 
-def _environment_contract() -> dict[str, str | None]:
+def _managed_environment_identity(repo_root: Path) -> tuple[dict[str, Any], list[str]]:
+    result = _run(
+        repo_root,
+        sys.executable,
+        "-E",
+        "-s",
+        "-B",
+        str(repo_root / "scripts" / "wolfy.py"),
+        "env",
+        "verify",
+    )
+    try:
+        report = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        report = {}
+    if not isinstance(report, dict):
+        report = {}
+    evidence = report.get("environmentEvidence")
+    errors: list[str] = []
+    if result.returncode != 0 or report.get("status") != "ok" or not isinstance(evidence, dict):
+        errors.append("managed_environment_unverified")
+        evidence = {}
+    identity = {
+        "schemaVersion": evidence.get("schemaVersion"),
+        "environmentPolicyVersion": evidence.get("environmentPolicyVersion"),
+        "environmentFingerprint": evidence.get("environmentFingerprint"),
+        "componentFingerprints": evidence.get("componentFingerprints"),
+    }
+    if not re.fullmatch(r"[0-9a-f]{64}", str(identity["environmentFingerprint"] or "")):
+        errors.append("managed_environment_fingerprint_invalid")
+    components = identity.get("componentFingerprints")
+    if not isinstance(components, dict) or set(components) != {"python", "web"}:
+        errors.append("managed_environment_components_invalid")
+    else:
+        for component in ("python", "web"):
+            values = components.get(component)
+            if not isinstance(values, dict) or any(
+                not re.fullmatch(r"[0-9a-f]{64}", str(values.get(field) or ""))
+                for field in ("input", "installed")
+            ):
+                errors.append(f"managed_environment_{component}_identity_invalid")
+    return identity, sorted(set(errors))
+
+
+def _environment_contract(repo_root: Path) -> tuple[dict[str, Any], list[str]]:
+    managed, errors = _managed_environment_identity(repo_root)
     keys = ["NODE_ENV", *sorted(key for key in os.environ if key.startswith("VITE_"))]
-    return {key: _sha256_json({"value": os.environ.get(key)}) for key in keys}
+    return {
+        "managed": managed,
+        "buildVariables": {key: _sha256_json({"value": os.environ.get(key)}) for key in keys},
+    }, errors
 
 
 def _index_inventory(index_path: Path, web_root: Path) -> dict[str, Any]:
@@ -153,34 +202,32 @@ def _assets(static_root: Path) -> list[dict[str, Any]]:
     return inventory
 
 
-def _make_writable(root: Path) -> None:
-    if not root.exists():
-        return
-    for path in sorted(root.rglob("*"), reverse=True):
-        if path.exists():
-            path.chmod(path.stat().st_mode | stat.S_IWRITE)
-    root.chmod(root.stat().st_mode | stat.S_IWRITE)
-
-
 def _make_read_only(root: Path) -> None:
     for path in [*sorted(root.rglob("*")), root]:
         if path.exists():
             path.chmod(path.stat().st_mode & ~stat.S_IWRITE)
 
 
-def generate_manifest(repo_root: Path | str) -> ArtifactResult:
+def generate_manifest(
+    repo_root: Path | str,
+    *,
+    static_root: Path | str | None = None,
+    expected_sha: str | None = None,
+) -> ArtifactResult:
     repo = Path(repo_root).resolve()
     web_root = repo / WEB_RELATIVE
-    static_root = repo / STATIC_RELATIVE
-    candidate, errors = _candidate(repo)
+    output_root = Path(static_root).resolve() if static_root is not None else repo / STATIC_RELATIVE
+    candidate, errors = _candidate(repo, expected_sha)
     integrity, integrity_errors = _npm_integrity(repo)
     errors.extend(integrity_errors)
     config_hashes, config_errors = _config_hashes(web_root)
     errors.extend(config_errors)
-    index_path = static_root / "index.html"
+    environment, environment_errors = _environment_contract(repo)
+    errors.extend(environment_errors)
+    index_path = output_root / "index.html"
     if not index_path.is_file():
         errors.append("artifact_index_missing")
-    assets = _assets(static_root)
+    assets = _assets(output_root)
     if not assets:
         errors.append("artifact_assets_missing")
     if errors:
@@ -192,7 +239,7 @@ def generate_manifest(repo_root: Path | str) -> ArtifactResult:
         "dependencyIntegrity": integrity,
         "toolchain": {"node": _version(repo, "node", "--version"), "npm": _version(repo, "npm", "--version")},
         "configuration": {"sha256": config_hashes},
-        "environment": _environment_contract(),
+        "environment": environment,
         "index": _index_inventory(index_path, web_root),
         "assets": assets,
     }
@@ -210,6 +257,8 @@ def run_typecheck(repo_root: Path | str) -> ArtifactResult:
             "--",
             "tsc",
             "--noEmit",
+            "--incremental",
+            "false",
             "-p",
             str(WEB_RELATIVE / "tsconfig.app.json"),
         ),
@@ -221,6 +270,8 @@ def run_typecheck(repo_root: Path | str) -> ArtifactResult:
             "--",
             "tsc",
             "--noEmit",
+            "--incremental",
+            "false",
             "-p",
             str(WEB_RELATIVE / "tsconfig.node.json"),
         ),
@@ -234,47 +285,93 @@ def run_typecheck(repo_root: Path | str) -> ArtifactResult:
     return ArtifactResult(True, {"commands": command_log})
 
 
-def build_artifact(repo_root: Path | str, artifact_path: Path | str | None = None) -> ArtifactResult:
+def build_artifact(
+    repo_root: Path | str,
+    artifact_path: Path | str | None = None,
+    *,
+    expected_sha: str | None = None,
+) -> ArtifactResult:
     repo = Path(repo_root).resolve()
     static_root = repo / STATIC_RELATIVE
-    artifact = Path(artifact_path) if artifact_path else static_root / ARTIFACT_FILENAME
-    candidate, errors = _candidate(repo)
+    artifact = Path(artifact_path).resolve() if artifact_path else static_root / ARTIFACT_FILENAME
+    canonical_artifact = (static_root / ARTIFACT_FILENAME).resolve()
+    if artifact != canonical_artifact:
+        return ArtifactResult(False, {}, ["artifact_path_not_canonical"])
+    if artifact.exists():
+        existing = verify_artifact(repo, artifact, expected_sha=expected_sha)
+        if existing.ok:
+            return existing
+        return ArtifactResult(
+            False,
+            existing.payload,
+            sorted(set(["existing_artifact_verification_failed", *existing.error_codes])),
+            existing.warning_codes,
+        )
+    if static_root.exists() and any(static_root.iterdir()):
+        return ArtifactResult(False, {}, ["artifact_destination_unverified"])
+
+    candidate, errors = _candidate(repo, expected_sha)
     integrity, integrity_errors = _npm_integrity(repo)
     errors.extend(integrity_errors)
     if errors:
         return ArtifactResult(False, {"candidate": candidate, "dependencyIntegrity": integrity}, sorted(set(errors)))
 
-    _make_writable(static_root)
     typecheck = run_typecheck(repo)
     command_log = list(typecheck.payload.get("commands", []))
     if not typecheck.ok:
         return ArtifactResult(False, {"candidate": candidate, "commands": command_log}, typecheck.error_codes)
-    commands = (("npm", "--prefix", str(WEB_RELATIVE), "run", "build:bundle"),)
-    for command in commands:
+    with tempfile.TemporaryDirectory(prefix="wolfystock-web-artifact-") as temporary_root:
+        staged_root = Path(temporary_root) / "static"
+        command = (
+            "npm",
+            "--prefix",
+            str(WEB_RELATIVE),
+            "run",
+            "build:bundle",
+            "--",
+            "--outDir",
+            str(staged_root),
+        )
         result = _run(repo, *command, capture=False)
-        command_log.append({"command": " ".join(command), "exitCode": result.returncode})
+        command_log.append(
+            {
+                "command": "npm --prefix apps/dsa-web run build:bundle -- --outDir $ARTIFACT_STAGING",
+                "exitCode": result.returncode,
+            }
+        )
         if result.returncode != 0:
             return ArtifactResult(False, {"candidate": candidate, "commands": command_log}, ["web_build_command_failed"])
 
-    from scripts.uat_fresh_build_verifier import read_backend_info, write_frontend_build_identity
+        from scripts.uat_fresh_build_verifier import read_backend_info, write_frontend_build_identity
 
-    legacy_identity = write_frontend_build_identity(
-        static_root=static_root,
-        backend_info=read_backend_info(repo),
-        repo_root=repo,
-    )
-    if not legacy_identity.ok:
-        return ArtifactResult(False, legacy_identity.payload, legacy_identity.error_codes)
+        legacy_identity = write_frontend_build_identity(
+            static_root=staged_root,
+            backend_info=read_backend_info(repo),
+            repo_root=repo,
+        )
+        if not legacy_identity.ok:
+            return ArtifactResult(False, legacy_identity.payload, legacy_identity.error_codes)
 
-    generated = generate_manifest(repo)
-    if not generated.ok:
-        return ArtifactResult(False, generated.payload, generated.error_codes)
-    manifest = {**generated.payload, "commands": command_log}
-    manifest["fingerprint"] = _sha256_json(manifest)
-    artifact.parent.mkdir(parents=True, exist_ok=True)
-    artifact.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    _make_read_only(static_root)
-    return ArtifactResult(True, manifest)
+        generated = generate_manifest(repo, static_root=staged_root, expected_sha=expected_sha)
+        if not generated.ok:
+            return ArtifactResult(False, generated.payload, generated.error_codes)
+        manifest = {**generated.payload, "commands": command_log}
+        manifest["fingerprint"] = _sha256_json(manifest)
+        staged_artifact = staged_root / ARTIFACT_FILENAME
+        staged_artifact.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        staged_verification = verify_artifact(repo, staged_artifact, expected_sha=expected_sha)
+        if not staged_verification.ok:
+            return staged_verification
+        if static_root.exists():
+            if any(static_root.iterdir()):
+                return ArtifactResult(False, {}, ["artifact_destination_changed"])
+            static_root.rmdir()
+        staged_root.replace(static_root)
+        _make_read_only(static_root)
+        return staged_verification
 
 
 def verify_artifact(
@@ -309,10 +406,13 @@ def verify_artifact(
         errors.append("artifact_dependency_integrity_mismatch")
     if manifest.get("toolchain") != {"node": _version(repo, "node", "--version"), "npm": _version(repo, "npm", "--version")}:
         errors.append("artifact_toolchain_mismatch")
-    if manifest.get("environment") != _environment_contract():
+    environment, environment_errors = _environment_contract(repo)
+    errors.extend(environment_errors)
+    if manifest.get("environment") != environment:
         errors.append("artifact_environment_mismatch")
     static_root = artifact.parent
-    if manifest.get("index") != _index_inventory(static_root / "index.html", web_root):
+    index_path = static_root / "index.html"
+    if not index_path.is_file() or manifest.get("index") != _index_inventory(index_path, web_root):
         errors.append("artifact_index_mismatch")
     if manifest.get("assets") != _assets(static_root):
         errors.append("artifact_asset_mismatch")
@@ -333,7 +433,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     artifact = args.artifact or args.repo_root / STATIC_RELATIVE / ARTIFACT_FILENAME
     if args.action == "build":
-        result = build_artifact(args.repo_root, artifact)
+        result = build_artifact(args.repo_root, artifact, expected_sha=args.expected_sha)
     elif args.action == "manifest":
         result = generate_manifest(args.repo_root)
     elif args.action == "typecheck":

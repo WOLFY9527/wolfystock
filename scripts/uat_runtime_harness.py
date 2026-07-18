@@ -12,9 +12,11 @@ from __future__ import annotations
 import argparse
 import ctypes
 import hashlib
+import http.cookiejar
 import json
 import os
 import re
+import secrets
 import signal
 import shutil
 import socket
@@ -44,9 +46,18 @@ DEFAULT_EVIDENCE_DIR = Path("output/runtime-verification")
 DEFAULT_READINESS_TIMEOUT_SECONDS = 90.0
 DEFAULT_HTTP_TIMEOUT_SECONDS = 5.0
 WOLFYSTOCK_HTML_MARKERS = ("WolfyStock", "/assets/")
-FRONTEND_REQUIRED_BINARIES = ("tsc", "vite")
-FRONTEND_INSTALL_COMMAND = ("npm", "--prefix", "apps/dsa-web", "ci")
+CANONICAL_WEB_ARTIFACT = Path("static/.wolfystock-web-build-artifact.json")
+AUTHENTICATED_MEMBER_ROUTES = (
+    "/api/v1/research/radar",
+    "/api/v1/scanner/themes",
+)
+AUTHENTICATED_ADMIN_ALLOWED_ROUTES = (
+    "/api/v1/admin/ops/status",
+    "/api/v1/admin/ops/surface-readiness",
+)
+AUTHENTICATED_ADMIN_DENIED_ROUTE = "/api/v1/admin/users"
 UAT_ENV_OVERRIDES = {
+    "ADMIN_AUTH_ENABLED": "true",
     "APP_ENV": "uat",
     "CRYPTO_REALTIME_ENABLED": "false",
     "WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS": "true",
@@ -101,31 +112,80 @@ class EvidenceCandidate:
     selection_reason: str
 
 
+@dataclass(frozen=True)
+class UatSmokeAccount:
+    username: str
+    password: str
+    role: str
+    capabilities: tuple[str, ...]
+
+
 class DirectNoProxyHttpClient:
     """Small urllib client that explicitly ignores process proxy settings."""
 
     def __init__(self, *, timeout: float = DEFAULT_HTTP_TIMEOUT_SECONDS) -> None:
         self.timeout = float(timeout)
-        self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        self._cookie_jar = http.cookiejar.CookieJar()
+        self._opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),
+            urllib.request.HTTPCookieProcessor(self._cookie_jar),
+        )
 
-    def request(self, method: str, url: str, headers: dict[str, str] | None = None) -> Any:
+    def request(
+        self,
+        method: str,
+        url: str,
+        headers: dict[str, str] | None = None,
+        json_body: Mapping[str, Any] | None = None,
+    ) -> Any:
+        request_headers = {"User-Agent": "wolfystock-uat-runtime-harness/1", **(headers or {})}
+        data = None
+        if json_body is not None:
+            data = json.dumps(dict(json_body), ensure_ascii=False).encode("utf-8")
+            request_headers["Content-Type"] = "application/json"
         request = urllib.request.Request(
             url,
             method=method,
-            headers={"User-Agent": "wolfystock-uat-runtime-harness/1", **(headers or {})},
+            headers=request_headers,
+            data=data,
         )
         try:
             with self._opener.open(request, timeout=self.timeout) as response:
-                return _HttpResponse(int(response.status), response.read())
+                response_headers = getattr(response, "headers", {})
+                return _HttpResponse(
+                    int(response.status),
+                    response.read(),
+                    headers=dict(response_headers.items()) if hasattr(response_headers, "items") else {},
+                )
         except urllib.error.HTTPError as exc:
-            return _HttpResponse(int(exc.code), exc.read())
+            response_headers = getattr(exc, "headers", None)
+            return _HttpResponse(
+                int(exc.code),
+                exc.read(),
+                headers=dict(response_headers.items()) if hasattr(response_headers, "items") else {},
+            )
+
+    def session_cookie_contract(self, name: str) -> dict[str, Any]:
+        matches = [cookie for cookie in self._cookie_jar if cookie.name == name]
+        cookie = matches[0] if len(matches) == 1 else None
+        rest = getattr(cookie, "_rest", {}) if cookie is not None else {}
+        return {
+            "name": name,
+            "present": cookie is not None,
+            "httpOnly": cookie is not None and "HttpOnly" in rest,
+            "secure": bool(cookie.secure) if cookie is not None else None,
+            "sameSite": rest.get("SameSite") if cookie is not None else None,
+            "path": cookie.path if cookie is not None else None,
+            "transport": "cookie_jar",
+        }
 
 
 class _HttpResponse:
-    def __init__(self, status_code: int, content: bytes) -> None:
+    def __init__(self, status_code: int, content: bytes, *, headers: Mapping[str, str] | None = None) -> None:
         self.status_code = int(status_code)
         self.content = bytes(content)
         self.text = self.content.decode("utf-8", errors="ignore")
+        self.headers = dict(headers or {})
 
     def json(self) -> dict[str, Any]:
         payload = json.loads(self.text)
@@ -149,12 +209,6 @@ def read_backend_info(repo_root: Path) -> Any:
     return _read_backend_info(repo_root)
 
 
-def run_frontend_build(repo_root: Path) -> int:
-    from scripts.uat_fresh_build_verifier import run_frontend_build as _run_frontend_build
-
-    return _run_frontend_build(repo_root)
-
-
 def verify_frontend_static_build(**kwargs: Any) -> Any:
     from scripts.uat_fresh_build_verifier import verify_frontend_static_build as _verify_frontend_static_build
 
@@ -165,6 +219,67 @@ def verify_web_build_artifact(repo_root: Path, artifact_path: Path, expected_sha
     from scripts.web_build_artifact import verify_artifact
 
     return verify_artifact(repo_root, artifact_path, expected_sha=expected_sha)
+
+
+def build_web_build_artifact(repo_root: Path, artifact_path: Path, expected_sha: str | None) -> Any:
+    from scripts.web_build_artifact import build_artifact
+
+    return build_artifact(repo_root, artifact_path, expected_sha=expected_sha)
+
+
+def prepare_canonical_web_artifact(
+    repo_root: Path,
+    *,
+    expected_sha: str | None,
+    requested_path: Path | None,
+) -> tuple[Any, dict[str, Any]]:
+    from scripts.web_build_artifact import ArtifactResult
+
+    canonical = (repo_root / CANONICAL_WEB_ARTIFACT).resolve()
+    requested = requested_path.resolve() if requested_path is not None else canonical
+    if requested != canonical:
+        result = ArtifactResult(False, {}, ["web_artifact_path_not_canonical"])
+        return result, {
+            "action": "artifact_path_rejected",
+            "artifactPath": str(requested),
+            "canonicalPath": str(canonical),
+            "buildInvoked": False,
+            "reasonCodes": list(result.error_codes),
+        }
+    if canonical.is_file():
+        result = verify_web_build_artifact(repo_root, canonical, expected_sha)
+        return result, {
+            "action": "reused_verified_artifact" if result.ok else "artifact_verification_failed",
+            "artifactPath": str(canonical),
+            "canonicalPath": str(canonical),
+            "buildInvoked": False,
+            "reasonCodes": list(result.error_codes),
+        }
+    built = build_web_build_artifact(repo_root, canonical, expected_sha)
+    if not built.ok:
+        return built, {
+            "action": "artifact_build_failed",
+            "artifactPath": str(canonical),
+            "canonicalPath": str(canonical),
+            "buildInvoked": True,
+            "reasonCodes": list(built.error_codes),
+        }
+    verified = verify_web_build_artifact(repo_root, canonical, expected_sha)
+    return verified, {
+        "action": "built_and_verified_artifact" if verified.ok else "artifact_verification_failed",
+        "artifactPath": str(canonical),
+        "canonicalPath": str(canonical),
+        "buildInvoked": True,
+        "reasonCodes": list(verified.error_codes),
+    }
+
+
+def _artifact_environment_fingerprint(result: Any) -> str | None:
+    payload = result.payload if isinstance(getattr(result, "payload", None), Mapping) else {}
+    environment = payload.get("environment") if isinstance(payload.get("environment"), Mapping) else {}
+    managed = environment.get("managed") if isinstance(environment.get("managed"), Mapping) else {}
+    fingerprint = str(managed.get("environmentFingerprint") or "")
+    return fingerprint if re.fullmatch(r"[0-9a-f]{64}", fingerprint) else None
 
 
 def verify_generated_artifact_hygiene(repo_root: Path) -> list[str]:
@@ -185,6 +300,245 @@ def seed_uat_consumer_test_accounts() -> dict[str, Any]:
     )
 
     return _seed_uat_consumer_test_accounts()
+
+
+def seed_authenticated_uat_smoke_accounts() -> tuple[dict[str, Any], UatSmokeAccount, UatSmokeAccount]:
+    from scripts.release_runtime_fixture import (
+        AUTHENTICATED_UAT_ADMIN_CAPABILITIES,
+        AUTHENTICATED_UAT_ADMIN_USERNAME,
+        AUTHENTICATED_UAT_MEMBER_USERNAME,
+        seed_authenticated_uat_accounts,
+    )
+
+    member_password = secrets.token_urlsafe(32)
+    admin_password = secrets.token_urlsafe(32)
+    result = seed_authenticated_uat_accounts(
+        member_password=member_password,
+        admin_password=admin_password,
+    )
+    member = UatSmokeAccount(
+        username=AUTHENTICATED_UAT_MEMBER_USERNAME,
+        password=member_password,
+        role="user",
+        capabilities=(),
+    )
+    admin = UatSmokeAccount(
+        username=AUTHENTICATED_UAT_ADMIN_USERNAME,
+        password=admin_password,
+        role="admin",
+        capabilities=tuple(AUTHENTICATED_UAT_ADMIN_CAPABILITIES),
+    )
+    return result, member, admin
+
+
+def _login_uat_session(client: Any, base_url: str, account: UatSmokeAccount) -> dict[str, Any]:
+    try:
+        response = client.request(
+            "POST",
+            clean_base_url(base_url) + "/api/v1/auth/login",
+            json_body={"username": account.username, "password": account.password},
+        )
+        payload = response.json() if int(response.status_code) == 200 else None
+    except (OSError, TimeoutError, urllib.error.URLError, json.JSONDecodeError, ValueError):
+        response = None
+        payload = None
+    current_user = payload.get("currentUser") if isinstance(payload, Mapping) else None
+    capabilities = current_user.get("adminCapabilities") if isinstance(current_user, Mapping) else None
+    cookie = client.session_cookie_contract("dsa_session")
+    ok = bool(
+        response is not None
+        and int(response.status_code) == 200
+        and isinstance(current_user, Mapping)
+        and current_user.get("username") == account.username
+        and current_user.get("role") == account.role
+        and current_user.get("isAdmin") is (account.role == "admin")
+        and capabilities == list(account.capabilities)
+        and cookie.get("present") is True
+        and cookie.get("httpOnly") is True
+        and cookie.get("transport") == "cookie_jar"
+    )
+    return {
+        "status": "PASS" if ok else "FAIL",
+        "reasonCodes": [] if ok else ["session_establishment_failed"],
+        "httpStatus": int(response.status_code) if response is not None else None,
+        "role": account.role,
+        "capabilities": list(account.capabilities),
+        "cookie": cookie,
+    }
+
+
+def _route_status(client: Any, base_url: str, path: str, *, method: str = "GET") -> tuple[int | None, dict[str, Any] | None]:
+    try:
+        response = client.request(method, clean_base_url(base_url) + path)
+        try:
+            payload = response.json()
+        except (json.JSONDecodeError, ValueError):
+            payload = None
+        return int(response.status_code), payload if isinstance(payload, dict) else None
+    except (OSError, TimeoutError, urllib.error.URLError):
+        return None, None
+
+
+def run_authenticated_uat_smoke(
+    *,
+    base_url: str,
+    member: UatSmokeAccount,
+    admin: UatSmokeAccount,
+    client_factory: Any = DirectNoProxyHttpClient,
+) -> dict[str, Any]:
+    anonymous_client = client_factory()
+    member_client = client_factory()
+    admin_client = client_factory()
+
+    auth_status, auth_payload = _route_status(anonymous_client, base_url, "/api/v1/auth/status")
+    anonymous_member_status, _ = _route_status(anonymous_client, base_url, AUTHENTICATED_MEMBER_ROUTES[0])
+    anonymous_admin_status, _ = _route_status(anonymous_client, base_url, AUTHENTICATED_ADMIN_ALLOWED_ROUTES[0])
+    anonymous_ok = bool(
+        auth_status == 200
+        and isinstance(auth_payload, dict)
+        and auth_payload.get("authEnabled") is True
+        and auth_payload.get("loggedIn") is False
+        and anonymous_member_status == 401
+        and anonymous_admin_status == 401
+    )
+    anonymous_check = {
+        "status": "PASS" if anonymous_ok else "FAIL",
+        "reasonCodes": [] if anonymous_ok else ["anonymous_access_contract_failed"],
+        "authStatusHttpStatus": auth_status,
+        "memberHttpStatus": anonymous_member_status,
+        "adminHttpStatus": anonymous_admin_status,
+    }
+
+    member_session = _login_uat_session(member_client, base_url, member)
+    member_routes = [
+        {"method": "GET", "path": path, "httpStatus": _route_status(member_client, base_url, path)[0]}
+        for path in AUTHENTICATED_MEMBER_ROUTES
+    ]
+    member_status, member_status_payload = _route_status(member_client, base_url, "/api/v1/auth/status")
+    member_ok = bool(
+        member_session["status"] == "PASS"
+        and member_status == 200
+        and isinstance(member_status_payload, dict)
+        and member_status_payload.get("loggedIn") is True
+        and all(200 <= int(route["httpStatus"] or 0) < 300 for route in member_routes)
+    )
+    member_check = {
+        "status": "PASS" if member_ok else "FAIL",
+        "reasonCodes": [] if member_ok else ["member_surface_access_failed"],
+        "authenticatedSessionRoutes": member_routes,
+    }
+
+    admin_session = _login_uat_session(admin_client, base_url, admin)
+    admin_payloads: dict[str, Any] = {}
+    admin_routes: list[dict[str, Any]] = []
+    for path in AUTHENTICATED_ADMIN_ALLOWED_ROUTES:
+        status, payload = _route_status(admin_client, base_url, path)
+        admin_routes.append({"method": "GET", "path": path, "httpStatus": status})
+        if path.endswith("/ops/status") and payload is not None:
+            admin_payloads["opsStatus"] = payload
+        if path.endswith("/ops/surface-readiness") and payload is not None:
+            admin_payloads["surfaceReadiness"] = payload
+    admin_allowed_ok = bool(
+        admin_session["status"] == "PASS"
+        and all(200 <= int(route["httpStatus"] or 0) < 300 for route in admin_routes)
+    )
+    admin_allowed = {
+        "status": "PASS" if admin_allowed_ok else "FAIL",
+        "reasonCodes": [] if admin_allowed_ok else ["admin_allowed_surface_failed"],
+        "checkedRoutes": admin_routes,
+    }
+    denied_status, _ = _route_status(admin_client, base_url, AUTHENTICATED_ADMIN_DENIED_ROUTE)
+    admin_denied = {
+        "status": "PASS" if denied_status == 403 else "FAIL",
+        "reasonCodes": [] if denied_status == 403 else ["admin_denial_contract_failed"],
+        "path": AUTHENTICATED_ADMIN_DENIED_ROUTE,
+        "requiredCapability": "users:read",
+        "httpStatus": denied_status,
+    }
+
+    logout_status, _ = _route_status(member_client, base_url, "/api/v1/auth/logout", method="POST")
+    revoked_status, _ = _route_status(member_client, base_url, AUTHENTICATED_MEMBER_ROUTES[0])
+    revoked_cookie = member_client.session_cookie_contract("dsa_session")
+    revocation_ok = logout_status == 204 and revoked_status == 401 and revoked_cookie.get("present") is False
+    revocation = {
+        "status": "PASS" if revocation_ok else "FAIL",
+        "reasonCodes": [] if revocation_ok else ["session_revocation_failed"],
+        "logoutHttpStatus": logout_status,
+        "httpStatus": revoked_status,
+        "cookie": revoked_cookie,
+    }
+    checks = {
+        "anonymousAccess": anonymous_check,
+        "memberSession": member_session,
+        "memberAccess": member_check,
+        "adminSession": admin_session,
+        "adminAllowed": admin_allowed,
+        "adminDenied": admin_denied,
+        "sessionRevocation": revocation,
+    }
+    status = "PASS" if all(check["status"] == "PASS" for check in checks.values()) else "FAIL"
+    return {
+        "contract": "wolfystock_authenticated_uat_smoke_v1",
+        "status": status,
+        "sessionTransport": "http_only_cookie_jar",
+        "authorizationHeaderInjected": False,
+        "dependencyUserInjected": False,
+        "sessionEstablishment": {
+            "boundary": "POST /api/v1/auth/login",
+            "transport": "HttpOnly CookieJar",
+            "authorizationHeaderInjected": False,
+            "dependencyUserInjected": False,
+        },
+        "capabilityMatrix": {
+            "member": list(member.capabilities),
+            "adminAllowed": list(admin.capabilities),
+            "adminDenied": ["users:read"],
+        },
+        "checks": checks,
+        "adminPayloads": admin_payloads,
+    }
+
+
+def qualify_smoke_report_with_authenticated_uat(
+    smoke_report: dict[str, Any],
+    authenticated_uat: Mapping[str, Any],
+) -> dict[str, Any]:
+    checks = dict(smoke_report.get("checks") or {})
+    auth_checks = authenticated_uat.get("checks") if isinstance(authenticated_uat.get("checks"), Mapping) else {}
+    member_access = auth_checks.get("memberAccess") if isinstance(auth_checks.get("memberAccess"), Mapping) else {}
+    checks["authenticatedRoutes"] = {
+        **dict(member_access),
+        "expectationMode": "authenticated_cookie_session",
+        "runtimeAuthMode": "auth_enabled",
+        "verificationSource": "repository_auth_login_cookie",
+    }
+    for name in ("adminOpsStatus", "surfaceReadiness"):
+        check = checks.get(name)
+        if isinstance(check, dict) and check.get("status") == "PASS":
+            check = dict(check)
+            check["source"] = "authenticated_cookie_session"
+            check["httpStatus"] = 200
+            checks[name] = check
+    failed_auth_checks = [
+        name
+        for name, check in auth_checks.items()
+        if not isinstance(check, Mapping) or check.get("status") != "PASS"
+    ]
+    checks["authenticatedUat"] = {
+        "status": str(authenticated_uat.get("status") or "FAIL"),
+        "reasonCodes": [f"{name}_not_pass" for name in failed_auth_checks],
+        "contract": authenticated_uat.get("contract"),
+    }
+    statuses = [str(check.get("status") or "FAIL") for check in checks.values() if isinstance(check, Mapping)]
+    summary = "PASS" if statuses and all(status == "PASS" for status in statuses) else (
+        "FAIL" if any(status == "FAIL" for status in statuses) else "PARTIAL"
+    )
+    return {
+        **smoke_report,
+        "summaryStatus": summary,
+        "exitCode": EXIT_OK if summary == "PASS" else EXIT_FAILED,
+        "checks": checks,
+    }
 
 
 def read_runtime_json(client: Any, base_url: str, path: str) -> dict[str, Any] | None:
@@ -296,62 +650,6 @@ def validate_source(repo_root: Path, expected_sha: str | None) -> dict[str, Any]
         "expectedGitSha": expected_sha,
         "errorCodes": errors,
     }
-
-
-def ensure_frontend_dependencies(repo_root: Path) -> dict[str, Any]:
-    web_dir = Path(repo_root) / "apps" / "dsa-web"
-    lockfile = web_dir / "package-lock.json"
-    missing_bins = [
-        name
-        for name in FRONTEND_REQUIRED_BINARIES
-        if not (web_dir / "node_modules" / ".bin" / name).is_file()
-    ]
-    npm_path = shutil.which("npm")
-    install_command = list(FRONTEND_INSTALL_COMMAND)
-    result: dict[str, Any] = {
-        "required": bool(missing_bins),
-        "action": "pending" if missing_bins else "skipped",
-        "skipReason": None if missing_bins else "frontend_toolchain_available",
-        "installCommand": install_command,
-        "exitStatus": None,
-        "missingBinaries": missing_bins,
-        "lockfile": {
-            "path": "apps/dsa-web/package-lock.json",
-            "sha256": _sha256_file(lockfile),
-            "exists": lockfile.is_file(),
-        },
-        "reasonCodes": [],
-    }
-    if not missing_bins:
-        return result
-    if not lockfile.is_file():
-        result.update(
-            {
-                "action": "failed",
-                "exitStatus": None,
-                "reasonCodes": ["frontend_package_lock_missing"],
-            }
-        )
-        return result
-    if not npm_path:
-        result.update(
-            {
-                "action": "failed",
-                "exitStatus": None,
-                "reasonCodes": ["npm_unavailable"],
-            }
-        )
-        return result
-
-    completed = subprocess.run([npm_path, *FRONTEND_INSTALL_COMMAND[1:]], cwd=repo_root, check=False)
-    result["exitStatus"] = int(completed.returncode)
-    if completed.returncode == 0:
-        result["action"] = "installed"
-        result["reasonCodes"] = []
-    else:
-        result["action"] = "failed"
-        result["reasonCodes"] = ["frontend_dependency_install_failed"]
-    return result
 
 
 def find_port_owner(host: str, port: int) -> PortOwner | None:
@@ -1410,7 +1708,6 @@ def run_harness(
     host: str,
     port: int,
     evidence_dir: Path,
-    skip_build: bool = False,
     web_artifact: Path | None = None,
     prepare_uat_accounts: bool = False,
     stop_runtime_after: bool = False,
@@ -1457,66 +1754,23 @@ def run_harness(
         evidence["run"]["evidencePath"] = evidence["evidencePath"]
         return EXIT_FAILED, evidence
 
-    artifact_result = None
-    if web_artifact is not None:
-        artifact_result = verify_web_build_artifact(repo_root, web_artifact, expected_sha)
-        dependency_bootstrap = {
-            "action": "verified_prebuilt_artifact",
-            "required": False,
-            "skipReason": "prebuilt_artifact_contract",
-            "installCommand": None,
-            "exitStatus": None,
-            "artifactPath": str(web_artifact),
-            "reasonCodes": list(artifact_result.error_codes),
-        }
-        if not artifact_result.ok:
-            evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
-            evidence["run"] = build_run_identity(run_context=run_context, repo_root=repo_root, source=source, pid=None, cwd=str(repo_root), port=port)
-            evidence["runtimeLog"] = build_runtime_log(run_context)
-            evidence["frontendDependencyBootstrap"] = dependency_bootstrap
-            evidence["webArtifact"] = _verification_dict(artifact_result)
-            evidence["failure"] = "prebuilt_web_artifact_failed"
-            evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
-            evidence["run"]["evidencePath"] = evidence["evidencePath"]
-            return EXIT_FAILED, evidence
-    else:
-        dependency_bootstrap = ensure_frontend_dependencies(repo_root)
-    if dependency_bootstrap.get("action") == "failed":
+    artifact_result, artifact_preparation = prepare_canonical_web_artifact(
+        repo_root,
+        expected_sha=expected_sha,
+        requested_path=web_artifact,
+    )
+    artifact_environment_fingerprint = _artifact_environment_fingerprint(artifact_result)
+    if not artifact_result.ok:
         evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
-        evidence["run"] = build_run_identity(
-            run_context=run_context,
-            repo_root=repo_root,
-            source=source,
-            pid=None,
-            cwd=str(repo_root),
-            port=port,
-        )
+        evidence["environmentFingerprint"] = artifact_environment_fingerprint
+        evidence["run"] = build_run_identity(run_context=run_context, repo_root=repo_root, source=source, pid=None, cwd=str(repo_root), port=port)
         evidence["runtimeLog"] = build_runtime_log(run_context)
-        evidence["frontendDependencyBootstrap"] = dependency_bootstrap
-        evidence["failure"] = "frontend_dependency_bootstrap_failed"
+        evidence["webArtifactPreparation"] = artifact_preparation
+        evidence["webArtifact"] = _verification_dict(artifact_result)
+        evidence["failure"] = "web_artifact_qualification_failed"
         evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
         evidence["run"]["evidencePath"] = evidence["evidencePath"]
         return EXIT_FAILED, evidence
-
-    if not skip_build and web_artifact is None:
-        build_exit = run_frontend_build(repo_root)
-        if build_exit != 0:
-            evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
-            evidence["run"] = build_run_identity(
-                run_context=run_context,
-                repo_root=repo_root,
-                source=source,
-                pid=None,
-                cwd=str(repo_root),
-                port=port,
-            )
-            evidence["runtimeLog"] = build_runtime_log(run_context)
-            evidence["frontendDependencyBootstrap"] = dependency_bootstrap
-            evidence["failure"] = "frontend_build_failed"
-            evidence["buildExitCode"] = build_exit
-            evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
-            evidence["run"]["evidencePath"] = evidence["evidencePath"]
-            return EXIT_FAILED, evidence
 
     local_build = verify_frontend_static_build(
         static_root=static_root,
@@ -1526,6 +1780,7 @@ def run_harness(
     )
     if not local_build.ok:
         evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
+        evidence["environmentFingerprint"] = artifact_environment_fingerprint
         evidence["run"] = build_run_identity(
             run_context=run_context,
             repo_root=repo_root,
@@ -1535,9 +1790,39 @@ def run_harness(
             port=port,
         )
         evidence["runtimeLog"] = build_runtime_log(run_context)
-        evidence["frontendDependencyBootstrap"] = dependency_bootstrap
+        evidence["webArtifactPreparation"] = artifact_preparation
+        evidence["webArtifact"] = _verification_dict(artifact_result)
         evidence["failure"] = "frontend_build_provenance_failed"
         evidence["localBuild"] = _verification_dict(local_build)
+        evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
+        evidence["run"]["evidencePath"] = evidence["evidencePath"]
+        return EXIT_FAILED, evidence
+
+    try:
+        authenticated_fixture, member_account, admin_account = seed_authenticated_uat_smoke_accounts()
+    except Exception as exc:
+        authenticated_fixture = {
+            "status": "failed",
+            "reasonCode": f"authenticated_uat_fixture_{type(exc).__name__}",
+        }
+        member_account = None
+        admin_account = None
+    if authenticated_fixture.get("status") != "seeded" or member_account is None or admin_account is None:
+        evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
+        evidence["environmentFingerprint"] = artifact_environment_fingerprint
+        evidence["run"] = build_run_identity(
+            run_context=run_context,
+            repo_root=repo_root,
+            source=source,
+            pid=None,
+            cwd=str(repo_root),
+            port=port,
+        )
+        evidence["runtimeLog"] = build_runtime_log(run_context)
+        evidence["webArtifactPreparation"] = artifact_preparation
+        evidence["webArtifact"] = _verification_dict(artifact_result)
+        evidence["failure"] = "authenticated_uat_fixture_failed"
+        evidence["authenticatedUatFixture"] = authenticated_fixture
         evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
         evidence["run"]["evidencePath"] = evidence["evidencePath"]
         return EXIT_FAILED, evidence
@@ -1547,6 +1832,7 @@ def run_harness(
         uat_accounts = seed_uat_consumer_test_accounts()
         if uat_accounts.get("status") != "seeded":
             evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
+            evidence["environmentFingerprint"] = artifact_environment_fingerprint
             evidence["run"] = build_run_identity(
                 run_context=run_context,
                 repo_root=repo_root,
@@ -1556,7 +1842,8 @@ def run_harness(
                 port=port,
             )
             evidence["runtimeLog"] = build_runtime_log(run_context)
-            evidence["frontendDependencyBootstrap"] = dependency_bootstrap
+            evidence["webArtifactPreparation"] = artifact_preparation
+            evidence["webArtifact"] = _verification_dict(artifact_result)
             evidence["failure"] = "uat_account_preparation_failed"
             evidence["uatAccountPreparation"] = uat_accounts
             evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
@@ -1582,7 +1869,9 @@ def run_harness(
         runtime_command = process_command(process.pid)
         interpreter_identity = build_interpreter_identity(expected_python, runtime_executable)
         identity_errors: list[str] = []
-        observed_environment_fingerprint = str(os.environ.get("WOLFYSTOCK_ENV_FINGERPRINT") or "")
+        observed_environment_fingerprint = str(artifact_environment_fingerprint or "")
+        if not observed_environment_fingerprint:
+            identity_errors.append("artifact_environment_fingerprint_unverified")
         if expected_environment_fingerprint and observed_environment_fingerprint != expected_environment_fingerprint:
             identity_errors.append("environment_fingerprint_mismatch")
         if runtime_cwd and Path(runtime_cwd).resolve() != repo_root:
@@ -1604,15 +1893,42 @@ def run_harness(
         if not direct_http["ok"]:
             identity_errors.extend(direct_http.get("reasonCodes") or ["direct_http_failed"])
 
+        if readiness["ok"]:
+            authenticated_uat = run_authenticated_uat_smoke(
+                base_url=base_url,
+                member=member_account,
+                admin=admin_account,
+            )
+        else:
+            authenticated_uat = {
+                "status": "FAIL",
+                "reasonCodes": ["runtime_readiness_unavailable"],
+                "sessionEstablishment": {
+                    "boundary": "POST /api/v1/auth/login",
+                    "transport": "HttpOnly cookie jar",
+                    "authorizationHeaderInjected": False,
+                    "dependencyUserInjected": False,
+                },
+                "checks": {},
+                "adminPayloads": {},
+            }
+        if authenticated_uat.get("status") != "PASS":
+            identity_errors.append("authenticated_uat_not_pass")
+        admin_payloads = (
+            authenticated_uat.get("adminPayloads")
+            if isinstance(authenticated_uat.get("adminPayloads"), Mapping)
+            else {}
+        )
         smoke_report = run_runtime_smoke(
             base_url=base_url,
             client=client,
             git_head=source["gitSha"],
             local_build_result=local_build,
-            admin_status_payload=read_runtime_json(client, base_url, "/api/v1/admin/ops/status"),
-            surface_readiness_payload=read_runtime_json(client, base_url, "/api/v1/admin/ops/surface-readiness"),
+            admin_status_payload=admin_payloads.get("opsStatus"),
+            surface_readiness_payload=admin_payloads.get("surfaceReadiness"),
             auth_headers=None,
         )
+        smoke_report = qualify_smoke_report_with_authenticated_uat(smoke_report, authenticated_uat)
         runtime = {
             "pid": process.pid,
             "cwd": runtime_cwd,
@@ -1655,18 +1971,19 @@ def run_harness(
             {
                 "run": run_identity,
                 "runtimeLog": runtime_log,
-                "frontendDependencyBootstrap": dependency_bootstrap,
+                "environmentFingerprint": artifact_environment_fingerprint,
+                "webArtifactPreparation": artifact_preparation,
                 "runtime": runtime,
                 "readiness": readiness,
                 "proxyIsolation": {
-                    "directClient": "urllib ProxyHandler({})",
+                    "directClient": "urllib ProxyHandler({}) + isolated CookieJar sessions",
                     "removedEnvKeys": list(PROXY_ENV_KEYS),
                     "noProxyMerged": True,
                 },
                 "directHttpHealth": readiness,
                 "directHttpHtml": direct_http,
                 "frontend": asset_identity,
-                "webArtifact": _verification_dict(artifact_result) if artifact_result else None,
+                "webArtifact": _verification_dict(artifact_result),
                 "providerIsolation": expected_provider_isolation(),
                 "cryptoRealtimeIsolation": {"env": "CRYPTO_REALTIME_ENABLED=false", "productionDefaultChanged": False},
                 "uatAccountPreparation": uat_accounts
@@ -1675,6 +1992,8 @@ def run_harness(
                     "writeScope": "none",
                     "optInFlag": "--prepare-uat-accounts",
                 },
+                "authenticatedUatFixture": authenticated_fixture,
+                "authenticatedUat": authenticated_uat,
                 "smokeReport": smoke_report,
                 "contaminationAwareness": contamination_awareness(owner, direct_http=direct_http),
                 "workbuddyHandoff": build_workbuddy_handoff(
@@ -1735,8 +2054,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--host", default=DEFAULT_HOST, help="Local bind host.")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="Local bind port.")
     parser.add_argument("--evidence-dir", type=Path, default=DEFAULT_EVIDENCE_DIR, help="Evidence output directory.")
-    parser.add_argument("--skip-build", action="store_true", help="Use only for diagnostics; default rebuilds frontend.")
-    parser.add_argument("--web-artifact", type=Path, default=None, help="Verified immutable Web artifact; skips dependency bootstrap and frontend rebuild.")
+    parser.add_argument(
+        "--web-artifact",
+        type=Path,
+        default=None,
+        help="Canonical repository-owned Web artifact path; defaults to static/.wolfystock-web-build-artifact.json.",
+    )
     parser.add_argument(
         "--prepare-uat-accounts",
         action="store_true",
@@ -1829,7 +2152,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         host=args.host,
         port=args.port,
         evidence_dir=evidence_dir,
-        skip_build=bool(args.skip_build),
         web_artifact=args.web_artifact,
         prepare_uat_accounts=bool(args.prepare_uat_accounts),
         stop_runtime_after=bool(args.stop_runtime_after),
@@ -1851,7 +2173,7 @@ def _base_evidence(repo_root: Path, base_url: str, source: Mapping[str, Any], *,
         "contract": "wolfystock_uat_runtime_harness_v1",
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "status": status,
-        "environmentFingerprint": str(os.environ.get("WOLFYSTOCK_ENV_FINGERPRINT") or "") or None,
+        "environmentFingerprint": None,
         "worktreePath": str(repo_root),
         "baseUrl": base_url,
         "source": dict(source),

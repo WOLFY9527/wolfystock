@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
 from scripts import web_build_artifact as artifact
+from scripts.uat_fresh_build_verifier import VerificationResult
 
 
 def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
@@ -32,7 +34,7 @@ def _manifest(repo: Path, artifact_path: Path) -> dict[str, object]:
         "dependencyIntegrity": integrity,
         "toolchain": {"node": "v1", "npm": "1"},
         "configuration": {"sha256": artifact._config_hashes(web)[0]},
-        "environment": {"NODE_ENV": "env"},
+        "environment": artifact._environment_contract(repo)[0],
         "commands": [],
         "index": artifact._index_inventory(repo / "static" / "index.html", web),
         "assets": artifact._assets(repo / "static"),
@@ -46,7 +48,25 @@ def _patch_current(monkeypatch) -> None:
     monkeypatch.setattr(artifact, "_candidate", lambda _repo, expected_sha=None: ({"commit": "candidate", "tree": "tree", "dirty": False}, [] if expected_sha in (None, "candidate") else ["candidate_sha_mismatch"]))
     monkeypatch.setattr(artifact, "_npm_integrity", lambda _repo: ({"command": "npm --prefix apps/dsa-web ls --all --json", "sha256": "deps", "valid": True}, []))
     monkeypatch.setattr(artifact, "_version", lambda _repo, *command: "v1" if command[0] == "node" else "1")
-    monkeypatch.setattr(artifact, "_environment_contract", lambda: {"NODE_ENV": "env"})
+    monkeypatch.setattr(
+        artifact,
+        "_environment_contract",
+        lambda _repo: (
+            {
+                "managed": {
+                    "schemaVersion": "wolfystock_environment_evidence_v1",
+                    "environmentPolicyVersion": "wolfystock_test_environment_policy_v1",
+                    "environmentFingerprint": "e" * 64,
+                    "componentFingerprints": {
+                        "python": {"input": "p" * 64, "installed": "q" * 64},
+                        "web": {"input": "w" * 64, "installed": "x" * 64},
+                    },
+                },
+                "buildVariables": {"NODE_ENV": "env"},
+            },
+            [],
+        ),
+    )
 
 
 def test_verify_artifact_accepts_matching_candidate(monkeypatch, tmp_path: Path) -> None:
@@ -93,6 +113,8 @@ def test_release_typecheck_uses_non_incremental_configs_without_snapshot_writes(
             "--",
             "tsc",
             "--noEmit",
+            "--incremental",
+            "false",
             "-p",
             "apps/dsa-web/tsconfig.app.json",
         ],
@@ -104,12 +126,85 @@ def test_release_typecheck_uses_non_incremental_configs_without_snapshot_writes(
             "--",
             "tsc",
             "--noEmit",
+            "--incremental",
+            "false",
             "-p",
             "apps/dsa-web/tsconfig.node.json",
         ],
     ]
     assert all("node_modules/.tmp" not in " ".join(command) for command in commands)
     assert str(repo) not in json.dumps(result.payload)
+
+
+def test_build_artifact_uses_temporary_output_and_binds_managed_environment(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo, artifact_path = _write_fixture(tmp_path)
+    shutil.rmtree(repo / "static")
+    _patch_current(monkeypatch)
+    commands: list[list[str]] = []
+
+    def run(_repo: Path, *args: str, capture: bool = True) -> subprocess.CompletedProcess[str]:
+        command = list(args)
+        commands.append(command)
+        if "build:bundle" in command:
+            output_dir = Path(command[command.index("--outDir") + 1])
+            (output_dir / "assets").mkdir(parents=True)
+            (output_dir / "index.html").write_text(
+                '<script type="module" src="/assets/index.js"></script>',
+                encoding="utf-8",
+            )
+            (output_dir / "assets" / "index.js").write_text("console.log('ok')\n", encoding="utf-8")
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(artifact, "_run", run)
+    monkeypatch.setattr(
+        "scripts.uat_fresh_build_verifier.write_frontend_build_identity",
+        lambda **_kwargs: VerificationResult(ok=True, payload={}),
+    )
+    monkeypatch.setattr("scripts.uat_fresh_build_verifier.read_backend_info", lambda _repo: object())
+
+    result = artifact.build_artifact(repo, artifact_path, expected_sha="candidate")
+
+    assert result.ok is True
+    assert artifact_path.is_file()
+    assert result.payload["candidate"] == {"commit": "candidate", "tree": "tree", "dirty": False}
+    assert result.payload["environment"]["managed"]["environmentFingerprint"] == "e" * 64
+    bundle = next(command for command in commands if "build:bundle" in command)
+    output_dir = Path(bundle[bundle.index("--outDir") + 1])
+    assert output_dir != repo / "static"
+    assert repo / "apps" / "dsa-web" / "node_modules" not in output_dir.parents
+    assert all(command[-1] != "build" for command in commands)
+
+
+def test_build_artifact_reuses_existing_verified_identity_without_rebuild(monkeypatch, tmp_path: Path) -> None:
+    repo, artifact_path = _write_fixture(tmp_path)
+    _patch_current(monkeypatch)
+    expected = _manifest(repo, artifact_path)
+    before = artifact_path.read_bytes()
+    monkeypatch.setattr(artifact, "run_typecheck", lambda *_args: (_ for _ in ()).throw(AssertionError("must not rebuild")))
+
+    result = artifact.build_artifact(repo, artifact_path, expected_sha="candidate")
+
+    assert result.ok is True
+    assert result.payload == expected
+    assert artifact_path.read_bytes() == before
+
+
+def test_build_artifact_rejects_existing_mismatch_without_replacing_identity(monkeypatch, tmp_path: Path) -> None:
+    repo, artifact_path = _write_fixture(tmp_path)
+    _patch_current(monkeypatch)
+    _manifest(repo, artifact_path)
+    (repo / "static" / "assets" / "index.js").write_text("tampered\n", encoding="utf-8")
+    before = artifact_path.read_bytes()
+    monkeypatch.setattr(artifact, "run_typecheck", lambda *_args: (_ for _ in ()).throw(AssertionError("must not rebuild")))
+
+    result = artifact.build_artifact(repo, artifact_path, expected_sha="candidate")
+
+    assert result.ok is False
+    assert {"existing_artifact_verification_failed", "artifact_asset_mismatch"} <= set(result.error_codes)
+    assert artifact_path.read_bytes() == before
 
 
 def test_verify_artifact_rejects_dirty_tree_and_wrong_sha(monkeypatch, tmp_path: Path) -> None:

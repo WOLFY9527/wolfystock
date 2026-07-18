@@ -166,6 +166,56 @@ def _valid_source(expected_sha: str = "45b6965d") -> dict[str, object]:
     }
 
 
+def _patch_canonical_runtime_inputs(monkeypatch) -> None:
+    artifact_result = type(
+        "ArtifactResult",
+        (),
+        {
+            "ok": True,
+            "payload": {
+                "fingerprint": "f" * 64,
+                "environment": {"managed": {"environmentFingerprint": "a" * 64}},
+            },
+            "error_codes": [],
+            "warning_codes": [],
+        },
+    )()
+    monkeypatch.setattr(
+        harness,
+        "prepare_canonical_web_artifact",
+        lambda *_args, **_kwargs: (
+            artifact_result,
+            {
+                "action": "reused_verified_artifact",
+                "artifactPath": "static/.wolfystock-web-build-artifact.json",
+                "buildInvoked": False,
+                "reasonCodes": [],
+            },
+        ),
+    )
+    member = harness.UatSmokeAccount("uat_runtime_member", "member-secret", "user", ())
+    admin = harness.UatSmokeAccount("uat_runtime_admin", "admin-secret", "admin", ("ops:logs:read",))
+    monkeypatch.setattr(
+        harness,
+        "seed_authenticated_uat_smoke_accounts",
+        lambda: (
+            {"status": "seeded", "accountCount": 2, "accounts": []},
+            member,
+            admin,
+        ),
+    )
+    monkeypatch.setattr(
+        harness,
+        "run_authenticated_uat_smoke",
+        lambda **_kwargs: {
+            "contract": "wolfystock_authenticated_uat_smoke_v1",
+            "status": "PASS",
+            "checks": {"memberAccess": {"status": "PASS", "reasonCodes": []}},
+            "adminPayloads": {},
+        },
+    )
+
+
 def _write_uat_evidence(
     evidence_dir: Path,
     *,
@@ -603,71 +653,6 @@ def test_direct_http_client_reads_full_raw_response_bytes() -> None:
     assert read_args == [()]
 
 
-def test_frontend_dependency_bootstrap_runs_npm_ci_when_required(monkeypatch, tmp_path: Path) -> None:
-    web_dir = tmp_path / "apps" / "dsa-web"
-    (web_dir / "node_modules" / ".bin").mkdir(parents=True)
-    (web_dir / "node_modules" / ".bin" / "vite").write_text("#!/bin/sh\n", encoding="utf-8")
-    (web_dir / "package-lock.json").write_text('{"lockfileVersion":3}\n', encoding="utf-8")
-    commands: list[tuple[str, ...]] = []
-
-    monkeypatch.setattr(harness.shutil, "which", lambda name: "/usr/local/bin/npm" if name == "npm" else None)
-
-    def _run(command, cwd, check):
-        commands.append(tuple(command))
-        assert cwd == tmp_path
-        assert check is False
-        return subprocess.CompletedProcess(command, 0)
-
-    monkeypatch.setattr(harness.subprocess, "run", _run)
-
-    result = harness.ensure_frontend_dependencies(tmp_path)
-
-    assert result["action"] == "installed"
-    assert result["required"] is True
-    assert result["installCommand"] == ["npm", "--prefix", "apps/dsa-web", "ci"]
-    assert result["exitStatus"] == 0
-    assert result["lockfile"]["path"] == "apps/dsa-web/package-lock.json"
-    assert result["lockfile"]["sha256"]
-    assert commands == [("/usr/local/bin/npm", "--prefix", "apps/dsa-web", "ci")]
-
-
-def test_frontend_dependency_bootstrap_skips_when_toolchain_usable(monkeypatch, tmp_path: Path) -> None:
-    web_dir = tmp_path / "apps" / "dsa-web"
-    (web_dir / "node_modules" / ".bin").mkdir(parents=True)
-    (web_dir / "node_modules" / ".bin" / "tsc").write_text("#!/bin/sh\n", encoding="utf-8")
-    (web_dir / "node_modules" / ".bin" / "vite").write_text("#!/bin/sh\n", encoding="utf-8")
-    (web_dir / "package-lock.json").write_text('{"lockfileVersion":3}\n', encoding="utf-8")
-    monkeypatch.setattr(harness.shutil, "which", lambda name: "/usr/local/bin/npm" if name == "npm" else None)
-    monkeypatch.setattr(harness.subprocess, "run", lambda *_args, **_kwargs: pytest.fail("npm ci must be skipped"))
-
-    result = harness.ensure_frontend_dependencies(tmp_path)
-
-    assert result["action"] == "skipped"
-    assert result["required"] is False
-    assert result["skipReason"] == "frontend_toolchain_available"
-    assert result["installCommand"] == ["npm", "--prefix", "apps/dsa-web", "ci"]
-    assert result["exitStatus"] is None
-
-
-def test_frontend_dependency_bootstrap_records_install_failure(monkeypatch, tmp_path: Path) -> None:
-    web_dir = tmp_path / "apps" / "dsa-web"
-    web_dir.mkdir(parents=True)
-    (web_dir / "package-lock.json").write_text('{"lockfileVersion":3}\n', encoding="utf-8")
-    monkeypatch.setattr(harness.shutil, "which", lambda name: "/usr/local/bin/npm" if name == "npm" else None)
-    monkeypatch.setattr(
-        harness.subprocess,
-        "run",
-        lambda command, cwd, check: subprocess.CompletedProcess(command, 19),
-    )
-
-    result = harness.ensure_frontend_dependencies(tmp_path)
-
-    assert result["action"] == "failed"
-    assert result["required"] is True
-    assert result["exitStatus"] == 19
-    assert result["reasonCodes"] == ["frontend_dependency_install_failed"]
-
-
 def test_run_harness_rejects_existing_port_owner_without_starting_runtime(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(
         harness,
@@ -698,7 +683,6 @@ def test_run_harness_rejects_existing_port_owner_without_starting_runtime(monkey
         host="127.0.0.1",
         port=8000,
         evidence_dir=tmp_path / "output" / "runtime-verification",
-        skip_build=True,
     )
 
     assert exit_code == 1
@@ -709,6 +693,9 @@ def test_run_harness_rejects_existing_port_owner_without_starting_runtime(monkey
 
 
 def test_run_harness_fails_closed_for_invalid_prebuilt_web_artifact(monkeypatch, tmp_path: Path) -> None:
+    artifact_path = tmp_path / "static" / ".wolfystock-web-build-artifact.json"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text("{}\n", encoding="utf-8")
     monkeypatch.setattr(harness, "validate_source", lambda _repo_root, _expected_sha: _valid_source())
     monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
     monkeypatch.setattr(
@@ -716,8 +703,7 @@ def test_run_harness_fails_closed_for_invalid_prebuilt_web_artifact(monkeypatch,
         "verify_web_build_artifact",
         lambda *_args: type("Result", (), {"ok": False, "payload": {}, "error_codes": ["artifact_asset_mismatch"], "warning_codes": []})(),
     )
-    monkeypatch.setattr(harness, "ensure_frontend_dependencies", lambda *_args: pytest.fail("artifact mode must not bootstrap dependencies"))
-    monkeypatch.setattr(harness, "run_frontend_build", lambda *_args: pytest.fail("artifact mode must not rebuild"))
+    monkeypatch.setattr(harness, "build_web_build_artifact", lambda *_args: pytest.fail("invalid artifact must not rebuild"))
 
     exit_code, evidence = harness.run_harness(
         repo_root=tmp_path,
@@ -725,12 +711,108 @@ def test_run_harness_fails_closed_for_invalid_prebuilt_web_artifact(monkeypatch,
         host="127.0.0.1",
         port=8000,
         evidence_dir=tmp_path / "output" / "runtime-verification",
-        web_artifact=tmp_path / "static" / ".wolfystock-web-build-artifact.json",
+        web_artifact=artifact_path,
     )
 
     assert exit_code == 1
-    assert evidence["failure"] == "prebuilt_web_artifact_failed"
-    assert evidence["frontendDependencyBootstrap"]["action"] == "verified_prebuilt_artifact"
+    assert evidence["failure"] == "web_artifact_qualification_failed"
+    assert evidence["webArtifactPreparation"]["action"] == "artifact_verification_failed"
+
+
+def test_prepare_canonical_web_artifact_reuses_verified_identity_without_build(monkeypatch, tmp_path: Path) -> None:
+    artifact_path = tmp_path / "static" / ".wolfystock-web-build-artifact.json"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text("{}\n", encoding="utf-8")
+    verified = type(
+        "Result",
+        (),
+        {"ok": True, "payload": {"fingerprint": "f" * 64}, "error_codes": [], "warning_codes": []},
+    )()
+    monkeypatch.setattr(harness, "verify_web_build_artifact", lambda *_args: verified)
+    monkeypatch.setattr(
+        harness,
+        "build_web_build_artifact",
+        lambda *_args: pytest.fail("valid artifact must not rebuild"),
+    )
+
+    result, evidence = harness.prepare_canonical_web_artifact(
+        tmp_path,
+        expected_sha="45b6965d",
+        requested_path=None,
+    )
+
+    assert result is verified
+    assert evidence["action"] == "reused_verified_artifact"
+    assert evidence["artifactPath"] == str(artifact_path)
+    assert evidence["buildInvoked"] is False
+
+
+def test_prepare_canonical_web_artifact_builds_missing_identity_then_verifies(monkeypatch, tmp_path: Path) -> None:
+    artifact_path = tmp_path / "static" / ".wolfystock-web-build-artifact.json"
+    built = type("Result", (), {"ok": True, "payload": {}, "error_codes": [], "warning_codes": []})()
+    verified = type(
+        "Result",
+        (),
+        {"ok": True, "payload": {"fingerprint": "f" * 64}, "error_codes": [], "warning_codes": []},
+    )()
+    calls: list[str] = []
+
+    def build(*_args):
+        calls.append("build")
+        artifact_path.parent.mkdir(parents=True)
+        artifact_path.write_text("{}\n", encoding="utf-8")
+        return built
+
+    def verify(*_args):
+        calls.append("verify")
+        return verified
+
+    monkeypatch.setattr(harness, "build_web_build_artifact", build)
+    monkeypatch.setattr(harness, "verify_web_build_artifact", verify)
+
+    result, evidence = harness.prepare_canonical_web_artifact(
+        tmp_path,
+        expected_sha="45b6965d",
+        requested_path=artifact_path,
+    )
+
+    assert result is verified
+    assert calls == ["build", "verify"]
+    assert evidence["action"] == "built_and_verified_artifact"
+    assert evidence["buildInvoked"] is True
+
+
+def test_prepare_canonical_web_artifact_rejects_mismatch_without_build(monkeypatch, tmp_path: Path) -> None:
+    artifact_path = tmp_path / "static" / ".wolfystock-web-build-artifact.json"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text("{}\n", encoding="utf-8")
+    failed = type(
+        "Result",
+        (),
+        {
+            "ok": False,
+            "payload": {},
+            "error_codes": ["artifact_candidate_mismatch"],
+            "warning_codes": [],
+        },
+    )()
+    monkeypatch.setattr(harness, "verify_web_build_artifact", lambda *_args: failed)
+    monkeypatch.setattr(
+        harness,
+        "build_web_build_artifact",
+        lambda *_args: pytest.fail("mismatched artifact must not be replaced"),
+    )
+
+    result, evidence = harness.prepare_canonical_web_artifact(
+        tmp_path,
+        expected_sha="45b6965d",
+        requested_path=artifact_path,
+    )
+
+    assert result is failed
+    assert evidence["action"] == "artifact_verification_failed"
+    assert evidence["buildInvoked"] is False
+    assert evidence["reasonCodes"] == ["artifact_candidate_mismatch"]
 
 
 def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(monkeypatch, tmp_path: Path) -> None:
@@ -740,20 +822,7 @@ def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(mo
     failed_process = _FakeProcess()
     monkeypatch.setattr(harness, "validate_source", lambda _repo_root, _expected_sha: _valid_source())
     monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
-    monkeypatch.setattr(
-        harness,
-        "ensure_frontend_dependencies",
-        lambda _repo_root: {
-            "action": "skipped",
-            "required": False,
-            "skipReason": "frontend_toolchain_available",
-            "installCommand": ["npm", "--prefix", "apps/dsa-web", "ci"],
-            "exitStatus": None,
-            "lockfile": {"path": "apps/dsa-web/package-lock.json", "sha256": "lockhash"},
-            "reasonCodes": [],
-        },
-    )
-    monkeypatch.setattr(harness, "run_frontend_build", lambda _repo_root: 0)
+    _patch_canonical_runtime_inputs(monkeypatch)
     monkeypatch.setattr(harness, "verify_frontend_static_build", lambda **_kwargs: _local_build())
     monkeypatch.setattr(harness, "read_backend_info", lambda _repo_root: object())
     processes = iter((fake_process, failed_process))
@@ -804,7 +873,6 @@ def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(mo
         host="127.0.0.1",
         port=8000,
         evidence_dir=tmp_path / "output" / "runtime-verification",
-        skip_build=True,
         stop_runtime_after=True,
         expected_environment_fingerprint="a" * 64,
     )
@@ -818,7 +886,8 @@ def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(mo
     assert evidence["run"]["evidencePath"] == evidence["evidencePath"]
     assert evidence["run"]["runLogPath"] == evidence["runtimeLog"]["path"]
     assert Path(evidence["runtimeLog"]["path"]).name.startswith(evidence["run"]["runId"])
-    assert evidence["frontendDependencyBootstrap"]["action"] == "skipped"
+    assert evidence["webArtifactPreparation"]["action"] == "reused_verified_artifact"
+    assert evidence["authenticatedUat"]["status"] == "PASS"
     assert evidence["status"] == "PASS"
     assert evidence["environmentFingerprint"] == "a" * 64
     assert evidence["runtime"]["pid"] == 43210
@@ -847,7 +916,6 @@ def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(mo
         host="127.0.0.1",
         port=8001,
         evidence_dir=tmp_path / "output" / "runtime-verification-failed",
-        skip_build=True,
         stop_runtime_after=True,
         expected_environment_fingerprint="a" * 64,
     )
@@ -893,11 +961,7 @@ def test_run_harness_fails_closed_for_wrong_process_cwd(monkeypatch, tmp_path: P
     fake_process = _FakeProcess()
     monkeypatch.setattr(harness, "validate_source", lambda _repo_root, _expected_sha: _valid_source())
     monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
-    monkeypatch.setattr(
-        harness,
-        "ensure_frontend_dependencies",
-        lambda _repo_root: {"action": "skipped", "required": False, "reasonCodes": []},
-    )
+    _patch_canonical_runtime_inputs(monkeypatch)
     monkeypatch.setattr(harness, "verify_frontend_static_build", lambda **_kwargs: _local_build())
     monkeypatch.setattr(harness, "read_backend_info", lambda _repo_root: object())
     monkeypatch.setattr(harness, "start_runtime", lambda *_args, **_kwargs: fake_process)
@@ -918,7 +982,6 @@ def test_run_harness_fails_closed_for_wrong_process_cwd(monkeypatch, tmp_path: P
         host="127.0.0.1",
         port=8000,
         evidence_dir=tmp_path / "output" / "runtime-verification",
-        skip_build=True,
         stop_runtime_after=True,
     )
 
@@ -932,11 +995,7 @@ def test_run_harness_fails_closed_for_mismatched_interpreter(monkeypatch, tmp_pa
     fake_process = _FakeProcess()
     monkeypatch.setattr(harness, "validate_source", lambda _repo_root, _expected_sha: _valid_source())
     monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
-    monkeypatch.setattr(
-        harness,
-        "ensure_frontend_dependencies",
-        lambda _repo_root: {"action": "skipped", "required": False, "reasonCodes": []},
-    )
+    _patch_canonical_runtime_inputs(monkeypatch)
     monkeypatch.setattr(harness, "verify_frontend_static_build", lambda **_kwargs: _local_build())
     monkeypatch.setattr(harness, "read_backend_info", lambda _repo_root: object())
     monkeypatch.setattr(harness, "start_runtime", lambda *_args, **_kwargs: fake_process)
@@ -957,7 +1016,6 @@ def test_run_harness_fails_closed_for_mismatched_interpreter(monkeypatch, tmp_pa
         host="127.0.0.1",
         port=8000,
         evidence_dir=tmp_path / "output" / "runtime-verification",
-        skip_build=True,
         stop_runtime_after=True,
     )
 
@@ -990,23 +1048,32 @@ def test_direct_http_asset_identity_rejects_same_filename_with_different_bytes(t
     assert "served_asset_hash_mismatch" in result["reasonCodes"]
 
 
-def test_run_harness_fails_when_dependency_bootstrap_fails(monkeypatch, tmp_path: Path) -> None:
+def test_run_harness_fails_when_canonical_artifact_build_fails(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(harness, "validate_source", lambda _repo_root, _expected_sha: _valid_source())
     monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
+    failed = type(
+        "ArtifactResult",
+        (),
+        {
+            "ok": False,
+            "payload": {},
+            "error_codes": ["web_build_command_failed"],
+            "warning_codes": [],
+        },
+    )()
     monkeypatch.setattr(
         harness,
-        "ensure_frontend_dependencies",
-        lambda _repo_root: {
-            "action": "failed",
-            "required": True,
-            "skipReason": None,
-            "installCommand": ["npm", "--prefix", "apps/dsa-web", "ci"],
-            "exitStatus": 19,
-            "lockfile": {"path": "apps/dsa-web/package-lock.json", "sha256": "lockhash"},
-            "reasonCodes": ["frontend_dependency_install_failed"],
-        },
+        "prepare_canonical_web_artifact",
+        lambda *_args, **_kwargs: (
+            failed,
+            {
+                "action": "artifact_build_failed",
+                "artifactPath": str(tmp_path / "static" / ".wolfystock-web-build-artifact.json"),
+                "buildInvoked": True,
+                "reasonCodes": ["web_build_command_failed"],
+            },
+        ),
     )
-    monkeypatch.setattr(harness, "run_frontend_build", lambda _repo_root: pytest.fail("build must not run after install failure"))
 
     exit_code, evidence = harness.run_harness(
         repo_root=tmp_path,
@@ -1018,8 +1085,9 @@ def test_run_harness_fails_when_dependency_bootstrap_fails(monkeypatch, tmp_path
 
     assert exit_code == 1
     assert evidence["status"] == "FAIL"
-    assert evidence["failure"] == "frontend_dependency_bootstrap_failed"
-    assert evidence["frontendDependencyBootstrap"]["exitStatus"] == 19
+    assert evidence["failure"] == "web_artifact_qualification_failed"
+    assert evidence["webArtifactPreparation"]["buildInvoked"] is True
+    assert evidence["webArtifactPreparation"]["reasonCodes"] == ["web_build_command_failed"]
 
 
 def test_preflight_pass_reports_machine_readable_current_run_identity(monkeypatch, tmp_path: Path) -> None:
