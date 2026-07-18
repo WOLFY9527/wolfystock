@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "manifestVersion": "1.0.0",
   "shadowOnly": true,
-  "capturedOn": "2026-07-16",
+  "capturedOn": "2026-07-18",
   "authoritativeGates": [
     "bash scripts/ci_gate.sh",
     "cd apps/dsa-web && npm test",
@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7994,
-      "sha256": "b7798a6a1a4bacb1d5cbdb08d2727d74f9e398a13ec07208c14f13f6dcfa1500"
+      "count": 8036,
+      "sha256": "95e0d20f6e77c6ed247c70f2f19fe0d794d39360a52837183febbf74a53611b8"
     },
     "tests": [
       {
@@ -6819,6 +6819,11 @@
         "baseline": true
       },
       {
+        "id": "tests/scripts/test_uat_runtime_harness.py::test_find_system_command_uses_reviewed_absolute_fallback",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_uat_runtime_harness.py::test_frontend_dependency_bootstrap_records_install_failure",
         "domain": "runtime_operator_tooling",
         "baseline": true
@@ -6912,6 +6917,11 @@
         "id": "tests/scripts/test_uat_runtime_harness.py::test_preflight_windows_rejects_observable_cwd_mismatch",
         "domain": "runtime_operator_tooling",
         "baseline": true
+      },
+      {
+        "id": "tests/scripts/test_uat_runtime_harness.py::test_release_evidence_sanitizer_normalizes_reviewed_roots_and_rejects_unknown_private_path",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
       },
       {
         "id": "tests/scripts/test_uat_runtime_harness.py::test_run_harness_fails_closed_for_invalid_prebuilt_web_artifact",
@@ -7287,6 +7297,11 @@
         "id": "tests/scripts/test_web_build_artifact.py::test_manifest_regeneration_is_deterministic",
         "domain": "runtime_operator_tooling",
         "baseline": true
+      },
+      {
+        "id": "tests/scripts/test_web_build_artifact.py::test_release_typecheck_uses_non_incremental_configs_without_snapshot_writes",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
       },
       {
         "id": "tests/scripts/test_web_build_artifact.py::test_verify_artifact_accepts_matching_candidate",
@@ -7810,6 +7825,11 @@
       },
       {
         "id": "tests/scripts/test_wolfy_runtime.py::test_multiple_runs_share_no_mutable_paths",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_runtime.py::test_release_projection_preserves_only_non_secret_identity_controls",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -32494,6 +32514,56 @@
         "baseline": true
       },
       {
+        "id": "tests/test_qualified_release_integration.py::test_candidate_binds_environment_lock_web_workflow_and_multiarch_identities",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_qualified_release_integration.py::test_candidate_rejects_invalid_environment_or_lock_identity[environment_fingerprint]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_qualified_release_integration.py::test_candidate_rejects_invalid_environment_or_lock_identity[lock_mismatch]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_qualified_release_integration.py::test_candidate_rejects_invalid_environment_or_lock_identity[network_used]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_qualified_release_integration.py::test_candidate_rejects_invalid_environment_or_lock_identity[top_status]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_qualified_release_integration.py::test_oci_inspection_records_exact_index_and_platform_digests",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_qualified_release_integration.py::test_playwright_browser_install_survives_managed_run_cleanup",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_qualified_release_integration.py::test_release_runtime_evidence_requires_source_cwd_environment_and_asset_identity",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_qualified_release_integration.py::test_release_runtime_fixture_assigns_explicit_super_admin_without_secret_output",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_qualified_release_integration.py::test_release_workflows_use_managed_environment_and_digest_only_promotion",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/test_quant_duckdb_service.py::test_benchmark_returns_elapsed_and_counts",
         "domain": "database_storage_migrations",
         "baseline": true
@@ -33194,6 +33264,131 @@
         "baseline": true
       },
       {
+        "id": "tests/test_release_gate_summary.py::test_each_required_gate_failure_blocks_qualification[artifact-provenance]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_each_required_gate_failure_blocks_qualification[auth-rbac]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_each_required_gate_failure_blocks_qualification[authoritative-topology]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_each_required_gate_failure_blocks_qualification[backend-canonical]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_each_required_gate_failure_blocks_qualification[frontend-lint]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_each_required_gate_failure_blocks_qualification[frontend-typecheck]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_each_required_gate_failure_blocks_qualification[full-vitest]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_each_required_gate_failure_blocks_qualification[operator-evidence]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_each_required_gate_failure_blocks_qualification[playwright-real-runtime]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_each_required_gate_failure_blocks_qualification[production-build]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_each_required_gate_failure_blocks_qualification[runtime-uat]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_each_required_gate_failure_blocks_qualification[secret-private-path-scan]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_gate_identity_mismatch_blocks_qualification[candidateDigest]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_gate_identity_mismatch_blocks_qualification[candidateSha]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_gate_identity_mismatch_blocks_qualification[environmentFingerprint]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_gate_identity_mismatch_blocks_qualification[imageIndexDigest]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_gate_identity_mismatch_blocks_qualification[imagePlatformDigests]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_gate_identity_mismatch_blocks_qualification[pythonLockContentHash]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_non_pass_gate_states_never_qualify[CANCELLED]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_non_pass_gate_states_never_qualify[FAIL]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_non_pass_gate_states_never_qualify[MISSING]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_non_pass_gate_states_never_qualify[NEUTRAL]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_non_pass_gate_states_never_qualify[NOT-RUN]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_non_pass_gate_states_never_qualify[SKIPPED]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_gate_summary.py::test_non_pass_gate_states_never_qualify[UNKNOWN]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/test_release_gate_summary.py::test_release_gate_summary_allows_dirty_repo_with_explicit_flag",
         "domain": "runtime_operator_tooling",
         "baseline": true
@@ -33327,6 +33522,21 @@
         "id": "tests/test_release_secret_scan.py::test_release_secret_scan_local_only_skips_committed_branch_changes",
         "domain": "runtime_operator_tooling",
         "baseline": true
+      },
+      {
+        "id": "tests/test_release_secret_scan.py::test_release_secret_scan_rejects_credentials_inside_candidate_archive",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_secret_scan.py::test_release_secret_scan_rejects_private_paths_in_generated_evidence",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_release_secret_scan.py::test_release_secret_scan_treats_only_topology_test_ids_as_reviewed_fixture_data",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
       },
       {
         "id": "tests/test_report_integrity.py::TestApplyPlaceholderFill::test_fills_missing_analysis_summary",
@@ -41179,16 +41389,18 @@
     ],
     "projects": [
       "chromium",
-      "chromium-mobile"
+      "chromium-mobile",
+      "release-real-runtime"
     ],
     "inventory": {
-      "specCount": 61,
-      "specSha256": "99377562b86278a828c34ad78fb53a0db8e3199a9317c4458fbe7d3224866096",
-      "projectCaseCount": 700,
-      "projectCaseSha256": "955d465e4a34bba50d7ed2cc79dc8751c614acd7b9fe99d0edc2984570378773",
+      "specCount": 62,
+      "specSha256": "4e35f541c006c0d468878080cf8d108c37df7f72af5d8ae1870ff6b268b78a25",
+      "projectCaseCount": 704,
+      "projectCaseSha256": "d2c7ebc59154ffd0b3057455f18d30852b5a34faccb76246e451f44e68b6bcb5",
       "projectCaseCounts": {
         "chromium": 350,
-        "chromium-mobile": 350
+        "chromium-mobile": 350,
+        "release-real-runtime": 4
       }
     },
     "specs": [
@@ -41359,6 +41571,11 @@
       },
       {
         "path": "apps/dsa-web/e2e/readiness-browser-acceptance.smoke.spec.ts",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "path": "apps/dsa-web/e2e/release-real-runtime.release.spec.ts",
         "owner": "uat",
         "mandatory": false
       },
@@ -46397,6 +46614,34 @@
         "spec": "apps/dsa-web/e2e/watchlist-user-alerts.smoke.spec.ts",
         "project": "chromium",
         "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "release-real-runtime::apps/dsa-web/e2e/release-real-runtime.release.spec.ts::release-real-runtime.release.spec.ts › qualified release real runtime › login logout and revoked session",
+        "spec": "apps/dsa-web/e2e/release-real-runtime.release.spec.ts",
+        "project": "release-real-runtime",
+        "owner": "protected_critical",
+        "mandatory": true
+      },
+      {
+        "id": "release-real-runtime::apps/dsa-web/e2e/release-real-runtime.release.spec.ts::release-real-runtime.release.spec.ts › qualified release real runtime › member admin boundary and portfolio read",
+        "spec": "apps/dsa-web/e2e/release-real-runtime.release.spec.ts",
+        "project": "release-real-runtime",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "release-real-runtime::apps/dsa-web/e2e/release-real-runtime.release.spec.ts::release-real-runtime.release.spec.ts › qualified release real runtime › production startup readiness and static assets",
+        "spec": "apps/dsa-web/e2e/release-real-runtime.release.spec.ts",
+        "project": "release-real-runtime",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "release-real-runtime::apps/dsa-web/e2e/release-real-runtime.release.spec.ts::release-real-runtime.release.spec.ts › qualified release real runtime › rollback error preserves portfolio state and exposes unavailable data",
+        "spec": "apps/dsa-web/e2e/release-real-runtime.release.spec.ts",
+        "project": "release-real-runtime",
+        "owner": "uat",
         "mandatory": false
       }
     ],

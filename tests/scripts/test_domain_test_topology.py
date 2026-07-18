@@ -25,8 +25,8 @@ def test_manifest_schema_preserves_baseline_and_complete_surface_counts() -> Non
     assert result["baselineBackendTests"] == 7_609
     assert result["backendTests"] >= result["baselineBackendTests"]
     assert result["vitestFiles"] == 176
-    assert result["playwrightSpecs"] == 61
-    assert result["playwrightProjectCases"] == 700
+    assert result["playwrightSpecs"] == 62
+    assert result["playwrightProjectCases"] == 704
     assert manifest["backend"]["baselineCapture"] == {
         "baseSha": topology.BASE_SHA,
         "count": 7_609,
@@ -136,9 +136,13 @@ def test_playwright_ownership_retains_projects_and_mandatory_auth_cases() -> Non
     specs = playwright["specs"]
     cases = playwright["projectCases"]
 
-    assert len(specs) == 61
-    assert len(cases) == 700
-    assert playwright["inventory"]["projectCaseCounts"] == {"chromium": 350, "chromium-mobile": 350}
+    assert len(specs) == 62
+    assert len(cases) == 704
+    assert playwright["inventory"]["projectCaseCounts"] == {
+        "chromium": 350,
+        "chromium-mobile": 350,
+        "release-real-runtime": 4,
+    }
     assert {spec["owner"] for spec in specs} == set(topology.PLAYWRIGHT_CLASSES)
     protected_auth_specs = [spec for spec in specs if any(word in spec["path"] for word in ("auth", "session", "rbac"))]
     assert protected_auth_specs
@@ -148,6 +152,13 @@ def test_playwright_ownership_retains_projects_and_mandatory_auth_cases() -> Non
     protected_behavior_cases = [case for case in cases if topology.playwright_case_requires_protection(case["id"])]
     assert protected_behavior_cases
     assert all(case["owner"] == "protected_critical" and case["mandatory"] for case in protected_behavior_cases)
+    release_path = "apps/dsa-web/e2e/release-real-runtime.release.spec.ts"
+    release_spec = next(spec for spec in specs if spec["path"] == release_path)
+    release_cases = [case for case in cases if case["spec"] == release_path]
+    assert release_spec == {"path": release_path, "owner": "uat", "mandatory": False}
+    assert len(release_cases) == 4
+    assert sum(case["owner"] == "protected_critical" and case["mandatory"] for case in release_cases) == 1
+    assert sum(case["owner"] == "uat" and not case["mandatory"] for case in release_cases) == 3
 
 
 def test_first_attempts_and_retries_are_never_coalesced() -> None:
