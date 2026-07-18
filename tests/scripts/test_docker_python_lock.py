@@ -47,22 +47,22 @@ def test_dockerfile_installs_dependencies_through_reviewed_lock_helper() -> None
         (
             "amd64",
             "linux-x86_64-cpython311-runtime",
-            "231e24f155659cde4c0474d1859f78ed8f76a63e311a0e02f5f60d59c7202d86",
+            "3cbe8e7f8865cbe0cbf138baeb17968111335fe08376484fc845e7d030fdadf7",
         ),
         (
             "x86_64",
             "linux-x86_64-cpython311-runtime",
-            "231e24f155659cde4c0474d1859f78ed8f76a63e311a0e02f5f60d59c7202d86",
+            "3cbe8e7f8865cbe0cbf138baeb17968111335fe08376484fc845e7d030fdadf7",
         ),
         (
             "arm64",
             "linux-aarch64-cpython311-runtime",
-            "d79ef9a552f1298b9a241952c1a26298543fe4d836238aecbf6105bf75dd94ef",
+            "7f77a9b32e210309cb3f26710f295d04cb9a21a72228d7e96a44ef1458885cff",
         ),
         (
             "aarch64",
             "linux-aarch64-cpython311-runtime",
-            "d79ef9a552f1298b9a241952c1a26298543fe4d836238aecbf6105bf75dd94ef",
+            "7f77a9b32e210309cb3f26710f295d04cb9a21a72228d7e96a44ef1458885cff",
         ),
     ],
 )
@@ -118,7 +118,7 @@ def test_docker_selection_rejects_linux_cpython312_and_development_projection() 
 
 @pytest.mark.parametrize(
     ("target_arch", "distribution_count", "artifact_count", "source_build_count"),
-    [("amd64", 140, 155, 7), ("arm64", 140, 155, 8)],
+    [("amd64", 141, 156, 7), ("arm64", 141, 156, 8)],
 )
 def test_docker_runtime_projection_has_reviewed_distribution_and_artifact_identity(
     target_arch: str,
@@ -138,6 +138,9 @@ def test_docker_runtime_projection_has_reviewed_distribution_and_artifact_identi
     assert contract.hash_count == artifact_count
     assert contract.source_build_count == source_build_count
     assert contract.distributions["litellm"] == frozenset({"1.91.3"})
+    assert contract.distributions["pyarrow"] == frozenset({"25.0.0"})
+    assert all(artifact.artifact_type == "wheel" for artifact in contract.artifacts["pyarrow"])
+    assert contract.artifact_hashes["pyarrow"]
     assert set(contract.artifacts) == set(contract.distributions)
     assert all(contract.artifacts[name] for name in contract.distributions)
     assert all(contract.artifact_hashes[name] for name in contract.distributions)

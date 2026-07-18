@@ -366,6 +366,26 @@ def test_every_direct_requirement_maps_to_exact_hashed_pins(tmp_path: Path) -> N
     assert contract.lock_path.name == "requirements-python311-dev.lock"
 
 
+def test_every_supported_projection_selects_one_reviewed_parquet_wheel() -> None:
+    manifest = json.loads((ROOT / LOCK_MANIFEST).read_text(encoding="utf-8"))
+    parquet_engines = {"pyarrow", "fastparquet"}
+
+    for projection_name, projection in manifest["targetProjections"].items():
+        records = {record["name"]: record for record in projection["records"]}
+        assert set(records) & parquet_engines == {"pyarrow"}, projection_name
+
+        engine = records["pyarrow"]
+        assert engine["version"] == "25.0.0", projection_name
+        assert "sourceBuild" not in engine, projection_name
+        assert engine["artifacts"], projection_name
+        assert all(
+            artifact["type"] == "wheel" for artifact in engine["artifacts"]
+        ), projection_name
+        assert all(
+            len(artifact["sha256"]) == 64 for artifact in engine["artifacts"]
+        ), projection_name
+
+
 @pytest.mark.parametrize(
     ("mutation", "reason_code"),
     [

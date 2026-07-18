@@ -1,7 +1,7 @@
 {
   "inputHashes": {
     "requirements-dev.txt": "fe786961e03419c986d96e98b20b5700c2107bd1fe05828e736add99a15b0302",
-    "requirements.txt": "a61fda180daca1924d5f6905241ff7b7680c4f096a1b767b039bb146a1af6b6b"
+    "requirements.txt": "ce0270b288e9def4f4e9b57a446f72fd58b418302aca55b594f9bb612b586e49"
   },
   "policyVersion": "wolfystock_python_lock_policy_v2",
   "profiles": {
@@ -9,20 +9,20 @@
       "input": "requirements-dev.txt",
       "locks": {
         "3.11": {
-          "distributionCount": 151,
-          "hashCount": 2919,
+          "distributionCount": 152,
+          "hashCount": 2962,
           "markerCount": 13,
           "path": "requirements-python311-dev.lock",
-          "recordCount": 152,
-          "sha256": "32914955625e1a9251cb0eb63a035f92cb8165fa48d36516bd9fbb61490dce28"
+          "recordCount": 153,
+          "sha256": "ebd1c782d643dcb2abbc7473d81bf56cdfba9a74158782adc9e1c569a3c75c31"
         },
         "3.12": {
-          "distributionCount": 150,
-          "hashCount": 2845,
+          "distributionCount": 151,
+          "hashCount": 2888,
           "markerCount": 10,
           "path": "requirements-python312-dev.lock",
-          "recordCount": 150,
-          "sha256": "74eb743dbc770bf530351fd70c235f3610446276c771ba5d6dfd747038d560f5"
+          "recordCount": 151,
+          "sha256": "a7a4c6768ba0717afcd55d1011396a12e5883807c7073eaa714f5b145fd1e6b6"
         }
       }
     },
@@ -30,20 +30,20 @@
       "input": "requirements.txt",
       "locks": {
         "3.11": {
-          "distributionCount": 144,
-          "hashCount": 2905,
+          "distributionCount": 145,
+          "hashCount": 2948,
           "markerCount": 13,
           "path": "requirements-python311-runtime.lock",
-          "recordCount": 145,
-          "sha256": "f74ccc5e1a1ab9052875340f5ab2df19163156d1bd16ae22953f3b9aa068b7a2"
+          "recordCount": 146,
+          "sha256": "3f5241f4f4290de087077d59fd84435920107ebc041f5ad70bb7fabe7d22ed9c"
         },
         "3.12": {
-          "distributionCount": 143,
-          "hashCount": 2831,
+          "distributionCount": 144,
+          "hashCount": 2874,
           "markerCount": 10,
           "path": "requirements-python312-runtime.lock",
-          "recordCount": 143,
-          "sha256": "d0288cf2cd08f878ec7fd14f045196c4ad83b291dc000894a3f99b81aa83a709"
+          "recordCount": 144,
+          "sha256": "bc24bfc4ca7b0237151618659f9b051e1dad2fd89c8d3693d8a3c38abac9f105"
         }
       }
     }
@@ -153,7 +153,7 @@
   "targetProjections": {
     "darwin-arm64-cpython311-development": {
       "profile": "development",
-      "projectionHash": "00e4a8e4fe678f527848c22760acab441f410b8ebd5ba3cd2b7520d390bc0b89",
+      "projectionHash": "dc02a88e58b8a84171e69e0dacce4fee41b62ab97c122e95020455d1b68425ba",
       "records": [
         {
           "artifacts": [
@@ -1210,6 +1210,17 @@
           ],
           "name": "py",
           "version": "1.11.0"
+        },
+        {
+          "artifacts": [
+            {
+              "filename": "pyarrow-25.0.0-cp311-cp311-macosx_12_0_arm64.whl",
+              "sha256": "2e3b6544e26e393fe2cd530f523e36c1c8d3c345bbbb60cca3fd866be8322517",
+              "type": "wheel"
+            }
+          ],
+          "name": "pyarrow",
+          "version": "25.0.0"
         },
         {
           "artifacts": [
@@ -1953,7 +1964,7 @@
     },
     "darwin-arm64-cpython311-runtime": {
       "profile": "runtime",
-      "projectionHash": "d57ace7f35410f80be9c14fe49666fdfa1bd09e4fcedc8bb5cc7ad0dc10715bc",
+      "projectionHash": "b9a6f890b419d1ede5a97e18655376bb480c314403140ba3555273c93290a618",
       "records": [
         {
           "artifacts": [
@@ -2970,6 +2981,17 @@
         {
           "artifacts": [
             {
+              "filename": "pyarrow-25.0.0-cp311-cp311-macosx_12_0_arm64.whl",
+              "sha256": "2e3b6544e26e393fe2cd530f523e36c1c8d3c345bbbb60cca3fd866be8322517",
+              "type": "wheel"
+            }
+          ],
+          "name": "pyarrow",
+          "version": "25.0.0"
+        },
+        {
+          "artifacts": [
+            {
               "filename": "pycparser-3.0-py3-none-any.whl",
               "sha256": "b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992",
               "type": "wheel"
@@ -3676,7 +3698,7 @@
     },
     "darwin-arm64-cpython312-development": {
       "profile": "development",
-      "projectionHash": "3cf45e8260764dfc9cdb82c460d5bc53cc8c5fb43c0d3cd4789af1f8c7a5eac3",
+      "projectionHash": "5568003b2651b44eeeb8bc60de02bfb8dcf64bf85c8e51a497dcc483b7a18f4c",
       "records": [
         {
           "artifacts": [
@@ -4726,6 +4748,17 @@
         {
           "artifacts": [
             {
+              "filename": "pyarrow-25.0.0-cp312-cp312-macosx_12_0_arm64.whl",
+              "sha256": "149730a3d1f0fb59d663a0b8aa210adfd9c17c27cd94a0d143e60daea8320d4e",
+              "type": "wheel"
+            }
+          ],
+          "name": "pyarrow",
+          "version": "25.0.0"
+        },
+        {
+          "artifacts": [
+            {
               "filename": "pycodestyle-2.14.0-py2.py3-none-any.whl",
               "sha256": "dd6bf7cb4ee77f8e016f9c8e74a35ddd9f67e1d5fd4184d86c3b98e07099f42d",
               "type": "wheel"
@@ -5465,7 +5498,7 @@
     },
     "darwin-arm64-cpython312-runtime": {
       "profile": "runtime",
-      "projectionHash": "5779e14290989efbe8311de514fb34811e23047f920975c14344b6fae50e874d",
+      "projectionHash": "50f783258dda79ac4c7d15aeb68eb07218ac9b9f97265a1904c40174690d28f4",
       "records": [
         {
           "artifacts": [
@@ -6471,6 +6504,17 @@
         {
           "artifacts": [
             {
+              "filename": "pyarrow-25.0.0-cp312-cp312-macosx_12_0_arm64.whl",
+              "sha256": "149730a3d1f0fb59d663a0b8aa210adfd9c17c27cd94a0d143e60daea8320d4e",
+              "type": "wheel"
+            }
+          ],
+          "name": "pyarrow",
+          "version": "25.0.0"
+        },
+        {
+          "artifacts": [
+            {
               "filename": "pycparser-3.0-py3-none-any.whl",
               "sha256": "b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992",
               "type": "wheel"
@@ -7177,7 +7221,7 @@
     },
     "darwin-x86_64-cpython311-development": {
       "profile": "development",
-      "projectionHash": "79b92f489555ae0a374a3ad94b0e8c09c5581513471cd18cfd2a9afa4691b77a",
+      "projectionHash": "81be59c2a5d151575e90ccc0e9e616a8cb537b549e6489aea3b152cdb5239e9b",
       "records": [
         {
           "artifacts": [
@@ -8276,6 +8320,17 @@
           ],
           "name": "py",
           "version": "1.11.0"
+        },
+        {
+          "artifacts": [
+            {
+              "filename": "pyarrow-25.0.0-cp311-cp311-macosx_12_0_x86_64.whl",
+              "sha256": "b724d127783b4c19f088fcdfc844cbc318809246a30307bcabd5ed02045e890e",
+              "type": "wheel"
+            }
+          ],
+          "name": "pyarrow",
+          "version": "25.0.0"
         },
         {
           "artifacts": [
@@ -9024,7 +9079,7 @@
     },
     "darwin-x86_64-cpython311-runtime": {
       "profile": "runtime",
-      "projectionHash": "2cc896a7d392e0daab6149c54b053430751c83fddc149f0dd85c70db2992a06b",
+      "projectionHash": "6a8aba691362a726c028adedd4e2c4650c7e914f110ba3e68a235144be3ddc78",
       "records": [
         {
           "artifacts": [
@@ -10083,6 +10138,17 @@
         {
           "artifacts": [
             {
+              "filename": "pyarrow-25.0.0-cp311-cp311-macosx_12_0_x86_64.whl",
+              "sha256": "b724d127783b4c19f088fcdfc844cbc318809246a30307bcabd5ed02045e890e",
+              "type": "wheel"
+            }
+          ],
+          "name": "pyarrow",
+          "version": "25.0.0"
+        },
+        {
+          "artifacts": [
+            {
               "filename": "pycparser-3.0-py3-none-any.whl",
               "sha256": "b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992",
               "type": "wheel"
@@ -10794,7 +10860,7 @@
     },
     "darwin-x86_64-cpython312-development": {
       "profile": "development",
-      "projectionHash": "231a58acac7fd807d1d4834f2051a77d5dfb5dc18f79c73df2476eb8199f04bc",
+      "projectionHash": "7299cff6e38ae5ed2c8c3c8d8eab5d3f6f1d32e4e9511f4a4b8dfc7063327b57",
       "records": [
         {
           "artifacts": [
@@ -11886,6 +11952,17 @@
         {
           "artifacts": [
             {
+              "filename": "pyarrow-25.0.0-cp312-cp312-macosx_12_0_x86_64.whl",
+              "sha256": "0721332c30fdd453fdd1fc203b2ac1f4c9db5aea28fa38d41f2574c4b068b9ec",
+              "type": "wheel"
+            }
+          ],
+          "name": "pyarrow",
+          "version": "25.0.0"
+        },
+        {
+          "artifacts": [
+            {
               "filename": "pycodestyle-2.14.0-py2.py3-none-any.whl",
               "sha256": "dd6bf7cb4ee77f8e016f9c8e74a35ddd9f67e1d5fd4184d86c3b98e07099f42d",
               "type": "wheel"
@@ -12630,7 +12707,7 @@
     },
     "darwin-x86_64-cpython312-runtime": {
       "profile": "runtime",
-      "projectionHash": "58c0e642418ee4538fc1493d7fc224eb22e564416557403ec0269923b36976e7",
+      "projectionHash": "350a4306acbbfaba0c154dc94fd9b29ee28dd6757e381a23a6520a5a32bc6edc",
       "records": [
         {
           "artifacts": [
@@ -13678,6 +13755,17 @@
         {
           "artifacts": [
             {
+              "filename": "pyarrow-25.0.0-cp312-cp312-macosx_12_0_x86_64.whl",
+              "sha256": "0721332c30fdd453fdd1fc203b2ac1f4c9db5aea28fa38d41f2574c4b068b9ec",
+              "type": "wheel"
+            }
+          ],
+          "name": "pyarrow",
+          "version": "25.0.0"
+        },
+        {
+          "artifacts": [
+            {
               "filename": "pycparser-3.0-py3-none-any.whl",
               "sha256": "b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992",
               "type": "wheel"
@@ -14389,7 +14477,7 @@
     },
     "linux-aarch64-cpython311-runtime": {
       "profile": "runtime",
-      "projectionHash": "d79ef9a552f1298b9a241952c1a26298543fe4d836238aecbf6105bf75dd94ef",
+      "projectionHash": "7f77a9b32e210309cb3f26710f295d04cb9a21a72228d7e96a44ef1458885cff",
       "records": [
         {
           "artifacts": [
@@ -15423,6 +15511,17 @@
         {
           "artifacts": [
             {
+              "filename": "pyarrow-25.0.0-cp311-cp311-manylinux_2_28_aarch64.whl",
+              "sha256": "244f98a595f70fa4fd35faa7508c4ae67e14a173397a4b3b49d2b3c360fb0062",
+              "type": "wheel"
+            }
+          ],
+          "name": "pyarrow",
+          "version": "25.0.0"
+        },
+        {
+          "artifacts": [
+            {
               "filename": "pycparser-3.0-py3-none-any.whl",
               "sha256": "b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992",
               "type": "wheel"
@@ -16109,7 +16208,7 @@
     },
     "linux-x86_64-cpython311-development": {
       "profile": "development",
-      "projectionHash": "16c9549504ede477783a7b3a4cb9e64d2713c47203c81c5fd07ededd90a830f1",
+      "projectionHash": "8b74e9bfbc35b741f6e7efe79deb105888165a9bf38022bfcddf0dd10c1ea3fc",
       "records": [
         {
           "artifacts": [
@@ -17173,6 +17272,17 @@
           ],
           "name": "py-mini-racer",
           "version": "0.6.0"
+        },
+        {
+          "artifacts": [
+            {
+              "filename": "pyarrow-25.0.0-cp311-cp311-manylinux_2_28_x86_64.whl",
+              "sha256": "0222f0071d13313962a88d21bf28b80d355ac39d81bfa6ff3fe00eeaf748e4be",
+              "type": "wheel"
+            }
+          ],
+          "name": "pyarrow",
+          "version": "25.0.0"
         },
         {
           "artifacts": [
@@ -17896,7 +18006,7 @@
     },
     "linux-x86_64-cpython311-runtime": {
       "profile": "runtime",
-      "projectionHash": "231e24f155659cde4c0474d1859f78ed8f76a63e311a0e02f5f60d59c7202d86",
+      "projectionHash": "3cbe8e7f8865cbe0cbf138baeb17968111335fe08376484fc845e7d030fdadf7",
       "records": [
         {
           "artifacts": [
@@ -18920,6 +19030,17 @@
         {
           "artifacts": [
             {
+              "filename": "pyarrow-25.0.0-cp311-cp311-manylinux_2_28_x86_64.whl",
+              "sha256": "0222f0071d13313962a88d21bf28b80d355ac39d81bfa6ff3fe00eeaf748e4be",
+              "type": "wheel"
+            }
+          ],
+          "name": "pyarrow",
+          "version": "25.0.0"
+        },
+        {
+          "artifacts": [
+            {
               "filename": "pycparser-3.0-py3-none-any.whl",
               "sha256": "b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992",
               "type": "wheel"
@@ -19606,7 +19727,7 @@
     },
     "windows-amd64-cpython311-development": {
       "profile": "development",
-      "projectionHash": "0c575454a8542c27a7bdc7752e9f6aa3b03b67e4fe5eb5043e1fec079313dc69",
+      "projectionHash": "7f91831906ec4ab1b8100bafa617fb0479cd1e722b0b83ab5006b35e07e9e1a9",
       "records": [
         {
           "artifacts": [
@@ -20645,6 +20766,17 @@
           ],
           "name": "py",
           "version": "1.11.0"
+        },
+        {
+          "artifacts": [
+            {
+              "filename": "pyarrow-25.0.0-cp311-cp311-win_amd64.whl",
+              "sha256": "161649d60a7a46c613a19fd795763ea8a88c36ba997dd99d9bc66e6794ee36e8",
+              "type": "wheel"
+            }
+          ],
+          "name": "pyarrow",
+          "version": "25.0.0"
         },
         {
           "artifacts": [
@@ -21357,7 +21489,7 @@
     },
     "windows-amd64-cpython311-runtime": {
       "profile": "runtime",
-      "projectionHash": "ded48bd976aefbc24868db62212332f13ee6c5a556533e7abf5d882a4c5e4e0e",
+      "projectionHash": "9fb57ba19b8d7b3475bcfabd519e5b742176f3f5231af66a0529a0e469b79233",
       "records": [
         {
           "artifacts": [
@@ -22356,6 +22488,17 @@
         {
           "artifacts": [
             {
+              "filename": "pyarrow-25.0.0-cp311-cp311-win_amd64.whl",
+              "sha256": "161649d60a7a46c613a19fd795763ea8a88c36ba997dd99d9bc66e6794ee36e8",
+              "type": "wheel"
+            }
+          ],
+          "name": "pyarrow",
+          "version": "25.0.0"
+        },
+        {
+          "artifacts": [
+            {
               "filename": "pycparser-3.0-py3-none-any.whl",
               "sha256": "b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992",
               "type": "wheel"
@@ -23031,7 +23174,7 @@
     },
     "windows-amd64-cpython312-development": {
       "profile": "development",
-      "projectionHash": "66fcc0210026b5efd0e581c88351128e734b16ec97eeef22efe0b39896263563",
+      "projectionHash": "510b1a6a47bbf529fdb681e3377a6da2fe1cf740545cab22d64b5d5721d8e4bd",
       "records": [
         {
           "artifacts": [
@@ -24063,6 +24206,17 @@
         {
           "artifacts": [
             {
+              "filename": "pyarrow-25.0.0-cp312-cp312-win_amd64.whl",
+              "sha256": "3f356afe61186395c861d5cd63dc21ff7d5fa335012a4668d979257df7fea0f5",
+              "type": "wheel"
+            }
+          ],
+          "name": "pyarrow",
+          "version": "25.0.0"
+        },
+        {
+          "artifacts": [
+            {
               "filename": "pycodestyle-2.14.0-py2.py3-none-any.whl",
               "sha256": "dd6bf7cb4ee77f8e016f9c8e74a35ddd9f67e1d5fd4184d86c3b98e07099f42d",
               "type": "wheel"
@@ -24771,7 +24925,7 @@
     },
     "windows-amd64-cpython312-runtime": {
       "profile": "runtime",
-      "projectionHash": "c3f934bd484b6df2375161a2f53d7505050c92d9add827f78c2ebd5ae3adc41f",
+      "projectionHash": "0a329cb08221d704bca6e2a80058cbdb5034e7ebc6778c41b290b714bb52d108",
       "records": [
         {
           "artifacts": [
@@ -25755,6 +25909,17 @@
           ],
           "name": "py",
           "version": "1.11.0"
+        },
+        {
+          "artifacts": [
+            {
+              "filename": "pyarrow-25.0.0-cp312-cp312-win_amd64.whl",
+              "sha256": "3f356afe61186395c861d5cd63dc21ff7d5fa335012a4668d979257df7fea0f5",
+              "type": "wheel"
+            }
+          ],
+          "name": "pyarrow",
+          "version": "25.0.0"
         },
         {
           "artifacts": [
