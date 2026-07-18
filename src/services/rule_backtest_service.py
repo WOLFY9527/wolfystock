@@ -5277,7 +5277,12 @@ class RuleBacktestService:
                 "benchmark_summary": dict(run_payload.get("benchmark_summary") or {}),
                 "buy_and_hold_summary": dict(run_payload.get("buy_and_hold_summary") or {}),
             },
-            "execution_model": dict(run_payload.get("execution_model") or {}),
+            "execution_model": (
+                dict(run_payload["execution_model"])
+                if isinstance(run_payload.get("execution_model"), Mapping)
+                and run_payload.get("execution_model")
+                else None
+            ),
             "result_authority": dict(run_payload.get("result_authority") or {}),
         }
 

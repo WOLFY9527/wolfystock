@@ -240,6 +240,7 @@ def _worker_lease(topology: _SyntheticTopology) -> dict[str, Any]:
         worker_a_db.heartbeat_durable_task_state(
             task_id="ws2-preflight-active-lease",
             worker_id="worker-a",
+            claim_attempt=first_claim["attempt_count"],
             lease_seconds=60,
             progress=25,
             current_step="Synthetic lease progress",
@@ -364,6 +365,7 @@ def _lease_expiry_retry(topology: _SyntheticTopology) -> dict[str, Any]:
     worker_a_db.heartbeat_durable_task_state(
         task_id="ws2-preflight-expired-lease",
         worker_id="worker-a",
+        claim_attempt=first_claim["attempt_count"],
         lease_seconds=1,
         progress=35,
         current_step="Synthetic worker paused",
@@ -379,11 +381,13 @@ def _lease_expiry_retry(topology: _SyntheticTopology) -> dict[str, Any]:
     stale_complete = worker_b_db.complete_claimed_durable_task_state(
         task_id="ws2-preflight-expired-lease",
         worker_id="worker-a",
+        claim_attempt=first_claim["attempt_count"],
         now=expired_time,
     )
     recovered_complete = worker_b_db.complete_claimed_durable_task_state(
         task_id="ws2-preflight-expired-lease",
         worker_id="worker-b",
+        claim_attempt=int((second_claim or {}).get("attempt_count") or 0),
         current_step="Recovered by worker B",
         metadata={"result_ref": "fixture:ws2-recovered"},
         now=expired_time,

@@ -86,10 +86,15 @@ def _supplied_bars(*, code: str = "600519", days: int = 60) -> list[dict[str, An
 
 
 def _payload(**overrides: Any) -> dict[str, Any]:
+    parsed_strategy = _parsed_strategy_payload()
+    parsed_strategy["strategy_spec"]["costs"] = {
+        "fee_bps": 0.0,
+        "slippage_bps": 0.0,
+    }
     payload: dict[str, Any] = {
         "code": "600519",
         "strategy_text": "MA diagnostic comparison",
-        "parsed_strategy": _parsed_strategy_payload(),
+        "parsed_strategy": parsed_strategy,
         "start_date": "2024-01-01",
         "end_date": "2024-02-20",
         "lookback_bars": 20,

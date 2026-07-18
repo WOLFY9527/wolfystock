@@ -1712,7 +1712,7 @@ def test_cn_scanner_degraded_snapshot_preserves_labels_and_provider_diagnostics(
     provider_diagnostics = result["diagnostics"]["provider_diagnostics"]
 
     assert scanner_data["degraded_mode_used"] is True
-    assert scanner_data["universe_resolution"]["source"] == "FakeListSource"
+    assert scanner_data["universe_resolution"]["source"] == "local_universe_cache"
     assert scanner_data["snapshot_resolution"]["source"] == "local_history_degraded"
     assert provider_diagnostics["snapshot_source_used"] == "local_history_degraded"
     assert provider_diagnostics["history_source_used"] == "local_db"
@@ -1738,11 +1738,11 @@ def test_us_and_hk_scanner_route_labels_preserve_quote_sources() -> None:
         symbols=["NVDA", "PLTR"],
     )
 
-    assert us_result["diagnostics"]["scanner_data"]["snapshot_resolution"]["source"] == "yfinance"
-    assert us_result["diagnostics"]["provider_diagnostics"]["quote_source_used"] == "yfinance"
-    assert us_result["diagnostics"]["provider_diagnostics"]["snapshot_source_used"] == "yfinance"
+    assert us_result["diagnostics"]["scanner_data"]["snapshot_resolution"]["source"] == "polygon_us_grouped_daily"
+    assert us_result["diagnostics"]["provider_diagnostics"]["quote_source_used"] == "polygon_us_grouped_daily"
+    assert us_result["diagnostics"]["provider_diagnostics"]["snapshot_source_used"] == "polygon_us_grouped_daily"
     assert "universe=custom_symbols" in us_result["source_summary"]
-    assert "snapshot=yfinance" in us_result["source_summary"]
+    assert "snapshot=polygon_us_grouped_daily" in us_result["source_summary"]
 
     hk_db = _in_memory_db()
     hk_stock_repo = StockRepository(hk_db)
@@ -1757,11 +1757,11 @@ def test_us_and_hk_scanner_route_labels_preserve_quote_sources() -> None:
         symbols=["HK00700", "HK01810"],
     )
 
-    assert hk_result["diagnostics"]["scanner_data"]["snapshot_resolution"]["source"] == "twelve_data"
-    assert hk_result["diagnostics"]["provider_diagnostics"]["quote_source_used"] == "twelve_data"
-    assert hk_result["diagnostics"]["provider_diagnostics"]["snapshot_source_used"] == "twelve_data"
+    assert hk_result["diagnostics"]["scanner_data"]["snapshot_resolution"]["source"] == "snapshot"
+    assert hk_result["diagnostics"]["provider_diagnostics"]["quote_source_used"] == "snapshot"
+    assert hk_result["diagnostics"]["provider_diagnostics"]["snapshot_source_used"] == "snapshot"
     assert "universe=custom_symbols" in hk_result["source_summary"]
-    assert "snapshot=twelve_data" in hk_result["source_summary"]
+    assert "snapshot=snapshot" in hk_result["source_summary"]
 
 
 def test_scanner_board_lookup_failures_remain_visible_in_candidate_diagnostics() -> None:
