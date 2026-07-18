@@ -923,7 +923,7 @@ class PublicPreviewSafetyTestCase(unittest.TestCase):
             "\n".join(
                 [
                     "STOCK_LIST=AAPL",
-                    "GEMINI_API_KEY=test",
+                    "GEMINI_API_KEY=deterministic-fixture-key",
                     "ADMIN_AUTH_ENABLED=true",
                     f"DATABASE_PATH={self.db_path}",
                 ]
@@ -1022,10 +1022,10 @@ class PublicPreviewSafetyTestCase(unittest.TestCase):
 
         payload = response.json()
         self.assertEqual(payload["preview_scope"], "guest")
-        self.assertIsNone(payload["report"]["meta"]["model_used"])
-        self.assertIsNone(payload["report"]["decision_trace"])
-        self.assertIsNone(payload["report"]["details"])
-        self.assertEqual(payload["report"]["data_quality_report"]["confidenceCap"], 75)
+        self.assertNotIn("model_used", payload["report"]["meta"])
+        self.assertNotIn("decision_trace", payload["report"])
+        self.assertNotIn("details", payload["report"])
+        self.assertNotIn("data_quality_report", payload["report"])
         _assert_no_forbidden_directives(payload["report"])
         _assert_no_raw_output_terms(payload["report"])
         self.assertNotIn("public-safety-fixture", json.dumps(payload["report"], ensure_ascii=False))

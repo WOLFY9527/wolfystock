@@ -769,8 +769,9 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         fallback_issue = next(issue for issue in validation["issues"] if issue["key"] == "LITELLM_FALLBACK_MODELS")
         self.assertIn("use task backup route for cross-provider failover", fallback_issue["message"])
 
+    @patch("src.services.system_config_service.require_uat_provider_dispatch_allowed")
     @patch("litellm.completion")
-    def test_test_llm_channel_returns_success_payload(self, mock_completion) -> None:
+    def test_test_llm_channel_returns_success_payload(self, mock_completion, mock_dispatch_guard) -> None:
         mock_completion.return_value = type(
             "MockResponse",
             (),
@@ -790,9 +791,11 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertTrue(payload["success"])
         self.assertEqual(payload["resolved_protocol"], "openai")
         self.assertEqual(payload["resolved_model"], "openai/deepseek-chat")
+        mock_dispatch_guard.assert_called_once()
 
+    @patch("src.services.system_config_service.require_uat_provider_dispatch_allowed")
     @patch("litellm.completion")
-    def test_test_llm_channel_glm4_success_path_stays_working(self, mock_completion) -> None:
+    def test_test_llm_channel_glm4_success_path_stays_working(self, mock_completion, mock_dispatch_guard) -> None:
         mock_completion.return_value = type(
             "MockResponse",
             (),
@@ -812,9 +815,11 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertTrue(payload["success"])
         self.assertEqual(payload["resolved_protocol"], "openai")
         self.assertEqual(payload["resolved_model"], "openai/glm-4-flash")
+        mock_dispatch_guard.assert_called_once()
 
+    @patch("src.services.system_config_service.require_uat_provider_dispatch_allowed")
     @patch("litellm.completion")
-    def test_test_llm_channel_accepts_deepseek_v4_text_content_blocks(self, mock_completion) -> None:
+    def test_test_llm_channel_accepts_deepseek_v4_text_content_blocks(self, mock_completion, mock_dispatch_guard) -> None:
         mock_completion.return_value = type(
             "MockResponse",
             (),
@@ -851,9 +856,11 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertTrue(payload["success"])
         self.assertEqual(payload["resolved_protocol"], "deepseek")
         self.assertEqual(payload["resolved_model"], "deepseek/deepseek-v4-pro")
+        mock_dispatch_guard.assert_called_once()
 
+    @patch("src.services.system_config_service.require_uat_provider_dispatch_allowed")
     @patch("litellm.completion")
-    def test_test_llm_channel_uses_safer_token_budget_for_deepseek_v4(self, mock_completion) -> None:
+    def test_test_llm_channel_uses_safer_token_budget_for_deepseek_v4(self, mock_completion, mock_dispatch_guard) -> None:
         mock_completion.return_value = type(
             "MockResponse",
             (),
@@ -872,9 +879,11 @@ class SystemConfigServiceTestCase(unittest.TestCase):
 
         self.assertTrue(payload["success"])
         self.assertGreaterEqual(mock_completion.call_args.kwargs["max_tokens"], 32)
+        mock_dispatch_guard.assert_called_once()
 
+    @patch("src.services.system_config_service.require_uat_provider_dispatch_allowed")
     @patch("litellm.completion")
-    def test_test_llm_channel_empty_response_returns_actionable_error(self, mock_completion) -> None:
+    def test_test_llm_channel_empty_response_returns_actionable_error(self, mock_completion, mock_dispatch_guard) -> None:
         mock_completion.return_value = type(
             "MockResponse",
             (),
@@ -896,6 +905,38 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertIn("empty response body", payload["error"].lower())
         self.assertIn("unsupported model", payload["error"].lower())
         self.assertIn("protocol", payload["error"].lower())
+        mock_dispatch_guard.assert_called_once()
+
+    @patch("src.services.system_config_service.require_uat_provider_dispatch_allowed")
+    @patch("litellm.completion")
+    def test_test_llm_channel_unknown_provider_error_is_sanitized(
+        self,
+        mock_completion,
+        mock_dispatch_guard,
+    ) -> None:
+        mock_completion.side_effect = RuntimeError(
+            "private-provider-sentinel failed with api_key=private-credential-sentinel"
+        )
+
+        payload = self.service.test_llm_channel(
+            name="fixture",
+            protocol="openai",
+            base_url="https://example.invalid/v1",
+            api_key="deterministic-fixture-key",
+            models=["deterministic-fixture"],
+        )
+
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["message"], "LLM channel test failed")
+        self.assertEqual(
+            payload["error"],
+            "Provider call failed. Check protocol, endpoint, model configuration, and service availability.",
+        )
+        serialized = str(payload)
+        self.assertNotIn("private-provider-sentinel", serialized)
+        self.assertNotIn("private-credential-sentinel", serialized)
+        self.assertNotIn("Raw error", serialized)
+        mock_dispatch_guard.assert_called_once()
 
     @patch("src.services.system_config_service.requests.request")
     def test_test_custom_data_source_reports_reachable_endpoint(self, mock_request) -> None:

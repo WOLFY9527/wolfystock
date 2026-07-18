@@ -141,10 +141,13 @@ def build_agent_executor(config=None, skills: Optional[List[str]] = None):
     skill_manager = get_skill_manager(config)
 
     configured_skills = getattr(config, "agent_skills", None) or None
-    explicit_skill_selection = bool(skills) or configured_skills is not None
-    default_skills = get_default_active_skill_ids(skill_manager.list_skills())
+    explicit_skill_selection = skills is not None or configured_skills is not None
+    default_skills = get_default_active_skill_ids(
+        skill_manager.list_skills(),
+        max_count=1,
+    )
     if skills is not None:
-        skills_to_activate = skills or default_skills
+        skills_to_activate = list(skills)
     else:
         skills_to_activate = configured_skills or default_skills
     skill_manager.activate(skills_to_activate)
@@ -165,6 +168,8 @@ def build_agent_executor(config=None, skills: Optional[List[str]] = None):
             llm_adapter,
             skill_manager,
             technical_skill_policy=technical_skill_policy,
+            selected_skill_ids=skills_to_activate,
+            skill_selection_explicit=explicit_skill_selection,
         )
 
     from src.agent.executor import AgentExecutor
@@ -178,7 +183,16 @@ def build_agent_executor(config=None, skills: Optional[List[str]] = None):
     )
 
 
-def _build_orchestrator(config, registry, llm_adapter, skill_manager, *, technical_skill_policy: str = ""):
+def _build_orchestrator(
+    config,
+    registry,
+    llm_adapter,
+    skill_manager,
+    *,
+    technical_skill_policy: str = "",
+    selected_skill_ids: Optional[List[str]] = None,
+    skill_selection_explicit: bool = False,
+):
     """Build and return an :class:`AgentOrchestrator` (multi-agent mode).
 
     The orchestrator presents the same ``run()`` / ``chat()`` interface as
@@ -198,6 +212,8 @@ def _build_orchestrator(config, registry, llm_adapter, skill_manager, *, technic
         mode=mode,
         skill_manager=skill_manager,
         config=config,
+        selected_skill_ids=selected_skill_ids,
+        skill_selection_explicit=skill_selection_explicit,
     )
 
 

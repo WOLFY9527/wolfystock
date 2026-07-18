@@ -11,19 +11,34 @@ Covers:
 - Metadata persistence (original_query, selection_source)
 """
 
-import pytest
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
+
+import pytest
 from fastapi.testclient import TestClient
+
 from api.app import create_app
-from src.services.task_queue import AnalysisTaskQueue, TaskStatus
-from src.config import Config
+from api.deps import get_config_dep
+from src.services.task_queue import AnalysisTaskQueue
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 import src.auth as auth
+
 
 @pytest.fixture
 def client():
     app = create_app()
-    return TestClient(app)
+    app.dependency_overrides[get_config_dep] = lambda: SimpleNamespace(
+        llm_model_list=[
+            {
+                "model_name": "openai/deterministic-fixture",
+                "litellm_params": {"model": "openai/deterministic-fixture"},
+            }
+        ],
+        litellm_model="openai/deterministic-fixture",
+        litellm_fallback_models=[],
+    )
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 @pytest.fixture(autouse=True)
@@ -36,12 +51,14 @@ def disable_auth():
         yield
     auth._auth_enabled = None
 
+
 @pytest.fixture
 def mock_task_queue():
     with patch("api.v1.endpoints.analysis.get_task_queue") as mock_get:
         queue = MagicMock(spec=AnalysisTaskQueue)
         mock_get.return_value = queue
         yield queue
+
 
 class TestAnalysisIntegration:
     """End-to-end integration tests for the analysis flow."""
@@ -55,20 +72,25 @@ class TestAnalysisIntegration:
         )
 
         # Trigger analysis with a stock name
-        response = client.post(
-            "/api/v1/analysis/analyze",
-            json={
-                "stock_code": "贵州茅台",
-                "async_mode": True,
-                "original_query": "贵州茅台",
-                "selection_source": "manual"
-            }
-        )
+        with patch(
+            "src.services.analysis_service.AnalysisService.analyze_stock",
+            side_effect=AssertionError("accepted async task must not execute analysis inline"),
+        ) as analyze_stock:
+            response = client.post(
+                "/api/v1/analysis/analyze",
+                json={
+                    "stock_code": "贵州茅台",
+                    "async_mode": True,
+                    "original_query": "贵州茅台",
+                    "selection_source": "manual"
+                }
+            )
 
         assert response.status_code == 202
         data = response.json()
         assert data["task_id"] == "test_task_123"
         assert data["status"] == "pending"
+        analyze_stock.assert_not_called()
 
         # Verify task queue received the correct resolved code and metadata
         mock_task_queue.submit_tasks_batch.assert_called_once_with(

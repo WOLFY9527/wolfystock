@@ -598,7 +598,11 @@ class SystemConfigService:
                 "latency_ms": latency_ms,
             }
         except Exception as exc:
-            logger.warning("LLM channel test failed for %s: %s", channel_name, exc)
+            logger.warning(
+                "LLM channel test failed for %s: %s",
+                channel_name,
+                sanitize_message(str(exc)),
+            )
             classified_message, classified_error = self._classify_llm_test_exception(
                 exc=exc,
                 resolved_protocol=resolved_protocol,
@@ -1289,10 +1293,7 @@ class SystemConfigService:
             )
         return (
             "LLM channel test failed",
-            (
-                "Provider call failed. Check protocol/base URL/model settings and advanced channel test details. "
-                f"Raw error: {raw_error[:240]}"
-            ),
+            "Provider call failed. Check protocol, endpoint, model configuration, and service availability.",
         )
 
     def update(

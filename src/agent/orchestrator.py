@@ -87,6 +87,8 @@ class AgentOrchestrator:
         mode: str = "standard",
         skill_manager=None,
         config=None,
+        selected_skill_ids: Optional[List[str]] = None,
+        skill_selection_explicit: bool = False,
     ):
         self.tool_registry = tool_registry
         self.llm_adapter = llm_adapter
@@ -97,6 +99,8 @@ class AgentOrchestrator:
         self.mode = normalized_mode if normalized_mode in VALID_MODES else "standard"
         self.skill_manager = skill_manager
         self.config = config
+        self.selected_skill_ids = list(selected_skill_ids or [])
+        self.skill_selection_explicit = bool(skill_selection_explicit)
 
     def _get_timeout_seconds(self) -> int:
         """Return the pipeline timeout in seconds.
@@ -140,7 +144,7 @@ class AgentOrchestrator:
                 content = json.dumps(dashboard, ensure_ascii=False, indent=2)
 
         return OrchestratorResult(
-            success=bool(content) if (not parse_dashboard or dashboard is not None) else False,
+            success=False,
             content=content,
             dashboard=dashboard,
             error=error,
@@ -589,6 +593,8 @@ class AgentOrchestrator:
     def _build_context(self, task: str, context: Optional[Dict[str, Any]] = None) -> AgentContext:
         """Seed an ``AgentContext`` from the user request."""
         ctx = AgentContext(query=task)
+        requested_skills = list(self.selected_skill_ids)
+        selection_explicit = self.skill_selection_explicit
 
         if context:
             ctx.stock_code = context.get("stock_code", "")
@@ -596,11 +602,12 @@ class AgentOrchestrator:
             owner_id = str(context.get("owner_id") or "").strip()
             if owner_id:
                 ctx.meta["owner_id"] = owner_id
-            requested_skills = context.get("skills")
-            if requested_skills is None:
-                requested_skills = context.get("strategies", [])
-            ctx.meta["skills_requested"] = requested_skills or []
-            ctx.meta["strategies_requested"] = requested_skills or []
+            if "skills" in context:
+                requested_skills = list(context.get("skills") or [])
+                selection_explicit = True
+            elif "strategies" in context:
+                requested_skills = list(context.get("strategies") or [])
+                selection_explicit = True
             ctx.meta["report_language"] = normalize_report_language(context.get("report_language", "zh"))
 
             # Pre-populate data fields that the caller already has
@@ -608,6 +615,10 @@ class AgentOrchestrator:
                              "trend_result", "news_context"):
                 if context.get(data_key):
                     ctx.set_data(data_key, context[data_key])
+
+        ctx.meta["skills_requested"] = requested_skills
+        ctx.meta["strategies_requested"] = requested_skills
+        ctx.meta["skill_selection_explicit"] = selection_explicit
 
         # Try to extract stock code from the query text
         if not ctx.stock_code:

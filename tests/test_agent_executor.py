@@ -820,7 +820,8 @@ class TestBuildUserMessage(unittest.TestCase):
     def test_basic_message(self):
         msg = self.executor._build_user_message("Analyze 600519")
         self.assertIn("Analyze 600519", msg)
-        self.assertIn("决策仪表盘", msg)
+        self.assertIn("研究观察仪表盘", msg)
+        self.assertNotIn("决策仪表盘", msg)
 
     def test_message_with_context(self):
         msg = self.executor._build_user_message(

@@ -250,6 +250,17 @@ class TestAgentRunStats(unittest.TestCase):
 class TestSkillRouter(unittest.TestCase):
     """Test canonical SkillRouter selection behavior."""
 
+    def test_explicit_empty_selection_returns_no_skills(self):
+        from src.agent.skills.router import SkillRouter
+
+        ctx = AgentContext(query="test")
+        ctx.meta["skills_requested"] = []
+        ctx.meta["skill_selection_explicit"] = True
+
+        result = SkillRouter().select_skills(ctx)
+
+        self.assertEqual(result, [])
+
     def test_user_requested_strategies_take_priority(self):
         from src.agent.skills.router import SkillRouter
         router = SkillRouter()
@@ -464,7 +475,7 @@ class TestIntelAgentPostProcess(unittest.TestCase):
 class TestOrchestratorModes(unittest.TestCase):
     """Test that _build_agent_chain returns the right agents for each mode."""
 
-    def _make_orchestrator(self, mode="standard"):
+    def _make_orchestrator(self, mode="standard", **kwargs):
         from src.agent.orchestrator import AgentOrchestrator
         mock_registry = MagicMock()
         mock_adapter = MagicMock()
@@ -472,6 +483,7 @@ class TestOrchestratorModes(unittest.TestCase):
             tool_registry=mock_registry,
             llm_adapter=mock_adapter,
             mode=mode,
+            **kwargs,
         )
 
     def test_quick_mode(self):
@@ -516,6 +528,25 @@ class TestOrchestratorModes(unittest.TestCase):
         self.assertEqual(ctx.stock_code, "600519")
         self.assertEqual(ctx.stock_name, "贵州茅台")
         self.assertEqual(ctx.meta["skills_requested"], ["bull_trend"])
+
+    def test_build_context_preserves_factory_skill_selection(self):
+        explicit_empty = self._make_orchestrator(
+            "specialist",
+            selected_skill_ids=[],
+            skill_selection_explicit=True,
+        )
+        empty_ctx = explicit_empty._build_context("Analyze 600519")
+        self.assertEqual(empty_ctx.meta["skills_requested"], [])
+        self.assertTrue(empty_ctx.meta["skill_selection_explicit"])
+
+        implicit_default = self._make_orchestrator(
+            "specialist",
+            selected_skill_ids=["bull_trend"],
+            skill_selection_explicit=False,
+        )
+        default_ctx = implicit_default._build_context("Analyze 600519")
+        self.assertEqual(default_ctx.meta["skills_requested"], ["bull_trend"])
+        self.assertFalse(default_ctx.meta["skill_selection_explicit"])
 
     def test_build_context_extracts_code_from_query(self):
         orch = self._make_orchestrator()
@@ -631,10 +662,11 @@ class TestOrchestratorExecution(unittest.TestCase):
             with patch("src.agent.orchestrator.time.time", side_effect=[0.0, 0.1, 1.2, 1.2, 1.2]):
                 result = orch._execute_pipeline(ctx, parse_dashboard=True)
 
-        self.assertTrue(result.success)
+        self.assertFalse(result.success)
         self.assertIn("timed out", result.error)
         self.assertEqual(result.dashboard["decision_type"], "buy")
-        self.assertEqual(result.dashboard["operation_advice"], "买入")
+        self.assertEqual(result.dashboard["operation_advice"], "正向观察")
+        self.assertNotIn("买入", json.dumps(result.dashboard, ensure_ascii=False))
         self.assertEqual(
             result.dashboard["dashboard"]["battle_plan"]["sniper_points"]["stop_loss"],
             1760.0,
@@ -667,9 +699,10 @@ class TestOrchestratorExecution(unittest.TestCase):
             with patch("src.agent.orchestrator.time.time", side_effect=[0.0, 0.1, 0.2, 0.3, 1.2, 1.2, 1.2]):
                 result = orch._execute_pipeline(ctx, parse_dashboard=True)
 
-        self.assertTrue(result.success)
+        self.assertFalse(result.success)
         self.assertIn("timed out", result.error)
         self.assertEqual(result.dashboard["decision_type"], "buy")
+        self.assertEqual(result.dashboard["operation_advice"], "正向观察")
         self.assertIn("降级结果", result.dashboard["analysis_summary"])
         self.assertEqual(
             result.dashboard["dashboard"]["battle_plan"]["sniper_points"]["stop_loss"],
