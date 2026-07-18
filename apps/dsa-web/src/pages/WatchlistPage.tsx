@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentProps, type FocusEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type FocusEvent as ReactFocusEvent } from 'react';
 import {
   BarChart3,
   CheckSquare,
@@ -153,7 +153,7 @@ type WatchlistMonitoringTone = 'success' | 'caution' | 'neutral';
 const ROW_SELECTION_BUTTON_CLASS = 'inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-lg border transition hover:border-[color:var(--wolfy-accent)] hover:bg-[var(--wolfy-surface-input)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]';
 const WATCHLIST_ADVICE_OR_TRADE_WORDS = /建议(买入|卖出|加仓|减仓|持有)|买入|卖出|下单|交易建议|操作建议|投资建议|止损|止盈|目标价|仓位建议|\b(buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing|trade advice|investment advice)\b/i;
 
-function scrollFocusedDescendantIntoHorizontalView(event: FocusEvent<HTMLElement>): void {
+function scrollFocusedDescendantIntoHorizontalView(event: ReactFocusEvent<HTMLElement>): void {
   const scrollRegion = event.currentTarget;
   const target = event.target;
   if (!(target instanceof HTMLElement) || target === scrollRegion || !scrollRegion.contains(target)) return;
@@ -167,6 +167,11 @@ function scrollFocusedDescendantIntoHorizontalView(event: FocusEvent<HTMLElement
   } else if (targetRect.right > regionRect.right - padding) {
     scrollRegion.scrollLeft += targetRect.right - (regionRect.right - padding);
   }
+}
+
+function getEnabledMenuItems(menu: HTMLElement | null): HTMLButtonElement[] {
+  if (!menu) return [];
+  return Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'));
 }
 
 function normalizeText(value?: string | null): string {
@@ -1949,7 +1954,7 @@ function WatchlistConclusionBand({
 
 const WatchlistPage: React.FC = () => {
   const navigate = useNavigate();
-  const { search: routeSearch } = useLocation();
+  const { pathname: routePathname, search: routeSearch } = useLocation();
   const { language } = useI18n();
   const { isGuest } = useProductSurface();
   const copy = getCopy(language);
@@ -1986,6 +1991,14 @@ const WatchlistPage: React.FC = () => {
   const [openRowActionsId, setOpenRowActionsId] = useState<number | null>(null);
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
+  const rowActionMenuRefs = useRef(new Map<number, HTMLDivElement>());
+  const rowActionTriggerRefs = useRef(new Map<number, HTMLButtonElement>());
+
+  const closeRowActions = useCallback((restoreFocus = false) => {
+    const trigger = openRowActionsId == null ? null : rowActionTriggerRefs.current.get(openRowActionsId);
+    setOpenRowActionsId(null);
+    if (restoreFocus) trigger?.focus();
+  }, [openRowActionsId]);
 
   const applyResearchOverlayResponse = useCallback((response: WatchlistResearchOverlayResponse) => {
     const nextState = deriveResearchOverlayViewState(response);
@@ -2209,6 +2222,62 @@ const WatchlistPage: React.FC = () => {
       setOpenRowActionsId(null);
     }
   }, [filteredItems, openRowActionsId]);
+
+  useEffect(() => {
+    setOpenRowActionsId(null);
+  }, [routePathname, routeSearch]);
+
+  useEffect(() => {
+    if (openRowActionsId == null) return;
+    getEnabledMenuItems(rowActionMenuRefs.current.get(openRowActionsId) ?? null)[0]?.focus();
+  }, [openRowActionsId]);
+
+  useEffect(() => {
+    if (openRowActionsId == null) return;
+    const menu = rowActionMenuRefs.current.get(openRowActionsId);
+    const trigger = rowActionTriggerRefs.current.get(openRowActionsId);
+    if (!menu || !trigger) return;
+
+    const closeOnOutsideTarget = (target: EventTarget | null) => {
+      if (target instanceof Node && !menu.contains(target) && !trigger.contains(target)) {
+        setOpenRowActionsId(null);
+      }
+    };
+    const handlePointerDown = (event: PointerEvent) => closeOnOutsideTarget(event.target);
+    const handleFocusIn = (event: FocusEvent) => closeOnOutsideTarget(event.target);
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('focusin', handleFocusIn);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('focusin', handleFocusIn);
+    };
+  }, [openRowActionsId]);
+
+  const handleRowActionMenuKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeRowActions(true);
+      return;
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+
+    const menuItems = getEnabledMenuItems(event.currentTarget);
+    if (menuItems.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const currentIndex = menuItems.indexOf(document.activeElement as HTMLButtonElement);
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? menuItems.length - 1
+        : event.key === 'ArrowDown'
+          ? (currentIndex + 1 + menuItems.length) % menuItems.length
+          : (currentIndex - 1 + menuItems.length) % menuItems.length;
+    menuItems[nextIndex]?.focus();
+  }, [closeRowActions]);
 
   const selectedItems = useMemo(
     () => filteredItems.filter((item) => selectedIds.has(item.id)),
@@ -3190,6 +3259,10 @@ const WatchlistPage: React.FC = () => {
                               <TerminalButton
                                 type="button"
                                 variant="compact"
+                                ref={(node) => {
+                                  if (node) rowActionTriggerRefs.current.set(item.id, node);
+                                  else rowActionTriggerRefs.current.delete(item.id);
+                                }}
                                 data-watchlist-action="secondary-disclosure"
                                 aria-expanded={openRowActionsId === item.id}
                                 aria-haspopup="menu"
@@ -3199,6 +3272,12 @@ const WatchlistPage: React.FC = () => {
                                   event.stopPropagation();
                                   setOpenRowActionsId((current) => (current === item.id ? null : item.id));
                                 }}
+                                onKeyDown={(event) => {
+                                  if (!['Enter', ' ', 'ArrowDown', 'ArrowUp'].includes(event.key)) return;
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  setOpenRowActionsId(item.id);
+                                }}
                               >
                                 <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
                                 {copy.moreActions}
@@ -3207,11 +3286,19 @@ const WatchlistPage: React.FC = () => {
                                 <div
                                   id={`watchlist-row-secondary-menu-${item.symbol}`}
                                   data-testid={`watchlist-row-secondary-menu-${item.symbol}`}
+                                  role="menu"
+                                  aria-label={`${copy.moreActionsAria} ${item.symbol}`}
+                                  ref={(node) => {
+                                    if (node) rowActionMenuRefs.current.set(item.id, node);
+                                    else rowActionMenuRefs.current.delete(item.id);
+                                  }}
+                                  onKeyDown={handleRowActionMenuKeyDown}
                                   className="absolute left-0 z-20 mt-2 grid min-w-[11.5rem] gap-1.5 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-2 shadow-[var(--wolfy-shadow-panel)] lg:left-auto lg:right-0"
                                 >
                                   <TerminalButton
                                     type="button"
                                     variant="compact"
+                                    role="menuitem"
                                     className="w-full justify-start"
                                     aria-label={`${language === 'zh' ? '打开扫描器' : 'Open scanner'} ${item.symbol}`}
                                     onClick={(event) => {
@@ -3226,6 +3313,7 @@ const WatchlistPage: React.FC = () => {
                                   <TerminalButton
                                     type="button"
                                     variant="compact"
+                                    role="menuitem"
                                     className="w-full justify-start"
                                     onClick={(event) => {
                                       event.stopPropagation();
@@ -3240,6 +3328,7 @@ const WatchlistPage: React.FC = () => {
                                   <TerminalButton
                                     type="button"
                                     variant="compact"
+                                    role="menuitem"
                                     className="w-full justify-start"
                                     onClick={(event) => {
                                       event.stopPropagation();
@@ -3254,6 +3343,7 @@ const WatchlistPage: React.FC = () => {
                                     <TerminalButton
                                       type="button"
                                       variant="compact"
+                                      role="menuitem"
                                       className="w-full justify-start font-mono text-[11px]"
                                       onClick={(event) => {
                                         event.stopPropagation();
@@ -3266,6 +3356,7 @@ const WatchlistPage: React.FC = () => {
                                   ) : null}
                                   <TerminalButton
                                     type="button"
+                                    role="menuitem"
                                     aria-label={`${copy.copySymbol} ${item.symbol}`}
                                     title={copiedId === item.id ? copy.copied : copy.copySymbol}
                                     variant="compact"
@@ -3281,6 +3372,7 @@ const WatchlistPage: React.FC = () => {
                                   </TerminalButton>
                                   <TerminalButton
                                     type="button"
+                                    role="menuitem"
                                     aria-label={`${copy.remove} ${item.symbol}`}
                                     variant="danger"
                                     className="w-full justify-start"

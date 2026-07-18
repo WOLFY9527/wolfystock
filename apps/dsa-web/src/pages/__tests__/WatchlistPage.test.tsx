@@ -1053,7 +1053,7 @@ describe('WatchlistPage', () => {
     expect(within(row).getByText('已回测')).toBeInTheDocument();
     expect(within(row).getByText(/更新 05\/01 13:30 · 命中 56% · 回测 \+24.6%/)).toBeInTheDocument();
     fireEvent.click(within(row).getByRole('button', { name: '更多操作 NVDA' }));
-    fireEvent.click(within(row).getByRole('button', { name: /结果 33/ }));
+    fireEvent.click(within(row).getByRole('menuitem', { name: /结果 33/ }));
     expect(screen.getByText('backtest result')).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/zh/backtest/results/33');
   });
@@ -1178,11 +1178,11 @@ describe('WatchlistPage', () => {
     expect(within(row).queryByRole('button', { name: '打开扫描器 600519' })).not.toBeInTheDocument();
     fireEvent.click(within(row).getByRole('button', { name: '更多操作 600519' }));
     expect(within(row).getByRole('button', { name: '更多操作 600519' })).toHaveAttribute('aria-expanded', 'true');
-    expect(within(row).getByRole('button', { name: '打开扫描器 600519' })).toBeInTheDocument();
-    expect(within(row).getByRole('button', { name: '分析' })).toBeInTheDocument();
-    expect(within(row).getByRole('button', { name: '回测' })).toBeInTheDocument();
-    expect(within(row).getByRole('button', { name: '复制代码 600519' })).toBeInTheDocument();
-    expect(within(row).getByRole('button', { name: '移除 600519' })).toBeInTheDocument();
+    expect(within(row).getByRole('menuitem', { name: '打开扫描器 600519' })).toBeInTheDocument();
+    expect(within(row).getByRole('menuitem', { name: '分析' })).toBeInTheDocument();
+    expect(within(row).getByRole('menuitem', { name: '回测' })).toBeInTheDocument();
+    expect(within(row).getByRole('menuitem', { name: '复制代码 600519' })).toBeInTheDocument();
+    expect(within(row).getByRole('menuitem', { name: '移除 600519' })).toBeInTheDocument();
     expect(row).not.toHaveTextContent('--');
     expect(primaryRegion).not.toHaveTextContent(/证据缺口|Missing evidence needs review|Price-history evidence|Scanner score evidence|evidence_gap|available|missing|stale|unknown|not_integrated|insufficient|ready|partial|blocked|observationOnly|noAdviceDisclosure|provider|cache|runtime|schema|requestId|traceId|fallback|proxy|sourceAuthority|score-grade|observation-only|insufficient_evidence|not personalized financial advice|not an instruction/i);
     expect(queue).not.toHaveTextContent(/Missing evidence needs review|Price-history evidence|Scanner score evidence|provider|cache|runtime|schema|requestId|traceId|fallback|proxy|sourceAuthority|score-grade|observation-only|insufficient_evidence/i);
@@ -2408,7 +2408,7 @@ describe('WatchlistPage', () => {
     expect(within(row).getByText(/更新 05\/03 17:01 · 命中 56% · 回测 \+14.2%/)).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-detail-rail')).toHaveTextContent(/收益 \+14.2% · 回撤 -3.2% · Sharpe 1.50 · 交易 5/);
     fireEvent.click(within(row).getByRole('button', { name: '更多操作 NVDA' }));
-    fireEvent.click(within(row).getByRole('button', { name: /结果 701/ }));
+    fireEvent.click(within(row).getByRole('menuitem', { name: /结果 701/ }));
     expect(screen.getByText('backtest result')).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/zh/backtest/results/701');
   });
@@ -2495,7 +2495,72 @@ describe('WatchlistPage', () => {
     fireEvent.click(within(nvdaRow).getByRole('button', { name: '更多操作 NVDA' }));
     expect(within(nvdaRow).getByRole('button', { name: '更多操作 NVDA' })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByTestId('watchlist-detail-rail')).toHaveTextContent('TSM');
-    expect(within(nvdaRow).queryByRole('button', { name: '分析' })).toBeInTheDocument();
+    expect(within(nvdaRow).queryByRole('menuitem', { name: '分析' })).toBeInTheDocument();
+  });
+
+  it('uses menu semantics and moves keyboard focus through enabled secondary actions', async () => {
+    renderWatchlist();
+    const row = await screen.findByTestId('watchlist-row-NVDA');
+    const trigger = within(row).getByRole('button', { name: '更多操作 NVDA' });
+
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: 'Enter' });
+
+    const menu = await screen.findByRole('menu', { name: '更多操作 NVDA' });
+    const menuItems = within(menu).getAllByRole('menuitem');
+    expect(menuItems).toHaveLength(6);
+    expect(menuItems[0]).toHaveFocus();
+
+    fireEvent.keyDown(menuItems[0], { key: 'ArrowDown' });
+    expect(menuItems[1]).toHaveFocus();
+    fireEvent.keyDown(menuItems[1], { key: 'ArrowUp' });
+    expect(menuItems[0]).toHaveFocus();
+    fireEvent.keyDown(menuItems[0], { key: 'End' });
+    expect(menuItems.at(-1)).toHaveFocus();
+    fireEvent.keyDown(menuItems.at(-1)!, { key: 'Home' });
+    expect(menuItems[0]).toHaveFocus();
+    fireEvent.keyDown(menuItems[0], { key: 'ArrowUp' });
+    expect(menuItems.at(-1)).toHaveFocus();
+    fireEvent.keyDown(menuItems.at(-1)!, { key: 'ArrowDown' });
+    expect(menuItems[0]).toHaveFocus();
+    fireEvent.keyDown(menuItems[0], { key: 'Escape' });
+
+    expect(screen.queryByRole('menu', { name: '更多操作 NVDA' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('closes secondary actions on outside interaction and skips disabled menuitems', async () => {
+    const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
+    analyzeAsync.mockImplementationOnce(() => new Promise(() => undefined));
+    const { unmount } = renderWatchlist();
+    const row = await screen.findByTestId('watchlist-row-NVDA');
+    const trigger = within(row).getByRole('button', { name: '更多操作 NVDA' });
+
+    fireEvent.click(trigger);
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole('menu', { name: '更多操作 NVDA' })).not.toBeInTheDocument();
+    await waitFor(() => expect(removeEventListenerSpy).toHaveBeenCalledWith('pointerdown', expect.any(Function)));
+
+    fireEvent.click(trigger);
+    fireEvent.click(within(screen.getByRole('menu', { name: '更多操作 NVDA' })).getByRole('menuitem', { name: '分析' }));
+    expect(analyzeAsync).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('menu', { name: '更多操作 NVDA' })).not.toBeInTheDocument();
+
+    fireEvent.click(trigger);
+    const menu = await screen.findByRole('menu', { name: '更多操作 NVDA' });
+    const scannerAction = within(menu).getByRole('menuitem', { name: '打开扫描器 NVDA' });
+    const analyzeAction = within(menu).getByRole('menuitem', { name: /分析/ });
+    const backtestAction = within(menu).getByRole('menuitem', { name: '回测' });
+    expect(analyzeAction).toBeDisabled();
+    expect(scannerAction).toHaveFocus();
+
+    fireEvent.keyDown(scannerAction, { key: 'ArrowDown' });
+    expect(backtestAction).toHaveFocus();
+    fireEvent.click(analyzeAction);
+    expect(analyzeAsync).toHaveBeenCalledTimes(1);
+    const removalsBeforeUnmount = removeEventListenerSpy.mock.calls.filter(([eventName]) => eventName === 'pointerdown').length;
+    unmount();
+    expect(removeEventListenerSpy.mock.calls.filter(([eventName]) => eventName === 'pointerdown')).toHaveLength(removalsBeforeUnmount + 1);
   });
 
   it('starts analysis for a candidate and navigates to the workspace', async () => {
@@ -2503,7 +2568,7 @@ describe('WatchlistPage', () => {
     const row = await screen.findByTestId('watchlist-row-NVDA');
 
     fireEvent.click(within(row).getByRole('button', { name: '更多操作 NVDA' }));
-    fireEvent.click(within(row).getByRole('button', { name: /分析/ }));
+    fireEvent.click(within(row).getByRole('menuitem', { name: /分析/ }));
 
     await waitFor(() => expect(analyzeAsync).toHaveBeenCalledWith(expect.objectContaining({
       stockCode: 'NVDA',
@@ -2552,7 +2617,7 @@ describe('WatchlistPage', () => {
     const row = await screen.findByTestId('watchlist-row-NVDA');
 
     fireEvent.click(within(row).getByRole('button', { name: '更多操作 NVDA' }));
-    fireEvent.click(within(row).getByRole('button', { name: /回测/ }));
+    fireEvent.click(within(row).getByRole('menuitem', { name: /回测/ }));
 
     expect(screen.getByText('backtest')).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/zh/backtest?');
@@ -2703,7 +2768,7 @@ describe('WatchlistPage', () => {
     const row = await screen.findByTestId('watchlist-row-NVDA');
 
     fireEvent.click(within(row).getByRole('button', { name: '更多操作 NVDA' }));
-    fireEvent.click(within(row).getByRole('button', { name: '移除 NVDA' }));
+    fireEvent.click(within(row).getByRole('menuitem', { name: '移除 NVDA' }));
 
     await waitFor(() => expect(removeWatchlistItem).toHaveBeenCalledWith(1));
     await waitFor(() => expect(screen.queryByTestId('watchlist-row-NVDA')).not.toBeInTheDocument());
@@ -2714,7 +2779,7 @@ describe('WatchlistPage', () => {
     const row = await screen.findByTestId('watchlist-row-NVDA');
 
     fireEvent.click(within(row).getByRole('button', { name: '更多操作 NVDA' }));
-    fireEvent.click(within(row).getByRole('button', { name: '复制代码 NVDA' }));
+    fireEvent.click(within(row).getByRole('menuitem', { name: '复制代码 NVDA' }));
 
     await waitFor(() => expect(writeTextMock).toHaveBeenCalledWith('NVDA'));
     expect(await screen.findByText('NVDA 已复制')).toBeInTheDocument();
@@ -2759,6 +2824,7 @@ describe('WatchlistPage', () => {
     expect(onboardingPanel).toHaveTextContent('查看研究雷达');
     expect(within(onboardingPanel).getByRole('button', { name: '先看市场概览' })).toHaveAttribute('href', '/zh/market-overview');
     expect(within(onboardingPanel).getByRole('button', { name: '打开扫描器' })).toHaveAttribute('href', '/zh/scanner');
+    expect(screen.getAllByRole('button', { name: '打开扫描器' })).toHaveLength(1);
     expect(within(onboardingPanel).getByRole('button', { name: '选择观察标的' })).toHaveAttribute('href', '/zh/watchlist');
     expect(within(onboardingPanel).getByRole('button', { name: '查看研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(onboardingPanel).toHaveTextContent('不会自动保存代码。');
