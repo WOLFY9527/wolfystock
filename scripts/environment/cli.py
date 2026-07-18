@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import re
@@ -15,7 +16,13 @@ from .errors import EnvironmentFailure
 from .manager import EnvironmentManager, managed_python_path, require_managed_python
 from .python_lock import check_python_lock, update_python_lock
 from .qualification import compare_findings, normalize_findings
-from .runtime import cleanup_run, create_run_context, project_test_environment, write_run_json
+from .runtime import (
+    cleanup_run,
+    create_run_context,
+    parse_test_config_overrides,
+    project_test_environment,
+    write_run_json,
+)
 
 
 FINDINGS_SCHEMA = "wolfystock_qualification_findings_v1"
@@ -43,6 +50,13 @@ def _parser() -> argparse.ArgumentParser:
     environment_subparsers.add_parser("verify", help="verify snapshots and worktree links")
     execute = subparsers.add_parser("exec", help="run a command with a hermetic environment projection")
     execute.add_argument("--profile", required=True, choices=("test",))
+    execute.add_argument(
+        "--config-override",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="apply one reviewed process-scoped test configuration variant",
+    )
     execute.add_argument("child_command", nargs=argparse.REMAINDER)
     qualify = subparsers.add_parser("qualify-env", help="emit environment evidence or compare baseline findings")
     qualify.add_argument("--findings", type=Path)
@@ -136,12 +150,15 @@ def _execute(root: Path, manager: EnvironmentManager, args: argparse.Namespace) 
         command.pop(0)
     if not command:
         raise EnvironmentFailure("child_command_missing", "exec requires '-- <command...>'")
+    config_overrides = parse_test_config_overrides(args.config_override)
     run_id = "run-" + secrets.token_hex(8)
     context = create_run_context(manager.cache_root, run_id=run_id)
     success = False
     try:
         verified = manager.verify(run_id=run_id)
-        write_run_json(context, "environment-evidence.json", verified.evidence)
+        evidence = copy.deepcopy(verified.evidence)
+        evidence["operational"]["configurationOverrideKeys"] = sorted(config_overrides)
+        write_run_json(context, "environment-evidence.json", evidence)
         node = shutil.which("node")
         if not node:
             raise EnvironmentFailure("managed_node_missing", "Node executable is unavailable")
@@ -150,7 +167,11 @@ def _execute(root: Path, manager: EnvironmentManager, args: argparse.Namespace) 
             context,
             managed_python=managed_python_path(root),
             node_bin=Path(node).parent,
+            managed_rg_dir=verified.rg.path,
+            browser_path=verified.browser.path,
+            browser_executable=verified.browser_executable,
             command=command,
+            config_overrides=config_overrides,
         )
         environment["WOLFYSTOCK_ENV_FINGERPRINT"] = verified.combined_fingerprint
         environment["WOLFYSTOCK_ENV_CACHE"] = str(manager.cache_root)

@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 const explicitPortEnv = 'DSA_WEB_PLAYWRIGHT_PORT';
@@ -59,12 +60,24 @@ const baseURL = process.env.DSA_WEB_PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${p
 const outputDir = process.env.PLAYWRIGHT_OUTPUT_DIR || 'test-results';
 const usesExternalServer = process.env.DSA_WEB_PLAYWRIGHT_EXTERNAL_SERVER === '1';
 const prebuiltArtifact = process.env.DSA_WEB_PLAYWRIGHT_ARTIFACT;
+const managedChromiumExecutable = process.env.WOLFYSTOCK_MANAGED_CHROMIUM_EXECUTABLE?.trim();
 const reporter = process.env.PLAYWRIGHT_HTML_REPORT
   ? ([
       ['list'],
       ['html', { outputFolder: process.env.PLAYWRIGHT_HTML_REPORT, open: 'never' }],
     ] as const)
   : 'list';
+
+if (
+  !managedChromiumExecutable ||
+  !path.isAbsolute(managedChromiumExecutable) ||
+  !existsSync(managedChromiumExecutable)
+) {
+  throw new Error(
+    'WOLFYSTOCK_MANAGED_CHROMIUM_EXECUTABLE must identify a verified absolute executable; ' +
+    'run Playwright through ./wolfy exec --profile test',
+  );
+}
 
 if (prebuiltArtifact) {
   execFileSync(process.env.PYTHON || 'python', [
@@ -101,18 +114,22 @@ export default defineConfig({
     {
       name: 'chromium',
       testIgnore: '**/*.release.spec.ts',
-      use: { ...devices['Desktop Chrome'], channel: 'chromium' },
+      use: { ...devices['Desktop Chrome'], executablePath: managedChromiumExecutable },
     },
     {
       name: 'chromium-mobile',
       testIgnore: '**/*.release.spec.ts',
-      use: { ...devices['Pixel 5'], channel: 'chromium' },
+      use: { ...devices['Pixel 5'], executablePath: managedChromiumExecutable },
     },
     {
       name: 'release-real-runtime',
       testMatch: '**/release-real-runtime.release.spec.ts',
       retries: 0,
-      use: { ...devices['Desktop Chrome'], channel: 'chromium', trace: 'retain-on-failure' },
+      use: {
+        ...devices['Desktop Chrome'],
+        executablePath: managedChromiumExecutable,
+        trace: 'retain-on-failure',
+      },
     },
   ],
 });

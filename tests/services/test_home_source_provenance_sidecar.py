@@ -7,6 +7,8 @@ import ast
 import copy
 import importlib
 import json
+import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -461,8 +463,19 @@ def test_json_output_stays_stable_with_fixed_domain_order() -> None:
 
 
 def test_helper_runtime_integration_is_limited_to_home_response_assembly() -> None:
+    managed_rg = shutil.which("rg")
+    cache_root = os.environ.get("WOLFYSTOCK_ENV_CACHE")
+    assert managed_rg is not None
+    assert cache_root is not None
+    assert Path(managed_rg).resolve().is_relative_to(Path(cache_root).resolve())
     result = subprocess.run(
-        ["rg", "-n", "build_home_source_provenance_sidecar_v1|home_source_provenance_sidecar"],
+        [
+            "rg",
+            "-n",
+            "--glob",
+            "!validation/domain_test_topology.json",
+            "build_home_source_provenance_sidecar_v1|home_source_provenance_sidecar",
+        ],
         cwd=REPO_ROOT,
         check=True,
         capture_output=True,

@@ -60,6 +60,30 @@ def test_lock_command_has_one_bounded_python_check_and_update_surface() -> None:
     assert (update.command, update.lock_family, update.lock_action) == ("lock", "python", "update")
 
 
+def test_exec_parser_exposes_one_repeatable_reviewed_config_override_surface() -> None:
+    parsed = _parser().parse_args(
+        [
+            "exec",
+            "--profile",
+            "test",
+            "--config-override",
+            "MARKET_CACHE_REMOTE_BACKEND=redis",
+            "--config-override",
+            "MARKET_CACHE_REMOTE_URL=redis://fixture.invalid/0",
+            "--",
+            "python",
+            "-c",
+            "pass",
+        ]
+    )
+
+    assert parsed.config_override == [
+        "MARKET_CACHE_REMOTE_BACKEND=redis",
+        "MARKET_CACHE_REMOTE_URL=redis://fixture.invalid/0",
+    ]
+    assert parsed.child_command == ["--", "python", "-c", "pass"]
+
+
 def test_existing_worktree_entrypoints_are_thin_wolfy_delegates() -> None:
     shell = BOOTSTRAP_SH.read_text(encoding="utf-8")
     powershell = BOOTSTRAP_PS1.read_text(encoding="utf-8")
@@ -173,6 +197,9 @@ def test_failed_exec_retains_run_scoped_environment_evidence(
             observed["runId"] = run_id
             return SimpleNamespace(
                 combined_fingerprint="e" * 64,
+                browser=SimpleNamespace(path=Path("/managed/browsers/browser-snapshot")),
+                browser_executable=Path("/managed/browsers/browser-snapshot/chrome"),
+                rg=SimpleNamespace(path=Path("/managed/tools/rg-snapshot")),
                 evidence={
                     "schemaVersion": "wolfystock_environment_evidence_v1",
                     "environmentFingerprint": "e" * 64,
@@ -190,7 +217,17 @@ def test_failed_exec_retains_run_scoped_environment_evidence(
     monkeypatch.setattr("scripts.environment.cli.managed_python_path", lambda _root: Path("/managed/bin/python"))
     monkeypatch.setattr("scripts.environment.cli.subprocess.run", child)
 
-    result = _execute(tmp_path, Manager(), SimpleNamespace(child_command=["--", "fixture-command"]))
+    result = _execute(
+        tmp_path,
+        Manager(),
+        SimpleNamespace(
+            child_command=["--", "fixture-command"],
+            config_override=[
+                "MARKET_CACHE_REMOTE_BACKEND=redis",
+                "MARKET_CACHE_REMOTE_URL=redis://user:private-value@fixture.invalid/0",
+            ],
+        ),
+    )
 
     run_id = "run-" + "a" * 16
     evidence_path = Manager.cache_root / "runs" / "failed" / run_id / "services" / "environment-evidence.json"
@@ -198,5 +235,10 @@ def test_failed_exec_retains_run_scoped_environment_evidence(
     assert result == 1
     assert observed["runId"] == run_id
     assert evidence["operational"]["runId"] == run_id
+    assert evidence["operational"]["configurationOverrideKeys"] == [
+        "MARKET_CACHE_REMOTE_BACKEND",
+        "MARKET_CACHE_REMOTE_URL",
+    ]
     assert "must-not-be-recorded" not in evidence_path.read_text(encoding="utf-8")
+    assert "private-value" not in evidence_path.read_text(encoding="utf-8")
     assert "ALPACA_API_KEY" not in observed["environment"]

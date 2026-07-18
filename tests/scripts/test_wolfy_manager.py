@@ -41,6 +41,12 @@ def snapshot(cache_root: Path, component: str, input_id: str, installed_id: str)
     )
 
 
+def tool_snapshots(cache_root: Path) -> tuple[SnapshotResult, SnapshotResult]:
+    browser = snapshot(cache_root, "browser", "e" * 64, "f" * 64)
+    rg = snapshot(cache_root, "tool-rg", "1" * 64, "2" * 64)
+    return browser, rg
+
+
 def make_root(tmp_path: Path) -> Path:
     root = tmp_path / "worktree"
     (root / "apps" / "dsa-web").mkdir(parents=True)
@@ -86,11 +92,14 @@ def test_migration_replaces_legacy_dependencies_only_after_snapshots_exist(tmp_p
     cache_root = tmp_path / "cache"
     python = snapshot(cache_root, "python", "a" * 64, "b" * 64)
     web = snapshot(cache_root, "web", "c" * 64, "d" * 64)
+    browser, rg = tool_snapshots(cache_root)
     (root / ".venv").mkdir()
     (root / ".venv" / "legacy.txt").write_text("usable legacy", encoding="utf-8")
     (root / "apps" / "dsa-web" / "node_modules").mkdir()
 
-    pointer = link_worktree_environment(root, cache_root, python, web, combined_fingerprint="e" * 64)
+    pointer = link_worktree_environment(
+        root, cache_root, python, web, browser, rg, combined_fingerprint="e" * 64
+    )
 
     assert (root / ".venv").resolve() == python.path
     assert (root / "apps" / "dsa-web" / "node_modules").resolve() == web.path / "node_modules"
@@ -103,12 +112,15 @@ def test_missing_replacement_snapshot_leaves_legacy_environment_untouched(tmp_pa
     cache_root = tmp_path / "cache"
     python = SnapshotResult("python", tmp_path / "missing", "a" * 64, "b" * 64, False, True)
     web = snapshot(cache_root, "web", "c" * 64, "d" * 64)
+    browser, rg = tool_snapshots(cache_root)
     (root / ".venv").mkdir()
     marker = root / ".venv" / "legacy.txt"
     marker.write_text("keep", encoding="utf-8")
 
     with pytest.raises(EnvironmentFailure, match="replacement_snapshot_missing"):
-        link_worktree_environment(root, cache_root, python, web, combined_fingerprint="e" * 64)
+        link_worktree_environment(
+            root, cache_root, python, web, browser, rg, combined_fingerprint="e" * 64
+        )
 
     assert marker.read_text(encoding="utf-8") == "keep"
 
@@ -121,8 +133,11 @@ def test_worktree_links_never_target_canonical_mutable_dependencies(tmp_path: Pa
     cache_root = tmp_path / "cache"
     python = snapshot(cache_root, "python", "a" * 64, "b" * 64)
     web = snapshot(cache_root, "web", "c" * 64, "d" * 64)
+    browser, rg = tool_snapshots(cache_root)
 
-    link_worktree_environment(root, cache_root, python, web, combined_fingerprint="e" * 64)
+    link_worktree_environment(
+        root, cache_root, python, web, browser, rg, combined_fingerprint="e" * 64
+    )
     shutil.rmtree(canonical)
 
     assert (root / ".venv" / "provenance.json").is_file()
@@ -137,9 +152,14 @@ def test_multiple_worktrees_share_snapshots_but_not_run_state(tmp_path: Path) ->
     cache_root = tmp_path / "cache"
     python = snapshot(cache_root, "python", "a" * 64, "b" * 64)
     web = snapshot(cache_root, "web", "c" * 64, "d" * 64)
+    browser, rg = tool_snapshots(cache_root)
 
-    link_worktree_environment(first_root, cache_root, python, web, combined_fingerprint="e" * 64)
-    link_worktree_environment(second_root, cache_root, python, web, combined_fingerprint="e" * 64)
+    link_worktree_environment(
+        first_root, cache_root, python, web, browser, rg, combined_fingerprint="e" * 64
+    )
+    link_worktree_environment(
+        second_root, cache_root, python, web, browser, rg, combined_fingerprint="e" * 64
+    )
     first_run = create_run_context(cache_root, run_id="run-first-worktree")
     second_run = create_run_context(cache_root, run_id="run-second-worktree")
 
@@ -163,11 +183,34 @@ def test_environment_evidence_redacts_cache_paths_and_credentials(tmp_path: Path
     private_cache = tmp_path / "Users" / "private-owner" / "cache"
     python = snapshot(private_cache, "python", "a" * 64, "b" * 64)
     web = snapshot(private_cache, "web", "c" * 64, "d" * 64)
+    browser, rg = tool_snapshots(private_cache)
+    browser_executable = browser.path / "chromium-1208" / "chrome-mac-arm64" / "chrome"
+    browser_executable.parent.mkdir(parents=True)
+    browser_executable.write_text("browser\n", encoding="utf-8")
+    (rg.path / "rg").write_text("rg\n", encoding="utf-8")
 
     evidence = build_environment_evidence(
         combined_fingerprint="e" * 64,
         python=python,
         web=web,
+        browser=browser,
+        rg=rg,
+        browser_identity={
+            "browserVersion": "145.0.7632.6",
+            "executable": "chromium-1208/chrome-mac-arm64/chrome",
+            "executableSha256": "3" * 64,
+            "family": "chromium",
+            "launchVerified": True,
+            "platform": "darwin-arm64",
+            "playwrightVersion": "1.58.2",
+            "revision": "1208",
+        },
+        rg_identity={
+            "executable": "rg",
+            "executableSha256": "4" * 64,
+            "platform": "darwin-arm64",
+            "version": "15.1.0",
+        },
         manifest_hashes={"requirements.txt": "f" * 64},
         python_lock_evidence={
             "schemaVersion": "wolfystock_python_lock_v1",
@@ -185,6 +228,10 @@ def test_environment_evidence_redacts_cache_paths_and_credentials(tmp_path: Path
     assert "private-owner" not in encoded
     assert "must-not-appear" not in encoded
     assert evidence["snapshots"]["python"].startswith("$CACHE/")
+    assert evidence["browser"]["revision"] == "1208"
+    assert evidence["browser"]["launchVerified"] is True
+    assert evidence["browser"]["executable"].startswith("$CACHE/")
+    assert evidence["managedTools"]["rg"]["executable"].startswith("$CACHE/")
     assert evidence["environmentIdentity"]["bootstrapImplementationVersion"] == "wolfystock_bootstrap_v7"
     assert evidence["pythonLock"]["contentHash"] == "1" * 64
     assert evidence["pythonLock"]["hashVerification"] is True
@@ -195,6 +242,8 @@ def test_environment_evidence_redacts_cache_paths_and_credentials(tmp_path: Path
     [
         ("python", "installedFingerprint", "f" * 64),
         ("web", "snapshot", "$CACHE/snapshots/web/wrong/snapshot"),
+        ("browser", "installedFingerprint", "9" * 64),
+        ("rg", "installedFingerprint", "8" * 64),
     ],
 )
 def test_verify_rejects_pointer_component_identity_mismatch(
@@ -209,8 +258,11 @@ def test_verify_rejects_pointer_component_identity_mismatch(
     manager = EnvironmentManager(root, cache_root=cache_root, toolchain=fixture_toolchain())
     python = snapshot(cache_root, "python", manager.identity.python_input_fingerprint, "b" * 64)
     web = snapshot(cache_root, "web", manager.identity.web_input_fingerprint, "d" * 64)
-    combined = combined_environment_fingerprint(manager.identity, python, web)
-    pointer_path = link_worktree_environment(root, cache_root, python, web, combined_fingerprint=combined)
+    browser, rg = tool_snapshots(cache_root)
+    combined = combined_environment_fingerprint(manager.identity, python, web, browser, rg)
+    pointer_path = link_worktree_environment(
+        root, cache_root, python, web, browser, rg, combined_fingerprint=combined
+    )
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     pointer["components"][component_name][field] = replacement
     pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
@@ -219,6 +271,16 @@ def test_verify_rejects_pointer_component_identity_mismatch(
         SimpleNamespace(name="web", input_fingerprint=manager.identity.web_input_fingerprint),
     )
     monkeypatch.setattr(manager, "_components", lambda: components)
+    monkeypatch.setattr(
+        manager,
+        "_browser_component",
+        lambda _web: SimpleNamespace(name="browser", input_fingerprint="e" * 64),
+    )
+    monkeypatch.setattr(
+        manager,
+        "_rg_component",
+        lambda: SimpleNamespace(name="tool-rg", input_fingerprint="1" * 64),
+    )
     monkeypatch.setattr(
         "scripts.environment.manager.verify_cached_snapshot",
         lambda path, _component: {"installedFingerprint": path.name},
@@ -255,8 +317,11 @@ def test_linking_environment_keeps_tracked_git_state_clean(tmp_path: Path) -> No
     cache_root = tmp_path / "cache"
     python = snapshot(cache_root, "python", "a" * 64, "b" * 64)
     web = snapshot(cache_root, "web", "c" * 64, "d" * 64)
+    browser, rg = tool_snapshots(cache_root)
 
-    link_worktree_environment(root, cache_root, python, web, combined_fingerprint="e" * 64)
+    link_worktree_environment(
+        root, cache_root, python, web, browser, rg, combined_fingerprint="e" * 64
+    )
 
     status = subprocess.run(["git", "status", "--porcelain"], cwd=root, text=True, capture_output=True, check=True)
     assert status.stdout == ""

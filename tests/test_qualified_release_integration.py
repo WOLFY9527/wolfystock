@@ -456,16 +456,26 @@ def test_release_workflows_use_managed_environment_and_digest_only_promotion() -
         assert command in ci_text
 
 
-def test_playwright_browser_install_survives_managed_run_cleanup() -> None:
-    release_text = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
-    ci_text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+def test_playwright_browser_install_survives_managed_run_cleanup(tmp_path: Path) -> None:
+    from scripts.environment.runtime import cleanup_run, create_run_context
 
-    release_browser_path = 'PLAYWRIGHT_BROWSERS_PATH="$PWD/../../output/release/playwright-browsers"'
-    ci_browser_path = 'PLAYWRIGHT_BROWSERS_PATH="$PWD/../../output/ci/playwright-browsers"'
-    assert release_text.count(release_browser_path) == 2
-    assert ci_text.count(ci_browser_path) == 2
-    assert "cd apps/dsa-web && export PLAYWRIGHT_BROWSERS_PATH=" in release_text
-    assert "cd apps/dsa-web && export PLAYWRIGHT_BROWSERS_PATH=" in ci_text
+    cache_root = tmp_path / "cache"
+    browser_snapshot = cache_root / "snapshots" / "browser" / ("a" * 64) / ("b" * 64)
+    browser_snapshot.mkdir(parents=True)
+    context = create_run_context(cache_root, run_id="run-browser-cleanup")
+
+    cleanup_run(context, success=True)
+
+    assert browser_snapshot.is_dir()
+    assert not context.root.exists()
+    manager = (ROOT / "scripts/environment/manager.py").read_text(encoding="utf-8")
+    runtime = (ROOT / "scripts/environment/runtime.py").read_text(encoding="utf-8")
+    playwright = (ROOT / "apps/dsa-web/playwright.config.ts").read_text(encoding="utf-8")
+    assert "ensure_snapshot(" in manager
+    assert "self._browser_component(web)" in manager
+    assert '"WOLFYSTOCK_MANAGED_CHROMIUM_EXECUTABLE": str(browser_executable)' in runtime
+    assert "executablePath: managedChromiumExecutable" in playwright
+    assert "channel: 'chromium'" not in playwright
 
 
 def test_release_runtime_evidence_requires_source_cwd_environment_and_asset_identity() -> None:

@@ -3,11 +3,22 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import pytest
+
+from scripts.environment.errors import EnvironmentFailure
 from scripts.environment.runtime import (
     cleanup_run,
     create_run_context,
+    parse_test_config_overrides,
     project_test_environment,
 )
+
+
+MANAGED_PATHS = {
+    "managed_rg_dir": Path("/managed/tools/rg"),
+    "browser_path": Path("/managed/browsers/chromium-1208"),
+    "browser_executable": Path("/managed/browsers/chromium-1208/chrome"),
+}
 
 
 def test_test_projection_strips_credentials_dsns_admin_flags_and_startup_modifiers(tmp_path: Path) -> None:
@@ -33,6 +44,7 @@ def test_test_projection_strips_credentials_dsns_admin_flags_and_startup_modifie
         managed_python=Path("/managed/.venv/bin/python"),
         node_bin=Path("/managed/node/bin"),
         command=["python", "-c", "pass"],
+        **MANAGED_PATHS,
     )
 
     for name in (
@@ -60,6 +72,7 @@ def test_app_env_is_preserved_only_when_explicitly_present(tmp_path: Path) -> No
         "managed_python": Path("/managed/.venv/bin/python"),
         "node_bin": Path("/managed/node/bin"),
         "command": ["python", "-c", "pass"],
+        **MANAGED_PATHS,
     }
 
     assert "APP_ENV" not in project_test_environment({}, **common)
@@ -82,6 +95,7 @@ def test_release_projection_preserves_only_non_secret_identity_controls(tmp_path
         managed_python=Path("/managed/.venv/bin/python"),
         node_bin=Path("/managed/node/bin"),
         command=["npm", "exec", "playwright"],
+        **MANAGED_PATHS,
     )
 
     assert projected["WOLFYSTOCK_RELEASE_CANDIDATE_SHA"] == "a" * 40
@@ -103,6 +117,7 @@ def test_destructive_postgres_dsn_requires_full_explicit_command_contract(tmp_pa
         "context": context,
         "managed_python": Path("/managed/.venv/bin/python"),
         "node_bin": Path("/managed/node/bin"),
+        **MANAGED_PATHS,
     }
 
     denied = project_test_environment(command=["pytest"], **common)
@@ -122,6 +137,123 @@ def test_destructive_postgres_dsn_requires_full_explicit_command_contract(tmp_pa
 
     assert "POSTGRES_PHASE_A_REAL_DSN" not in denied
     assert allowed["POSTGRES_PHASE_A_REAL_DSN"] == source["POSTGRES_PHASE_A_REAL_DSN"]
+
+
+def test_profile_defaults_are_deterministic_without_freezing_product_settings(tmp_path: Path) -> None:
+    context = create_run_context(tmp_path, run_id="run-defaults")
+
+    projected = project_test_environment(
+        {
+            "PATH": "/unreviewed/bin",
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+        },
+        context,
+        managed_python=Path("/managed/.venv/bin/python"),
+        node_bin=Path("/managed/node/bin"),
+        command=["python", "-c", "pass"],
+        **MANAGED_PATHS,
+    )
+
+    assert "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED" not in projected
+    assert "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED" not in projected
+    assert projected["WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS"] == "true"
+    assert projected["PATH"].split(os.pathsep) == [
+        "/managed/.venv/bin",
+        "/managed/node/bin",
+        "/managed/tools/rg",
+        "/usr/bin",
+        "/bin",
+    ]
+    assert "/unreviewed/bin" not in projected["PATH"]
+    assert projected["PLAYWRIGHT_BROWSERS_PATH"] == "/managed/browsers/chromium-1208"
+    assert projected["WOLFYSTOCK_MANAGED_CHROMIUM_EXECUTABLE"] == (
+        "/managed/browsers/chromium-1208/chrome"
+    )
+
+
+def test_reviewed_process_override_is_allowlisted_and_order_isolated(tmp_path: Path) -> None:
+    context = create_run_context(tmp_path, run_id="run-overrides")
+    common = {
+        "source": {},
+        "context": context,
+        "managed_python": Path("/managed/.venv/bin/python"),
+        "node_bin": Path("/managed/node/bin"),
+        "command": ["python", "-c", "pass"],
+        **MANAGED_PATHS,
+    }
+    enabled = parse_test_config_overrides(
+        [
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED=true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED=true",
+        ]
+    )
+
+    first_enabled = project_test_environment(config_overrides=enabled, **common)
+    first_default = project_test_environment(config_overrides={}, **common)
+    second_default = project_test_environment(config_overrides={}, **common)
+    second_enabled = project_test_environment(config_overrides=enabled, **common)
+
+    for projected in (first_enabled, second_enabled):
+        assert projected["WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED"] == "true"
+        assert projected["WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED"] == "true"
+    for projected in (first_default, second_default):
+        assert "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED" not in projected
+        assert "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED" not in projected
+
+
+def test_pytest_child_projection_extends_only_reviewed_override_keys(monkeypatch) -> None:
+    from scripts.environment.pytest_projection import pytest_configure
+    from scripts.environment.runtime import TEST_CONFIG_OVERRIDE_KEYS
+    from tests import offline_network
+
+    original = set(offline_network.CHILD_ENVIRONMENT_ALLOWLIST)
+    monkeypatch.setattr(
+        offline_network,
+        "CHILD_ENVIRONMENT_ALLOWLIST",
+        original.difference(TEST_CONFIG_OVERRIDE_KEYS),
+    )
+
+    pytest_configure()
+
+    assert TEST_CONFIG_OVERRIDE_KEYS <= offline_network.CHILD_ENVIRONMENT_ALLOWLIST
+    assert "UNREVIEWED_HOST_SETTING" not in offline_network.CHILD_ENVIRONMENT_ALLOWLIST
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "UNKNOWN_FLAG=true",
+        "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED=maybe",
+        "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED=true=WAT",
+    ],
+)
+def test_reviewed_process_override_rejects_unknown_or_invalid_values(raw: str) -> None:
+    with pytest.raises(EnvironmentFailure) as raised:
+        parse_test_config_overrides([raw])
+
+    assert raised.value.code == "test_config_override_invalid"
+
+
+def test_test_override_is_rejected_for_release_or_production_controls(tmp_path: Path) -> None:
+    context = create_run_context(tmp_path, run_id="run-release-override")
+    overrides = parse_test_config_overrides(
+        ["WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED=true"]
+    )
+
+    for source in ({"APP_ENV": "production"}, {"WOLFYSTOCK_RELEASE_CANDIDATE_SHA": "a" * 40}):
+        with pytest.raises(EnvironmentFailure) as raised:
+            project_test_environment(
+                source,
+                context,
+                managed_python=Path("/managed/.venv/bin/python"),
+                node_bin=Path("/managed/node/bin"),
+                command=["python", "-c", "pass"],
+                config_overrides=overrides,
+                **MANAGED_PATHS,
+            )
+
+        assert raised.value.code == "test_config_override_forbidden"
 
 
 def test_multiple_runs_share_no_mutable_paths(tmp_path: Path) -> None:

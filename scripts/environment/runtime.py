@@ -5,8 +5,10 @@ import os
 import re
 import shutil
 import uuid
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 from .errors import EnvironmentFailure
 
@@ -17,6 +19,74 @@ _SAFE_DSN = re.compile(
     r"wolfystock_destructive_test_[a-z0-9_]+$"
 )
 _RELEASE_SHA = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _boolean_override(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized not in {"false", "true"}:
+        raise ValueError
+    return normalized
+
+
+def _market_cache_backend_override(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized not in {"disabled", "redis"}:
+        raise ValueError
+    return normalized
+
+
+def _market_cache_url_override(value: str) -> str:
+    if not value:
+        return value
+    if len(value) > 2048 or urlparse(value).scheme not in {"redis", "rediss"}:
+        raise ValueError
+    return value
+
+
+def _bounded_float_override(value: str) -> str:
+    parsed = float(value)
+    if not 0.001 <= parsed <= 5.0:
+        raise ValueError
+    return value
+
+
+def _bounded_integer_override(value: str) -> str:
+    parsed = int(value)
+    if not 1 <= parsed <= 100_000:
+        raise ValueError
+    return value
+
+
+TEST_CONFIG_OVERRIDE_VALIDATORS: Mapping[str, Callable[[str], str]] = {
+    "MARKET_CACHE_REMOTE_BACKEND": _market_cache_backend_override,
+    "MARKET_CACHE_REMOTE_QUEUE_SIZE": _bounded_integer_override,
+    "MARKET_CACHE_REMOTE_TIMEOUT_SECONDS": _bounded_float_override,
+    "MARKET_CACHE_REMOTE_URL": _market_cache_url_override,
+    "WOLFYSTOCK_HISTORICAL_OHLCV_CACHE_SEED_ENABLED": _boolean_override,
+    "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": _boolean_override,
+    "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": _boolean_override,
+}
+TEST_CONFIG_OVERRIDE_KEYS = frozenset(TEST_CONFIG_OVERRIDE_VALIDATORS)
+
+
+def parse_test_config_overrides(values: Sequence[str]) -> dict[str, str]:
+    overrides: dict[str, str] = {}
+    for item in values:
+        name, separator, value = item.partition("=")
+        validator = TEST_CONFIG_OVERRIDE_VALIDATORS.get(name)
+        if not separator or validator is None or name in overrides:
+            raise EnvironmentFailure(
+                "test_config_override_invalid",
+                "test configuration override must use one reviewed KEY=VALUE identity",
+            )
+        try:
+            overrides[name] = validator(value)
+        except (TypeError, ValueError) as exc:
+            raise EnvironmentFailure(
+                "test_config_override_invalid",
+                f"test configuration override value is invalid for {name}",
+            ) from exc
+    return overrides
 
 
 @dataclass(frozen=True)
@@ -122,8 +192,27 @@ def project_test_environment(
     *,
     managed_python: Path,
     node_bin: Path,
+    managed_rg_dir: Path,
+    browser_path: Path,
+    browser_executable: Path,
     command: list[str],
+    config_overrides: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
+    overrides = dict(config_overrides or {})
+    if set(overrides).difference(TEST_CONFIG_OVERRIDE_KEYS):
+        raise EnvironmentFailure(
+            "test_config_override_invalid", "test configuration override key is not reviewed"
+        )
+    release_controlled = bool(
+        source.get("WOLFYSTOCK_RELEASE_CANDIDATE_SHA")
+        or source.get("DSA_WEB_PLAYWRIGHT_EXTERNAL_SERVER")
+        or source.get("APP_ENV", "").strip().lower() in {"production", "release"}
+    )
+    if overrides and release_controlled:
+        raise EnvironmentFailure(
+            "test_config_override_forbidden",
+            "test configuration overrides are forbidden for production and release execution",
+        )
     preserved = {
         key: source[key]
         for key in ("CI", "COLORTERM", "LANG", "LC_ALL", "TERM", "TZ")
@@ -151,7 +240,15 @@ def project_test_environment(
         preserved[name] = value
     preserved.update(
         {
-            "PATH": os.pathsep.join((str(managed_python.parent), str(node_bin), "/usr/bin", "/bin")),
+            "PATH": os.pathsep.join(
+                (
+                    str(managed_python.parent),
+                    str(node_bin),
+                    str(managed_rg_dir),
+                    "/usr/bin",
+                    "/bin",
+                )
+            ),
             "DATABASE_PATH": str(context.database_path),
             "DUCKDB_DATABASE_PATH": str(context.duckdb_path),
             "ENV_FILE": str(context.root / "empty.env"),
@@ -163,6 +260,7 @@ def project_test_environment(
             "XDG_CACHE_HOME": str(context.cache_dir),
             "COVERAGE_FILE": str(context.coverage_dir / ".coverage"),
             "PYTEST_ADDOPTS": f"-o cache_dir={context.pytest_cache_dir}",
+            "PYTEST_PLUGINS": "scripts.environment.pytest_projection",
             "PYTHONDONTWRITEBYTECODE": "1",
             "PYTHONHASHSEED": "0",
             "NO_PROXY": "*",
@@ -177,11 +275,12 @@ def project_test_environment(
             "CRYPTO_REALTIME_ENABLED": "false",
             "SEARXNG_PUBLIC_INSTANCES_ENABLED": "false",
             "WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS": "true",
-            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "false",
-            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "false",
             "PORTFOLIO_FX_UPDATE_ENABLED": "false",
+            "PLAYWRIGHT_BROWSERS_PATH": str(browser_path),
+            "WOLFYSTOCK_MANAGED_CHROMIUM_EXECUTABLE": str(browser_executable),
         }
     )
+    preserved.update(overrides)
     (context.root / "home").mkdir(parents=True, exist_ok=True)
     if _destructive_postgres_authorized(command, source):
         preserved["POSTGRES_PHASE_A_REAL_DSN"] = source["POSTGRES_PHASE_A_REAL_DSN"]

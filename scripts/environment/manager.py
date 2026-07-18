@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
+from .browser import BrowserComponent, browser_executable_path
 from .cache import environment_cache_root
 from .components import PythonComponent, WebComponent
 from .errors import EnvironmentFailure
@@ -24,12 +25,13 @@ from .identity import (
     detect_toolchain,
     stable_hash,
 )
-from .runtime import ENVIRONMENT_POLICY_VERSION
+from .managed_tools import ManagedRgComponent
 from .python_lock import (
     PythonLockContract,
     bootstrap_profile_for_target,
     load_python_lock,
 )
+from .runtime import ENVIRONMENT_POLICY_VERSION
 from .snapshots import SnapshotResult, ensure_snapshot, verify_cached_snapshot
 
 
@@ -42,6 +44,9 @@ class VerifiedEnvironment:
     identity: EnvironmentIdentity
     python: SnapshotResult
     web: SnapshotResult
+    browser: SnapshotResult
+    rg: SnapshotResult
+    browser_executable: Path
     combined_fingerprint: str
     evidence: dict[str, Any]
 
@@ -109,7 +114,11 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
 
 
 def combined_environment_fingerprint(
-    identity: EnvironmentIdentity, python: SnapshotResult, web: SnapshotResult
+    identity: EnvironmentIdentity,
+    python: SnapshotResult,
+    web: SnapshotResult,
+    browser: SnapshotResult,
+    rg: SnapshotResult,
 ) -> str:
     return stable_hash(
         {
@@ -117,6 +126,10 @@ def combined_environment_fingerprint(
             "combinedInputFingerprint": identity.combined_input_fingerprint,
             "pythonInstalledFingerprint": python.installed_fingerprint,
             "webInstalledFingerprint": web.installed_fingerprint,
+            "browserInputFingerprint": browser.input_fingerprint,
+            "browserInstalledFingerprint": browser.installed_fingerprint,
+            "managedRgInputFingerprint": rg.input_fingerprint,
+            "managedRgInstalledFingerprint": rg.installed_fingerprint,
             "environmentPolicyVersion": ENVIRONMENT_POLICY_VERSION,
         }
     )
@@ -127,12 +140,14 @@ def link_worktree_environment(
     cache_root: Path,
     python: SnapshotResult,
     web: SnapshotResult,
+    browser: SnapshotResult,
+    rg: SnapshotResult,
     *,
     combined_fingerprint: str,
 ) -> Path:
     root = root.resolve(strict=True)
     cache_root.mkdir(parents=True, exist_ok=True)
-    for result in (python, web):
+    for result in (python, web, browser, rg):
         if not result.path.is_dir() or not (result.path / "provenance.json").is_file():
             raise EnvironmentFailure("replacement_snapshot_missing", "replacement_snapshot_missing")
         _cache_relative(cache_root, result.path)
@@ -158,6 +173,16 @@ def link_worktree_environment(
                     "inputFingerprint": web.input_fingerprint,
                     "installedFingerprint": web.installed_fingerprint,
                     "snapshot": _cache_relative(cache_root, web.path),
+                },
+                "browser": {
+                    "inputFingerprint": browser.input_fingerprint,
+                    "installedFingerprint": browser.installed_fingerprint,
+                    "snapshot": _cache_relative(cache_root, browser.path),
+                },
+                "rg": {
+                    "inputFingerprint": rg.input_fingerprint,
+                    "installedFingerprint": rg.installed_fingerprint,
+                    "snapshot": _cache_relative(cache_root, rg.path),
                 },
             },
         },
@@ -205,6 +230,10 @@ def build_environment_evidence(
     combined_fingerprint: str,
     python: SnapshotResult,
     web: SnapshotResult,
+    browser: SnapshotResult,
+    rg: SnapshotResult,
+    browser_identity: Mapping[str, Any],
+    rg_identity: Mapping[str, Any],
     manifest_hashes: dict[str, str],
     python_lock_evidence: dict[str, Any],
     toolchain: Mapping[str, Any],
@@ -214,6 +243,38 @@ def build_environment_evidence(
     cache_root: Path | None = None,
 ) -> dict[str, Any]:
     root = cache_root or python.path.parents[3]
+    browser_details = {
+        key: browser_identity[key]
+        for key in (
+            "browserVersion",
+            "executableSha256",
+            "family",
+            "launchVerified",
+            "platform",
+            "playwrightVersion",
+            "revision",
+        )
+        if key in browser_identity
+    }
+    browser_relative_executable = browser_identity.get("executable")
+    if not isinstance(browser_relative_executable, str):
+        raise EnvironmentFailure(
+            "browser_executable_missing", "managed Chromium executable identity is missing"
+        )
+    browser_details["executable"] = _cache_relative(
+        root, browser.path / browser_relative_executable
+    )
+    rg_details = {
+        key: rg_identity[key]
+        for key in ("executableSha256", "platform", "version")
+        if key in rg_identity
+    }
+    rg_relative_executable = rg_identity.get("executable")
+    if not isinstance(rg_relative_executable, str):
+        raise EnvironmentFailure(
+            "managed_rg_executable_missing", "managed rg executable identity is missing"
+        )
+    rg_details["executable"] = _cache_relative(root, rg.path / rg_relative_executable)
     return {
         "schemaVersion": EVIDENCE_SCHEMA,
         "environmentIdentity": {
@@ -227,6 +288,11 @@ def build_environment_evidence(
                 "installed": python.installed_fingerprint,
             },
             "web": {"input": web.input_fingerprint, "installed": web.installed_fingerprint},
+            "browser": {
+                "input": browser.input_fingerprint,
+                "installed": browser.installed_fingerprint,
+            },
+            "rg": {"input": rg.input_fingerprint, "installed": rg.installed_fingerprint},
         },
         "manifestHashes": dict(sorted(manifest_hashes.items())),
         "pythonLock": python_lock_evidence,
@@ -234,7 +300,11 @@ def build_environment_evidence(
         "snapshots": {
             "python": _cache_relative(root, python.path),
             "web": _cache_relative(root, web.path),
+            "browser": _cache_relative(root, browser.path),
+            "rg": _cache_relative(root, rg.path),
         },
+        "browser": browser_details,
+        "managedTools": {"rg": rg_details},
         "environmentPolicyVersion": ENVIRONMENT_POLICY_VERSION,
         "operational": {
             "bootstrapNetworkUsed": network_used,
@@ -291,19 +361,52 @@ class EnvironmentManager:
             WebComponent(self.root, self.identity.web_input_fingerprint, self.toolchain),
         )
 
+    def _browser_component(self, web: SnapshotResult) -> BrowserComponent:
+        return BrowserComponent(
+            web.path,
+            web.input_fingerprint,
+            self.toolchain,
+        )
+
+    def _rg_component(self) -> ManagedRgComponent:
+        return ManagedRgComponent(self.toolchain)
+
+    @staticmethod
+    def _installed_identity(result: SnapshotResult) -> dict[str, Any]:
+        try:
+            payload = json.loads((result.path / "provenance.json").read_text(encoding="utf-8"))
+            installed = payload["installed"]
+        except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise EnvironmentFailure(
+                "snapshot_provenance_invalid", "snapshot provenance manifest is invalid"
+            ) from exc
+        if not isinstance(installed, dict):
+            raise EnvironmentFailure(
+                "snapshot_provenance_invalid", "snapshot provenance manifest is invalid"
+            )
+        return installed
+
     def _verified(
         self,
         python: SnapshotResult,
         web: SnapshotResult,
+        browser: SnapshotResult,
+        rg: SnapshotResult,
         *,
         network_used: bool,
         run_id: str | None = None,
     ) -> VerifiedEnvironment:
-        combined = combined_environment_fingerprint(self.identity, python, web)
+        combined = combined_environment_fingerprint(
+            self.identity, python, web, browser, rg
+        )
         evidence = build_environment_evidence(
             combined_fingerprint=combined,
             python=python,
             web=web,
+            browser=browser,
+            rg=rg,
+            browser_identity=self._installed_identity(browser),
+            rg_identity=self._installed_identity(rg),
             manifest_hashes=self.identity.manifest_hashes,
             python_lock_evidence=self.python_lock.evidence(),
             toolchain=asdict(self.toolchain),
@@ -312,16 +415,36 @@ class EnvironmentManager:
             verified_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
             cache_root=self.cache_root,
         )
-        return VerifiedEnvironment(self.identity, python, web, combined, evidence)
+        return VerifiedEnvironment(
+            self.identity,
+            python,
+            web,
+            browser,
+            rg,
+            browser_executable_path(browser.path),
+            combined,
+            evidence,
+        )
 
     def ensure(self, *, offline: bool, run_id: str | None = None) -> VerifiedEnvironment:
         python_component, web_component = self._components()
         python = ensure_snapshot(self.cache_root, python_component, offline=offline)
         web = ensure_snapshot(self.cache_root, web_component, offline=offline)
+        rg = ensure_snapshot(self.cache_root, self._rg_component(), offline=offline)
+        browser = ensure_snapshot(
+            self.cache_root, self._browser_component(web), offline=offline
+        )
         verified = self._verified(
             python,
             web,
-            network_used=python.network_used or web.network_used,
+            browser,
+            rg,
+            network_used=(
+                python.network_used
+                or web.network_used
+                or browser.network_used
+                or rg.network_used
+            ),
             run_id=run_id,
         )
         link_worktree_environment(
@@ -329,6 +452,8 @@ class EnvironmentManager:
             self.cache_root,
             python,
             web,
+            browser,
+            rg,
             combined_fingerprint=verified.combined_fingerprint,
         )
         return self.verify(
@@ -345,7 +470,7 @@ class EnvironmentManager:
         if pointer.get("schemaVersion") != POINTER_SCHEMA or not isinstance(pointer.get("components"), dict):
             raise EnvironmentFailure("worktree_pointer_invalid", "worktree environment pointer is invalid")
         python_component, web_component = self._components()
-        results: list[SnapshotResult] = []
+        results: dict[str, SnapshotResult] = {}
         for name, destination, component in (
             ("python", self.root / ".venv", python_component),
             ("web", self.root / "apps" / "dsa-web" / "node_modules", web_component),
@@ -369,17 +494,53 @@ class EnvironmentManager:
                 raise EnvironmentFailure(
                     "worktree_pointer_mismatch", f"{name} pointer snapshot identity does not match"
                 )
-            results.append(
-                SnapshotResult(
-                    name,
-                    snapshot,
-                    component.input_fingerprint,
-                    str(manifest["installedFingerprint"]),
-                    False,
-                    True,
-                )
+            results[name] = SnapshotResult(
+                name,
+                snapshot,
+                component.input_fingerprint,
+                str(manifest["installedFingerprint"]),
+                False,
+                True,
             )
-        verified = self._verified(results[0], results[1], network_used=network_used, run_id=run_id)
+        browser_component = self._browser_component(results["web"])
+        rg_component = self._rg_component()
+        for name, component in (("browser", browser_component), ("rg", rg_component)):
+            details = pointer["components"].get(name)
+            if not isinstance(details, dict) or details.get("inputFingerprint") != component.input_fingerprint:
+                raise EnvironmentFailure(
+                    "worktree_pointer_mismatch", f"{name} pointer input fingerprint does not match"
+                )
+            snapshot_value = details.get("snapshot")
+            if not isinstance(snapshot_value, str) or not snapshot_value.startswith("$CACHE/"):
+                raise EnvironmentFailure(
+                    "worktree_pointer_mismatch", f"{name} pointer snapshot identity does not match"
+                )
+            snapshot = self.cache_root / snapshot_value.removeprefix("$CACHE/")
+            _cache_relative(self.cache_root, snapshot)
+            manifest = verify_cached_snapshot(snapshot, component)
+            if (
+                details.get("snapshot") != _cache_relative(self.cache_root, snapshot)
+                or details.get("installedFingerprint") != manifest.get("installedFingerprint")
+            ):
+                raise EnvironmentFailure(
+                    "worktree_pointer_mismatch", f"{name} pointer snapshot identity does not match"
+                )
+            results[name] = SnapshotResult(
+                component.name,
+                snapshot,
+                component.input_fingerprint,
+                str(manifest["installedFingerprint"]),
+                False,
+                True,
+            )
+        verified = self._verified(
+            results["python"],
+            results["web"],
+            results["browser"],
+            results["rg"],
+            network_used=network_used,
+            run_id=run_id,
+        )
         if pointer.get("combinedFingerprint") != verified.combined_fingerprint:
             raise EnvironmentFailure("worktree_pointer_mismatch", "combined environment fingerprint does not match")
         return verified

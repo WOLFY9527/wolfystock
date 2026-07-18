@@ -174,6 +174,9 @@ def run_development_services(root: Path, manager: "EnvironmentManager") -> dict[
         context,
         managed_python=managed_python_path(root),
         node_bin=Path(node).parent,
+        managed_rg_dir=verified.rg.path,
+        browser_path=verified.browser.path,
+        browser_executable=verified.browser_executable,
         command=["dev"],
     )
     environment["WOLFYSTOCK_ENV_FINGERPRINT"] = verified.combined_fingerprint
