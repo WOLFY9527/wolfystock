@@ -1456,14 +1456,42 @@ class RuleBacktestService:
             artifact_availability=artifact_availability,
             trade_rows_present=bool(trade_run_ids),
         )
+        (
+            execution_model,
+            execution_model_source,
+            execution_model_completeness,
+            execution_model_missing_fields,
+        ) = self._resolve_execution_model_payload(summary=summary, row=row)
+        execution_assumptions_snapshot = self._resolve_execution_assumptions_snapshot(
+            summary=summary,
+            derived_payload=self._build_execution_assumptions_payload(
+                execution_model=execution_model,
+            ),
+        )
+        execution_assumptions = dict(execution_assumptions_snapshot.get("payload") or {})
+        readiness_result_authority = {
+            "domains": {
+                "execution_model": self._build_result_authority_domain_entry(
+                    source=execution_model_source,
+                    completeness=execution_model_completeness,
+                    missing=execution_model_missing_fields,
+                    missing_kind="fields",
+                ),
+                "execution_assumptions_snapshot": self._build_result_authority_domain_entry(
+                    source=str(execution_assumptions_snapshot.get("source") or "unavailable"),
+                    completeness=str(
+                        execution_assumptions_snapshot.get("completeness") or "unavailable"
+                    ),
+                    missing=list(execution_assumptions_snapshot.get("missing_keys") or []),
+                    missing_kind="keys",
+                ),
+            }
+        }
         readiness_payload = self._build_single_symbol_professional_readiness_payload(
             data_quality=summary.get("data_quality") if isinstance(summary.get("data_quality"), dict) else None,
-            execution_assumptions=(
-                summary.get("execution_assumptions")
-                if isinstance(summary.get("execution_assumptions"), dict)
-                else None
-            ),
-            execution_model=summary.get("execution_model") if isinstance(summary.get("execution_model"), dict) else None,
+            execution_assumptions=execution_assumptions,
+            execution_model=execution_model,
+            result_authority=readiness_result_authority,
         )
         payload = self._build_run_status_payload(
             row=row,

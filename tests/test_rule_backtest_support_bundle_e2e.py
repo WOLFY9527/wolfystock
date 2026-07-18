@@ -22,6 +22,10 @@ ensure_litellm_stub()
 
 import src.auth as auth  # noqa: E402
 from api.app import create_app  # noqa: E402
+from api.v1.schemas.backtest import (  # noqa: E402
+    RuleBacktestSupportBundleManifestResponse,
+    RuleBacktestSupportBundleReproducibilityManifestResponse,
+)
 from src.config import Config  # noqa: E402
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID  # noqa: E402
 from src.services.rule_backtest_service import RuleBacktestService  # noqa: E402
@@ -435,40 +439,40 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 ]
         return normalized
 
-    def _fetch_support_bundle_surface(self, run_id: int) -> dict:
+    def _fetch_support_bundle_surface(self, run_id: int, *, expect_oos_export: bool = True) -> dict:
         export_index_response = self.client.get(f"/api/v1/backtest/rule/runs/{run_id}/export-index")
         self.assertEqual(export_index_response.status_code, 200)
         export_index = export_index_response.json()
 
         self.assertEqual(export_index["run_id"], run_id)
-        self.assertEqual(
-            [item["key"] for item in export_index["exports"]],
-            [
-                "support_bundle_manifest_json",
-                "support_bundle_reproducibility_manifest_json",
-                "execution_trace_json",
-                "execution_trace_csv",
-                "robustness_evidence_json",
-                "regime_attribution_readiness_json",
-                "execution_model_metadata_json",
-                "oos_parameter_readiness_json",
-            ],
-        )
+        expected_keys = [
+            "support_bundle_manifest_json",
+            "support_bundle_reproducibility_manifest_json",
+            "execution_trace_json",
+            "execution_trace_csv",
+            "robustness_evidence_json",
+            "regime_attribution_readiness_json",
+            "execution_model_metadata_json",
+        ]
+        expected_contracts = [
+            ("json", "application/json", "api", "compact"),
+            ("json", "application/json", "api", "compact"),
+            ("json", "application/json", "api", "heavy"),
+            ("csv", "text/csv", "api", "heavy"),
+            ("json", "application/json", "api", "heavy"),
+            ("json", "application/json", "api", "compact"),
+            ("json", "application/json", "api", "compact"),
+        ]
+        if expect_oos_export:
+            expected_keys.append("oos_parameter_readiness_json")
+            expected_contracts.append(("json", "application/json", "api", "compact"))
+        self.assertEqual([item["key"] for item in export_index["exports"]], expected_keys)
         self.assertEqual(
             [
                 (item["format"], item["media_type"], item["delivery_mode"], item["payload_class"])
                 for item in export_index["exports"]
             ],
-            [
-                ("json", "application/json", "api", "compact"),
-                ("json", "application/json", "api", "compact"),
-                ("json", "application/json", "api", "heavy"),
-                ("csv", "text/csv", "api", "heavy"),
-                ("json", "application/json", "api", "heavy"),
-                ("json", "application/json", "api", "compact"),
-                ("json", "application/json", "api", "compact"),
-                ("json", "application/json", "api", "compact"),
-            ],
+            expected_contracts,
         )
 
         manifest_response = self.client.get(export_index["exports"][0]["endpoint_path"])
@@ -496,10 +500,27 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         trace_available: bool,
     ) -> None:
         self.assertEqual(service.get_support_export_index(run_id), payloads["export_index"])
-        self.assertEqual(service.get_support_bundle_manifest(run_id), payloads["manifest"])
+        service_manifest = service.get_support_bundle_manifest(run_id)
+        service_reproducibility = service.get_support_bundle_reproducibility_manifest(run_id)
         self.assertEqual(
-            service.get_support_bundle_reproducibility_manifest(run_id),
+            RuleBacktestSupportBundleManifestResponse.model_validate(service_manifest).model_dump(
+                mode="json"
+            ),
+            payloads["manifest"],
+        )
+        self.assertEqual(
+            RuleBacktestSupportBundleReproducibilityManifestResponse.model_validate(
+                service_reproducibility
+            ).model_dump(mode="json"),
             payloads["reproducibility"],
+        )
+        self.assertEqual(
+            service_manifest["dataset_manifest_identity"],
+            service_reproducibility["dataset_manifest_identity"],
+        )
+        self.assertEqual(
+            service_manifest["dataset_reproducibility_manifest"],
+            service_reproducibility["dataset_reproducibility_manifest"],
         )
 
         trace_json_path = payloads["export_index"]["exports"][2]["endpoint_path"]
@@ -570,6 +591,14 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 service.get_robustness_evidence_export_json(run_id)
 
         execution_model_metadata = execution_model_metadata_response.json()
+        stored_run = service.get_run(run_id)
+        assert stored_run is not None
+        self.assertEqual(execution_model_metadata["source"], "run.execution_model")
+        self.assertEqual(execution_model_metadata["read_mode"], "stored_first")
+        self.assertEqual(
+            execution_model_metadata["execution_model"],
+            stored_run["execution_model"],
+        )
         self.assertEqual(
             execution_model_metadata["execution_model"]["model_id"],
             "rule_backtest_default_execution_model_v1",
@@ -577,7 +606,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         self.assertEqual(execution_model_metadata["execution_model"]["version"], "v1")
         self.assertEqual(
             execution_model_metadata["semantics"]["engine_identity"],
-            "existing_rule_backtest_behavior",
+            "canonical_registered_rule_backtest_execution",
         )
         self.assertFalse(execution_model_metadata["semantics"]["institutional_execution_realism"])
         self.assertFalse(execution_model_metadata["semantics"]["decision_grade"])
@@ -1239,7 +1268,10 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
     def test_support_bundle_e2e_insufficient_history_export_surface_is_sanitized(self) -> None:
         _, response = self._run_insufficient_history_backtest()
 
-        payloads = self._fetch_support_bundle_surface(int(response["id"]))
+        payloads = self._fetch_support_bundle_surface(
+            int(response["id"]),
+            expect_oos_export=False,
+        )
         export_index = payloads["export_index"]
         trace_json_response = self.client.get(export_index["exports"][2]["endpoint_path"])
         trace_csv_response = self.client.get(export_index["exports"][3]["endpoint_path"])
@@ -1253,6 +1285,10 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         self.assertEqual(self._error_code(trace_csv_response), "export_unavailable")
         self.assertFalse(export_index["exports"][2]["available"])
         self.assertFalse(export_index["exports"][3]["available"])
+        self.assertNotIn(
+            "oos_parameter_readiness_json",
+            [item["key"] for item in export_index["exports"]],
+        )
         self.assertEqual(
             export_index["exports"][2]["availability_reason"],
             "execution_trace_rows_missing",

@@ -13,6 +13,7 @@ from src.services.backtest_parameter_stability import build_parameter_stability_
 from src.services.backtest_walkforward_oos import build_walk_forward_oos_evidence_from_stored_robustness
 from src.services.rule_backtest_execution_model_registry import (
     CURRENT_RULE_BACKTEST_EXECUTION_MODEL_VERSION,
+    audit_rule_backtest_execution_model_evidence,
     build_current_rule_backtest_execution_model_guardrails,
     build_current_rule_backtest_execution_model_metadata,
     build_current_rule_backtest_execution_model_semantics,
@@ -972,6 +973,40 @@ def _with_walk_forward_oos_evidence(
     return payload
 
 
+def _canonical_stored_execution_model(run: Mapping[str, Any]) -> dict[str, Any]:
+    execution_model = _mapping_payload(run.get("execution_model"))
+    if not execution_model or audit_rule_backtest_execution_model_evidence(execution_model):
+        return {}
+
+    result_authority = _mapping_payload(run.get("result_authority"))
+    domains = _mapping_payload(result_authority.get("domains"))
+    execution_authority = _mapping_payload(domains.get("execution_model"))
+    if execution_authority and (
+        str(execution_authority.get("state") or "") != "available"
+        or str(execution_authority.get("completeness") or "") != "complete"
+    ):
+        return {}
+    return execution_model
+
+
+def _has_stored_walk_forward_evidence(run: Mapping[str, Any]) -> bool:
+    summary = _mapping_payload(run.get("summary"))
+    for robustness in (
+        _mapping_payload(summary.get("robustness_analysis")),
+        _mapping_payload(run.get("robustness_analysis")),
+    ):
+        if _mapping_payload(robustness.get("walk_forward")):
+            return True
+    return False
+
+
+def _is_stored_readback_payload(run: Mapping[str, Any]) -> bool:
+    return any(
+        key in run
+        for key in ("summary", "result_authority", "artifact_availability", "readback_integrity")
+    )
+
+
 def build_support_export_index(run: Mapping[str, Any]) -> dict[str, Any]:
     resolved_run_id = int(run.get("id") or 0)
     trace_rows = list((dict(run.get("execution_trace") or {})).get("rows") or [])
@@ -984,7 +1019,7 @@ def build_support_export_index(run: Mapping[str, Any]) -> dict[str, Any]:
         if robustness_available
         else "stored_robustness_analysis_missing"
     )
-    return {
+    payload = {
         "run_id": resolved_run_id,
         "status": str(run.get("status") or ""),
         "exports": [
@@ -1070,19 +1105,38 @@ def build_support_export_index(run: Mapping[str, Any]) -> dict[str, Any]:
             },
         ],
     }
+    unavailable_keys: set[str] = set()
+    if not _canonical_stored_execution_model(run):
+        unavailable_keys.add("execution_model_metadata_json")
+    if not _has_stored_walk_forward_evidence(run):
+        unavailable_keys.add("oos_parameter_readiness_json")
+    payload["exports"] = [
+        item for item in payload["exports"] if item["key"] not in unavailable_keys
+    ]
+    return payload
 
 
 def build_execution_model_metadata_export(run: Mapping[str, Any]) -> dict[str, Any]:
+    stored_execution_model = _canonical_stored_execution_model(run)
+    if _is_stored_readback_payload(run) and not stored_execution_model:
+        raise ValueError(
+            f"Run {int(run.get('id') or 0)} has no canonical stored execution model evidence to export."
+        )
+    execution_model = stored_execution_model or dict(_RULE_BACKTEST_EXECUTION_MODEL_V1)
     return {
         "export_kind": RULE_BACKTEST_EXECUTION_MODEL_EXPORT_KIND,
         "version": RULE_BACKTEST_EXECUTION_MODEL_METADATA_VERSION,
         "run_id": int(run.get("id") or 0),
         "code": run.get("code"),
         "status": run.get("status"),
-        "timeframe": run.get("timeframe") or _RULE_BACKTEST_EXECUTION_MODEL_V1["timeframe"],
-        "source": "stored_rule_backtest_execution_model_v1_projection",
-        "read_mode": "stored_first_projection",
-        "execution_model": dict(_RULE_BACKTEST_EXECUTION_MODEL_V1),
+        "timeframe": execution_model["timeframe"],
+        "source": (
+            "run.execution_model"
+            if stored_execution_model
+            else "registered_execution_model_metadata"
+        ),
+        "read_mode": "stored_first" if stored_execution_model else "registry_metadata",
+        "execution_model": dict(execution_model),
         "semantics": dict(_RULE_BACKTEST_EXECUTION_MODEL_V1_SEMANTICS),
         "guardrails": dict(_RULE_BACKTEST_EXECUTION_MODEL_V1_GUARDRAILS),
         "registry": build_rule_backtest_execution_model_registry_metadata(),

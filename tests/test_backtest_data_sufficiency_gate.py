@@ -19,7 +19,6 @@ ensure_litellm_stub()
 from src.config import Config
 from src.services.backtest_data_sufficiency import assess_backtest_data_sufficiency
 from src.services.rule_backtest_service import RuleBacktestService
-from src.services.us_history_helper import persist_local_us_daily_history
 from src.storage import DatabaseManager, StockDaily
 
 
@@ -470,18 +469,22 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
         self.assertIsNone(response["total_return_pct"])
 
     def test_seeded_symbol_and_benchmark_adjusted_cache_unlocks_data110_execution(self) -> None:
-        cache_dir = tempfile.TemporaryDirectory()
-        self.addCleanup(cache_dir.cleanup)
-        os.environ["LOCAL_US_PARQUET_DIR"] = cache_dir.name
-        persist_local_us_daily_history("AAPL", self._cache_frame([100.0 + (index * 0.5) for index in range(28)]))
-        persist_local_us_daily_history("SPY", self._cache_frame([400.0 + (index * 0.4) for index in range(28)]))
+        symbol_closes = [100.0 + (index * 0.5) for index in range(28)]
+        benchmark_closes = [400.0 + (index * 0.4) for index in range(28)]
+        self._seed_daily_rows("AAPL", symbol_closes)
+        self._seed_daily_rows("SPY", benchmark_closes)
         service = RuleBacktestService(self.db)
+        service._remember_adjusted_close_values("AAPL", self._cache_frame(symbol_closes))
+        service._remember_adjusted_close_values("SPY", self._cache_frame(benchmark_closes))
 
         with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
             service.engine,
             "run",
             wraps=service.engine.run,
-        ) as engine_run:
+        ) as engine_run, patch(
+            "src.services.rule_backtest_service.fetch_daily_history_with_local_us_fallback",
+            side_effect=AssertionError("adjusted cache contract must not call a provider"),
+        ):
             response = service.run_backtest(
                 code="AAPL",
                 strategy_text="Buy when Close > MA3. Sell when Close < MA3.",

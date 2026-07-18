@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from src.config import Config
 from src.services.rule_backtest_service import RuleBacktestService
+from src.services.rule_backtest_support_exports import build_execution_model_metadata_export
 from src.storage import DatabaseManager, StockDaily
 
 
@@ -363,3 +364,87 @@ class RuleBacktestReopenAcceptanceTestCase(unittest.TestCase):
         self.assertTrue(status["readback_integrity"]["has_summary_storage_drift"])
         self.assertEqual(status["readback_integrity"]["drift_domains"], ["trade_rows"])
         self.assertEqual(status["readback_integrity"]["integrity_level"], "drift_repaired")
+
+    def test_reopen_acceptance_missing_execution_identity_blocks_readiness_and_export_discovery(self) -> None:
+        service, _, run_row = self._run_completed_backtest()
+        summary = json.loads(run_row.summary_json)
+        summary.pop("execution_model", None)
+        summary["request"].pop("execution_model", None)
+        summary.pop("execution_assumptions_snapshot", None)
+        summary["execution_assumptions"] = {
+            "partial_fill_supported": True,
+            "no_fill_supported": True,
+            "volume_participation_limit": 0.1,
+            "limit_up_down_handling": "modelled",
+            "halt_handling": "modelled",
+        }
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        with patch.object(
+            service.engine,
+            "run",
+            side_effect=AssertionError("stored readback must not rerun the engine"),
+        ):
+            first_detail = service.get_run(run_row.id)
+            second_detail = service.get_run(run_row.id)
+            first_status = service.get_run_status(run_row.id)
+            second_status = service.get_run_status(run_row.id)
+            first_history = service.list_runs(code="600519", page=1, limit=10)["items"][0]
+            second_history = service.list_runs(code="600519", page=1, limit=10)["items"][0]
+
+        assert first_detail is not None
+        assert first_status is not None
+        self.assertEqual(first_detail, second_detail)
+        self.assertEqual(first_status, second_status)
+        self.assertEqual(first_history, second_history)
+        self.assertIsNone(first_detail["execution_model"])
+        self.assertIsNone(first_history["execution_model"])
+
+        for payload in (first_detail, first_status, first_history):
+            fill_readiness = payload["professionalReadiness"]["categories"]["fill_model"]
+            self.assertFalse(fill_readiness["ready"])
+            self.assertIn("execution_model_identity_unavailable", fill_readiness["blockers"])
+            self.assertFalse(payload["professionalReadiness"]["partial_fill_supported"])
+            self.assertFalse(payload["professionalReadiness"]["no_fill_supported"])
+
+        export_keys = [
+            item["key"]
+            for item in service.get_support_export_index(run_row.id)["exports"]
+        ]
+        self.assertNotIn("execution_model_metadata_json", export_keys)
+        with self.assertRaisesRegex(ValueError, "no canonical stored execution model evidence"):
+            build_execution_model_metadata_export(first_detail)
+
+    def test_reopen_acceptance_contradictory_execution_identity_remains_unavailable(self) -> None:
+        service, _, run_row = self._run_completed_backtest()
+        summary = json.loads(run_row.summary_json)
+        summary["execution_model"]["model_id"] = "rule_backtest_default_execution_model_v2"
+        summary["request"].pop("execution_model", None)
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        detail = service.get_run(run_row.id)
+        status = service.get_run_status(run_row.id)
+        history = service.list_runs(code="600519", page=1, limit=10)["items"][0]
+        assert detail is not None
+        assert status is not None
+
+        for payload in (detail, status, history):
+            fill_readiness = payload["professionalReadiness"]["categories"]["fill_model"]
+            self.assertFalse(fill_readiness["ready"])
+            self.assertIn("execution_model_identity_unavailable", fill_readiness["blockers"])
+        self.assertIsNone(detail["execution_model"])
+        self.assertIsNone(history["execution_model"])
+        self.assertIn(
+            "mismatch.model_id",
+            detail["result_authority"]["domains"]["execution_model"]["missing"],
+        )
+        self.assertEqual(
+            detail["result_authority"]["domains"]["execution_model"],
+            history["result_authority"]["domains"]["execution_model"],
+        )
+        self.assertNotIn(
+            "execution_model_metadata_json",
+            [item["key"] for item in service.get_support_export_index(run_row.id)["exports"]],
+        )
+        with self.assertRaisesRegex(ValueError, "no canonical stored execution model evidence"):
+            build_execution_model_metadata_export(detail)

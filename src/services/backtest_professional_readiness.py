@@ -182,6 +182,17 @@ def _optional_float(value: Any) -> float | None:
         return None
 
 
+def _execution_model_authority_available(result_authority: dict[str, Any]) -> bool | None:
+    domains = _mapping(result_authority.get("domains"))
+    if "execution_model" not in domains:
+        return None
+    execution_model = _mapping(domains.get("execution_model"))
+    return (
+        _lower(execution_model.get("state")) == "available"
+        and _lower(execution_model.get("completeness")) == "complete"
+    )
+
+
 def _authority_blockers(data_quality: dict[str, Any]) -> list[str]:
     status = _lower(data_quality.get("authority_status"))
     reasons = [str(item) for item in data_quality.get("authority_reason_codes") or [] if str(item or "").strip()]
@@ -320,18 +331,24 @@ def _derive_fill_model(
     readiness: BacktestProfessionalReadiness,
     execution_assumptions: dict[str, Any],
     execution_model: dict[str, Any],
+    execution_model_authority_available: bool | None,
 ) -> BacktestReadinessDescriptor:
+    execution_identity_unavailable = execution_model_authority_available is False
     volume_limit = _optional_float(execution_assumptions.get("volume_participation_limit"))
     capabilities = _mapping(execution_model.get("capabilities"))
     market_rules = _mapping(execution_model.get("market_rules"))
     terminal_liquidation = _mapping(execution_model.get("terminal_liquidation"))
-    partial_fill_supported = _is_positive(
-        capabilities.get(
-            "partial_fills_supported",
-            execution_assumptions.get("partial_fill_supported"),
+    partial_fill_supported = (
+        False
+        if execution_identity_unavailable
+        else _is_positive(
+            capabilities.get(
+                "partial_fills_supported",
+                execution_assumptions.get("partial_fill_supported"),
+            )
         )
     )
-    no_fill_supported = (
+    no_fill_supported = not execution_identity_unavailable and (
         capabilities.get("missing_required_price_state") == "unfilled"
         or _is_positive(execution_assumptions.get("no_fill_supported"))
     )
@@ -343,11 +360,19 @@ def _derive_fill_model(
     readiness.no_fill_supported = no_fill_supported
     readiness.terminal_fallback = _text(
         terminal_liquidation.get("event_type"),
-        _text(execution_assumptions.get("terminal_position_behavior"), "unknown"),
+        (
+            "unknown"
+            if execution_identity_unavailable
+            else _text(execution_assumptions.get("terminal_position_behavior"), "unknown")
+        ),
     )
     readiness.open_missing_fallback = _text(
         market_rules.get("missing_required_fill_price"),
-        _text(execution_assumptions.get("open_missing_behavior"), "unknown"),
+        (
+            "unknown"
+            if execution_identity_unavailable
+            else _text(execution_assumptions.get("open_missing_behavior"), "unknown")
+        ),
     )
     readiness.fill_model = (
         "explicit_capacity_and_fallback_controls"
@@ -360,6 +385,8 @@ def _derive_fill_model(
     )
 
     blockers: list[str] = []
+    if execution_identity_unavailable:
+        blockers.append("execution_model_identity_unavailable")
     if not partial_fill_supported:
         blockers.append("partial_fill_model_missing")
     if not no_fill_supported:
@@ -534,6 +561,7 @@ def build_backtest_professional_readiness(
             readiness,
             execution_assumptions_payload,
             execution_model_payload,
+            _execution_model_authority_available(result_authority_payload),
         ),
         BacktestReadinessCategory.COST_MODEL.value: _derive_cost_model(
             readiness,
