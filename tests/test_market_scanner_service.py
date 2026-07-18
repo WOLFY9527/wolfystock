@@ -2122,6 +2122,24 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         )
         self.assertEqual(ai_service.received_signature, expected_signature)
 
+        repeated_ranked, repeated_shortlist, _ = service._prepare_shortlist(
+            profile_config=get_scanner_profile(market="us", profile="us_preopen_v1"),
+            evaluated_candidates=[
+                {"symbol": "AAPL", "score": 91.0, "_diagnostics": {"factorEvidence": {"rankingEligible": True}}},
+                {"symbol": "PLTR", "score": 88.5, "_diagnostics": {"factorEvidence": {"rankingEligible": True}}},
+                {"symbol": "NVDA", "score": 91.0, "_diagnostics": {"factorEvidence": {"rankingEligible": True}}},
+            ],
+            resolved_shortlist_size=3,
+        )
+        self.assertEqual(
+            [(item["symbol"], item["rank"], float(item["score"])) for item in repeated_shortlist],
+            expected_signature,
+        )
+        self.assertEqual(
+            [(item["symbol"], item["rank"], float(item["score"])) for item in repeated_ranked],
+            expected_signature,
+        )
+
     def test_prepare_shortlist_excludes_blocked_candidates_without_assigning_rank(self) -> None:
         ai_service = RecordingScannerAiService()
         service = MarketScannerService(

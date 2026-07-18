@@ -109,6 +109,10 @@ def test_reason_code_and_quality_flag_regressions_stay_stable_for_incomplete_evi
     assert set(scanner_packet.confidence_cap.reason_codes) == {
         "scanner_evidence_metadata_only",
         "stale_required_data",
+        "history_insufficient",
+        "history_stale",
+        "provider_unavailable",
+        "external_optional_unavailable",
     }
 
     assert rotation_packet.decision_status is AiEvidenceDecisionStatus.CAUTION

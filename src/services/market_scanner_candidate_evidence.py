@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Optional
 
 from src.services.research_readiness_contract import build_research_readiness_v1
+from src.services.scanner_factor_evidence import SCANNER_FACTOR_EVIDENCE_VERSION
 
 
 SCANNER_CANDIDATE_EVIDENCE_VERSION = "scanner_candidate_evidence_v1"
@@ -43,6 +44,46 @@ def _bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
     return _text(value).lower() in {"1", "true", "yes", "y"}
+
+
+def scanner_candidate_score_evidence_is_complete(diagnostics: Mapping[str, Any] | None) -> bool:
+    """Require canonical factor and source-confidence evidence before score reuse."""
+    payload = _mapping(diagnostics)
+    factor_evidence = _mapping(payload.get("factorEvidence"))
+    factors = [item for item in factor_evidence.get("factors") or [] if isinstance(item, Mapping)]
+    required_factors = [item for item in factors if item.get("required") is True]
+    try:
+        required_count = int(factor_evidence.get("requiredFactorCount"))
+        valid_required_count = int(factor_evidence.get("validRequiredFactorCount"))
+    except (TypeError, ValueError, OverflowError):
+        return False
+    factor_evidence_complete = (
+        factor_evidence.get("contractVersion") == SCANNER_FACTOR_EVIDENCE_VERSION
+        and factor_evidence.get("overallState") == "valid"
+        and factor_evidence.get("rankingEligible") is True
+        and not factor_evidence.get("blockers")
+        and required_count > 0
+        and required_count == valid_required_count == len(required_factors)
+        and all(
+            item.get("state") == "valid" and item.get("scoreContributionAllowed") is True
+            for item in required_factors
+        )
+    )
+    explainability = _mapping(payload.get("score_explainability"))
+    source_confidence = _mapping(explainability.get("source_confidence"))
+    source_confidence_complete = (
+        explainability.get("score_grade_allowed") is True
+        and not explainability.get("cap_reason")
+        and not explainability.get("degradation_reason")
+        and source_confidence.get("scoreContributionAllowed") is True
+        and source_confidence.get("sourceAuthorityAllowed") is True
+        and source_confidence.get("observationOnly") is False
+        and not any(
+            source_confidence.get(flag) is True
+            for flag in ("isFallback", "isStale", "isPartial", "isSynthetic", "isUnavailable")
+        )
+    )
+    return factor_evidence_complete and source_confidence_complete
 
 
 def _has_signal(*values: Any) -> bool:
@@ -461,4 +502,5 @@ __all__ = [
     "SCANNER_CANDIDATE_EVIDENCE_VERSION",
     "build_scanner_candidate_evidence_frame",
     "build_scanner_candidate_research_readiness",
+    "scanner_candidate_score_evidence_is_complete",
 ]

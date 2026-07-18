@@ -39,8 +39,12 @@ class ScannerStrategySimulationTestCase(unittest.TestCase):
         self.repo = ScannerRepository(self.db)
         self.stock_repo = StockRepository(self.db)
         self.service = MarketScannerService(self.db, owner_id=BOOTSTRAP_ADMIN_USER_ID)
+        self.datetime_patcher = patch("src.services.market_scanner_service.datetime", wraps=datetime)
+        self.scanner_datetime = self.datetime_patcher.start()
+        self.scanner_datetime.now.return_value = datetime(2026, 4, 10, 12, 0, 0)
 
     def tearDown(self) -> None:
+        self.datetime_patcher.stop()
         DatabaseManager.reset_instance()
 
     def _save_run(
@@ -52,6 +56,7 @@ class ScannerStrategySimulationTestCase(unittest.TestCase):
         theme_id: str | None = "crypto_miners",
         symbols: list[tuple[str, float]] | None = None,
         evaluated_size: int = 8,
+        comparable_evidence: bool = True,
     ) -> int:
         symbols = symbols or [("WULF", 62.0)]
         universe_selection = {
@@ -87,7 +92,23 @@ class ScannerStrategySimulationTestCase(unittest.TestCase):
                     "universe_selection": universe_selection,
                 }
             ),
-            diagnostics_json=json.dumps({"universe_selection": universe_selection}),
+            diagnostics_json=json.dumps(
+                {
+                    "universe_selection": universe_selection,
+                    **(
+                        {
+                            "dataReadiness": {
+                                "state": "ready",
+                                "candidateGenerationState": "ready",
+                                "candidateGenerationBlockers": [],
+                                "selectedCount": len(symbols),
+                            }
+                        }
+                        if comparable_evidence
+                        else {}
+                    ),
+                }
+            ),
             universe_notes_json="[]",
             scoring_notes_json="[]",
         )
@@ -99,7 +120,54 @@ class ScannerStrategySimulationTestCase(unittest.TestCase):
                 score=score,
                 quality_hint="test",
                 reason_summary="test",
-                diagnostics_json=json.dumps({"last_trade_date": dt.date().isoformat()}),
+                reasons_json="[]",
+                key_metrics_json="[]",
+                feature_signals_json="[]",
+                risk_notes_json="[]",
+                watch_context_json="[]",
+                boards_json="[]",
+                diagnostics_json=json.dumps(
+                    {
+                        "last_trade_date": dt.date().isoformat(),
+                        **(
+                            {
+                                "factorEvidence": {
+                                    "contractVersion": "scanner_factor_evidence_v1",
+                                    "overallState": "valid",
+                                    "rankingEligible": True,
+                                    "blockers": [],
+                                    "requiredFactorCount": 1,
+                                    "validRequiredFactorCount": 1,
+                                    "factors": [
+                                        {
+                                            "component": "trend",
+                                            "required": True,
+                                            "state": "valid",
+                                            "scoreContributionAllowed": True,
+                                        }
+                                    ],
+                                },
+                                "score_explainability": {
+                                    "score_grade_allowed": True,
+                                    "cap_reason": None,
+                                    "degradation_reason": None,
+                                    "source_confidence": {
+                                        "scoreContributionAllowed": True,
+                                        "sourceAuthorityAllowed": True,
+                                        "observationOnly": False,
+                                        "isFallback": False,
+                                        "isStale": False,
+                                        "isPartial": False,
+                                        "isSynthetic": False,
+                                        "isUnavailable": False,
+                                    },
+                                },
+                            }
+                            if comparable_evidence
+                            else {}
+                        ),
+                    }
+                ),
             )
             for index, (symbol, score) in enumerate(symbols, start=1)
         ]
@@ -153,6 +221,23 @@ class ScannerStrategySimulationTestCase(unittest.TestCase):
         self.assertEqual(result["status"], "insufficient_history")
         self.assertEqual(result["window"]["runCount"], 1)
         self.assertIn("历史扫描不足", result["warnings"][0])
+
+    def test_excludes_completed_runs_without_comparable_factor_evidence(self) -> None:
+        self._seed_prices()
+        self._save_run(run_at="2026-04-01T13:30:00", comparable_evidence=False)
+        self._save_run(run_at="2026-04-06T13:30:00")
+
+        result = self.service.build_strategy_simulation(
+            market="us",
+            profile="us_preopen_v1",
+            theme="crypto_miners",
+            lookback_days=90,
+            forward_days=1,
+        )
+
+        self.assertEqual(result["status"], "insufficient_history")
+        self.assertEqual(result["window"]["runCount"], 1)
+        self.assertEqual(result["summary"]["selectionEvents"], 0)
 
     def test_filters_matching_theme_profile_market_and_lookback(self) -> None:
         self._seed_prices()
@@ -212,7 +297,7 @@ class ScannerStrategySimulationTestCase(unittest.TestCase):
             forward_days=5,
         )
 
-        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["status"], "unavailable")
         self.assertEqual(result["summary"]["selectionEvents"], 2)
         self.assertEqual(result["summary"]["dataCoverage"], 0.0)
         self.assertIsNone(result["summary"]["avgForwardReturnPct"])

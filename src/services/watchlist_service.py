@@ -15,6 +15,7 @@ from src.multi_user import OWNERSHIP_SCOPE_USER
 from src.repositories.scanner_repo import ScannerRepository
 from src.services.catalyst_event_exposure import build_catalyst_event_exposures
 from src.services._persisted_json import decode_persisted_json
+from src.services.market_scanner_candidate_evidence import scanner_candidate_score_evidence_is_complete
 from src.services.product_read_model import PRODUCT_READ_MODEL_CONTRACT_VERSION, normalize_product_state
 from src.services.reason_code_vocabulary import classify_reason_code
 from src.services.scanner_evidence_packet import build_scanner_investor_signal
@@ -1642,6 +1643,23 @@ class WatchlistService:
                         continue
 
                     candidate, run = latest
+                    diagnostics, storage_integrity = self._load_candidate_diagnostics(
+                        getattr(candidate, "diagnostics_json", None)
+                    )
+                    if storage_integrity is not None or not scanner_candidate_score_evidence_is_complete(
+                        diagnostics
+                    ):
+                        row.score_status = "unavailable"
+                        row.score_error = "Scanner candidate factor evidence is incomplete."
+                        skipped_count += 1
+                        results.append({
+                            "symbol": row.symbol,
+                            "market": row.market,
+                            "status": "unavailable",
+                            "message": row.score_error,
+                        })
+                        continue
+
                     row.scanner_run_id = int(run.id)
                     row.scanner_rank = int(candidate.rank)
                     row.scanner_score = float(candidate.score)

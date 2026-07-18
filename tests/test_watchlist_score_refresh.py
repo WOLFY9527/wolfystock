@@ -54,8 +54,62 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         completed_at: datetime | None = None,
         status: str = "completed",
         reason_summary: str = "Latest scanner score.",
+        complete_evidence: bool = True,
     ) -> None:
         now = datetime.now()
+        diagnostics = dict(diagnostics_payload or {})
+        if diagnostics_source:
+            diagnostics.setdefault(
+                "history",
+                {
+                    "source": diagnostics_source,
+                    "latest_trade_date": "2026-05-22",
+                },
+            )
+        if complete_evidence:
+            diagnostics.setdefault(
+                "factorEvidence",
+                {
+                    "contractVersion": "scanner_factor_evidence_v1",
+                    "overallState": "valid",
+                    "rankingEligible": True,
+                    "blockers": [],
+                    "requiredFactorCount": 1,
+                    "validRequiredFactorCount": 1,
+                    "factors": [
+                        {
+                            "component": "trend",
+                            "required": True,
+                            "state": "valid",
+                            "scoreContributionAllowed": True,
+                        }
+                    ],
+                },
+            )
+            diagnostics.setdefault(
+                "score_explainability",
+                {
+                    "score_confidence": 1.0,
+                    "score_grade_allowed": True,
+                    "cap_reason": None,
+                    "degradation_reason": None,
+                    "source_confidence": {
+                        "source": "authorized_scanner_evidence",
+                        "sourceType": "authorized_licensed_feed",
+                        "freshness": "live",
+                        "isFallback": False,
+                        "isStale": False,
+                        "isPartial": False,
+                        "isSynthetic": False,
+                        "isUnavailable": False,
+                        "confidenceWeight": 1.0,
+                        "coverage": 1.0,
+                        "scoreContributionAllowed": True,
+                        "sourceAuthorityAllowed": True,
+                        "observationOnly": False,
+                    },
+                },
+            )
         run = MarketScannerRun(
             market=market,
             profile=f"{market}_preopen_v1",
@@ -74,27 +128,12 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
             rank=rank,
             score=score,
             reason_summary=reason_summary,
-            diagnostics_json=(
-                json.dumps(diagnostics_payload, ensure_ascii=False)
-                if diagnostics_payload is not None
-                else json.dumps(
-                    {
-                        "history": {
-                            "source": diagnostics_source,
-                            "latest_trade_date": "2026-05-22",
-                        }
-                    },
-                    ensure_ascii=False,
-                )
-                if diagnostics_source
-                else None
-            ),
+            diagnostics_json=json.dumps(diagnostics, ensure_ascii=False) if diagnostics else None,
             created_at=now,
         )
         with self.db.get_session() as session:
             session.add(run)
             session.flush()
-            run_id = run.id
             candidate.run_id = run.id
             session.add(candidate)
             session.commit()
@@ -218,26 +257,18 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         ):
             result = self.service.refresh_scores(owner_id="user-1", market="us")
 
-        self.assertEqual(result["updated_count"], 1)
+        self.assertEqual(result["updated_count"], 0)
+        self.assertEqual(result["skipped_count"], 1)
+        self.assertEqual(result["results"][0]["status"], "unavailable")
         get_daily_data.assert_not_called()
         get_realtime_quote.assert_not_called()
 
         item = self.service.list_items(owner_id="user-1")[0]
-        lineage = item["intelligence"]["scanner"]["scanner_lineage_v1"]
-        self.assertEqual(lineage["scanner_run_id"], run_id)
-        self.assertEqual(lineage["score_snapshot_kind"], "post_add_refresh")
-        self.assertEqual(lineage["run_profile"], "us_preopen_v1")
-        self.assertEqual(lineage["rank_at_scan"], 3)
-        self.assertEqual(lineage["score_at_scan"], 72.5)
-        self.assertEqual(lineage["research_reason"], "评分刷新后继续观察。")
-        self.assertEqual(lineage["research_next_step"], "补充证据后继续观察。")
-        self.assertEqual(lineage["data_state"], "observation_only")
-        self.assertFalse(lineage["score_grade_allowed"])
-        serialized_lineage = json.dumps(lineage, ensure_ascii=False)
-        self.assertNotIn("providerObservation", serialized_lineage)
-        self.assertNotIn("internal-provider", serialized_lineage)
-        self.assertNotIn("sourceAuthorityAllowed", serialized_lineage)
-        self.assertNotIn("scoreContributionAllowed", serialized_lineage)
+        self.assertEqual(item["scanner_run_id"], 5)
+        self.assertEqual(item["scanner_rank"], 8)
+        self.assertEqual(item["scanner_score"], 60.0)
+        self.assertEqual(item["score_status"], "unavailable")
+        self.assertNotEqual(item["scanner_run_id"], run_id)
 
     def test_refresh_projects_local_us_parquet_dir_provenance_without_runtime_fetches(self) -> None:
         self.service.add_item(
@@ -267,15 +298,13 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         self.assertEqual(result["updated_count"], 1)
         self.assertEqual(item["score_source"], "scanner_run")
         provenance = item["intelligence"]["scanner"]["ohlcv_provenance"]
-        self.assertEqual(provenance["source"], "local_us_parquet_dir")
-        self.assertEqual(provenance["source_type"], "cache_snapshot")
-        self.assertEqual(provenance["source_label"], "本地 Parquet 历史")
+        self.assertEqual(provenance, {"data_quality": "cached", "label": "最近可用"})
         get_daily_data.assert_not_called()
         get_realtime_quote.assert_not_called()
         fetch_local_history.assert_not_called()
         run_backtest.assert_not_called()
 
-    def test_refresh_missing_diagnostics_preserves_scanner_run_without_provenance(self) -> None:
+    def test_refresh_does_not_promote_candidate_without_complete_factor_evidence(self) -> None:
         self.service.add_item(
             owner_id="user-1",
             symbol="WULF",
@@ -283,15 +312,24 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
             scanner_score=60,
             scanner_rank=8,
         )
-        self._save_scanner_candidate(symbol="WULF", market="us", score=72.5, rank=3)
+        self._save_scanner_candidate(
+            symbol="WULF",
+            market="us",
+            score=72.5,
+            rank=3,
+            complete_evidence=False,
+        )
 
         result = self.service.refresh_scores(owner_id="user-1", market="us")
 
-        self.assertEqual(result["updated_count"], 1)
+        self.assertEqual(result["updated_count"], 0)
+        self.assertEqual(result["skipped_count"], 1)
+        self.assertEqual(result["results"][0]["status"], "unavailable")
         item = self.service.list_items(owner_id="user-1")[0]
-        self.assertEqual(item["score_source"], "scanner_run")
-        self.assertEqual(item["scanner_score"], 72.5)
-        self.assertEqual(item["scanner_rank"], 3)
+        self.assertEqual(item["scanner_score"], 60.0)
+        self.assertEqual(item["scanner_rank"], 8)
+        self.assertEqual(item["score_status"], "unavailable")
+        self.assertIn("factor evidence", item["score_error"])
         self.assertNotIn("ohlcv_provenance", item["intelligence"]["scanner"])
         self.assertNotIn("investor_signal", item["intelligence"]["scanner"])
         self.assertIsNone(item["intelligence"]["scanner"].get("score_confidence"))
@@ -349,65 +387,16 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
 
         result = self.service.refresh_scores(owner_id="user-1", market="us")
 
-        self.assertEqual(result["updated_count"], 1)
+        self.assertEqual(result["updated_count"], 0)
+        self.assertEqual(result["skipped_count"], 1)
         item = self.service.list_items(owner_id="user-1")[0]
-        self.assertEqual(item["score_status"], "fresh")
+        self.assertEqual(item["score_status"], "unavailable")
         self.assertEqual(item["score_status_context"]["scope"], "score_refresh_recency")
         self.assertFalse(item["score_status_context"]["source_freshness_implied"])
         self.assertFalse(item["score_status_context"]["source_authority_implied"])
         disclosure = item["intelligence"]["scanner"]
-        self.assertEqual(disclosure["score_confidence"], 0.4)
-        self.assertEqual(disclosure["cap_reason"], "public_proxy_not_score_grade")
-        self.assertEqual(disclosure["degradation_reason"], "fallback_source")
-        self.assertFalse(disclosure["score_grade_allowed"])
-        self.assertEqual(
-            disclosure["reason_families"]["cap_reason"],
-            {
-                "raw_code": "public_proxy_not_score_grade",
-                "family": "source_confidence_cap",
-                "scope": "scanner_evidence_packet",
-            },
-        )
-        self.assertEqual(
-            disclosure["reason_families"]["degradation_reason"],
-            {
-                "raw_code": "fallback_source",
-                "family": "fallback",
-                "scope": "source_confidence",
-            },
-        )
-        self.assertEqual(
-            disclosure["reason_families"]["source_confidence"]["cap_reason"],
-            {
-                "raw_code": "public_proxy_not_score_grade",
-                "family": "source_confidence_cap",
-                "scope": "scanner_evidence_packet",
-            },
-        )
-        self.assertEqual(
-            disclosure["reason_families"]["source_confidence"]["degradation_reason"],
-            {
-                "raw_code": "fallback_source",
-                "family": "fallback",
-                "scope": "source_confidence",
-            },
-        )
-        self.assertEqual(disclosure["source_confidence"]["source"], "yfinance_proxy")
-        self.assertEqual(disclosure["source_confidence"]["source_type"], "proxy")
-        self.assertEqual(disclosure["source_confidence"]["freshness"], "fallback")
-        self.assertTrue(disclosure["source_confidence"]["is_fallback"])
-        self.assertTrue(disclosure["source_confidence"]["is_stale"])
-        self.assertTrue(disclosure["source_confidence"]["is_partial"])
-        self.assertFalse(disclosure["source_confidence"]["score_contribution_allowed"])
-        self.assertFalse(disclosure["source_confidence"]["source_authority_allowed"])
-        self.assertTrue(disclosure["source_confidence"]["observation_only"])
-        investor_signal = disclosure["investor_signal"]
-        self.assertEqual(investor_signal["contractVersion"], "investor_signal_contract_v1")
-        self.assertFalse(investor_signal["sourceAuthorityAllowed"])
-        self.assertEqual(investor_signal["freshness"], "fallback")
-        self.assertEqual(investor_signal["confidenceLabel"], "blocked")
-        self.assertIn("fallback_source", investor_signal["reasonCodes"])
-        self.assertIn("source_authority_missing", investor_signal["reasonCodes"])
+        self.assertNotIn("cap_reason", disclosure)
+        self.assertNotIn("source_confidence", disclosure)
 
     def test_refresh_projects_local_cache_score_disclosure_without_provider_calls(self) -> None:
         self.service.add_item(
@@ -461,31 +450,11 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
             result = self.service.refresh_scores(owner_id="user-1", market="us")
             item = self.service.list_items(owner_id="user-1")[0]
 
-        self.assertEqual(result["updated_count"], 1)
+        self.assertEqual(result["updated_count"], 0)
+        self.assertEqual(result["skipped_count"], 1)
         disclosure = item["intelligence"]["scanner"]
-        self.assertEqual(disclosure["score_confidence"], 0.35)
-        self.assertFalse(disclosure["score_grade_allowed"])
-        self.assertEqual(
-            disclosure["reason_families"]["cap_reason"],
-            {
-                "raw_code": "configured_cache_only_diagnostic",
-                "family": "unclassified",
-                "scope": None,
-            },
-        )
-        self.assertEqual(
-            disclosure["reason_families"]["degradation_reason"],
-            {
-                "raw_code": "configured_cache_only_diagnostic",
-                "family": "unclassified",
-                "scope": None,
-            },
-        )
-        self.assertEqual(disclosure["source_confidence"]["source"], "local_us_parquet_dir")
-        self.assertEqual(disclosure["source_confidence"]["source_type"], "cache_snapshot")
-        self.assertEqual(disclosure["source_confidence"]["freshness"], "cached")
-        self.assertTrue(disclosure["source_confidence"]["observation_only"])
-        self.assertFalse(disclosure["source_confidence"]["score_contribution_allowed"])
+        self.assertNotIn("score_confidence", disclosure)
+        self.assertNotIn("score_grade_allowed", disclosure)
         get_daily_data.assert_not_called()
         get_realtime_quote.assert_not_called()
 
@@ -519,27 +488,12 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
             result = self.service.refresh_scores(owner_id="user-1", market="us")
             item = self.service.list_items(owner_id="user-1")[0]
 
-        self.assertEqual(result["updated_count"], 1)
-        self.assertEqual(item["scanner_score"], 72.5)
+        self.assertEqual(result["updated_count"], 0)
+        self.assertEqual(result["skipped_count"], 1)
+        self.assertEqual(item["scanner_score"], 60.0)
         disclosure = item["intelligence"]["scanner"]
-        self.assertEqual(disclosure["cap_reason"], "mystery_reason_code")
-        self.assertEqual(disclosure["degradation_reason"], "fallback_source")
-        self.assertEqual(
-            disclosure["reason_families"]["cap_reason"],
-            {
-                "raw_code": "mystery_reason_code",
-                "family": "unclassified",
-                "scope": None,
-            },
-        )
-        self.assertEqual(
-            disclosure["reason_families"]["degradation_reason"],
-            {
-                "raw_code": "fallback_source",
-                "family": "fallback",
-                "scope": "source_confidence",
-            },
-        )
+        self.assertNotIn("cap_reason", disclosure)
+        self.assertNotIn("degradation_reason", disclosure)
         get_daily_data.assert_not_called()
         get_realtime_quote.assert_not_called()
 
@@ -559,7 +513,7 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         item = self.service.list_items(owner_id="user-1")[0]
         self.assertEqual(item["scanner_score"], 61.0)
         self.assertEqual(item["scanner_rank"], 7)
-        self.assertEqual(item["score_status"], "stale")
+        self.assertEqual(item["score_status"], "unavailable")
         self.assertEqual(item["score_status_context"]["scope"], "score_refresh_recency")
         self.assertFalse(item["score_status_context"]["source_freshness_implied"])
         self.assertFalse(item["score_status_context"]["source_authority_implied"])
@@ -588,7 +542,11 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
 
         for index in range(24):
             market = "us" if index % 2 == 0 else "hk"
-            symbol = f"B{index:04d}"
+            symbol = (
+                f"B{chr(65 + index // 26)}{chr(65 + index % 26)}"
+                if market == "us"
+                else f"{index + 100:05d}"
+            )
             self.service.add_item(
                 owner_id="user-1",
                 symbol=symbol,
@@ -605,8 +563,8 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
                 stale_keys.add(key)
 
         self.service.add_item(owner_id="user-1", symbol="DUAL", market="us", scanner_score=10, scanner_rank=90)
-        self.service.add_item(owner_id="user-1", symbol="DUAL", market="hk", scanner_score=20, scanner_rank=91)
-        self.service.add_item(owner_id="user-2", symbol="B0000", market="us", scanner_score=5, scanner_rank=88)
+        self.service.add_item(owner_id="user-1", symbol="00700", market="hk", scanner_score=20, scanner_rank=91)
+        self.service.add_item(owner_id="user-2", symbol="BAA", market="us", scanner_score=5, scanner_rank=88)
 
         baseline_time = datetime(2026, 5, 12, 9, 0, 0)
         self._save_scanner_candidate(
@@ -638,7 +596,7 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
             reason_summary="Running scanner score should be ignored.",
         )
         self._save_scanner_candidate(
-            symbol="DUAL",
+            symbol="00700",
             market="hk",
             score=82.0,
             rank=2,
@@ -647,7 +605,7 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
             reason_summary="Latest HK scanner score.",
         )
         expected_scores[("us", "DUAL")] = 91.0
-        expected_scores[("hk", "DUAL")] = 82.0
+        expected_scores[("hk", "00700")] = 82.0
 
         scanner_join_queries: list[str] = []
 
@@ -675,11 +633,11 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
             self.assertEqual(user_one_items[key]["score_status"], "fresh")
             self.assertEqual(user_one_items[key]["scanner_score"], expected_score)
         for key in stale_keys:
-            self.assertEqual(user_one_items[key]["score_status"], "stale")
+            self.assertEqual(user_one_items[key]["score_status"], "unavailable")
             self.assertIn("No scanner candidate", user_one_items[key]["score_error"])
 
         self.assertEqual(user_one_items[("us", "DUAL")]["score_reason"], "Latest US scanner score.")
-        self.assertEqual(user_one_items[("hk", "DUAL")]["score_reason"], "Latest HK scanner score.")
+        self.assertEqual(user_one_items[("hk", "00700")]["score_reason"], "Latest HK scanner score.")
         user_two_item = self.service.list_items(owner_id="user-2")[0]
         self.assertEqual(user_two_item["scanner_score"], 5.0)
         self.assertEqual(user_two_item["scanner_rank"], 88)
@@ -754,7 +712,6 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         with self.db.get_session() as session:
             session.add(run)
             session.flush()
-            run_id = int(run.id)
             candidate.run_id = run.id
             session.add(candidate)
             session.commit()
@@ -765,20 +722,20 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         ):
             result = self.service.refresh_scores(owner_id="user-1", market="cn")
 
-        self.assertEqual(result["updated_count"], 1)
+        self.assertEqual(result["updated_count"], 0)
+        self.assertEqual(result["skipped_count"], 1)
         self.assertEqual(result["failed_count"], 0)
-        self.assertEqual(result["results"][0]["status"], "fresh")
+        self.assertEqual(result["results"][0]["status"], "unavailable")
         get_daily_data.assert_not_called()
         get_realtime_quote.assert_not_called()
 
         item = self.service.list_items(owner_id="user-1")[0]
-        self.assertEqual(item["scanner_run_id"], run_id)
-        self.assertEqual(item["scanner_score"], 78.4)
-        self.assertEqual(item["scanner_rank"], 2)
-        self.assertEqual(item["score_source"], "scanner_run")
-        self.assertEqual(item["score_profile"], "cn_preopen_v1")
-        self.assertEqual(item["score_reason"], "Persisted scanner score only.")
-        self.assertEqual(item["score_status"], "fresh")
+        self.assertEqual(item["scanner_run_id"], 5)
+        self.assertEqual(item["scanner_score"], 61.0)
+        self.assertEqual(item["scanner_rank"], 7)
+        self.assertIsNone(item["score_source"])
+        self.assertIsNone(item["score_profile"])
+        self.assertEqual(item["score_status"], "unavailable")
         self.assertNotIn("providerObservation", item)
         self.assertNotIn("providerObservation", item["intelligence"]["scanner"])
 

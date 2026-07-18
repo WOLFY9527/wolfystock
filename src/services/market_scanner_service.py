@@ -35,6 +35,7 @@ from src.services.market_scanner_context_adapter import (
 from src.services.market_scanner_candidate_evidence import (
     build_scanner_candidate_evidence_frame,
     build_scanner_candidate_research_readiness,
+    scanner_candidate_score_evidence_is_complete,
 )
 from src.services.market_scanner_candidate_summary import build_scanner_candidate_research_summary_frame
 from src.services.market_scanner_source_provenance_sidecar import build_market_scanner_source_provenance_sidecar
@@ -5260,6 +5261,28 @@ class MarketScannerService:
         if run.status != "completed" or run.run_at is None or run.run_at < cutoff_at:
             return False
         summary, diagnostics, _ = self._extract_run_metadata(run)
+        readiness = diagnostics.get("dataReadiness") if isinstance(diagnostics, Mapping) else None
+        if not isinstance(readiness, Mapping):
+            return False
+        candidates = self.repo.get_candidates_for_run(run.id)
+        try:
+            selected_count = int(readiness.get("selectedCount"))
+        except (TypeError, ValueError):
+            return False
+        if (
+            readiness.get("state") != "ready"
+            or readiness.get("candidateGenerationState") != "ready"
+            or readiness.get("candidateGenerationBlockers")
+            or selected_count <= 0
+            or selected_count != len(candidates)
+        ):
+            return False
+        for candidate in candidates:
+            persisted_values, storage_issues = _candidate_persisted_json_values(candidate)
+            if storage_issues or not scanner_candidate_score_evidence_is_complete(
+                persisted_values["diagnostics_json"]
+            ):
+                return False
         universe_selection = self._public_universe_selection(
             summary.get("universe_selection")
             if isinstance(summary.get("universe_selection"), dict)
@@ -5475,7 +5498,13 @@ class MarketScannerService:
         worst_row = min(valid_rows, key=lambda row: float(row.get("forward_return_pct") or 9999.0), default=None)
         base_payload.update(
             {
-                "status": "ready" if valid_rows and data_failed_count == 0 else "partial",
+                "status": (
+                    "ready"
+                    if valid_rows and data_failed_count == 0
+                    else "partial"
+                    if valid_rows
+                    else "unavailable"
+                ),
                 "summary": {
                     "historicalRuns": len(comparable_runs),
                     "selectionEvents": total_events,
