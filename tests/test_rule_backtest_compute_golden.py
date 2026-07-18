@@ -117,7 +117,7 @@ def test_rule_backtest_compute_basic_long_cash_golden_fixture_matches_python_eng
     assert result["execution_model"]["fee_bps_per_side"] == fixture["inputs"]["execution"]["fee_bps"]
     assert result["execution_model"]["slippage_bps_per_side"] == fixture["inputs"]["execution"]["slippage_bps"]
     assert result["execution_assumptions"]["entry_fill_timing"] == "next_bar_open"
-    assert result["execution_assumptions"]["exit_fill_timing"] == "next_bar_open; same_bar_close"
+    assert result["execution_assumptions"]["exit_fill_timing"] == "next_bar_open"
 
     for key, value in expected["metrics"].items():
         actual = result["metrics"][key]
@@ -283,6 +283,8 @@ def test_rule_backtest_semantics_freeze_fixture_matches_current_v1_engine() -> N
                 "entry_reason": trade["entry_reason"],
                 "exit_reason": trade["exit_reason"],
                 "signal_reason": trade["signal_reason"],
+                "exit_event_type": trade["exit_event_type"],
+                "terminal_liquidation_policy_id": trade["terminal_liquidation_policy_id"],
                 "notes": trade["notes"],
             }
             for trade in result["trades"]
@@ -333,7 +335,7 @@ def test_rule_backtest_shadow_cli_fixtures_match_python_engine_without_parser() 
         },
         "rule_backtest_compute_shadow_cli_v3_terminal_forced_close.json": {
             "contract_version": "shadow_cli_v1",
-            "case_id": "rule_conditions_close_vs_ma3_terminal_forced_close",
+            "case_id": "rule_conditions_close_vs_ma3_terminal_liquidation",
             "date_window": {"start_date": "2024-01-01", "end_date": "2024-01-08"},
             "strategy_kind": "rule_conditions",
             "entry_text": "Close > MA3",
@@ -512,13 +514,18 @@ def test_rule_backtest_shadow_cli_fixtures_match_python_engine_without_parser() 
             for float_key in ("entry_price", "exit_price", "return_pct", "quantity", "fees", "slippage"):
                 _assert_close(actual_trade[float_key], expected_trade[float_key])
 
-        if expected_case["case_id"] == "rule_conditions_close_vs_ma3_terminal_forced_close":
+        if expected_case["case_id"] == "rule_conditions_close_vs_ma3_terminal_liquidation":
             terminal_point = result["equity_curve"][-1]
             assert terminal_point["date"] == "2024-01-08"
-            assert terminal_point["executed_action"] == "forced_close"
-            assert terminal_point["notes"] == "forced_close_at_window_end"
+            assert terminal_point["executed_action"] == "terminal_liquidation"
+            assert terminal_point["notes"] == "terminal_liquidation_at_window_end"
             assert terminal_point["position_state"] == "flat"
-            assert result["trades"][-1]["exit_signal_date"] == "2024-01-08"
+            assert result["trades"][-1]["exit_signal_date"] is None
             assert result["trades"][-1]["exit_date"] == "2024-01-08"
-            assert result["trades"][-1]["exit_reason"] == "final_close"
-            assert result["trades"][-1]["notes"] == "forced_close_at_window_end"
+            assert result["trades"][-1]["exit_reason"] == "terminal_liquidation"
+            assert result["trades"][-1]["exit_event_type"] == "terminal_liquidation"
+            assert (
+                result["trades"][-1]["terminal_liquidation_policy_id"]
+                == "window_end_close_liquidation_v1"
+            )
+            assert result["trades"][-1]["notes"] == "terminal_liquidation_at_window_end"

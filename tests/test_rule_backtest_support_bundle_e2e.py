@@ -746,7 +746,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         self.assertEqual(payloads["execution_model_metadata"]["execution_model"]["version"], "v1")
         self.assertEqual(
             payloads["execution_model_metadata"]["semantics"]["cost_realism"],
-            "baseline_bps_assumptions_only_when_present",
+            "configured_bps_with_explicit_presence_state",
         )
         self.assertFalse(payloads["execution_model_metadata"]["semantics"]["decision_grade"])
         self.assertFalse(

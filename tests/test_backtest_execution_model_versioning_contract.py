@@ -6,7 +6,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from api.v1.schemas.backtest import _default_rule_backtest_execution_model
+import pytest
+from pydantic import ValidationError
+
+from api.v1.schemas.backtest import RuleBacktestExecutionModel
 from src.core.rule_backtest_engine import RuleBacktestEngine
 from src.services import rule_backtest_support_exports
 
@@ -18,6 +21,7 @@ FIXTURE_PATH = (
     / "rule_backtest_execution_model_v1_metadata.json"
 )
 RUNTIME_SHARED_FIELDS = (
+    "model_id",
     "version",
     "timeframe",
     "signal_evaluation_timing",
@@ -30,6 +34,10 @@ RUNTIME_SHARED_FIELDS = (
     "fee_bps_per_side",
     "slippage_model",
     "slippage_bps_per_side",
+    "cost_configuration",
+    "capabilities",
+    "terminal_liquidation",
+    "market_rules",
 )
 
 
@@ -74,22 +82,38 @@ def test_rule_backtest_execution_model_fixture_locks_current_default_metadata_co
     ).to_dict()
     fixture_runtime_fields = {
         field: execution_model[field]
-        for field in (*RUNTIME_SHARED_FIELDS, "market_rules")
+        for field in RUNTIME_SHARED_FIELDS
     }
     assert fixture_runtime_fields == engine_default
 
-    schema_default = _default_rule_backtest_execution_model().model_dump()
+    schema_model = RuleBacktestExecutionModel.model_validate(execution_model).model_dump()
     assert {
         field: execution_model[field]
         for field in RUNTIME_SHARED_FIELDS
     } == {
-        field: schema_default[field]
+        field: schema_model[field]
         for field in RUNTIME_SHARED_FIELDS
     }
+    with pytest.raises(ValidationError):
+        RuleBacktestExecutionModel.model_validate(
+            {
+                key: value
+                for key, value in execution_model.items()
+                if key != "model_id"
+            }
+        )
+    incomplete_market_rules = dict(execution_model)
+    incomplete_market_rules["market_rules"] = {
+        key: value
+        for key, value in execution_model["market_rules"].items()
+        if key != "missing_required_fill_price"
+    }
+    with pytest.raises(ValidationError):
+        RuleBacktestExecutionModel.model_validate(incomplete_market_rules)
 
     assert semantics == {
-        "engine_identity": "existing_rule_backtest_behavior",
-        "cost_realism": "baseline_bps_assumptions_only_when_present",
+        "engine_identity": "canonical_registered_rule_backtest_execution",
+        "cost_realism": "configured_bps_with_explicit_presence_state",
         "institutional_execution_realism": False,
         "market_impact_model": "not_modelled",
         "spread_simulation": "not_modelled",

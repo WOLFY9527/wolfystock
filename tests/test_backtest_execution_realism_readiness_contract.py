@@ -29,10 +29,13 @@ def test_execution_realism_readiness_stays_research_only_with_bps_assumptions() 
         "limit_up_down_handling": "not_modelled",
         "halt_handling": "not_modelled",
         "partial_fill_supported": False,
-        "no_fill_supported": False,
+        "no_fill_supported": True,
+        "open_missing_behavior": "unfilled",
+        "terminal_position_behavior": "terminal_liquidation_event",
         "volume_participation_limit": None,
     }
     execution_model = {
+        "model_id": "rule_backtest_default_execution_model_v1",
         "version": "v1",
         "entry_timing": "next_bar_open",
         "exit_timing": "next_bar_open",
@@ -40,9 +43,19 @@ def test_execution_realism_readiness_stays_research_only_with_bps_assumptions() 
         "exit_fill_price_basis": "open",
         "fee_bps_per_side": 1.0,
         "slippage_bps_per_side": 2.0,
+        "capabilities": {
+            "partial_fills_supported": False,
+            "missing_required_price_state": "unfilled",
+            "terminal_liquidation_supported": True,
+        },
+        "terminal_liquidation": {
+            "event_type": "terminal_liquidation",
+            "policy_id": "window_end_close_liquidation_v1",
+        },
         "market_rules": {
             "trading_day_execution": "available_bars_only",
-            "terminal_bar_fill_fallback": "same_bar_close",
+            "missing_required_fill_price": "unfilled",
+            "window_end_position_handling": "terminal_liquidation_event",
         },
     }
     result_authority = {
@@ -75,9 +88,9 @@ def test_execution_realism_readiness_stays_research_only_with_bps_assumptions() 
 
     assert readiness["overall_state"] == "research_prototype"
     assert readiness["professional_quant_ready"] is False
-    assert readiness["fill_model"] == "next_open_baseline"
-    assert readiness["terminal_fallback"] == "same_bar_close"
-    assert readiness["open_missing_fallback"] == "close_fallback_when_open_missing"
+    assert readiness["fill_model"] == "next_open_with_explicit_no_fill"
+    assert readiness["terminal_fallback"] == "terminal_liquidation"
+    assert readiness["open_missing_fallback"] == "unfilled"
     assert readiness["commission_model"] == "bps_per_side"
     assert readiness["cost_model_state"] == "explicit_cost_capacity_diagnostics"
     assert readiness["tax_model"] == "not_modelled"
@@ -86,7 +99,7 @@ def test_execution_realism_readiness_stays_research_only_with_bps_assumptions() 
     assert readiness["market_impact_model"] == "not_modelled"
     assert readiness["minimum_fee_model"] == "not_modelled"
     assert readiness["partial_fill_supported"] is False
-    assert readiness["no_fill_supported"] is False
+    assert readiness["no_fill_supported"] is True
     assert readiness["volume_participation_limit"] is None
     assert readiness["trading_calendar_state"] == "available_bars_only"
     assert readiness["trading_calendar_ready"] is False
@@ -99,13 +112,13 @@ def test_execution_realism_readiness_stays_research_only_with_bps_assumptions() 
 
     fill_category = readiness["categories"]["fill_model"]
     assert fill_category["ready"] is False
-    assert fill_category["state"] == "next_open_baseline"
+    assert fill_category["state"] == "next_open_with_explicit_no_fill"
     assert fill_category["summary"] == (
-        "Execution assumes next-open baseline fills with terminal same-bar-close fallback."
+        "Execution uses next-open fills, preserves missing required prices as unfilled, "
+        "and records terminal liquidation separately."
     )
     assert fill_category["blockers"] == [
         "partial_fill_model_missing",
-        "no_fill_policy_missing",
         "liquidity_constraints_not_modelled",
         "limit_halt_handling_not_modelled",
     ]

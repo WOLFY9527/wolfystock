@@ -110,8 +110,8 @@ def _sweep_kwargs(**overrides: Any) -> dict[str, Any]:
         "end_date": "2024-02-20",
         "lookback_bars": 20,
         "initial_capital": 100000.0,
-        "fee_bps": 0.0,
-        "slippage_bps": 0.0,
+        "fee_bps": 2.5,
+        "slippage_bps": 1.25,
         "execution_model": {"version": "v1"},
         "confirmed": True,
         "parameter_grid": {

@@ -135,6 +135,7 @@ _SUPPORT_RESULT_AUTHORITY_DOMAIN_NAMES = {
 }
 _SUPPORT_RESULT_AUTHORITY_DOMAIN_KEYS = {"source", "completeness", "state", "missing", "missing_kind"}
 _TRACE_EXECUTION_MODEL_KEYS = {
+    "model_id",
     "version",
     "timeframe",
     "signal_evaluation_timing",
@@ -147,11 +148,14 @@ _TRACE_EXECUTION_MODEL_KEYS = {
     "fee_bps_per_side",
     "slippage_model",
     "slippage_bps_per_side",
+    "cost_configuration",
+    "capabilities",
+    "terminal_liquidation",
     "market_rules",
 }
 _TRACE_MARKET_RULE_KEYS = {
     "trading_day_execution",
-    "terminal_bar_fill_fallback",
+    "missing_required_fill_price",
     "window_end_position_handling",
 }
 _TRACE_EXECUTION_ASSUMPTION_KEYS = {
@@ -177,6 +181,11 @@ _TRACE_EXECUTION_ASSUMPTION_KEYS = {
     "allow_fractional_shares",
     "lot_size",
     "volume_participation_limit",
+    "partial_fill_supported",
+    "no_fill_supported",
+    "open_missing_behavior",
+    "terminal_position_behavior",
+    "terminal_liquidation",
     "limit_up_down_handling",
     "halt_handling",
     "short_selling",
@@ -184,8 +193,31 @@ _TRACE_EXECUTION_ASSUMPTION_KEYS = {
     "warnings",
     "fill_model",
 }
-_TRACE_FEE_MODEL_KEYS = {"type", "commission_bps", "min_commission", "tax_bps", "sec_fee"}
-_TRACE_SLIPPAGE_MODEL_KEYS = {"type", "slippage_bps"}
+_TRACE_FEE_MODEL_KEYS = {
+    "type",
+    "configuration_state",
+    "commission_bps",
+    "min_commission",
+    "tax_bps",
+    "sec_fee",
+}
+_TRACE_SLIPPAGE_MODEL_KEYS = {"type", "configuration_state", "slippage_bps"}
+_TRACE_COST_CONFIGURATION_KEYS = {"fee", "slippage"}
+_TRACE_COST_ITEM_KEYS = {"state", "bps_per_side", "omitted_policy", "application"}
+_TRACE_CAPABILITY_KEYS = {
+    "partial_fills_supported",
+    "missing_required_price_state",
+    "terminal_liquidation_supported",
+}
+_TRACE_TERMINAL_LIQUIDATION_KEYS = {
+    "supported",
+    "policy_id",
+    "event_type",
+    "fill_timing",
+    "fill_price_basis",
+    "reason",
+    "ordinary_strategy_signal",
+}
 _TRACE_WARNING_KEYS = {"code", "severity", "message"}
 _TRACE_BENCHMARK_SUMMARY_KEYS = {
     "label",
@@ -319,6 +351,23 @@ def _safe_trace_export_section(value: Any, allowed_keys: set[str]) -> dict[str, 
             result[key] = _safe_export_mapping(payload.get(key), _TRACE_FEE_MODEL_KEYS)
         elif key == "slippage_model":
             result[key] = _safe_export_mapping(payload.get(key), _TRACE_SLIPPAGE_MODEL_KEYS)
+        elif key == "cost_configuration":
+            cost_configuration = _mapping_payload(payload.get(key))
+            result[key] = {
+                item_key: _safe_export_mapping(
+                    cost_configuration.get(item_key),
+                    _TRACE_COST_ITEM_KEYS,
+                )
+                for item_key in _TRACE_COST_CONFIGURATION_KEYS
+                if item_key in cost_configuration
+            }
+        elif key == "capabilities":
+            result[key] = _safe_export_mapping(payload.get(key), _TRACE_CAPABILITY_KEYS)
+        elif key == "terminal_liquidation":
+            result[key] = _safe_export_mapping(
+                payload.get(key),
+                _TRACE_TERMINAL_LIQUIDATION_KEYS,
+            )
         elif key == "warnings":
             result[key] = [
                 _safe_export_mapping(item, _TRACE_WARNING_KEYS)

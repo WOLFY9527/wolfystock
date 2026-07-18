@@ -55,7 +55,7 @@ from src.services.backtest_parameter_stability import build_parameter_stability_
 from src.services.backtest_response_contract import build_performance_contract, build_rule_run_contract
 from src.services.rule_backtest_execution_model_registry import (
     RuleBacktestExecutionModelUnsupportedError,
-    resolve_rule_backtest_execution_model_request,
+    validate_rule_backtest_execution_model_request,
 )
 from src.services.rule_backtest_service import RuleBacktestService
 from src.services.rule_backtest_support_exports import build_execution_model_metadata_export
@@ -807,9 +807,11 @@ def run_rule_backtest(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> RuleBacktestRunResponse:
     def _operation() -> RuleBacktestRunResponse:
-        resolve_rule_backtest_execution_model_request(request.execution_model)
+        validate_rule_backtest_execution_model_request(request.execution_model)
         service = _build_rule_backtest_service(db_manager, current_user)
         robustness_config = request.robustness_config.model_dump(exclude_none=True) if request.robustness_config is not None else None
+        fee_bps_configured = "fee_bps" in request.model_fields_set
+        slippage_bps_configured = "slippage_bps" in request.model_fields_set
         if request.wait_for_completion:
             data = service.run_backtest(
                 code=request.code,
@@ -821,6 +823,8 @@ def run_rule_backtest(
                 initial_capital=request.initial_capital,
                 fee_bps=request.fee_bps,
                 slippage_bps=request.slippage_bps,
+                fee_bps_configured=fee_bps_configured,
+                slippage_bps_configured=slippage_bps_configured,
                 benchmark_mode=request.benchmark_mode,
                 benchmark_code=request.benchmark_code,
                 execution_model=request.execution_model,
@@ -839,6 +843,8 @@ def run_rule_backtest(
             initial_capital=request.initial_capital,
             fee_bps=request.fee_bps,
             slippage_bps=request.slippage_bps,
+            fee_bps_configured=fee_bps_configured,
+            slippage_bps_configured=slippage_bps_configured,
             benchmark_mode=request.benchmark_mode,
             benchmark_code=request.benchmark_code,
             execution_model=request.execution_model,

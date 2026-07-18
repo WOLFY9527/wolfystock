@@ -37,7 +37,9 @@ from src.services.backtest_professional_readiness import build_backtest_professi
 from src.services.backtest_reproducibility_manifest import build_backtest_reproducibility_manifest
 from src.services.rule_backtest_execution_model_registry import (
     RuleBacktestExecutionModelUnsupportedError,
+    audit_rule_backtest_execution_model_evidence,
     resolve_rule_backtest_execution_model_request,
+    validate_rule_backtest_execution_model_request,
 )
 from src.repositories.stock_repo import StockRepository
 from src.services.local_data_preflight_service import LocalDataPreflightService
@@ -888,6 +890,7 @@ class RuleBacktestService:
             initial_capital=initial_capital,
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
+            execution_costs_from_request=True,
         )
         return self._parsed_to_dict(parsed)
 
@@ -903,6 +906,8 @@ class RuleBacktestService:
         initial_capital: float = 100000.0,
         fee_bps: float = 0.0,
         slippage_bps: float = 0.0,
+        fee_bps_configured: bool | None = None,
+        slippage_bps_configured: bool | None = None,
         benchmark_mode: str = BENCHMARK_MODE_AUTO,
         benchmark_code: Optional[str] = None,
         execution_model: Optional[Any] = None,
@@ -912,7 +917,7 @@ class RuleBacktestService:
         """Run a deterministic rule backtest synchronously and persist the completed result."""
 
         normalized_code, raw_text = self._validate_submission_inputs(code=code, strategy_text=strategy_text)
-        self._resolve_execution_model_request(execution_model)
+        validate_rule_backtest_execution_model_request(execution_model)
         normalized_robustness_config = self._sanitize_robustness_config(robustness_config)
         parsed = self._ensure_parsed_strategy(
             raw_text,
@@ -926,6 +931,15 @@ class RuleBacktestService:
         )
         if parsed.needs_confirmation and not confirmed:
             raise ValueError(_CONFIRMATION_REQUIRED_ERROR)
+        self._resolve_execution_model_request(
+            execution_model,
+            strategy_type=str(parsed.strategy_spec.get("strategy_type") or parsed.strategy_kind),
+            timeframe=parsed.timeframe,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            fee_bps_configured=fee_bps_configured,
+            slippage_bps_configured=slippage_bps_configured,
+        )
 
         result = self._execute_rule_backtest(
             code=normalized_code,
@@ -936,6 +950,9 @@ class RuleBacktestService:
             initial_capital=initial_capital,
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
+            fee_bps_configured=fee_bps_configured,
+            slippage_bps_configured=slippage_bps_configured,
+            execution_model_request=execution_model,
             benchmark_mode=benchmark_mode,
             benchmark_code=benchmark_code,
             robustness_config=normalized_robustness_config,
@@ -951,6 +968,9 @@ class RuleBacktestService:
             initial_capital=initial_capital,
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
+            fee_bps_configured=fee_bps_configured,
+            slippage_bps_configured=slippage_bps_configured,
+            execution_model_request=execution_model,
             benchmark_mode=benchmark_mode,
             benchmark_code=benchmark_code,
             robustness_config=normalized_robustness_config,
@@ -970,6 +990,8 @@ class RuleBacktestService:
         initial_capital: float = 100000.0,
         fee_bps: float = 0.0,
         slippage_bps: float = 0.0,
+        fee_bps_configured: bool | None = None,
+        slippage_bps_configured: bool | None = None,
         benchmark_mode: str = BENCHMARK_MODE_AUTO,
         benchmark_code: Optional[str] = None,
         execution_model: Optional[Any] = None,
@@ -979,7 +1001,7 @@ class RuleBacktestService:
         """Create a non-blocking rule backtest run and return immediately."""
 
         normalized_code, raw_text = self._validate_submission_inputs(code=code, strategy_text=strategy_text)
-        self._resolve_execution_model_request(execution_model)
+        validate_rule_backtest_execution_model_request(execution_model)
         normalized_robustness_config = self._sanitize_robustness_config(robustness_config)
         parsed: Optional[ParsedStrategy] = None
         if parsed_strategy:
@@ -996,6 +1018,9 @@ class RuleBacktestService:
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
             parsed_strategy=parsed,
+            fee_bps_configured=fee_bps_configured,
+            slippage_bps_configured=slippage_bps_configured,
+            execution_model_request=execution_model,
         )
         request_payload = self._build_request_payload(
             start_date=normalized_start_date,
@@ -1004,10 +1029,13 @@ class RuleBacktestService:
             initial_capital=initial_capital,
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
+            fee_bps_configured=fee_bps_configured,
+            slippage_bps_configured=slippage_bps_configured,
             benchmark_mode=benchmark_mode,
             benchmark_code=benchmark_code,
             confirmed=confirmed,
             execution_model=execution_model_payload,
+            execution_model_request=execution_model,
             robustness_config=normalized_robustness_config,
         )
         strategy_hash = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
@@ -1079,7 +1107,9 @@ class RuleBacktestService:
         normalized_robustness_config = self._sanitize_robustness_config(request_payload.get("robustness_config"))
         try:
             try:
-                self._resolve_execution_model_request(request_payload.get("execution_model"))
+                validate_rule_backtest_execution_model_request(
+                    request_payload.get("execution_model_request")
+                )
             except RuleBacktestExecutionModelUnsupportedError as exc:
                 detail = exc.to_error_detail()
                 self._mark_run_failed(
@@ -1114,6 +1144,18 @@ class RuleBacktestService:
                     no_result_message="解析结果仍存在歧义，请先确认规则结构后再运行。",
                 )
                 return
+            self._resolve_execution_model_request(
+                request_payload.get("execution_model_request"),
+                strategy_type=str(
+                    parsed_strategy.strategy_spec.get("strategy_type")
+                    or parsed_strategy.strategy_kind
+                ),
+                timeframe=parsed_strategy.timeframe,
+                fee_bps=request_payload["fee_bps"],
+                slippage_bps=request_payload["slippage_bps"],
+                fee_bps_configured=request_payload["fee_bps_configured"],
+                slippage_bps_configured=request_payload["slippage_bps_configured"],
+            )
 
             if self._should_stop_run_processing(run_id):
                 logger.info("Rule backtest submission %s was cancelled before execution.", run_id)
@@ -1129,6 +1171,9 @@ class RuleBacktestService:
                 initial_capital=request_payload["initial_capital"],
                 fee_bps=request_payload["fee_bps"],
                 slippage_bps=request_payload["slippage_bps"],
+                fee_bps_configured=request_payload["fee_bps_configured"],
+                slippage_bps_configured=request_payload["slippage_bps_configured"],
+                execution_model_request=request_payload.get("execution_model_request"),
                 benchmark_mode=str(request_payload.get("benchmark_mode") or BENCHMARK_MODE_AUTO),
                 benchmark_code=request_payload.get("benchmark_code"),
                 robustness_config=normalized_robustness_config,
@@ -1160,6 +1205,9 @@ class RuleBacktestService:
                 initial_capital=request_payload["initial_capital"],
                 fee_bps=request_payload["fee_bps"],
                 slippage_bps=request_payload["slippage_bps"],
+                fee_bps_configured=request_payload["fee_bps_configured"],
+                slippage_bps_configured=request_payload["slippage_bps_configured"],
+                execution_model_request=request_payload.get("execution_model_request"),
                 benchmark_mode=str(request_payload.get("benchmark_mode") or BENCHMARK_MODE_AUTO),
                 benchmark_code=request_payload.get("benchmark_code"),
                 robustness_config=normalized_robustness_config,
@@ -2443,8 +2491,25 @@ class RuleBacktestService:
         return normalized_code, raw_text
 
     @staticmethod
-    def _resolve_execution_model_request(execution_model: Optional[Any]) -> Dict[str, Any]:
-        return resolve_rule_backtest_execution_model_request(execution_model)
+    def _resolve_execution_model_request(
+        execution_model: Optional[Any],
+        *,
+        strategy_type: str = "rule_conditions",
+        timeframe: str = "daily",
+        fee_bps: float = 0.0,
+        slippage_bps: float = 0.0,
+        fee_bps_configured: bool | None = None,
+        slippage_bps_configured: bool | None = None,
+    ) -> Dict[str, Any]:
+        return resolve_rule_backtest_execution_model_request(
+            execution_model,
+            strategy_type=strategy_type,
+            timeframe=timeframe,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            fee_bps_configured=fee_bps_configured,
+            slippage_bps_configured=slippage_bps_configured,
+        )
 
     def _run_bounded_parameter_grid_diagnostic_with_supplied_bars(
         self,
@@ -3007,6 +3072,9 @@ class RuleBacktestService:
         initial_capital: float,
         fee_bps: float,
         slippage_bps: float,
+        fee_bps_configured: bool | None,
+        slippage_bps_configured: bool | None,
+        execution_model_request: Optional[Any],
         benchmark_mode: str,
         benchmark_code: Optional[str],
         robustness_config: Optional[Dict[str, Any]] = None,
@@ -3106,6 +3174,9 @@ class RuleBacktestService:
                 lookback_bars=lookback_bars,
                 fee_bps=fee_bps,
                 slippage_bps=slippage_bps,
+                fee_bps_configured=fee_bps_configured,
+                slippage_bps_configured=slippage_bps_configured,
+                execution_model_request=execution_model_request,
                 no_result_reason=no_result_reason,
                 no_result_message=no_result_message,
                 start_date=normalized_start_date,
@@ -3148,6 +3219,9 @@ class RuleBacktestService:
             initial_capital=initial_capital,
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
+            fee_bps_configured=fee_bps_configured,
+            slippage_bps_configured=slippage_bps_configured,
+            execution_model_request=execution_model_request,
             lookback_bars=lookback_bars,
             start_date=normalized_start_date,
             end_date=normalized_end_date,
@@ -4501,7 +4575,15 @@ class RuleBacktestService:
         if parsed_strategy:
             parsed = self._dict_to_parsed_strategy(parsed_strategy, raw_text)
         else:
-            parsed_dict = self.parse_strategy(raw_text, code=code)
+            parsed_dict = self.parse_strategy(
+                raw_text,
+                code=code,
+                start_date=start_date,
+                end_date=end_date,
+                initial_capital=initial_capital,
+                fee_bps=fee_bps,
+                slippage_bps=slippage_bps,
+            )
             parsed = self._dict_to_parsed_strategy(parsed_dict, raw_text)
         return self._normalize_parsed_strategy(
             parsed,
@@ -4533,6 +4615,9 @@ class RuleBacktestService:
         lookback_bars: int,
         fee_bps: float,
         slippage_bps: float,
+        fee_bps_configured: bool | None,
+        slippage_bps_configured: bool | None,
+        execution_model_request: Optional[Any],
         no_result_reason: str,
         no_result_message: str,
         start_date: Optional[date] = None,
@@ -4570,6 +4655,9 @@ class RuleBacktestService:
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
             strategy_type=str(parsed.strategy_spec.get("strategy_type") or parsed.strategy_kind),
+            fee_bps_configured=fee_bps_configured,
+            slippage_bps_configured=slippage_bps_configured,
+            execution_model_request=execution_model_request,
         )
         assumptions = self.engine._build_execution_assumptions(execution_model=execution_model)
         return RuleBacktestResult(
@@ -4612,12 +4700,18 @@ class RuleBacktestService:
                 exit_rule_json=self._serialize_json(
                     {
                         "rule": trade.exit_rule_json,
-                        "signal_date": trade.exit_signal_date.isoformat(),
+                        "signal_date": (
+                            trade.exit_signal_date.isoformat()
+                            if trade.exit_signal_date is not None
+                            else None
+                        ),
                         "trigger": trade.exit_trigger,
                         "indicators": trade.exit_indicators,
                         "signal_price_basis": trade.signal_price_basis,
                         "fill_basis": trade.exit_fill_basis,
                         "reason": trade.to_dict().get("exit_reason"),
+                        "event_type": trade.exit_event_type,
+                        "terminal_liquidation_policy_id": trade.terminal_liquidation_policy_id,
                     }
                 ),
                 notes=self._serialize_json(
@@ -4660,6 +4754,9 @@ class RuleBacktestService:
         initial_capital: float,
         fee_bps: float,
         slippage_bps: float,
+        fee_bps_configured: bool | None,
+        slippage_bps_configured: bool | None,
+        execution_model_request: Optional[Any],
         benchmark_mode: str,
         benchmark_code: Optional[str],
         robustness_config: Optional[Dict[str, Any]] = None,
@@ -4700,10 +4797,13 @@ class RuleBacktestService:
             initial_capital=initial_capital,
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
+            fee_bps_configured=fee_bps_configured,
+            slippage_bps_configured=slippage_bps_configured,
             benchmark_mode=benchmark_mode,
             benchmark_code=benchmark_code,
             confirmed=confirmed,
             execution_model=execution_model_payload,
+            execution_model_request=execution_model_request,
             robustness_config=robustness_config,
         )
         data_sufficiency_payload = assess_backtest_data_sufficiency(
@@ -4956,6 +5056,15 @@ class RuleBacktestService:
                     fee_bps=row.fee_bps,
                     slippage_bps=float(self._extract_request_payload(row.summary_json).get("slippage_bps") or 0.0),
                     parsed_strategy=parsed_strategy,
+                    fee_bps_configured=bool(
+                        self._extract_request_payload(row.summary_json).get("fee_bps_configured")
+                    ),
+                    slippage_bps_configured=bool(
+                        self._extract_request_payload(row.summary_json).get("slippage_bps_configured")
+                    ),
+                    execution_model_request=self._extract_request_payload(row.summary_json).get(
+                        "execution_model_request"
+                    ),
                 )
                 if parsed_strategy is not None
                 else _UNSET
@@ -4967,6 +5076,15 @@ class RuleBacktestService:
                         fee_bps=row.fee_bps,
                         slippage_bps=float(self._extract_request_payload(row.summary_json).get("slippage_bps") or 0.0),
                         parsed_strategy=parsed_strategy,
+                        fee_bps_configured=bool(
+                            self._extract_request_payload(row.summary_json).get("fee_bps_configured")
+                        ),
+                        slippage_bps_configured=bool(
+                            self._extract_request_payload(row.summary_json).get("slippage_bps_configured")
+                        ),
+                        execution_model_request=self._extract_request_payload(row.summary_json).get(
+                            "execution_model_request"
+                        ),
                     )
                 )
                 if parsed_strategy is not None
@@ -7425,10 +7543,13 @@ class RuleBacktestService:
             "initial_capital": float(request.get("initial_capital") or 100000.0),
             "fee_bps": float(request.get("fee_bps") or 0.0),
             "slippage_bps": float(request.get("slippage_bps") or 0.0),
+            "fee_bps_configured": bool(request.get("fee_bps_configured", False)),
+            "slippage_bps_configured": bool(request.get("slippage_bps_configured", False)),
             "benchmark_mode": str(request.get("benchmark_mode") or BENCHMARK_MODE_AUTO),
             "benchmark_code": str(request.get("benchmark_code") or "").strip() or None,
             "confirmed": bool(request.get("confirmed", False)),
             "execution_model": dict(request.get("execution_model") or {}),
+            "execution_model_request": copy.deepcopy(request.get("execution_model_request")),
         }
         if isinstance(request.get("robustness_config"), dict):
             payload["robustness_config"] = dict(request.get("robustness_config") or {})
@@ -7443,10 +7564,13 @@ class RuleBacktestService:
         initial_capital: float,
         fee_bps: float,
         slippage_bps: float,
+        fee_bps_configured: bool | None,
+        slippage_bps_configured: bool | None,
         benchmark_mode: str,
         benchmark_code: Optional[str],
         confirmed: bool,
         execution_model: Optional[Dict[str, Any]] = None,
+        execution_model_request: Optional[Any] = None,
         robustness_config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         payload = {
@@ -7456,10 +7580,21 @@ class RuleBacktestService:
             "initial_capital": float(initial_capital),
             "fee_bps": float(fee_bps),
             "slippage_bps": float(slippage_bps),
+            "fee_bps_configured": (
+                bool(fee_bps_configured)
+                if fee_bps_configured is not None
+                else float(fee_bps) != 0.0
+            ),
+            "slippage_bps_configured": (
+                bool(slippage_bps_configured)
+                if slippage_bps_configured is not None
+                else float(slippage_bps) != 0.0
+            ),
             "benchmark_mode": str(benchmark_mode or BENCHMARK_MODE_AUTO),
             "benchmark_code": str(benchmark_code or "").strip() or None,
             "confirmed": bool(confirmed),
             "execution_model": dict(execution_model or {}),
+            "execution_model_request": copy.deepcopy(execution_model_request),
         }
         if robustness_config is not None:
             payload["robustness_config"] = dict(robustness_config or {})
@@ -7596,15 +7731,24 @@ class RuleBacktestService:
         fee_bps: float,
         slippage_bps: float,
         parsed_strategy: Optional[ParsedStrategy] = None,
+        fee_bps_configured: bool | None = None,
+        slippage_bps_configured: bool | None = None,
+        execution_model_request: Optional[Any] = None,
     ) -> Dict[str, Any]:
-        strategy_type = "rule_conditions"
-        if parsed_strategy is not None:
-            strategy_type = str(parsed_strategy.strategy_spec.get("strategy_type") or parsed_strategy.strategy_kind)
+        if parsed_strategy is None:
+            return {}
+        strategy_type = str(
+            parsed_strategy.strategy_spec.get("strategy_type")
+            or parsed_strategy.strategy_kind
+        )
         return self.engine._build_execution_model(
             timeframe=timeframe,
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
             strategy_type=strategy_type,
+            fee_bps_configured=fee_bps_configured,
+            slippage_bps_configured=slippage_bps_configured,
+            execution_model_request=execution_model_request,
         ).to_dict()
 
     def _build_execution_assumptions_payload(
@@ -7650,6 +7794,11 @@ class RuleBacktestService:
         fee_bps = float(_safe_float(execution_model.get("fee_bps_per_side")) or _safe_float(payload.get("fee_bps_per_side")) or 0.0)
         slippage_bps = float(_safe_float(execution_model.get("slippage_bps_per_side")) or _safe_float(payload.get("slippage_bps_per_side")) or 0.0)
         market_rules = dict(execution_model.get("market_rules") or {})
+        capabilities = dict(execution_model.get("capabilities") or {})
+        terminal_liquidation = dict(execution_model.get("terminal_liquidation") or {})
+        cost_configuration = dict(execution_model.get("cost_configuration") or {})
+        fee_configuration = dict(cost_configuration.get("fee") or {})
+        slippage_configuration = dict(cost_configuration.get("slippage") or {})
         warnings = [
             self._quality_warning("limit_halt_not_modeled", "Limit-up/down and halt handling are not modeled."),
             self._quality_warning("volume_limit_unknown", "Volume participation limits are not modeled."),
@@ -7664,18 +7813,29 @@ class RuleBacktestService:
                 "allow_fractional_shares": True,
                 "lot_size": 1,
                 "volume_participation_limit": None,
+                "partial_fill_supported": bool(
+                    capabilities.get("partial_fills_supported", False)
+                ),
+                "no_fill_supported": (
+                    capabilities.get("missing_required_price_state") == "unfilled"
+                ),
+                "open_missing_behavior": market_rules.get("missing_required_fill_price"),
+                "terminal_position_behavior": market_rules.get("window_end_position_handling"),
+                "terminal_liquidation": terminal_liquidation,
                 "limit_up_down_handling": "not_modeled",
                 "halt_handling": "not_modeled",
                 "short_selling": "disabled",
                 "fee_model": {
-                    "type": "bps" if fee_bps else "none",
+                    "type": "bps_per_side",
+                    "configuration_state": fee_configuration.get("state"),
                     "commission_bps": fee_bps,
                     "min_commission": None,
                     "tax_bps": None,
                     "sec_fee": None,
                 },
                 "slippage_model": {
-                    "type": "bps" if slippage_bps else "none",
+                    "type": "bps_per_side",
+                    "configuration_state": slippage_configuration.get("state"),
                     "slippage_bps": slippage_bps,
                 },
                 "market_rules": market_rules,
@@ -7716,41 +7876,24 @@ class RuleBacktestService:
         summary: Dict[str, Any],
         derived_payload: Dict[str, Any],
     ) -> Dict[str, Any]:
-        diagnostic_optional_keys = {
-            "engine",
-            "signal_timing",
-            "fill_timing",
-            "fill_price",
-            "allow_same_day_exit",
-            "allow_fractional_shares",
-            "lot_size",
-            "volume_participation_limit",
-            "limit_up_down_handling",
-            "halt_handling",
-            "short_selling",
-            "fee_model",
-            "slippage_model",
-            "market_rules",
-            "warnings",
-        }
         snapshot = RuleBacktestService._extract_execution_assumptions_snapshot_payload(summary)
         if snapshot is not None:
             stored_payload = dict(snapshot.get("payload") or {})
             missing_keys = [
                 key for key in derived_payload.keys()
-                if key not in diagnostic_optional_keys and stored_payload.get(key) is None
+                if key not in stored_payload
             ]
-            resolved_payload = dict(derived_payload)
-            resolved_payload.update({key: value for key, value in stored_payload.items() if value is not None})
+            if not derived_payload:
+                missing_keys.append("execution_model_identity")
             if missing_keys:
                 return RuleBacktestService._build_execution_assumptions_snapshot_payload(
-                    payload=resolved_payload,
-                    source="summary.execution_assumptions_snapshot+derived_defaults",
-                    completeness="stored_partial_repaired",
+                    payload=stored_payload,
+                    source="summary.execution_assumptions_snapshot",
+                    completeness="stored_partial",
                     missing_keys=missing_keys,
                 )
             return RuleBacktestService._build_execution_assumptions_snapshot_payload(
-                payload=resolved_payload,
+                payload=stored_payload,
                 source="summary.execution_assumptions_snapshot",
                 completeness="complete",
                 missing_keys=[],
@@ -7760,30 +7903,31 @@ class RuleBacktestService:
         if isinstance(legacy_payload, dict) and legacy_payload:
             missing_keys = [
                 key for key in derived_payload.keys()
-                if key not in diagnostic_optional_keys and legacy_payload.get(key) is None
+                if key not in legacy_payload
             ]
-            resolved_payload = dict(derived_payload)
-            resolved_payload.update({key: value for key, value in legacy_payload.items() if value is not None})
+            if not derived_payload:
+                missing_keys.append("execution_model_identity")
             if missing_keys:
                 return RuleBacktestService._build_execution_assumptions_snapshot_payload(
-                    payload=resolved_payload,
-                    source="summary.execution_assumptions+derived_defaults",
-                    completeness="legacy_partial_repaired",
+                    payload=dict(legacy_payload),
+                    source="summary.execution_assumptions",
+                    completeness="legacy_partial",
                     missing_keys=missing_keys,
                 )
             return RuleBacktestService._build_execution_assumptions_snapshot_payload(
-                payload=resolved_payload,
+                payload=dict(legacy_payload),
                 source="summary.execution_assumptions",
                 completeness="legacy_complete",
                 missing_keys=[],
             )
 
         return RuleBacktestService._build_execution_assumptions_snapshot_payload(
-            payload=derived_payload,
-            source="derived_from_execution_model",
-            completeness="derived",
-            missing_keys=[],
+            payload={},
+            source="unavailable",
+            completeness="unavailable",
+            missing_keys=["execution_assumptions_snapshot"],
         )
+
     @staticmethod
     def _build_daily_return_series(equity_curve: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         series: List[Dict[str, Any]] = []
@@ -9658,6 +9802,7 @@ class RuleBacktestService:
         initial_capital: Optional[float] = None,
         fee_bps: float = 0.0,
         slippage_bps: float = 0.0,
+        execution_costs_from_request: bool = False,
     ) -> ParsedStrategy:
         parsed = self._promote_supported_classic_template(parsed)
         if parsed.strategy_kind == "periodic_accumulation":
@@ -9669,6 +9814,7 @@ class RuleBacktestService:
                 initial_capital=initial_capital,
                 fee_bps=fee_bps,
                 slippage_bps=slippage_bps,
+                execution_costs_from_request=execution_costs_from_request,
             )
         elif self._is_supported_indicator_strategy_family(parsed.strategy_kind):
             normalized_spec = self._normalize_indicator_strategy_spec(
@@ -9679,6 +9825,7 @@ class RuleBacktestService:
                 initial_capital=initial_capital,
                 fee_bps=fee_bps,
                 slippage_bps=slippage_bps,
+                execution_costs_from_request=execution_costs_from_request,
             )
         else:
             normalized_spec = dict(parsed.strategy_spec or {})
@@ -9879,6 +10026,7 @@ class RuleBacktestService:
         initial_capital: Optional[float] = None,
         fee_bps: float = 0.0,
         slippage_bps: float = 0.0,
+        execution_costs_from_request: bool = False,
     ) -> Dict[str, Any]:
         setup = dict(parsed.setup or {})
         existing_spec = dict(parsed.strategy_spec or {})
@@ -9948,8 +10096,16 @@ class RuleBacktestService:
                     "stop_when_insufficient_cash",
                 )
             ),
-            fee_bps=float(resolved_fee_bps if resolved_fee_bps is not None else fee_bps),
-            slippage_bps=float(resolved_slippage_bps if resolved_slippage_bps is not None else slippage_bps),
+            fee_bps=float(
+                fee_bps
+                if execution_costs_from_request
+                else resolved_fee_bps if resolved_fee_bps is not None else fee_bps
+            ),
+            slippage_bps=float(
+                slippage_bps
+                if execution_costs_from_request
+                else resolved_slippage_bps if resolved_slippage_bps is not None else slippage_bps
+            ),
         )
         parsed.executable = True
         parsed.normalization_state = "assumed" if (parsed.needs_confirmation or bool(parsed.ambiguities)) else "ready"
@@ -9968,6 +10124,7 @@ class RuleBacktestService:
         initial_capital: Optional[float],
         fee_bps: float,
         slippage_bps: float,
+        execution_costs_from_request: bool = False,
     ) -> Dict[str, Any]:
         setup = dict(parsed.setup or {})
         existing_spec = dict(parsed.strategy_spec or {})
@@ -10028,8 +10185,16 @@ class RuleBacktestService:
             entry_sizing=str(self._nested_value(existing_spec, "position_behavior", "entry_sizing") or "all_in"),
             max_positions=int(self._nested_value(existing_spec, "position_behavior", "max_positions") or 1),
             pyramiding=bool(self._nested_value(existing_spec, "position_behavior", "pyramiding") or False),
-            fee_bps=float(resolved_fee_bps if resolved_fee_bps is not None else fee_bps),
-            slippage_bps=float(resolved_slippage_bps if resolved_slippage_bps is not None else slippage_bps),
+            fee_bps=float(
+                fee_bps
+                if execution_costs_from_request
+                else resolved_fee_bps if resolved_fee_bps is not None else fee_bps
+            ),
+            slippage_bps=float(
+                slippage_bps
+                if execution_costs_from_request
+                else resolved_slippage_bps if resolved_slippage_bps is not None else slippage_bps
+            ),
             end_policy=str(self._nested_value(existing_spec, "end_behavior", "policy") or "liquidate_at_end"),
             end_price_basis=str(self._nested_value(existing_spec, "end_behavior", "price_basis") or "close"),
             stop_loss_pct=_safe_float(risk_controls.get("stop_loss_pct")),
@@ -10739,30 +10904,6 @@ class RuleBacktestService:
         return normalized_start, normalized_end
 
     @staticmethod
-    def _canonical_signal_evaluation_timing(value: Any) -> str:
-        normalized = str(value or "").strip().lower()
-        if normalized in {"scheduled_trading_day_open", "execute scheduled accumulation on each trading day"}:
-            return "scheduled_trading_day_open"
-        return "bar_close"
-
-    @staticmethod
-    def _canonical_entry_timing(value: Any) -> str:
-        normalized = str(value or "").strip().lower()
-        if "same_bar_open" in normalized:
-            return "same_bar_open"
-        return "next_bar_open"
-
-    @staticmethod
-    def _canonical_exit_timing(value: Any) -> str:
-        normalized = str(value or "").strip().lower()
-        if "forced_close_at_window_end_close" in normalized:
-            return "forced_close_at_window_end_close"
-        if ";" in normalized:
-            normalized = normalized.split(";", 1)[0].strip()
-        return normalized or "next_bar_open"
-
-    @staticmethod
-    @staticmethod
     def _describe_execution_assumptions_source(summary: Dict[str, Any]) -> str:
         snapshot = RuleBacktestService._extract_execution_assumptions_snapshot_payload(summary)
         if snapshot is not None:
@@ -10772,99 +10913,6 @@ class RuleBacktestService:
             return "summary.execution_assumptions"
         return "derived_from_execution_model"
 
-    def _build_derived_execution_model_payload(
-        self,
-        *,
-        summary: Dict[str, Any],
-        row: RuleBacktestRun,
-        parsed_strategy: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        execution_assumptions = dict(summary.get("execution_assumptions") or {})
-        request = dict(summary.get("request") or {})
-        parsed_payload = parsed_strategy if isinstance(parsed_strategy, dict) else {}
-        strategy_spec = dict(parsed_payload.get("strategy_spec") or parsed_payload.get("strategySpec") or {})
-        strategy_kind = str(strategy_spec.get("strategy_type") or parsed_payload.get("strategy_kind") or parsed_payload.get("strategyKind") or "rule_conditions")
-
-        derived = self.engine._build_execution_model(
-            timeframe=str(execution_assumptions.get("timeframe") or row.timeframe or "daily"),
-            fee_bps=float(_safe_float(execution_assumptions.get("fee_bps_per_side")) or row.fee_bps or 0.0),
-            slippage_bps=float(_safe_float(execution_assumptions.get("slippage_bps_per_side")) or request.get("slippage_bps") or 0.0),
-            strategy_type=strategy_kind,
-        ).to_dict()
-
-        if execution_assumptions:
-            derived["signal_evaluation_timing"] = self._canonical_signal_evaluation_timing(
-                execution_assumptions.get("signal_evaluation_timing")
-            )
-            derived["entry_timing"] = self._canonical_entry_timing(execution_assumptions.get("entry_fill_timing"))
-            derived["exit_timing"] = self._canonical_exit_timing(execution_assumptions.get("exit_fill_timing"))
-            if execution_assumptions.get("default_fill_price_basis"):
-                derived["entry_fill_price_basis"] = str(execution_assumptions.get("default_fill_price_basis"))
-            if derived["exit_timing"] == "forced_close_at_window_end_close":
-                derived["exit_fill_price_basis"] = "close"
-            else:
-                derived["exit_fill_price_basis"] = derived["entry_fill_price_basis"]
-            if execution_assumptions.get("position_sizing"):
-                derived["position_sizing"] = str(execution_assumptions.get("position_sizing"))
-            if execution_assumptions.get("fee_model"):
-                derived["fee_model"] = str(execution_assumptions.get("fee_model"))
-            if execution_assumptions.get("slippage_model"):
-                derived["slippage_model"] = str(execution_assumptions.get("slippage_model"))
-            market_rules = dict(derived.get("market_rules") or {})
-            if "same-bar close" in str(execution_assumptions.get("exit_fill_timing") or "").lower():
-                market_rules["terminal_bar_fill_fallback"] = "same_bar_close"
-            derived["market_rules"] = market_rules
-
-        return derived
-
-    @staticmethod
-    def _merge_execution_model_payload(
-        *,
-        derived_payload: Dict[str, Any],
-        stored_payload: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        resolved_payload = dict(derived_payload or {})
-        resolved_payload.update(
-            {
-                key: value
-                for key, value in dict(stored_payload or {}).items()
-                if key != "market_rules" and value is not None
-            }
-        )
-        resolved_market_rules = dict(derived_payload.get("market_rules") or {})
-        stored_market_rules = stored_payload.get("market_rules")
-        if isinstance(stored_market_rules, dict):
-            resolved_market_rules.update(
-                {key: value for key, value in stored_market_rules.items() if value is not None}
-            )
-        resolved_payload["market_rules"] = resolved_market_rules
-        resolved_model = ExecutionModelConfig.from_dict(resolved_payload)
-        return resolved_model.to_dict() if resolved_model is not None else dict(derived_payload or {})
-
-    @staticmethod
-    def _collect_missing_execution_model_fields(
-        *,
-        derived_payload: Dict[str, Any],
-        stored_payload: Dict[str, Any],
-    ) -> List[str]:
-        missing_fields: List[str] = []
-        for key, value in (derived_payload or {}).items():
-            if key == "market_rules":
-                expected_market_rules = dict(value or {})
-                stored_market_rules = stored_payload.get("market_rules")
-                if not isinstance(stored_market_rules, dict):
-                    missing_fields.extend(
-                        [f"market_rules.{sub_key}" for sub_key in expected_market_rules.keys()]
-                    )
-                    continue
-                for sub_key in expected_market_rules.keys():
-                    if stored_market_rules.get(sub_key) is None:
-                        missing_fields.append(f"market_rules.{sub_key}")
-                continue
-            if stored_payload.get(key) is None:
-                missing_fields.append(key)
-        return missing_fields
-
     def _resolve_execution_model_payload(
         self,
         *,
@@ -10872,47 +10920,23 @@ class RuleBacktestService:
         row: RuleBacktestRun,
         parsed_strategy: Optional[Dict[str, Any]] = None,
     ) -> tuple[Dict[str, Any], str, str, List[str]]:
-        derived_payload = self._build_derived_execution_model_payload(
-            summary=summary,
-            row=row,
-            parsed_strategy=parsed_strategy,
-        )
+        if (
+            self._normalize_run_status(row.status) == "parsing"
+            and not summary.get("execution_model")
+        ):
+            return {}, "unavailable", "unavailable", ["strategy_not_parsed"]
         request_payload = dict(summary.get("request") or {})
         for source, stored_payload in (
             ("summary.execution_model", summary.get("execution_model")),
             ("summary.request.execution_model", request_payload.get("execution_model")),
         ):
             if isinstance(stored_payload, dict) and stored_payload:
-                missing_fields = self._collect_missing_execution_model_fields(
-                    derived_payload=derived_payload,
-                    stored_payload=stored_payload,
-                )
-                resolved_payload = self._merge_execution_model_payload(
-                    derived_payload=derived_payload,
-                    stored_payload=stored_payload,
-                )
-                if missing_fields:
-                    return (
-                        resolved_payload,
-                        f"{source}+repaired_fields",
-                        "stored_partial_repaired",
-                        missing_fields,
-                    )
-                return resolved_payload, source, "complete", []
+                evidence_issues = audit_rule_backtest_execution_model_evidence(stored_payload)
+                if evidence_issues:
+                    return {}, "unavailable", "unavailable", evidence_issues
+                return copy.deepcopy(stored_payload), source, "complete", []
 
-        if summary.get("execution_assumptions"):
-            return (
-                derived_payload,
-                "derived_from_execution_assumptions_and_request",
-                "derived",
-                ["stored_execution_model"],
-            )
-        return (
-            derived_payload,
-            "derived_from_row_and_request",
-            "derived",
-            ["stored_execution_model", "execution_assumptions"],
-        )
+        return {}, "unavailable", "unavailable", ["stored_execution_model"]
 
     @staticmethod
     def _dedupe_trade_row_missing_fields(fields: List[str]) -> List[str]:
@@ -10953,6 +10977,8 @@ class RuleBacktestService:
             "entry_reason": row.get("entry_reason"),
             "exit_reason": row.get("exit_reason"),
             "signal_reason": row.get("signal_reason"),
+            "exit_event_type": row.get("exit_event_type"),
+            "terminal_liquidation_policy_id": row.get("terminal_liquidation_policy_id"),
             "return_pct": row.get("return_pct"),
             "holding_days": row.get("holding_days"),
             "holding_bars": row.get("holding_bars"),
@@ -11023,7 +11049,10 @@ class RuleBacktestService:
             exit_rule = exit_payload.get("rule") or exit_payload
             if not isinstance(exit_rule, dict) or not exit_rule:
                 missing_fields.append("exit_rule")
-            if exit_payload.get("signal_date") is None:
+            if (
+                exit_payload.get("signal_date") is None
+                and exit_payload.get("event_type") != "terminal_liquidation"
+            ):
                 missing_fields.append("exit_signal_date")
             if exit_payload.get("trigger") is None:
                 missing_fields.append("exit_trigger")
@@ -11590,6 +11619,10 @@ class RuleBacktestService:
                 "entry_reason": entry_payload.get("reason"),
                 "exit_reason": exit_payload.get("reason"),
                 "signal_reason": notes_payload.get("signal_reason"),
+                "exit_event_type": exit_payload.get("event_type"),
+                "terminal_liquidation_policy_id": exit_payload.get(
+                    "terminal_liquidation_policy_id"
+                ),
                 "return_pct": trade.return_pct,
                 "holding_days": trade.holding_days,
                 "holding_bars": notes_payload.get("holding_bars", trade.holding_days),
@@ -12010,7 +12043,7 @@ class RuleBacktestService:
             "research_artifact": research_artifact,
             "research_artifact_availability": research_artifact_availability,
             "readback_integrity": readback_integrity,
-            "execution_model": execution_model,
+            "execution_model": execution_model or None,
             "execution_assumptions": execution_assumptions,
             "execution_assumptions_snapshot": execution_assumptions_snapshot,
             "benchmark_curve": benchmark_curve,

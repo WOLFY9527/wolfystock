@@ -168,8 +168,19 @@ def test_rule_backtest_semantics_freeze_fixture_covers_current_v1_boundaries() -
     assert template["expected_execution_model"]["position_sizing"] == "single_position_full_notional"
     assert template["expected_execution_model"]["market_rules"] == {
         "trading_day_execution": "available_bars_only",
-        "terminal_bar_fill_fallback": "same_bar_close",
-        "window_end_position_handling": "force_flatten",
+        "missing_required_fill_price": "unfilled",
+        "window_end_position_handling": "terminal_liquidation_event",
+    }
+    assert template["expected_execution_model"]["model_id"] == "rule_backtest_default_execution_model_v1"
+    assert template["expected_execution_model"]["capabilities"]["partial_fills_supported"] is False
+    assert template["expected_execution_model"]["terminal_liquidation"] == {
+        "supported": True,
+        "policy_id": "window_end_close_liquidation_v1",
+        "event_type": "terminal_liquidation",
+        "fill_timing": "window_end_bar_close",
+        "fill_price_basis": "close",
+        "reason": "window_end_policy",
+        "ordinary_strategy_signal": False,
     }
     parser_defaults = payload["parser_default_template_behavior"]
     assert parser_defaults["strategy_text"] == "5日均线上穿20日均线买入"
@@ -242,9 +253,11 @@ def test_rule_backtest_semantics_freeze_fixture_covers_current_v1_boundaries() -
     assert cases[1]["expected"]["metrics"]["period_end"] == "2024-01-06"
     assert cases[1]["expected"]["metrics"]["bars_used"] == 3
     for case in cases:
-        assert case["expected"]["selected_equity_points"][-1]["executed_action"] == "forced_close"
-        assert case["expected"]["selected_equity_points"][-1]["notes"] == "forced_close_at_window_end"
-        assert case["expected"]["trades"][-1]["exit_reason"] == "final_close"
+        assert case["expected"]["selected_equity_points"][-1]["executed_action"] == "terminal_liquidation"
+        assert case["expected"]["selected_equity_points"][-1]["signal_summary"] is None
+        assert case["expected"]["selected_equity_points"][-1]["notes"] == "terminal_liquidation_at_window_end"
+        assert case["expected"]["trades"][-1]["exit_signal_date"] is None
+        assert case["expected"]["trades"][-1]["exit_reason"] == "terminal_liquidation"
 
     boundary = payload["no_order_no_broker_boundary"]
     assert boundary["runtime_paths_executed"] == {
@@ -338,7 +351,7 @@ def test_rule_backtest_shadow_cli_fixtures_are_parser_free_and_explicit() -> Non
         },
         "rule_backtest_compute_shadow_cli_v3_terminal_forced_close.json": {
             "contract_version": "shadow_cli_v1",
-            "case_id": "rule_conditions_close_vs_ma3_terminal_forced_close",
+            "case_id": "rule_conditions_close_vs_ma3_terminal_liquidation",
             "date_window": {"start_date": "2024-01-01", "end_date": "2024-01-08"},
             "strategy_kind": "rule_conditions",
             "entry_text": "Close > MA3",
@@ -354,13 +367,13 @@ def test_rule_backtest_shadow_cli_fixtures_are_parser_free_and_explicit() -> Non
             "trade_count": 1,
             "final_equity": 126118.967526,
             "total_return_pct": 26.119,
-            "selected_actions": [None, "buy", None, "forced_close"],
+            "selected_actions": [None, "buy", None, "terminal_liquidation"],
             "selected_dates": ["2024-01-05", "2024-01-06", "2024-01-07", "2024-01-08"],
             "trades": [
                 {
                     "entry_signal_date": "2024-01-05",
                     "entry_date": "2024-01-06",
-                    "exit_signal_date": "2024-01-08",
+                    "exit_signal_date": None,
                     "exit_date": "2024-01-08",
                     "entry_price": 10.301288,
                     "exit_price": 12.998375,
@@ -369,9 +382,11 @@ def test_rule_backtest_shadow_cli_fixtures_are_parser_free_and_explicit() -> Non
                     "fees": 56.531378,
                     "slippage": 28.266098,
                     "entry_reason": "signal_entry",
-                    "exit_reason": "final_close",
+                    "exit_reason": "terminal_liquidation",
                     "signal_reason": "rule_conditions",
-                    "notes": "forced_close_at_window_end",
+                    "exit_event_type": "terminal_liquidation",
+                    "terminal_liquidation_policy_id": "window_end_close_liquidation_v1",
+                    "notes": "terminal_liquidation_at_window_end",
                 }
             ],
         },
@@ -484,7 +499,10 @@ def test_rule_backtest_shadow_cli_fixtures_are_parser_free_and_explicit() -> Non
         assert fixture_input["date_window"] == expected_case["date_window"]
         assert fixture_input["execution_model"]["entry_timing"] == "next_bar_open"
         assert fixture_input["execution_model"]["exit_timing"] == "next_bar_open"
-        assert fixture_input["execution_model"]["market_rules"]["terminal_bar_fill_fallback"] == "same_bar_close"
+        assert fixture_input["execution_model"]["model_id"] == "rule_backtest_default_execution_model_v1"
+        assert fixture_input["execution_model"]["market_rules"]["missing_required_fill_price"] == "unfilled"
+        assert fixture_input["execution_model"]["capabilities"]["partial_fills_supported"] is False
+        assert fixture_input["execution_model"]["terminal_liquidation"]["ordinary_strategy_signal"] is False
         assert fixture_input["parsed_strategy"]["strategy_kind"] == expected_case["strategy_kind"]
         assert fixture_input["parsed_strategy"].get("entry", {}).get("text") == expected_case["entry_text"]
         assert fixture_input["parsed_strategy"].get("exit", {}).get("text") == expected_case["exit_text"]
@@ -513,7 +531,7 @@ def test_rule_backtest_shadow_cli_fixtures_are_parser_free_and_explicit() -> Non
         assert expected_output["case_id"] == payload["case_id"]
         assert expected_output["execution_model"] == fixture_input["execution_model"]
         assert expected_output["execution_assumptions"]["entry_fill_timing"] == "next_bar_open"
-        assert expected_output["execution_assumptions"]["exit_fill_timing"] == "next_bar_open; same_bar_close"
+        assert expected_output["execution_assumptions"]["exit_fill_timing"] == "next_bar_open"
         assert expected_output["metrics"]["trade_count"] == expected_case["trade_count"]
         assert expected_output["metrics"]["final_equity"] == expected_case["final_equity"]
         assert expected_output["metrics"]["total_return_pct"] == expected_case["total_return_pct"]

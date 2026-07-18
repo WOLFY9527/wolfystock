@@ -774,6 +774,8 @@ class RuleBacktestTradeItem(BaseModel):
     entry_reason: Optional[str] = None
     exit_reason: Optional[str] = None
     signal_reason: Optional[str] = None
+    exit_event_type: Optional[str] = None
+    terminal_liquidation_policy_id: Optional[str] = None
     return_pct: Optional[float] = None
     holding_days: Optional[int] = None
     holding_bars: Optional[int] = None
@@ -821,14 +823,15 @@ class RuleBacktestAuditRowItem(BaseModel):
 
 
 class RuleBacktestExecutionMarketRules(BaseModel):
-    trading_day_execution: Optional[str] = None
-    terminal_bar_fill_fallback: Optional[str] = None
-    window_end_position_handling: Optional[str] = None
+    trading_day_execution: str
+    missing_required_fill_price: str
+    window_end_position_handling: str
 
 
 class RuleBacktestExecutionModel(BaseModel):
-    version: str = "v1"
-    timeframe: str = "daily"
+    model_id: str
+    version: str
+    timeframe: str
     signal_evaluation_timing: str
     entry_timing: str
     exit_timing: str
@@ -836,23 +839,13 @@ class RuleBacktestExecutionModel(BaseModel):
     exit_fill_price_basis: str
     position_sizing: str
     fee_model: str
-    fee_bps_per_side: float = 0.0
+    fee_bps_per_side: float
     slippage_model: str
-    slippage_bps_per_side: float = 0.0
-    market_rules: RuleBacktestExecutionMarketRules = Field(default_factory=RuleBacktestExecutionMarketRules)
-
-
-def _default_rule_backtest_execution_model() -> RuleBacktestExecutionModel:
-    return RuleBacktestExecutionModel(
-        signal_evaluation_timing="bar_close",
-        entry_timing="next_bar_open",
-        exit_timing="next_bar_open",
-        entry_fill_price_basis="open",
-        exit_fill_price_basis="open",
-        position_sizing="single_position_full_notional",
-        fee_model="bps_per_side",
-        slippage_model="bps_per_side",
-    )
+    slippage_bps_per_side: float
+    cost_configuration: Dict[str, Any]
+    capabilities: Dict[str, Any]
+    terminal_liquidation: Dict[str, Any]
+    market_rules: RuleBacktestExecutionMarketRules
 
 
 def _rule_backtest_audit_rows_field() -> Any:
@@ -920,7 +913,7 @@ class RuleBacktestCompareRunItem(BaseModel):
     parsed_strategy: RuleBacktestParsedStrategyPayload = Field(default_factory=RuleBacktestParsedStrategyPayload)
     metrics: RuleBacktestCompareRunMetrics = Field(default_factory=RuleBacktestCompareRunMetrics)
     benchmark: RuleBacktestCompareRunBenchmark = Field(default_factory=RuleBacktestCompareRunBenchmark)
-    execution_model: RuleBacktestExecutionModel = Field(default_factory=_default_rule_backtest_execution_model)
+    execution_model: Optional[RuleBacktestExecutionModel] = None
     result_authority: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -1270,7 +1263,7 @@ class RuleBacktestHistoryItem(BacktestResponseContractFields):
     antiLeakageState: Optional[str] = None
     reproducibilityState: Optional[str] = None
     universeBiasState: Optional[str] = None
-    execution_model: RuleBacktestExecutionModel = Field(default_factory=_default_rule_backtest_execution_model)
+    execution_model: Optional[RuleBacktestExecutionModel] = None
     execution_assumptions: Dict[str, Any] = Field(default_factory=dict)
     execution_assumptions_snapshot: Dict[str, Any] = Field(default_factory=dict)
     benchmark_curve: List[Dict[str, Any]] = Field(default_factory=list)
@@ -1356,7 +1349,7 @@ class RuleBacktestRunResponse(BacktestResponseContractFields):
     antiLeakageState: Optional[str] = None
     reproducibilityState: Optional[str] = None
     universeBiasState: Optional[str] = None
-    execution_model: RuleBacktestExecutionModel = Field(default_factory=_default_rule_backtest_execution_model)
+    execution_model: Optional[RuleBacktestExecutionModel] = None
     execution_assumptions: Dict[str, Any] = Field(default_factory=dict)
     execution_assumptions_snapshot: Dict[str, Any] = Field(default_factory=dict)
     benchmark_curve: List[Dict[str, Any]] = Field(default_factory=list)

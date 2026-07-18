@@ -15,15 +15,43 @@
     "fee_bps_per_side": 0.0,
     "slippage_model": "bps_per_side",
     "slippage_bps_per_side": 0.0,
+    "cost_configuration": {
+      "fee": {
+        "state": "unspecified",
+        "bps_per_side": 0.0,
+        "omitted_policy": "no_cost_applied",
+        "application": "filled_side_exactly_once"
+      },
+      "slippage": {
+        "state": "unspecified",
+        "bps_per_side": 0.0,
+        "omitted_policy": "no_cost_applied",
+        "application": "filled_side_exactly_once"
+      }
+    },
+    "capabilities": {
+      "partial_fills_supported": false,
+      "missing_required_price_state": "unfilled",
+      "terminal_liquidation_supported": true
+    },
+    "terminal_liquidation": {
+      "supported": true,
+      "policy_id": "window_end_close_liquidation_v1",
+      "event_type": "terminal_liquidation",
+      "fill_timing": "window_end_bar_close",
+      "fill_price_basis": "close",
+      "reason": "window_end_policy",
+      "ordinary_strategy_signal": false
+    },
     "market_rules": {
       "trading_day_execution": "available_bars_only",
-      "terminal_bar_fill_fallback": "same_bar_close",
-      "window_end_position_handling": "force_flatten"
+      "missing_required_fill_price": "unfilled",
+      "window_end_position_handling": "terminal_liquidation_event"
     }
   },
   "semantics": {
-    "engine_identity": "existing_rule_backtest_behavior",
-    "cost_realism": "baseline_bps_assumptions_only_when_present",
+    "engine_identity": "canonical_registered_rule_backtest_execution",
+    "cost_realism": "configured_bps_with_explicit_presence_state",
     "institutional_execution_realism": false,
     "market_impact_model": "not_modelled",
     "spread_simulation": "not_modelled",

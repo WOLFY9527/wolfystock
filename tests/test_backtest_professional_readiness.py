@@ -227,7 +227,7 @@ class BacktestProfessionalReadinessTestCase(unittest.TestCase):
         self.assertEqual(response["adjustedDataState"], "unknown_or_mixed")
         self.assertEqual(response["corporateActionState"], "not_ready")
         self.assertEqual(response["tradingCalendarState"], "available_bars_only")
-        self.assertEqual(response["fillModelState"], "next_open_baseline")
+        self.assertEqual(response["fillModelState"], "next_open_with_explicit_no_fill")
         self.assertEqual(response["costModelState"], "baseline_bps_only")
         self.assertEqual(response["antiLeakageState"], "basic_bar_close_to_next_open")
         self.assertEqual(response["reproducibilityState"], "partial_without_dataset_lineage")
@@ -239,7 +239,7 @@ class BacktestProfessionalReadinessTestCase(unittest.TestCase):
         self.assertEqual(status["professionalReadiness"]["overall_state"], "research_prototype")
         self.assertFalse(status["professionalReadiness"]["professional_quant_ready"])
         self.assertEqual(status["adjustedDataState"], "unknown_or_mixed")
-        self.assertEqual(status["fillModelState"], "next_open_baseline")
+        self.assertEqual(status["fillModelState"], "next_open_with_explicit_no_fill")
 
 
 if __name__ == "__main__":

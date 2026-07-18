@@ -18,6 +18,7 @@
       "strategy_spec": {}
     },
     "expected_execution_model": {
+      "model_id": "rule_backtest_default_execution_model_v1",
       "version": "v1",
       "timeframe": "daily",
       "signal_evaluation_timing": "bar_close",
@@ -28,10 +29,38 @@
       "position_sizing": "single_position_full_notional",
       "fee_model": "bps_per_side",
       "slippage_model": "bps_per_side",
+      "cost_configuration": {
+        "fee": {
+          "state": "explicit_non_zero",
+          "bps_per_side": 2.5,
+          "omitted_policy": "no_cost_applied",
+          "application": "filled_side_exactly_once"
+        },
+        "slippage": {
+          "state": "explicit_non_zero",
+          "bps_per_side": 1.25,
+          "omitted_policy": "no_cost_applied",
+          "application": "filled_side_exactly_once"
+        }
+      },
+      "capabilities": {
+        "partial_fills_supported": false,
+        "missing_required_price_state": "unfilled",
+        "terminal_liquidation_supported": true
+      },
+      "terminal_liquidation": {
+        "supported": true,
+        "policy_id": "window_end_close_liquidation_v1",
+        "event_type": "terminal_liquidation",
+        "fill_timing": "window_end_bar_close",
+        "fill_price_basis": "close",
+        "reason": "window_end_policy",
+        "ordinary_strategy_signal": false
+      },
       "market_rules": {
         "trading_day_execution": "available_bars_only",
-        "terminal_bar_fill_fallback": "same_bar_close",
-        "window_end_position_handling": "force_flatten"
+        "missing_required_fill_price": "unfilled",
+        "window_end_position_handling": "terminal_liquidation_event"
       }
     }
   },
@@ -145,19 +174,19 @@
             },
             {
               "date": "2024-01-06",
-              "executed_action": "forced_close",
+              "executed_action": "terminal_liquidation",
               "signal_summary": null,
               "position_state": "flat",
               "exposure_pct": 0.0,
               "total_portfolio_value": 108333.333333,
-              "notes": "forced_close_at_window_end"
+              "notes": "terminal_liquidation_at_window_end"
             }
           ],
           "trades": [
             {
               "entry_signal_date": "2024-01-04",
               "entry_date": "2024-01-05",
-              "exit_signal_date": "2024-01-06",
+              "exit_signal_date": null,
               "exit_date": "2024-01-06",
               "entry_price": 12.0,
               "exit_price": 13.0,
@@ -166,9 +195,11 @@
               "fees": 0.0,
               "slippage": 0.0,
               "entry_reason": "signal_entry",
-              "exit_reason": "final_close",
+              "exit_reason": "terminal_liquidation",
               "signal_reason": "rule_conditions",
-              "notes": "forced_close_at_window_end"
+              "exit_event_type": "terminal_liquidation",
+              "terminal_liquidation_policy_id": "window_end_close_liquidation_v1",
+              "notes": "terminal_liquidation_at_window_end"
             }
           ]
         }
@@ -229,19 +260,19 @@
             },
             {
               "date": "2024-01-06",
-              "executed_action": "forced_close",
+              "executed_action": "terminal_liquidation",
               "signal_summary": null,
               "position_state": "flat",
               "exposure_pct": 0.0,
               "total_portfolio_value": 108333.333333,
-              "notes": "forced_close_at_window_end"
+              "notes": "terminal_liquidation_at_window_end"
             }
           ],
           "trades": [
             {
               "entry_signal_date": "2024-01-04",
               "entry_date": "2024-01-05",
-              "exit_signal_date": "2024-01-06",
+              "exit_signal_date": null,
               "exit_date": "2024-01-06",
               "entry_price": 12.0,
               "exit_price": 13.0,
@@ -250,9 +281,11 @@
               "fees": 0.0,
               "slippage": 0.0,
               "entry_reason": "signal_entry",
-              "exit_reason": "final_close",
+              "exit_reason": "terminal_liquidation",
               "signal_reason": "rule_conditions",
-              "notes": "forced_close_at_window_end"
+              "exit_event_type": "terminal_liquidation",
+              "terminal_liquidation_policy_id": "window_end_close_liquidation_v1",
+              "notes": "terminal_liquidation_at_window_end"
             }
           ]
         }

@@ -711,6 +711,63 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(default_response["summary"]["request"]["execution_model"]["version"], "v1")
         self.assertEqual(explicit_response["summary"]["request"]["execution_model"]["version"], "v1")
 
+    def test_run_backtest_preserves_cost_configuration_presence_in_result_evidence(self) -> None:
+        service = RuleBacktestService(self.db)
+        kwargs = {
+            "code": "600519",
+            "strategy_text": "Buy when Close > MA3. Sell when Close < MA3.",
+            "lookback_bars": 20,
+            "benchmark_mode": "none",
+            "confirmed": True,
+        }
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            omitted = service.run_backtest(**kwargs)
+            explicit_zero = service.run_backtest(
+                **kwargs,
+                fee_bps=0.0,
+                slippage_bps=0.0,
+                fee_bps_configured=True,
+                slippage_bps_configured=True,
+            )
+
+        self.assertEqual(
+            omitted["execution_model"]["cost_configuration"]["fee"]["state"],
+            "unspecified",
+        )
+        self.assertEqual(
+            explicit_zero["execution_model"]["cost_configuration"]["fee"]["state"],
+            "explicit_zero",
+        )
+        self.assertEqual(
+            omitted["execution_model"]["cost_configuration"]["slippage"]["state"],
+            "unspecified",
+        )
+        self.assertEqual(
+            explicit_zero["execution_model"]["cost_configuration"]["slippage"]["state"],
+            "explicit_zero",
+        )
+
+    def test_run_backtest_rejects_unsupported_partial_fills_before_engine_or_persistence(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_execute_rule_backtest", side_effect=AssertionError("engine")) as execute_mock, patch.object(
+            service.repo,
+            "save_run",
+            side_effect=AssertionError("save"),
+        ) as save_mock:
+            with self.assertRaises(RuleBacktestExecutionModelUnsupportedError) as ctx:
+                service.run_backtest(
+                    code="600519",
+                    strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                    execution_model={"version": "v1", "partial_fills": True},
+                    confirmed=True,
+                )
+
+        self.assertEqual(ctx.exception.to_error_detail()["unsupported_fields"], ["partial_fills"])
+        execute_mock.assert_not_called()
+        save_mock.assert_not_called()
+
     def test_run_backtest_rejects_v2_execution_model_before_engine_or_persistence(self) -> None:
         service = RuleBacktestService(self.db)
 
@@ -1113,6 +1170,30 @@ class RuleBacktestTestCase(unittest.TestCase):
 
         self.assertEqual(ctx.exception.to_error_detail()["requested_version"], "quant-v9")
         save_mock.assert_not_called()
+
+    def test_submit_backtest_does_not_invent_model_identity_before_strategy_parse(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        submitted = service.submit_backtest(
+            code="600519",
+            strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            fee_bps=0.0,
+            slippage_bps=0.0,
+            fee_bps_configured=True,
+            slippage_bps_configured=True,
+            execution_model={"version": "v1"},
+            confirmed=True,
+        )
+
+        self.assertEqual(submitted["status"], "parsing")
+        self.assertIsNone(submitted["execution_model"])
+        row = service.repo.get_run(submitted["id"])
+        assert row is not None
+        request = json.loads(row.summary_json)["request"]
+        self.assertEqual(request["execution_model"], {})
+        self.assertEqual(request["execution_model_request"], {"version": "v1"})
+        self.assertTrue(request["fee_bps_configured"])
+        self.assertTrue(request["slippage_bps_configured"])
 
     def test_parse_simple_ma_rsi_strategy(self) -> None:
         parser = RuleBacktestParser()
@@ -1827,7 +1908,14 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(result.execution_model.signal_evaluation_timing, "bar_close")
         self.assertEqual(result.execution_model.entry_timing, "next_bar_open")
         self.assertEqual(result.execution_model.entry_fill_price_basis, "open")
-        self.assertEqual(result.execution_model.market_rules["terminal_bar_fill_fallback"], "same_bar_close")
+        self.assertEqual(
+            result.execution_model.market_rules["missing_required_fill_price"],
+            "unfilled",
+        )
+        self.assertEqual(
+            result.execution_model.terminal_liquidation["event_type"],
+            "terminal_liquidation",
+        )
         result_payload = result.to_dict()
         self.assertGreater(len(result_payload["benchmark_curve"]), 0)
         self.assertEqual(result_payload["execution_model"]["entry_timing"], "next_bar_open")
@@ -1837,7 +1925,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         first_trade = result_payload["trades"][0]
         self.assertEqual(first_trade["side"], "long")
         self.assertEqual(first_trade["entry_reason"], "signal_entry")
-        self.assertIn(first_trade["exit_reason"], {"signal_exit", "final_close"})
+        self.assertIn(first_trade["exit_reason"], {"signal_exit", "terminal_liquidation"})
         self.assertGreater(first_trade["quantity"], 0)
         self.assertIn("gross_pnl", first_trade)
         self.assertIn("net_pnl", first_trade)
@@ -2193,14 +2281,16 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(response["historicalOhlcvReadiness"]["status"], "available")
         self.assertTrue(response["historicalOhlcvReadiness"]["executable"])
         self.assertEqual(response["summary"]["visualization"]["audit_rows"], response["audit_rows"])
-        self.assertEqual(response["execution_model"]["entry_timing"], "same_bar_open")
-        self.assertEqual(response["execution_model"]["exit_timing"], "forced_close_at_window_end_close")
+        self.assertEqual(response["execution_model"]["entry_timing"], "same_session_open")
+        self.assertEqual(response["execution_model"]["exit_timing"], "terminal_liquidation_event")
         self.assertEqual(response["summary"]["execution_model"]["entry_fill_price_basis"], "open")
         self.assertIn("total_portfolio_value", response["audit_rows"][0])
         self.assertIn("cumulative_return", response["audit_rows"][0])
         self.assertIn("position", response["audit_rows"][0])
         self.assertEqual(response["trades"][0]["entry_reason"], "scheduled_entry")
-        self.assertEqual(response["trades"][0]["exit_reason"], "final_close")
+        self.assertEqual(response["trades"][0]["exit_reason"], "terminal_liquidation")
+        self.assertEqual(response["trades"][0]["exit_event_type"], "terminal_liquidation")
+        self.assertIsNone(response["trades"][0]["exit_signal_date"])
         self.assertGreater(response["trades"][0]["quantity"], 0)
         self.assertIn("net_pnl", response["trades"][0])
         self.assertGreater(len(response["daily_return_series"]), 0)
@@ -6884,7 +6974,7 @@ class RuleBacktestTestCase(unittest.TestCase):
             ["stored_trace", "rows"],
         )
 
-    def test_get_run_marks_execution_model_as_derived_when_snapshot_missing(self) -> None:
+    def test_get_run_does_not_derive_execution_model_when_snapshot_missing(self) -> None:
         service = RuleBacktestService(self.db)
 
         with patch.object(service, "_get_llm_adapter", return_value=None):
@@ -6919,25 +7009,25 @@ class RuleBacktestTestCase(unittest.TestCase):
         assert detail is not None
         self.assertEqual(
             detail["result_authority"]["execution_model_source"],
-            "derived_from_execution_assumptions_and_request",
+            "unavailable",
         )
         self.assertEqual(
             detail["result_authority"]["execution_assumptions_source"],
-            "summary.execution_assumptions+derived_defaults",
+            "summary.execution_assumptions",
         )
         self.assertEqual(
             detail["result_authority"]["execution_assumptions_snapshot_completeness"],
-            "legacy_partial_repaired",
-        )
-        self.assertIn(
-            "benchmark_method",
-            detail["result_authority"]["execution_assumptions_snapshot_missing_keys"],
+            "legacy_partial",
         )
         self.assertEqual(
             detail["execution_assumptions_snapshot"]["source"],
-            "summary.execution_assumptions+derived_defaults",
+            "summary.execution_assumptions",
         )
-        self.assertEqual(detail["execution_model"]["entry_timing"], "next_bar_open")
+        self.assertIn(
+            "execution_model_identity",
+            detail["result_authority"]["execution_assumptions_snapshot_missing_keys"],
+        )
+        self.assertIsNone(detail["execution_model"])
 
     def test_get_run_prefers_persisted_request_execution_model_when_summary_snapshot_missing(self) -> None:
         service = RuleBacktestService(self.db)
@@ -6957,22 +7047,51 @@ class RuleBacktestTestCase(unittest.TestCase):
         summary.pop("execution_assumptions_snapshot", None)
         summary.pop("execution_assumptions", None)
         summary["request"]["execution_model"] = {
+            "model_id": "rule_backtest_default_execution_model_v1",
             "version": "v1",
             "timeframe": "daily",
             "signal_evaluation_timing": "bar_close",
             "entry_timing": "next_bar_open",
-            "exit_timing": "forced_close_at_window_end_close",
+            "exit_timing": "next_bar_open",
             "entry_fill_price_basis": "open",
-            "exit_fill_price_basis": "close",
+            "exit_fill_price_basis": "open",
             "position_sizing": "single_position_full_notional",
             "fee_model": "bps_per_side",
             "fee_bps_per_side": 1.5,
             "slippage_model": "bps_per_side",
             "slippage_bps_per_side": 2.5,
+            "cost_configuration": {
+                "fee": {
+                    "state": "explicit_non_zero",
+                    "bps_per_side": 1.5,
+                    "omitted_policy": "no_cost_applied",
+                    "application": "filled_side_exactly_once",
+                },
+                "slippage": {
+                    "state": "explicit_non_zero",
+                    "bps_per_side": 2.5,
+                    "omitted_policy": "no_cost_applied",
+                    "application": "filled_side_exactly_once",
+                },
+            },
+            "capabilities": {
+                "partial_fills_supported": False,
+                "missing_required_price_state": "unfilled",
+                "terminal_liquidation_supported": True,
+            },
+            "terminal_liquidation": {
+                "supported": True,
+                "policy_id": "window_end_close_liquidation_v1",
+                "event_type": "terminal_liquidation",
+                "fill_timing": "window_end_bar_close",
+                "fill_price_basis": "close",
+                "reason": "window_end_policy",
+                "ordinary_strategy_signal": False,
+            },
             "market_rules": {
                 "trading_day_execution": "available_bars_only",
-                "terminal_bar_fill_fallback": "same_bar_close",
-                "window_end_position_handling": "force_flatten",
+                "missing_required_fill_price": "unfilled",
+                "window_end_position_handling": "terminal_liquidation_event",
             },
         }
         service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
@@ -6998,11 +7117,11 @@ class RuleBacktestTestCase(unittest.TestCase):
                 "missing_kind": "fields",
             },
         )
-        self.assertEqual(detail["execution_model"]["exit_timing"], "forced_close_at_window_end_close")
-        self.assertEqual(detail["execution_model"]["exit_fill_price_basis"], "close")
+        self.assertEqual(detail["execution_model"]["exit_timing"], "next_bar_open")
+        self.assertEqual(detail["execution_model"]["exit_fill_price_basis"], "open")
         self.assertEqual(detail["execution_model"]["fee_bps_per_side"], 1.5)
 
-    def test_get_run_repairs_partial_stored_execution_model_with_provenance(self) -> None:
+    def test_get_run_marks_partial_stored_execution_model_unavailable(self) -> None:
         service = RuleBacktestService(self.db)
 
         with patch.object(service, "_get_llm_adapter", return_value=None):
@@ -7019,7 +7138,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         summary["execution_model"] = {
             "version": "v1",
             "timeframe": "daily",
-            "entry_timing": "same_bar_open",
+            "entry_timing": "next_bar_open",
             "fee_bps_per_side": 4.2,
             "market_rules": {
                 "trading_day_execution": "available_bars_only",
@@ -7031,51 +7150,24 @@ class RuleBacktestTestCase(unittest.TestCase):
         assert detail is not None
         self.assertEqual(
             detail["result_authority"]["execution_model_source"],
-            "summary.execution_model+repaired_fields",
+            "unavailable",
         )
         self.assertEqual(
             detail["result_authority"]["execution_model_completeness"],
-            "stored_partial_repaired",
+            "unavailable",
         )
-        self.assertEqual(
+        self.assertIn(
+            "missing.model_id",
             detail["result_authority"]["execution_model_missing_fields"],
-            [
-                "signal_evaluation_timing",
-                "exit_timing",
-                "entry_fill_price_basis",
-                "exit_fill_price_basis",
-                "position_sizing",
-                "fee_model",
-                "slippage_model",
-                "slippage_bps_per_side",
-                "market_rules.terminal_bar_fill_fallback",
-                "market_rules.window_end_position_handling",
-            ],
         )
-        self.assertEqual(detail["execution_model"]["entry_timing"], "same_bar_open")
-        self.assertEqual(detail["execution_model"]["signal_evaluation_timing"], "bar_close")
-        self.assertEqual(
-            detail["execution_model"]["market_rules"]["terminal_bar_fill_fallback"],
-            "same_bar_close",
-        )
+        self.assertIsNone(detail["execution_model"])
         self.assertEqual(
             detail["result_authority"]["domains"]["execution_model"],
             {
-                "source": "summary.execution_model+repaired_fields",
-                "completeness": "stored_partial_repaired",
-                "state": "available",
-                "missing": [
-                    "signal_evaluation_timing",
-                    "exit_timing",
-                    "entry_fill_price_basis",
-                    "exit_fill_price_basis",
-                    "position_sizing",
-                    "fee_model",
-                    "slippage_model",
-                    "slippage_bps_per_side",
-                    "market_rules.terminal_bar_fill_fallback",
-                    "market_rules.window_end_position_handling",
-                ],
+                "source": "unavailable",
+                "completeness": "unavailable",
+                "state": "unavailable",
+                "missing": detail["result_authority"]["execution_model_missing_fields"],
                 "missing_kind": "fields",
             },
         )
@@ -7094,26 +7186,21 @@ class RuleBacktestTestCase(unittest.TestCase):
         run_row = service.repo.get_run(response["id"])
         assert run_row is not None
         summary = json.loads(run_row.summary_json)
+        stored_assumptions = dict(
+            summary["execution_assumptions_snapshot"]["payload"]
+        )
+        stored_assumptions.update({
+            "indicator_price_basis": "hlc3",
+            "fee_bps_per_side": 1.25,
+            "slippage_bps_per_side": 3.5,
+            "benchmark_method": "custom_snapshot_authority",
+        })
         summary["execution_assumptions_snapshot"] = {
             "version": "v1",
             "source": "summary.execution_assumptions_snapshot",
             "completeness": "complete",
             "missing_keys": [],
-            "payload": {
-                "timeframe": "daily",
-                "indicator_price_basis": "hlc3",
-                "signal_evaluation_timing": "bar_close",
-                "entry_fill_timing": "next_bar_open",
-                "exit_fill_timing": "next_bar_open; same_bar_close",
-                "default_fill_price_basis": "open",
-                "position_sizing": "single_position_full_notional",
-                "fee_model": "bps_per_side",
-                "fee_bps_per_side": 1.25,
-                "slippage_model": "bps_per_side",
-                "slippage_bps_per_side": 3.5,
-                "benchmark_method": "custom_snapshot_authority",
-                "benchmark_price_basis": "close",
-            },
+            "payload": stored_assumptions,
         }
         summary.pop("execution_assumptions", None)
         service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
@@ -7509,8 +7596,13 @@ class RuleBacktestTestCase(unittest.TestCase):
         )
 
         self.assertEqual(result.parsed_strategy.strategy_spec["entry"]["order"]["mode"], "fixed_amount")
-        self.assertEqual([point.executed_action for point in result.equity_curve], ["accumulate", None, "forced_close"])
+        self.assertEqual(
+            [point.executed_action for point in result.equity_curve],
+            ["accumulate", None, "terminal_liquidation"],
+        )
         self.assertEqual(result.equity_curve[1].notes, "skip_buy_when_insufficient_cash")
+        self.assertEqual(result.equity_curve[1].execution_state, "rejected")
+        self.assertEqual(result.equity_curve[1].execution_events[0]["state"], "rejected")
         self.assertEqual(result.equity_curve[1].signal_summary, "现金不足，跳过本次计划买入")
         self.assertEqual(result.metrics["trade_count"], 1)
         self.assertEqual(result.metrics["entry_signal_count"], 3)
@@ -7540,8 +7632,13 @@ class RuleBacktestTestCase(unittest.TestCase):
         )
 
         self.assertEqual(result.parsed_strategy.strategy_spec["position_behavior"]["cash_policy"], "stop_when_insufficient_cash")
-        self.assertEqual([point.executed_action for point in result.equity_curve], ["accumulate", None, "forced_close"])
+        self.assertEqual(
+            [point.executed_action for point in result.equity_curve],
+            ["accumulate", None, "terminal_liquidation"],
+        )
         self.assertEqual(result.equity_curve[1].notes, "stop_buying_when_insufficient_cash")
+        self.assertEqual(result.equity_curve[1].execution_state, "rejected")
+        self.assertEqual(result.equity_curve[1].execution_events[0]["state"], "rejected")
         self.assertEqual(result.equity_curve[1].signal_summary, "现金不足，后续停止继续买入")
         self.assertEqual(result.metrics["trade_count"], 1)
         self.assertEqual(result.metrics["entry_signal_count"], 2)
@@ -8252,9 +8349,11 @@ class RuleBacktestTestCase(unittest.TestCase):
             detail["summary"]["parsed_strategy_summary"]["entry"],
             response["parsed_strategy"]["summary"]["entry"],
         )
+        self.assertEqual(detail["summary"]["execution_model"], {})
+        self.assertIsNone(detail["execution_model"])
         self.assertEqual(
-            detail["summary"]["execution_model"]["entry_timing"],
-            detail["execution_model"]["entry_timing"],
+            detail["result_authority"]["execution_model_source"],
+            "unavailable",
         )
         self.assertIn("comparison", detail["summary"]["visualization"])
         self.assertEqual(
@@ -8298,7 +8397,12 @@ class RuleBacktestTestCase(unittest.TestCase):
             response["parsed_strategy"]["summary"]["entry"],
         )
         self.assertEqual(detail["summary"]["metrics"]["trade_count"], response["trade_count"])
-        self.assertEqual(detail["summary"]["execution_model"]["entry_timing"], detail["execution_model"]["entry_timing"])
+        self.assertEqual(detail["summary"]["execution_model"], {})
+        self.assertIsNone(detail["execution_model"])
+        self.assertEqual(
+            detail["result_authority"]["execution_model_source"],
+            "unavailable",
+        )
         self.assertEqual(detail["summary"]["ai_summary"], response["ai_summary"])
         self.assertEqual(
             detail["result_authority"]["summary_source"],
@@ -8492,7 +8596,7 @@ class RuleBacktestTestCase(unittest.TestCase):
 
     def test_submit_and_process_backtest_records_async_status_history(self) -> None:
         service = RuleBacktestService(self.db)
-        strategy_text = "Buy when Close > MA3. Sell when Close < MA3."
+        strategy_text = "5日均线上穿20日均线买入，下穿卖出"
 
         with patch.object(service, "_get_llm_adapter", return_value=None):
             submitted = service.submit_backtest(
@@ -8501,6 +8605,10 @@ class RuleBacktestTestCase(unittest.TestCase):
                 start_date="2024-01-08",
                 end_date="2024-01-18",
                 lookback_bars=20,
+                fee_bps=2.5,
+                slippage_bps=1.25,
+                fee_bps_configured=True,
+                slippage_bps_configured=True,
                 confirmed=True,
             )
 
@@ -8530,6 +8638,12 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("benchmark_curve", detail)
         self.assertIn("benchmark_summary", detail)
         self.assertIn("audit_rows", detail)
+        self.assertEqual(detail["execution_model"]["fee_bps_per_side"], 2.5)
+        self.assertEqual(detail["execution_model"]["slippage_bps_per_side"], 1.25)
+        self.assertEqual(detail["execution_model"]["cost_configuration"]["fee"]["state"], "explicit_non_zero")
+        self.assertEqual(detail["execution_model"]["cost_configuration"]["slippage"]["state"], "explicit_non_zero")
+        self.assertEqual(detail["parsed_strategy"]["strategy_spec"]["costs"]["fee_bps"], 2.5)
+        self.assertEqual(detail["parsed_strategy"]["strategy_spec"]["costs"]["slippage_bps"], 1.25)
 
     def test_duplicate_active_submit_reuses_existing_nonterminal_run(self) -> None:
         service = RuleBacktestService(self.db)
@@ -9332,7 +9446,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("final_equity", detail["result_authority"]["metrics_missing_fields"])
         self.assertIn("avg_holding_calendar_days", detail["result_authority"]["metrics_missing_fields"])
 
-    def test_get_run_derives_execution_model_for_legacy_runs_without_structured_config(self) -> None:
+    def test_get_run_does_not_promote_legacy_assumptions_to_registered_model(self) -> None:
         service = RuleBacktestService(self.db)
         strategy_text = "Buy when Close > MA3. Sell when Close < MA3."
 
@@ -9366,12 +9480,23 @@ class RuleBacktestTestCase(unittest.TestCase):
 
         detail = service.get_run(run_row.id)
         assert detail is not None
-        self.assertEqual(detail["execution_model"]["signal_evaluation_timing"], "bar_close")
-        self.assertEqual(detail["execution_model"]["entry_timing"], "next_bar_open")
-        self.assertEqual(detail["execution_model"]["entry_fill_price_basis"], "open")
-        self.assertEqual(detail["execution_model"]["fee_bps_per_side"], 1.5)
-        self.assertEqual(detail["execution_model"]["slippage_bps_per_side"], 2.5)
-        self.assertEqual(detail["execution_model"]["market_rules"]["terminal_bar_fill_fallback"], "same_bar_close")
+        self.assertIsNone(detail["execution_model"])
+        self.assertEqual(
+            detail["result_authority"]["execution_model_source"],
+            "unavailable",
+        )
+        self.assertEqual(
+            detail["result_authority"]["execution_model_missing_fields"],
+            ["stored_execution_model"],
+        )
+        self.assertEqual(
+            detail["execution_assumptions_snapshot"]["completeness"],
+            "legacy_partial",
+        )
+        self.assertIn(
+            "execution_model_identity",
+            detail["execution_assumptions_snapshot"]["missing_keys"],
+        )
 
 
 if __name__ == "__main__":

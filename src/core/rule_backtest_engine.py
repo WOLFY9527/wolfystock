@@ -28,6 +28,12 @@ from datetime import date
 from statistics import mean, pstdev
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from src.services.rule_backtest_execution_model_registry import (
+    PERIODIC_RULE_BACKTEST_EXECUTION_MODEL_ID,
+    resolve_rule_backtest_execution_model_request,
+    validate_rule_backtest_strategy_execution_contract,
+)
+
 
 def _safe_float(value: Any) -> Optional[float]:
     if value is None:
@@ -113,6 +119,7 @@ class ExecutionAssumptions:
 class ExecutionModelConfig:
     """Structured execution model for deterministic rule backtests."""
 
+    model_id: str
     version: str
     timeframe: str
     signal_evaluation_timing: str
@@ -125,10 +132,14 @@ class ExecutionModelConfig:
     fee_bps_per_side: float
     slippage_model: str
     slippage_bps_per_side: float
+    cost_configuration: Dict[str, Any] = field(default_factory=dict)
+    capabilities: Dict[str, Any] = field(default_factory=dict)
+    terminal_liquidation: Dict[str, Any] = field(default_factory=dict)
     market_rules: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "model_id": self.model_id,
             "version": self.version,
             "timeframe": self.timeframe,
             "signal_evaluation_timing": self.signal_evaluation_timing,
@@ -141,6 +152,9 @@ class ExecutionModelConfig:
             "fee_bps_per_side": round(float(self.fee_bps_per_side), 6),
             "slippage_model": self.slippage_model,
             "slippage_bps_per_side": round(float(self.slippage_bps_per_side), 6),
+            "cost_configuration": dict(self.cost_configuration or {}),
+            "capabilities": dict(self.capabilities or {}),
+            "terminal_liquidation": dict(self.terminal_liquidation or {}),
             "market_rules": dict(self.market_rules or {}),
         }
 
@@ -148,20 +162,56 @@ class ExecutionModelConfig:
     def from_dict(cls, payload: Optional[Dict[str, Any]]) -> Optional["ExecutionModelConfig"]:
         if not isinstance(payload, dict) or not payload:
             return None
+        text_fields = {
+            "model_id",
+            "version",
+            "timeframe",
+            "signal_evaluation_timing",
+            "entry_timing",
+            "exit_timing",
+            "entry_fill_price_basis",
+            "exit_fill_price_basis",
+            "position_sizing",
+            "fee_model",
+            "slippage_model",
+        }
+        mapping_fields = {
+            "cost_configuration",
+            "capabilities",
+            "terminal_liquidation",
+            "market_rules",
+        }
+        if any(not str(payload.get(key) or "").strip() for key in text_fields):
+            return None
+        if any(not isinstance(payload.get(key), dict) for key in mapping_fields):
+            return None
+        fee_bps = _safe_float(payload.get("fee_bps_per_side"))
+        slippage_bps = _safe_float(payload.get("slippage_bps_per_side"))
+        if (
+            fee_bps is None
+            or slippage_bps is None
+            or not math.isfinite(fee_bps)
+            or not math.isfinite(slippage_bps)
+        ):
+            return None
         return cls(
-            version=str(payload.get("version") or "v1"),
-            timeframe=str(payload.get("timeframe") or "daily"),
-            signal_evaluation_timing=str(payload.get("signal_evaluation_timing") or "bar_close"),
-            entry_timing=str(payload.get("entry_timing") or "next_bar_open"),
-            exit_timing=str(payload.get("exit_timing") or "next_bar_open"),
-            entry_fill_price_basis=str(payload.get("entry_fill_price_basis") or "open"),
-            exit_fill_price_basis=str(payload.get("exit_fill_price_basis") or "open"),
-            position_sizing=str(payload.get("position_sizing") or "single_position_full_notional"),
-            fee_model=str(payload.get("fee_model") or "bps_per_side"),
-            fee_bps_per_side=float(_safe_float(payload.get("fee_bps_per_side")) or 0.0),
-            slippage_model=str(payload.get("slippage_model") or "bps_per_side"),
-            slippage_bps_per_side=float(_safe_float(payload.get("slippage_bps_per_side")) or 0.0),
-            market_rules=dict(payload.get("market_rules") or {}),
+            model_id=str(payload["model_id"]),
+            version=str(payload["version"]),
+            timeframe=str(payload["timeframe"]),
+            signal_evaluation_timing=str(payload["signal_evaluation_timing"]),
+            entry_timing=str(payload["entry_timing"]),
+            exit_timing=str(payload["exit_timing"]),
+            entry_fill_price_basis=str(payload["entry_fill_price_basis"]),
+            exit_fill_price_basis=str(payload["exit_fill_price_basis"]),
+            position_sizing=str(payload["position_sizing"]),
+            fee_model=str(payload["fee_model"]),
+            fee_bps_per_side=float(fee_bps),
+            slippage_model=str(payload["slippage_model"]),
+            slippage_bps_per_side=float(slippage_bps),
+            cost_configuration=dict(payload["cost_configuration"]),
+            capabilities=dict(payload["capabilities"]),
+            terminal_liquidation=dict(payload["terminal_liquidation"]),
+            market_rules=dict(payload["market_rules"]),
         )
 
 
@@ -169,7 +219,7 @@ class ExecutionModelConfig:
 class RuleBacktestTrade:
     code: str
     entry_signal_date: date
-    exit_signal_date: date
+    exit_signal_date: Optional[date]
     entry_date: date
     exit_date: date
     entry_price: float
@@ -206,6 +256,8 @@ class RuleBacktestTrade:
     entry_reason: Optional[str] = None
     exit_reason: Optional[str] = None
     signal_reason: Optional[str] = None
+    exit_event_type: str = "strategy_exit"
+    terminal_liquidation_policy_id: Optional[str] = None
 
     @staticmethod
     def _classify_exit_reason(trigger: Optional[str]) -> str:
@@ -275,7 +327,7 @@ class RuleBacktestTrade:
             "code": self.code,
             "side": self.side or "long",
             "entry_signal_date": self.entry_signal_date.isoformat(),
-            "exit_signal_date": self.exit_signal_date.isoformat(),
+            "exit_signal_date": self.exit_signal_date.isoformat() if self.exit_signal_date else None,
             "entry_date": self.entry_date.isoformat(),
             "exit_date": self.exit_date.isoformat(),
             "entry_price": round(self.entry_price, 6),
@@ -293,6 +345,8 @@ class RuleBacktestTrade:
             or ("scheduled_entry" if str(self.entry_trigger or "").upper() == "PERIODIC_BUY" else "signal_entry" if self.entry_trigger or self.entry_signal else "unknown"),
             "exit_reason": self.exit_reason or self._classify_exit_reason(self.exit_trigger or self.exit_signal),
             "signal_reason": self.signal_reason or self._classify_signal_reason(self.entry_rule_json, self.exit_rule_json),
+            "exit_event_type": self.exit_event_type,
+            "terminal_liquidation_policy_id": self.terminal_liquidation_policy_id,
             "return_pct": round(self.return_pct, 4),
             "holding_days": self.holding_days,
             "holding_bars": self.holding_bars,
@@ -335,6 +389,9 @@ class RuleBacktestPoint:
     fee_amount: Optional[float] = None
     slippage_amount: Optional[float] = None
     notes: Optional[str] = None
+    execution_state: Optional[str] = None
+    execution_reason: Optional[str] = None
+    execution_events: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -356,6 +413,9 @@ class RuleBacktestPoint:
             "fee_amount": round(self.fee_amount, 6) if self.fee_amount is not None else None,
             "slippage_amount": round(self.slippage_amount, 6) if self.slippage_amount is not None else None,
             "notes": self.notes,
+            "execution_state": self.execution_state,
+            "execution_reason": self.execution_reason,
+            "execution_events": [dict(event) for event in self.execution_events],
         }
 
 
@@ -1301,6 +1361,9 @@ class RuleBacktestEngine:
         initial_capital: float = 100000.0,
         fee_bps: float = 0.0,
         slippage_bps: float = 0.0,
+        fee_bps_configured: bool | None = None,
+        slippage_bps_configured: bool | None = None,
+        execution_model_request: Any = None,
         lookback_bars: int = 252,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
@@ -1312,9 +1375,17 @@ class RuleBacktestEngine:
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
             strategy_type=strategy_type,
+            fee_bps_configured=fee_bps_configured,
+            slippage_bps_configured=slippage_bps_configured,
+            execution_model_request=execution_model_request,
+        )
+        validate_rule_backtest_strategy_execution_contract(
+            strategy_type=strategy_type,
+            strategy_spec=strategy_spec,
+            execution_model=execution_model.to_dict(),
         )
         assumptions = self._build_execution_assumptions(execution_model=execution_model)
-        if strategy_type == "periodic_accumulation":
+        if execution_model.model_id == PERIODIC_RULE_BACKTEST_EXECUTION_MODEL_ID:
             return self._run_periodic_accumulation(
                 code=code,
                 parsed_strategy=parsed_strategy,
@@ -1433,6 +1504,9 @@ class RuleBacktestEngine:
             executed_fee_amount: Optional[float] = None
             executed_slippage_amount: Optional[float] = None
             action_notes: Optional[str] = None
+            execution_state: Optional[str] = None
+            execution_reason: Optional[str] = None
+            execution_events: List[Dict[str, Any]] = []
 
             if pending_exit is not None and position:
                 fill_price, fill_basis = self._resolve_fill_price(
@@ -1440,63 +1514,97 @@ class RuleBacktestEngine:
                     close_price=price,
                     preferred=execution_model.exit_fill_price_basis,
                 )
-                exit_execution = self._apply_exit_execution(
-                    shares=shares,
-                    base_fill_price=fill_price,
-                    fee_rate=fee_rate,
-                    slippage_rate=slippage_rate,
-                )
-                cash = float(active_position.get("cash_buffer", 0.0)) + exit_execution["net_proceeds"]
                 exit_date = getattr(bar, "date")
-                entry_date = active_position["entry_date"]
-                holding_bars = max(1, idx - int(active_position["entry_fill_index"]))
-                holding_calendar_days = max(1, (exit_date - entry_date).days)
-                entry_total_cost = float(active_position["entry_total_cost"])
-                trade_return = ((exit_execution["net_proceeds"] / entry_total_cost) - 1.0) * 100.0 if entry_total_cost else 0.0
-                trades.append(
-                    RuleBacktestTrade(
-                        code=code,
-                        entry_signal_date=active_position["entry_signal_date"],
-                        exit_signal_date=pending_exit.signal_date,
-                        entry_date=entry_date,
-                        exit_date=exit_date,
-                        entry_price=float(active_position["entry_price"]),
-                        exit_price=float(exit_execution["effective_price"]),
-                        entry_signal=active_position["entry_signal_text"],
-                        exit_signal=pending_exit.trigger,
-                        entry_trigger=active_position["entry_trigger"],
-                        exit_trigger=pending_exit.trigger,
-                        return_pct=round(trade_return, 4),
-                        holding_days=holding_bars,
-                        holding_bars=holding_bars,
-                        holding_calendar_days=holding_calendar_days,
-                        entry_rule_json=active_position["entry_rule_json"],
-                        exit_rule_json=pending_exit.rule_json,
-                        entry_indicators=active_position["entry_indicators"],
-                        exit_indicators=pending_exit.indicators,
-                        entry_fill_basis=active_position["entry_fill_basis"],
-                        exit_fill_basis=fill_basis,
-                        signal_price_basis="close",
-                        price_basis="close",
-                        fee_bps=float(execution_model.fee_bps_per_side),
-                        slippage_bps=float(execution_model.slippage_bps_per_side),
-                        entry_fee_amount=float(active_position["entry_fee_amount"]),
-                        exit_fee_amount=float(exit_execution["fee_amount"]),
-                        entry_slippage_amount=float(active_position["entry_slippage_amount"]),
-                        exit_slippage_amount=float(exit_execution["slippage_amount"]),
-                        quantity=float(shares),
-                        notes="exit_signal_next_bar_open",
+                if fill_price is None or fill_basis is None:
+                    execution_state = "unfilled"
+                    execution_reason = "required_open_unavailable"
+                    execution_events.append(
+                        self._build_unfilled_event(
+                            event_type="strategy_exit_order",
+                            side="exit",
+                            signal_date=pending_exit.signal_date,
+                            fill_date=exit_date,
+                            timing=execution_model.exit_timing,
+                            price_basis=execution_model.exit_fill_price_basis,
+                        )
                     )
-                )
-                pending_exit = None
-                active_position = {}
-                shares = 0.0
-                position = False
-                executed_action = "sell"
-                executed_fill_price = float(exit_execution["effective_price"])
-                executed_fee_amount = float(exit_execution["fee_amount"])
-                executed_slippage_amount = float(exit_execution["slippage_amount"])
-                action_notes = "exit_signal_next_bar_open"
+                    action_notes = execution_reason
+                    pending_exit = None
+                else:
+                    exit_execution = self._apply_exit_execution(
+                        shares=shares,
+                        base_fill_price=fill_price,
+                        fee_rate=fee_rate,
+                        slippage_rate=slippage_rate,
+                    )
+                    cash = float(active_position.get("cash_buffer", 0.0)) + exit_execution["net_proceeds"]
+                    entry_date = active_position["entry_date"]
+                    holding_bars = max(1, idx - int(active_position["entry_fill_index"]))
+                    holding_calendar_days = max(1, (exit_date - entry_date).days)
+                    entry_total_cost = float(active_position["entry_total_cost"])
+                    trade_return = ((exit_execution["net_proceeds"] / entry_total_cost) - 1.0) * 100.0 if entry_total_cost else 0.0
+                    trades.append(
+                        RuleBacktestTrade(
+                            code=code,
+                            entry_signal_date=active_position["entry_signal_date"],
+                            exit_signal_date=pending_exit.signal_date,
+                            entry_date=entry_date,
+                            exit_date=exit_date,
+                            entry_price=float(active_position["entry_price"]),
+                            exit_price=float(exit_execution["effective_price"]),
+                            entry_signal=active_position["entry_signal_text"],
+                            exit_signal=pending_exit.trigger,
+                            entry_trigger=active_position["entry_trigger"],
+                            exit_trigger=pending_exit.trigger,
+                            return_pct=round(trade_return, 4),
+                            holding_days=holding_bars,
+                            holding_bars=holding_bars,
+                            holding_calendar_days=holding_calendar_days,
+                            entry_rule_json=active_position["entry_rule_json"],
+                            exit_rule_json=pending_exit.rule_json,
+                            entry_indicators=active_position["entry_indicators"],
+                            exit_indicators=pending_exit.indicators,
+                            entry_fill_basis=active_position["entry_fill_basis"],
+                            exit_fill_basis=fill_basis,
+                            signal_price_basis="close",
+                            price_basis="close",
+                            fee_bps=float(execution_model.fee_bps_per_side),
+                            slippage_bps=float(execution_model.slippage_bps_per_side),
+                            entry_fee_amount=float(active_position["entry_fee_amount"]),
+                            exit_fee_amount=float(exit_execution["fee_amount"]),
+                            entry_slippage_amount=float(active_position["entry_slippage_amount"]),
+                            exit_slippage_amount=float(exit_execution["slippage_amount"]),
+                            quantity=float(shares),
+                            notes="exit_signal_next_bar_open",
+                        )
+                    )
+                    execution_state = "filled"
+                    execution_reason = "scheduled_fill"
+                    execution_events.append(
+                        self._build_execution_event(
+                            event_type="strategy_exit_order",
+                            state="filled",
+                            side="exit",
+                            signal_date=pending_exit.signal_date,
+                            fill_date=exit_date,
+                            timing=execution_model.exit_timing,
+                            price_basis=execution_model.exit_fill_price_basis,
+                            fill_basis=fill_basis,
+                            fill_price=float(exit_execution["effective_price"]),
+                            fee_amount=float(exit_execution["fee_amount"]),
+                            slippage_amount=float(exit_execution["slippage_amount"]),
+                            reason="scheduled_fill",
+                        )
+                    )
+                    pending_exit = None
+                    active_position = {}
+                    shares = 0.0
+                    position = False
+                    executed_action = "sell"
+                    executed_fill_price = float(exit_execution["effective_price"])
+                    executed_fee_amount = float(exit_execution["fee_amount"])
+                    executed_slippage_amount = float(exit_execution["slippage_amount"])
+                    action_notes = "exit_signal_next_bar_open"
 
             if pending_entry is not None and not position:
                 fill_price, fill_basis = self._resolve_fill_price(
@@ -1504,37 +1612,71 @@ class RuleBacktestEngine:
                     close_price=price,
                     preferred=execution_model.entry_fill_price_basis,
                 )
-                entry_execution = self._apply_entry_execution(
-                    cash=cash,
-                    base_fill_price=fill_price,
-                    fee_rate=fee_rate,
-                    slippage_rate=slippage_rate,
-                )
-                if entry_execution["shares"] > 0:
-                    shares = entry_execution["shares"]
-                    cash = entry_execution["cash_remaining"]
-                    position = True
-                    active_position = {
-                        "entry_signal_date": pending_entry.signal_date,
-                        "entry_date": getattr(bar, "date"),
-                        "entry_fill_index": idx,
-                        "entry_price": float(entry_execution["effective_price"]),
-                        "entry_total_cost": float(entry_execution["total_cost"]),
-                        "entry_fee_amount": float(entry_execution["fee_amount"]),
-                        "entry_slippage_amount": float(entry_execution["slippage_amount"]),
-                        "entry_signal_text": pending_entry.trigger,
-                        "entry_trigger": pending_entry.trigger,
-                        "entry_rule_json": pending_entry.rule_json,
-                        "entry_indicators": pending_entry.indicators,
-                        "entry_fill_basis": fill_basis,
-                        "cash_buffer": float(entry_execution["cash_remaining"]),
-                        "peak_close_price": float(max(entry_execution["effective_price"], float(price))),
-                    }
-                    executed_action = "buy"
-                    executed_fill_price = float(entry_execution["effective_price"])
-                    executed_fee_amount = float(entry_execution["fee_amount"])
-                    executed_slippage_amount = float(entry_execution["slippage_amount"])
-                    action_notes = "entry_signal_next_bar_open"
+                entry_date = getattr(bar, "date")
+                if fill_price is None or fill_basis is None:
+                    execution_state = "unfilled"
+                    execution_reason = "required_open_unavailable"
+                    execution_events.append(
+                        self._build_unfilled_event(
+                            event_type="strategy_entry_order",
+                            side="entry",
+                            signal_date=pending_entry.signal_date,
+                            fill_date=entry_date,
+                            timing=execution_model.entry_timing,
+                            price_basis=execution_model.entry_fill_price_basis,
+                        )
+                    )
+                    action_notes = execution_reason
+                else:
+                    entry_execution = self._apply_entry_execution(
+                        cash=cash,
+                        base_fill_price=fill_price,
+                        fee_rate=fee_rate,
+                        slippage_rate=slippage_rate,
+                    )
+                    if entry_execution["shares"] > 0:
+                        shares = entry_execution["shares"]
+                        cash = entry_execution["cash_remaining"]
+                        position = True
+                        active_position = {
+                            "entry_signal_date": pending_entry.signal_date,
+                            "entry_date": entry_date,
+                            "entry_fill_index": idx,
+                            "entry_price": float(entry_execution["effective_price"]),
+                            "entry_total_cost": float(entry_execution["total_cost"]),
+                            "entry_fee_amount": float(entry_execution["fee_amount"]),
+                            "entry_slippage_amount": float(entry_execution["slippage_amount"]),
+                            "entry_signal_text": pending_entry.trigger,
+                            "entry_trigger": pending_entry.trigger,
+                            "entry_rule_json": pending_entry.rule_json,
+                            "entry_indicators": pending_entry.indicators,
+                            "entry_fill_basis": fill_basis,
+                            "cash_buffer": float(entry_execution["cash_remaining"]),
+                            "peak_close_price": float(max(entry_execution["effective_price"], float(price))),
+                        }
+                        executed_action = "buy"
+                        executed_fill_price = float(entry_execution["effective_price"])
+                        executed_fee_amount = float(entry_execution["fee_amount"])
+                        executed_slippage_amount = float(entry_execution["slippage_amount"])
+                        action_notes = "entry_signal_next_bar_open"
+                        execution_state = "filled"
+                        execution_reason = "scheduled_fill"
+                        execution_events.append(
+                            self._build_execution_event(
+                                event_type="strategy_entry_order",
+                                state="filled",
+                                side="entry",
+                                signal_date=pending_entry.signal_date,
+                                fill_date=entry_date,
+                                timing=execution_model.entry_timing,
+                                price_basis=execution_model.entry_fill_price_basis,
+                                fill_basis=fill_basis,
+                                fill_price=float(entry_execution["effective_price"]),
+                                fee_amount=float(entry_execution["fee_amount"]),
+                                slippage_amount=float(entry_execution["slippage_amount"]),
+                                reason="scheduled_fill",
+                            )
+                        )
                 pending_entry = None
 
             equity = cash if not position else cash + shares * price
@@ -1553,6 +1695,9 @@ class RuleBacktestEngine:
                     fee_amount=executed_fee_amount,
                     slippage_amount=executed_slippage_amount,
                     notes=action_notes,
+                    execution_state=execution_state,
+                    execution_reason=execution_reason,
+                    execution_events=execution_events,
                 )
             )
 
@@ -1590,20 +1735,14 @@ class RuleBacktestEngine:
         if position and active_position:
             last_bar = ordered_bars[execution_end_index]
             last_price = closes[execution_end_index] or float(active_position["entry_price"])
-            fill_price, fill_basis = self._resolve_fill_price(
-                last_bar,
-                close_price=last_price,
-                preferred=str((execution_model.market_rules or {}).get("terminal_bar_fill_fallback") or "close").startswith("same_bar_close") and "close" or execution_model.exit_fill_price_basis,
-            )
+            terminal_policy = dict(execution_model.terminal_liquidation or {})
             exit_execution = self._apply_exit_execution(
                 shares=shares,
-                base_fill_price=fill_price,
+                base_fill_price=last_price,
                 fee_rate=fee_rate,
                 slippage_rate=slippage_rate,
             )
             cash = float(active_position.get("cash_buffer", 0.0)) + exit_execution["net_proceeds"]
-            exit_signal_date = pending_exit.signal_date if pending_exit is not None else getattr(last_bar, "date")
-            exit_trigger = pending_exit.trigger if pending_exit is not None else "END_OF_WINDOW"
             holding_bars = max(1, execution_end_index - int(active_position["entry_fill_index"]) + 1)
             holding_calendar_days = max(1, (getattr(last_bar, "date") - active_position["entry_date"]).days)
             entry_total_cost = float(active_position["entry_total_cost"])
@@ -1612,21 +1751,21 @@ class RuleBacktestEngine:
                 RuleBacktestTrade(
                     code=code,
                     entry_signal_date=active_position["entry_signal_date"],
-                    exit_signal_date=exit_signal_date,
+                    exit_signal_date=None,
                     entry_date=active_position["entry_date"],
                     exit_date=getattr(last_bar, "date"),
                     entry_price=float(active_position["entry_price"]),
                     exit_price=float(exit_execution["effective_price"]),
                     entry_signal=active_position["entry_signal_text"],
-                    exit_signal=exit_trigger,
+                    exit_signal="",
                     entry_trigger=active_position["entry_trigger"],
-                    exit_trigger=exit_trigger,
+                    exit_trigger="TERMINAL_LIQUIDATION",
                     return_pct=round(trade_return, 4),
                     holding_days=holding_bars,
                     holding_bars=holding_bars,
                     holding_calendar_days=holding_calendar_days,
                     entry_rule_json=active_position["entry_rule_json"],
-                    exit_rule_json=pending_exit.rule_json if pending_exit is not None else exit_node,
+                    exit_rule_json={"terminal_liquidation": terminal_policy},
                     entry_indicators=active_position["entry_indicators"],
                     exit_indicators=(
                         pending_exit.indicators
@@ -1634,7 +1773,7 @@ class RuleBacktestEngine:
                         else self._collect_indicator_snapshot(exit_node, execution_end_index, ordered_bars, warmup_cache)
                     ),
                     entry_fill_basis=active_position["entry_fill_basis"],
-                    exit_fill_basis=fill_basis,
+                    exit_fill_basis="close",
                     signal_price_basis="close",
                     price_basis="close",
                     fee_bps=float(execution_model.fee_bps_per_side),
@@ -1644,10 +1783,28 @@ class RuleBacktestEngine:
                     entry_slippage_amount=float(active_position["entry_slippage_amount"]),
                     exit_slippage_amount=float(exit_execution["slippage_amount"]),
                     quantity=float(shares),
-                    notes="forced_close_at_window_end",
+                    notes="terminal_liquidation_at_window_end",
+                    exit_reason="terminal_liquidation",
+                    exit_event_type="terminal_liquidation",
+                    terminal_liquidation_policy_id=str(terminal_policy.get("policy_id") or ""),
                 )
             )
             previous_signal_summary = equity_curve[-1].signal_summary if equity_curve else None
+            terminal_event = self._build_execution_event(
+                event_type="terminal_liquidation",
+                state="filled",
+                side="exit",
+                signal_date=None,
+                fill_date=getattr(last_bar, "date"),
+                timing=str(terminal_policy.get("fill_timing") or "window_end_bar_close"),
+                price_basis="close",
+                fill_basis="close",
+                fill_price=float(exit_execution["effective_price"]),
+                fee_amount=float(exit_execution["fee_amount"]),
+                slippage_amount=float(exit_execution["slippage_amount"]),
+                reason=str(terminal_policy.get("reason") or "window_end_policy"),
+            )
+            previous_events = list(equity_curve[-1].execution_events) if equity_curve else []
             equity_curve[-1] = self._build_equity_point(
                 point_date=getattr(last_bar, "date"),
                 close_price=float(last_price),
@@ -1657,11 +1814,14 @@ class RuleBacktestEngine:
                 peak_equity=float(peak_equity),
                 target_position=0.0,
                 signal_summary=previous_signal_summary,
-                executed_action="forced_close",
+                executed_action="terminal_liquidation",
                 fill_price=float(exit_execution["effective_price"]),
                 fee_amount=float(exit_execution["fee_amount"]),
                 slippage_amount=float(exit_execution["slippage_amount"]),
-                notes="forced_close_at_window_end",
+                notes="terminal_liquidation_at_window_end",
+                execution_state="filled",
+                execution_reason="window_end_policy",
+                execution_events=[*previous_events, terminal_event],
             )
 
         execution_bars = ordered_bars[execution_start_index:execution_end_index + 1]
@@ -1784,6 +1944,9 @@ class RuleBacktestEngine:
             executed_fee_amount: Optional[float] = None
             executed_slippage_amount: Optional[float] = None
             action_notes: Optional[str] = None
+            execution_state: Optional[str] = None
+            execution_reason: Optional[str] = None
+            execution_events: List[Dict[str, Any]] = []
 
             if pending_exit is not None and position:
                 fill_price, fill_basis = self._resolve_fill_price(
@@ -1791,63 +1954,97 @@ class RuleBacktestEngine:
                     close_price=price,
                     preferred=execution_model.exit_fill_price_basis,
                 )
-                exit_execution = self._apply_exit_execution(
-                    shares=shares,
-                    base_fill_price=fill_price,
-                    fee_rate=fee_rate,
-                    slippage_rate=slippage_rate,
-                )
-                cash = float(active_position.get("cash_buffer", 0.0)) + exit_execution["net_proceeds"]
                 exit_date = getattr(bar, "date")
-                entry_date = active_position["entry_date"]
-                holding_bars = max(1, idx - int(active_position["entry_fill_index"]))
-                holding_calendar_days = max(1, (exit_date - entry_date).days)
-                entry_total_cost = float(active_position["entry_total_cost"])
-                trade_return = ((exit_execution["net_proceeds"] / entry_total_cost) - 1.0) * 100.0 if entry_total_cost else 0.0
-                trades.append(
-                    RuleBacktestTrade(
-                        code=code,
-                        entry_signal_date=active_position["entry_signal_date"],
-                        exit_signal_date=pending_exit.signal_date,
-                        entry_date=entry_date,
-                        exit_date=exit_date,
-                        entry_price=float(active_position["entry_price"]),
-                        exit_price=float(exit_execution["effective_price"]),
-                        entry_signal=active_position["entry_signal_text"],
-                        exit_signal=pending_exit.trigger,
-                        entry_trigger=active_position["entry_trigger"],
-                        exit_trigger=pending_exit.trigger,
-                        return_pct=round(trade_return, 4),
-                        holding_days=holding_bars,
-                        holding_bars=holding_bars,
-                        holding_calendar_days=holding_calendar_days,
-                        entry_rule_json=active_position["entry_rule_json"],
-                        exit_rule_json=pending_exit.rule_json,
-                        entry_indicators=active_position["entry_indicators"],
-                        exit_indicators=pending_exit.indicators,
-                        entry_fill_basis=active_position["entry_fill_basis"],
-                        exit_fill_basis=fill_basis,
-                        signal_price_basis="close",
-                        price_basis="close",
-                        fee_bps=float(execution_model.fee_bps_per_side),
-                        slippage_bps=float(execution_model.slippage_bps_per_side),
-                        entry_fee_amount=float(active_position["entry_fee_amount"]),
-                        exit_fee_amount=float(exit_execution["fee_amount"]),
-                        entry_slippage_amount=float(active_position["entry_slippage_amount"]),
-                        exit_slippage_amount=float(exit_execution["slippage_amount"]),
-                        quantity=float(shares),
-                        notes=f"{strategy_spec.get('strategy_type')}_exit_next_bar_open",
+                if fill_price is None or fill_basis is None:
+                    execution_state = "unfilled"
+                    execution_reason = "required_open_unavailable"
+                    execution_events.append(
+                        self._build_unfilled_event(
+                            event_type="strategy_exit_order",
+                            side="exit",
+                            signal_date=pending_exit.signal_date,
+                            fill_date=exit_date,
+                            timing=execution_model.exit_timing,
+                            price_basis=execution_model.exit_fill_price_basis,
+                        )
                     )
-                )
-                pending_exit = None
-                active_position = {}
-                shares = 0.0
-                position = False
-                executed_action = "sell"
-                executed_fill_price = float(exit_execution["effective_price"])
-                executed_fee_amount = float(exit_execution["fee_amount"])
-                executed_slippage_amount = float(exit_execution["slippage_amount"])
-                action_notes = f"{strategy_spec.get('strategy_type')}_exit_next_bar_open"
+                    action_notes = execution_reason
+                    pending_exit = None
+                else:
+                    exit_execution = self._apply_exit_execution(
+                        shares=shares,
+                        base_fill_price=fill_price,
+                        fee_rate=fee_rate,
+                        slippage_rate=slippage_rate,
+                    )
+                    cash = float(active_position.get("cash_buffer", 0.0)) + exit_execution["net_proceeds"]
+                    entry_date = active_position["entry_date"]
+                    holding_bars = max(1, idx - int(active_position["entry_fill_index"]))
+                    holding_calendar_days = max(1, (exit_date - entry_date).days)
+                    entry_total_cost = float(active_position["entry_total_cost"])
+                    trade_return = ((exit_execution["net_proceeds"] / entry_total_cost) - 1.0) * 100.0 if entry_total_cost else 0.0
+                    trades.append(
+                        RuleBacktestTrade(
+                            code=code,
+                            entry_signal_date=active_position["entry_signal_date"],
+                            exit_signal_date=pending_exit.signal_date,
+                            entry_date=entry_date,
+                            exit_date=exit_date,
+                            entry_price=float(active_position["entry_price"]),
+                            exit_price=float(exit_execution["effective_price"]),
+                            entry_signal=active_position["entry_signal_text"],
+                            exit_signal=pending_exit.trigger,
+                            entry_trigger=active_position["entry_trigger"],
+                            exit_trigger=pending_exit.trigger,
+                            return_pct=round(trade_return, 4),
+                            holding_days=holding_bars,
+                            holding_bars=holding_bars,
+                            holding_calendar_days=holding_calendar_days,
+                            entry_rule_json=active_position["entry_rule_json"],
+                            exit_rule_json=pending_exit.rule_json,
+                            entry_indicators=active_position["entry_indicators"],
+                            exit_indicators=pending_exit.indicators,
+                            entry_fill_basis=active_position["entry_fill_basis"],
+                            exit_fill_basis=fill_basis,
+                            signal_price_basis="close",
+                            price_basis="close",
+                            fee_bps=float(execution_model.fee_bps_per_side),
+                            slippage_bps=float(execution_model.slippage_bps_per_side),
+                            entry_fee_amount=float(active_position["entry_fee_amount"]),
+                            exit_fee_amount=float(exit_execution["fee_amount"]),
+                            entry_slippage_amount=float(active_position["entry_slippage_amount"]),
+                            exit_slippage_amount=float(exit_execution["slippage_amount"]),
+                            quantity=float(shares),
+                            notes=f"{strategy_spec.get('strategy_type')}_exit_next_bar_open",
+                        )
+                    )
+                    execution_state = "filled"
+                    execution_reason = "scheduled_fill"
+                    execution_events.append(
+                        self._build_execution_event(
+                            event_type="strategy_exit_order",
+                            state="filled",
+                            side="exit",
+                            signal_date=pending_exit.signal_date,
+                            fill_date=exit_date,
+                            timing=execution_model.exit_timing,
+                            price_basis=execution_model.exit_fill_price_basis,
+                            fill_basis=fill_basis,
+                            fill_price=float(exit_execution["effective_price"]),
+                            fee_amount=float(exit_execution["fee_amount"]),
+                            slippage_amount=float(exit_execution["slippage_amount"]),
+                            reason="scheduled_fill",
+                        )
+                    )
+                    pending_exit = None
+                    active_position = {}
+                    shares = 0.0
+                    position = False
+                    executed_action = "sell"
+                    executed_fill_price = float(exit_execution["effective_price"])
+                    executed_fee_amount = float(exit_execution["fee_amount"])
+                    executed_slippage_amount = float(exit_execution["slippage_amount"])
+                    action_notes = f"{strategy_spec.get('strategy_type')}_exit_next_bar_open"
 
             if pending_entry is not None and not position:
                 fill_price, fill_basis = self._resolve_fill_price(
@@ -1855,36 +2052,70 @@ class RuleBacktestEngine:
                     close_price=price,
                     preferred=execution_model.entry_fill_price_basis,
                 )
-                entry_execution = self._apply_entry_execution(
-                    cash=cash,
-                    base_fill_price=fill_price,
-                    fee_rate=fee_rate,
-                    slippage_rate=slippage_rate,
-                )
-                if entry_execution["shares"] > 0:
-                    shares = entry_execution["shares"]
-                    cash = entry_execution["cash_remaining"]
-                    position = True
-                    active_position = {
-                        "entry_signal_date": pending_entry.signal_date,
-                        "entry_date": getattr(bar, "date"),
-                        "entry_fill_index": idx,
-                        "entry_price": float(entry_execution["effective_price"]),
-                        "entry_total_cost": float(entry_execution["total_cost"]),
-                        "entry_fee_amount": float(entry_execution["fee_amount"]),
-                        "entry_slippage_amount": float(entry_execution["slippage_amount"]),
-                        "entry_signal_text": pending_entry.trigger,
-                        "entry_trigger": pending_entry.trigger,
-                        "entry_rule_json": pending_entry.rule_json,
-                        "entry_indicators": pending_entry.indicators,
-                        "entry_fill_basis": fill_basis,
-                        "cash_buffer": float(entry_execution["cash_remaining"]),
-                    }
-                    executed_action = "buy"
-                    executed_fill_price = float(entry_execution["effective_price"])
-                    executed_fee_amount = float(entry_execution["fee_amount"])
-                    executed_slippage_amount = float(entry_execution["slippage_amount"])
-                    action_notes = f"{strategy_spec.get('strategy_type')}_entry_next_bar_open"
+                entry_date = getattr(bar, "date")
+                if fill_price is None or fill_basis is None:
+                    execution_state = "unfilled"
+                    execution_reason = "required_open_unavailable"
+                    execution_events.append(
+                        self._build_unfilled_event(
+                            event_type="strategy_entry_order",
+                            side="entry",
+                            signal_date=pending_entry.signal_date,
+                            fill_date=entry_date,
+                            timing=execution_model.entry_timing,
+                            price_basis=execution_model.entry_fill_price_basis,
+                        )
+                    )
+                    action_notes = execution_reason
+                else:
+                    entry_execution = self._apply_entry_execution(
+                        cash=cash,
+                        base_fill_price=fill_price,
+                        fee_rate=fee_rate,
+                        slippage_rate=slippage_rate,
+                    )
+                    if entry_execution["shares"] > 0:
+                        shares = entry_execution["shares"]
+                        cash = entry_execution["cash_remaining"]
+                        position = True
+                        active_position = {
+                            "entry_signal_date": pending_entry.signal_date,
+                            "entry_date": entry_date,
+                            "entry_fill_index": idx,
+                            "entry_price": float(entry_execution["effective_price"]),
+                            "entry_total_cost": float(entry_execution["total_cost"]),
+                            "entry_fee_amount": float(entry_execution["fee_amount"]),
+                            "entry_slippage_amount": float(entry_execution["slippage_amount"]),
+                            "entry_signal_text": pending_entry.trigger,
+                            "entry_trigger": pending_entry.trigger,
+                            "entry_rule_json": pending_entry.rule_json,
+                            "entry_indicators": pending_entry.indicators,
+                            "entry_fill_basis": fill_basis,
+                            "cash_buffer": float(entry_execution["cash_remaining"]),
+                        }
+                        executed_action = "buy"
+                        executed_fill_price = float(entry_execution["effective_price"])
+                        executed_fee_amount = float(entry_execution["fee_amount"])
+                        executed_slippage_amount = float(entry_execution["slippage_amount"])
+                        action_notes = f"{strategy_spec.get('strategy_type')}_entry_next_bar_open"
+                        execution_state = "filled"
+                        execution_reason = "scheduled_fill"
+                        execution_events.append(
+                            self._build_execution_event(
+                                event_type="strategy_entry_order",
+                                state="filled",
+                                side="entry",
+                                signal_date=pending_entry.signal_date,
+                                fill_date=entry_date,
+                                timing=execution_model.entry_timing,
+                                price_basis=execution_model.entry_fill_price_basis,
+                                fill_basis=fill_basis,
+                                fill_price=float(entry_execution["effective_price"]),
+                                fee_amount=float(entry_execution["fee_amount"]),
+                                slippage_amount=float(entry_execution["slippage_amount"]),
+                                reason="scheduled_fill",
+                            )
+                        )
                 pending_entry = None
 
             equity = cash if not position else cash + shares * price
@@ -1903,6 +2134,9 @@ class RuleBacktestEngine:
                     fee_amount=executed_fee_amount,
                     slippage_amount=executed_slippage_amount,
                     notes=action_notes,
+                    execution_state=execution_state,
+                    execution_reason=execution_reason,
+                    execution_events=execution_events,
                 )
             )
 
@@ -2057,14 +2291,10 @@ class RuleBacktestEngine:
         if position and active_position and str(end_behavior.get("policy") or "liquidate_at_end") == "liquidate_at_end":
             last_bar = ordered_bars[execution_end_index]
             last_price = closes[execution_end_index] or float(active_position["entry_price"])
-            fill_price, fill_basis = self._resolve_fill_price(
-                last_bar,
-                close_price=last_price,
-                preferred=str(end_behavior.get("price_basis") or execution_model.exit_fill_price_basis or "close"),
-            )
+            terminal_policy = dict(execution_model.terminal_liquidation or {})
             exit_execution = self._apply_exit_execution(
                 shares=shares,
-                base_fill_price=fill_price,
+                base_fill_price=last_price,
                 fee_rate=fee_rate,
                 slippage_rate=slippage_rate,
             )
@@ -2077,25 +2307,25 @@ class RuleBacktestEngine:
                 RuleBacktestTrade(
                     code=code,
                     entry_signal_date=active_position["entry_signal_date"],
-                    exit_signal_date=getattr(last_bar, "date"),
+                    exit_signal_date=None,
                     entry_date=active_position["entry_date"],
                     exit_date=getattr(last_bar, "date"),
                     entry_price=float(active_position["entry_price"]),
                     exit_price=float(exit_execution["effective_price"]),
                     entry_signal=active_position["entry_signal_text"],
-                    exit_signal="END_OF_WINDOW",
+                    exit_signal="",
                     entry_trigger=active_position["entry_trigger"],
-                    exit_trigger="END_OF_WINDOW",
+                    exit_trigger="TERMINAL_LIQUIDATION",
                     return_pct=round(trade_return, 4),
                     holding_days=holding_bars,
                     holding_bars=holding_bars,
                     holding_calendar_days=holding_calendar_days,
                     entry_rule_json=active_position["entry_rule_json"],
-                    exit_rule_json={"strategy_spec": signal_spec, "condition": "end_of_test_liquidation"},
+                    exit_rule_json={"terminal_liquidation": terminal_policy},
                     entry_indicators=active_position["entry_indicators"],
                     exit_indicators=self._collect_signal_strategy_snapshot(strategy_spec, execution_end_index, series_payload, ordered_bars),
                     entry_fill_basis=active_position["entry_fill_basis"],
-                    exit_fill_basis=fill_basis,
+                    exit_fill_basis="close",
                     signal_price_basis="close",
                     price_basis="close",
                     fee_bps=float(execution_model.fee_bps_per_side),
@@ -2105,10 +2335,28 @@ class RuleBacktestEngine:
                     entry_slippage_amount=float(active_position["entry_slippage_amount"]),
                     exit_slippage_amount=float(exit_execution["slippage_amount"]),
                     quantity=float(shares),
-                    notes="forced_close_at_window_end",
+                    notes="terminal_liquidation_at_window_end",
+                    exit_reason="terminal_liquidation",
+                    exit_event_type="terminal_liquidation",
+                    terminal_liquidation_policy_id=str(terminal_policy.get("policy_id") or ""),
                 )
             )
             previous_signal_summary = equity_curve[-1].signal_summary if equity_curve else None
+            terminal_event = self._build_execution_event(
+                event_type="terminal_liquidation",
+                state="filled",
+                side="exit",
+                signal_date=None,
+                fill_date=getattr(last_bar, "date"),
+                timing=str(terminal_policy.get("fill_timing") or "window_end_bar_close"),
+                price_basis="close",
+                fill_basis="close",
+                fill_price=float(exit_execution["effective_price"]),
+                fee_amount=float(exit_execution["fee_amount"]),
+                slippage_amount=float(exit_execution["slippage_amount"]),
+                reason=str(terminal_policy.get("reason") or "window_end_policy"),
+            )
+            previous_events = list(equity_curve[-1].execution_events) if equity_curve else []
             equity_curve[-1] = self._build_equity_point(
                 point_date=getattr(last_bar, "date"),
                 close_price=float(last_price),
@@ -2118,11 +2366,14 @@ class RuleBacktestEngine:
                 peak_equity=float(peak_equity),
                 target_position=0.0,
                 signal_summary=previous_signal_summary,
-                executed_action="forced_close",
+                executed_action="terminal_liquidation",
                 fill_price=float(exit_execution["effective_price"]),
                 fee_amount=float(exit_execution["fee_amount"]),
                 slippage_amount=float(exit_execution["slippage_amount"]),
-                notes="forced_close_at_window_end",
+                notes="terminal_liquidation_at_window_end",
+                execution_state="filled",
+                execution_reason="window_end_policy",
+                execution_events=[*previous_events, terminal_event],
             )
 
         execution_bars = ordered_bars[execution_start_index:execution_end_index + 1]
@@ -2233,53 +2484,106 @@ class RuleBacktestEngine:
             executed_slippage_amount: Optional[float] = None
             action_notes: Optional[str] = None
             signal_summary: Optional[str] = None
+            execution_state: Optional[str] = None
+            execution_reason: Optional[str] = None
+            execution_events: List[Dict[str, Any]] = []
 
             if not stop_buying:
                 buy_attempts += 1
+                execution_date = getattr(bar, "date")
                 base_fill_price, fill_basis = self._resolve_fill_price(
                     bar,
                     close_price=close_price,
                     preferred=execution_model.entry_fill_price_basis,
                 )
-                order_plan = self._build_periodic_order_plan(
-                    order_mode=order_mode,
-                    quantity_per_trade=quantity_per_trade,
-                    amount_per_trade=amount_per_trade,
-                    base_fill_price=base_fill_price,
-                    fee_rate=fee_rate,
-                    slippage_rate=slippage_rate,
-                    available_cash=cash,
-                )
-                if order_plan is None:
-                    if cash_policy == "stop_when_insufficient_cash":
-                        stop_buying = True
-                        signal_summary = "现金不足，后续停止继续买入"
-                        action_notes = "stop_buying_when_insufficient_cash"
-                    else:
-                        signal_summary = "现金不足，跳过本次计划买入"
-                        action_notes = "skip_buy_when_insufficient_cash"
-                else:
-                    cash -= order_plan["total_cost"]
-                    total_shares += order_plan["shares"]
-                    open_lots.append(
-                        {
-                            "entry_signal_date": getattr(bar, "date"),
-                            "entry_date": getattr(bar, "date"),
-                            "entry_index": idx,
-                            "entry_price": order_plan["effective_price"],
-                            "entry_fee_amount": order_plan["fee_amount"],
-                            "entry_slippage_amount": order_plan["slippage_amount"],
-                            "shares": order_plan["shares"],
-                            "entry_fill_basis": fill_basis,
-                            "cash_after_buy": cash,
-                        }
+                if base_fill_price is None or fill_basis is None:
+                    execution_state = "unfilled"
+                    execution_reason = "required_open_unavailable"
+                    execution_events.append(
+                        self._build_unfilled_event(
+                            event_type="scheduled_entry_order",
+                            side="entry",
+                            signal_date=execution_date,
+                            fill_date=execution_date,
+                            timing=execution_model.entry_timing,
+                            price_basis=execution_model.entry_fill_price_basis,
+                        )
                     )
-                    executed_action = "accumulate"
-                    executed_fill_price = float(order_plan["effective_price"])
-                    executed_fee_amount = float(order_plan["fee_amount"])
-                    executed_slippage_amount = float(order_plan["slippage_amount"])
-                    signal_summary = f"按计划买入 {self._format_accumulation_size(order_mode, quantity_per_trade, amount_per_trade)}"
-                    action_notes = "periodic_accumulation_fill"
+                    action_notes = execution_reason
+                else:
+                    order_plan = self._build_periodic_order_plan(
+                        order_mode=order_mode,
+                        quantity_per_trade=quantity_per_trade,
+                        amount_per_trade=amount_per_trade,
+                        base_fill_price=base_fill_price,
+                        fee_rate=fee_rate,
+                        slippage_rate=slippage_rate,
+                        available_cash=cash,
+                    )
+                    if order_plan is None:
+                        execution_state = "rejected"
+                        execution_reason = "insufficient_cash"
+                        execution_events.append(
+                            self._build_execution_event(
+                                event_type="scheduled_entry_order",
+                                state="rejected",
+                                side="entry",
+                                signal_date=execution_date,
+                                fill_date=execution_date,
+                                timing=execution_model.entry_timing,
+                                price_basis=execution_model.entry_fill_price_basis,
+                                fill_basis=None,
+                                fill_price=None,
+                                reason="insufficient_cash",
+                            )
+                        )
+                        if cash_policy == "stop_when_insufficient_cash":
+                            stop_buying = True
+                            signal_summary = "现金不足，后续停止继续买入"
+                            action_notes = "stop_buying_when_insufficient_cash"
+                        else:
+                            signal_summary = "现金不足，跳过本次计划买入"
+                            action_notes = "skip_buy_when_insufficient_cash"
+                    else:
+                        cash -= order_plan["total_cost"]
+                        total_shares += order_plan["shares"]
+                        open_lots.append(
+                            {
+                                "entry_signal_date": execution_date,
+                                "entry_date": execution_date,
+                                "entry_index": idx,
+                                "entry_price": order_plan["effective_price"],
+                                "entry_fee_amount": order_plan["fee_amount"],
+                                "entry_slippage_amount": order_plan["slippage_amount"],
+                                "shares": order_plan["shares"],
+                                "entry_fill_basis": fill_basis,
+                                "cash_after_buy": cash,
+                            }
+                        )
+                        executed_action = "accumulate"
+                        executed_fill_price = float(order_plan["effective_price"])
+                        executed_fee_amount = float(order_plan["fee_amount"])
+                        executed_slippage_amount = float(order_plan["slippage_amount"])
+                        signal_summary = f"按计划买入 {self._format_accumulation_size(order_mode, quantity_per_trade, amount_per_trade)}"
+                        action_notes = "periodic_accumulation_fill"
+                        execution_state = "filled"
+                        execution_reason = "scheduled_fill"
+                        execution_events.append(
+                            self._build_execution_event(
+                                event_type="scheduled_entry_order",
+                                state="filled",
+                                side="entry",
+                                signal_date=execution_date,
+                                fill_date=execution_date,
+                                timing=execution_model.entry_timing,
+                                price_basis=execution_model.entry_fill_price_basis,
+                                fill_basis=fill_basis,
+                                fill_price=float(order_plan["effective_price"]),
+                                fee_amount=float(order_plan["fee_amount"]),
+                                slippage_amount=float(order_plan["slippage_amount"]),
+                                reason="scheduled_fill",
+                            )
+                        )
 
             equity = cash + total_shares * close_price
             peak_equity = max(peak_equity, equity)
@@ -2298,12 +2602,16 @@ class RuleBacktestEngine:
                     fee_amount=executed_fee_amount,
                     slippage_amount=executed_slippage_amount,
                     notes=action_notes,
+                    execution_state=execution_state,
+                    execution_reason=execution_reason,
+                    execution_events=execution_events,
                 )
             )
 
         if open_lots and equity_curve:
             last_bar = ordered_bars[execution_end_index]
             last_close = self._safe_price(getattr(last_bar, "close", None)) or 0.0
+            terminal_policy = dict(execution_model.terminal_liquidation or {})
             total_exit_fee = 0.0
             total_exit_slippage = 0.0
             final_fill_price = last_close * (1.0 - slippage_rate)
@@ -2327,28 +2635,28 @@ class RuleBacktestEngine:
                     RuleBacktestTrade(
                         code=code,
                         entry_signal_date=lot["entry_signal_date"],
-                        exit_signal_date=getattr(last_bar, "date"),
+                        exit_signal_date=None,
                         entry_date=lot["entry_date"],
                         exit_date=getattr(last_bar, "date"),
                         entry_price=float(lot["entry_price"]),
                         exit_price=float(exit_execution["effective_price"]),
                         entry_signal=f"定投买入 {self._format_accumulation_size(order_mode, quantity_per_trade, amount_per_trade)}",
-                        exit_signal="区间结束统一平仓",
+                        exit_signal="",
                         entry_trigger="PERIODIC_BUY",
-                        exit_trigger="END_OF_WINDOW",
+                        exit_trigger="TERMINAL_LIQUIDATION",
                         return_pct=round(trade_return, 4),
                         holding_days=holding_bars,
                         holding_bars=holding_bars,
                         holding_calendar_days=holding_calendar_days,
                         entry_rule_json={"strategy_spec": strategy_spec.get("entry", {}), "strategy_type": "periodic_accumulation"},
-                        exit_rule_json={"strategy_spec": strategy_spec.get("exit", {})},
+                        exit_rule_json={"terminal_liquidation": terminal_policy},
                         entry_indicators={
                             "shares": round(float(lot["shares"]), 6),
                             "cash_after_buy": round(float(max(lot["cash_after_buy"], 0.0)), 6),
                         },
                         exit_indicators={"close": round(float(last_close), 6)},
                         entry_fill_basis=lot["entry_fill_basis"],
-                        exit_fill_basis=execution_model.exit_fill_price_basis,
+                        exit_fill_basis="close",
                         signal_price_basis="scheduled",
                         price_basis="close",
                         fee_bps=float(execution_model.fee_bps_per_side),
@@ -2359,8 +2667,26 @@ class RuleBacktestEngine:
                         exit_slippage_amount=float(exit_execution["slippage_amount"]),
                         quantity=float(lot["shares"]),
                         notes="periodic_accumulation_lot",
+                        exit_reason="terminal_liquidation",
+                        exit_event_type="terminal_liquidation",
+                        terminal_liquidation_policy_id=str(terminal_policy.get("policy_id") or ""),
                     )
                 )
+            terminal_event = self._build_execution_event(
+                event_type="terminal_liquidation",
+                state="filled",
+                side="exit",
+                signal_date=None,
+                fill_date=getattr(last_bar, "date"),
+                timing=str(terminal_policy.get("fill_timing") or "window_end_bar_close"),
+                price_basis="close",
+                fill_basis="close",
+                fill_price=float(final_fill_price),
+                fee_amount=float(total_exit_fee),
+                slippage_amount=float(total_exit_slippage),
+                reason=str(terminal_policy.get("reason") or "window_end_policy"),
+            )
+            previous_events = list(equity_curve[-1].execution_events)
             equity_curve[-1] = self._build_equity_point(
                 point_date=getattr(last_bar, "date"),
                 close_price=float(last_close),
@@ -2369,12 +2695,15 @@ class RuleBacktestEngine:
                 initial_capital=float(initial_capital),
                 peak_equity=float(peak_equity),
                 target_position=0.0,
-                signal_summary="区间结束统一平仓",
-                executed_action="forced_close",
+                signal_summary=equity_curve[-1].signal_summary,
+                executed_action="terminal_liquidation",
                 fill_price=float(final_fill_price),
                 fee_amount=float(total_exit_fee),
                 slippage_amount=float(total_exit_slippage),
-                notes="periodic_accumulation_window_close",
+                notes="periodic_accumulation_terminal_liquidation",
+                execution_state="filled",
+                execution_reason="window_end_policy",
+                execution_events=[*previous_events, terminal_event],
             )
 
         execution_bars = ordered_bars[execution_start_index:execution_end_index + 1]
@@ -3245,59 +3574,32 @@ class RuleBacktestEngine:
         fee_bps: float,
         slippage_bps: float,
         strategy_type: Optional[str] = None,
+        fee_bps_configured: bool | None = None,
+        slippage_bps_configured: bool | None = None,
+        execution_model_request: Any = None,
     ) -> ExecutionModelConfig:
-        normalized_strategy_type = str(strategy_type or "rule_conditions")
-        if normalized_strategy_type == "periodic_accumulation":
-            return ExecutionModelConfig(
-                version="v1",
-                timeframe=str(timeframe or "daily"),
-                signal_evaluation_timing="scheduled_trading_day_open",
-                entry_timing="same_bar_open",
-                exit_timing="forced_close_at_window_end_close",
-                entry_fill_price_basis="open",
-                exit_fill_price_basis="close",
-                position_sizing="scheduled_fixed_accumulation",
-                fee_model="bps_per_side",
-                fee_bps_per_side=float(fee_bps),
-                slippage_model="bps_per_side",
-                slippage_bps_per_side=float(slippage_bps),
-                market_rules={
-                    "trading_day_execution": "available_bars_only",
-                    "window_end_position_handling": "force_flatten",
-                },
-            )
-        return ExecutionModelConfig(
-            version="v1",
-            timeframe=str(timeframe or "daily"),
-            signal_evaluation_timing="bar_close",
-            entry_timing="next_bar_open",
-            exit_timing="next_bar_open",
-            entry_fill_price_basis="open",
-            exit_fill_price_basis="open",
-            position_sizing="single_position_full_notional",
-            fee_model="bps_per_side",
-            fee_bps_per_side=float(fee_bps),
-            slippage_model="bps_per_side",
-            slippage_bps_per_side=float(slippage_bps),
-            market_rules={
-                "trading_day_execution": "available_bars_only",
-                "terminal_bar_fill_fallback": "same_bar_close",
-                "window_end_position_handling": "force_flatten",
-            },
+        resolution = resolve_rule_backtest_execution_model_request(
+            execution_model_request,
+            strategy_type=str(strategy_type or "rule_conditions"),
+            timeframe=str(timeframe or ""),
+            fee_bps=float(fee_bps),
+            slippage_bps=float(slippage_bps),
+            fee_bps_configured=fee_bps_configured,
+            slippage_bps_configured=slippage_bps_configured,
         )
+        execution_model = ExecutionModelConfig.from_dict(resolution["execution_model"])
+        if execution_model is None or not execution_model.model_id:
+            raise ValueError("Canonical rule backtest execution model is unavailable.")
+        return execution_model
 
     @staticmethod
     def _build_execution_assumptions(*, execution_model: ExecutionModelConfig) -> ExecutionAssumptions:
-        exit_fill_timing = execution_model.exit_timing
-        terminal_fallback = str((execution_model.market_rules or {}).get("terminal_bar_fill_fallback") or "").strip()
-        if terminal_fallback:
-            exit_fill_timing = f"{exit_fill_timing}; {terminal_fallback}"
         return ExecutionAssumptions(
             timeframe=execution_model.timeframe,
             indicator_price_basis="close",
             signal_evaluation_timing=execution_model.signal_evaluation_timing,
             entry_fill_timing=execution_model.entry_timing,
-            exit_fill_timing=exit_fill_timing,
+            exit_fill_timing=execution_model.exit_timing,
             default_fill_price_basis=execution_model.entry_fill_price_basis,
             position_sizing=execution_model.position_sizing,
             fee_model=execution_model.fee_model,
@@ -3357,13 +3659,74 @@ class RuleBacktestEngine:
             return f"{int(numeric)}%"
         return f"{numeric:g}%"
 
-    def _resolve_fill_price(self, bar: Any, *, close_price: float, preferred: str) -> Tuple[float, str]:
+    def _resolve_fill_price(
+        self,
+        bar: Any,
+        *,
+        close_price: float,
+        preferred: str,
+    ) -> Tuple[Optional[float], Optional[str]]:
         if preferred == "open":
             open_price = self._safe_price(getattr(bar, "open", None))
             if open_price is not None:
                 return float(open_price), "open"
-            return float(close_price), "close_fallback"
+            return None, None
         return float(close_price), "close"
+
+    @staticmethod
+    def _build_execution_event(
+        *,
+        event_type: str,
+        state: str,
+        side: str,
+        signal_date: Optional[date],
+        fill_date: date,
+        timing: str,
+        price_basis: str,
+        fill_basis: Optional[str],
+        fill_price: Optional[float],
+        fee_amount: float = 0.0,
+        slippage_amount: float = 0.0,
+        reason: str,
+    ) -> Dict[str, Any]:
+        return {
+            "event_type": event_type,
+            "state": state,
+            "side": side,
+            "signal_date": signal_date.isoformat() if signal_date is not None else None,
+            "execution_date": fill_date.isoformat(),
+            "fill_date": fill_date.isoformat() if state == "filled" else None,
+            "timing": timing,
+            "price_basis": price_basis,
+            "fill_basis": fill_basis,
+            "fill_price": round(float(fill_price), 6) if fill_price is not None else None,
+            "fee_amount": round(float(fee_amount), 6),
+            "slippage_amount": round(float(slippage_amount), 6),
+            "reason": reason,
+        }
+
+    def _build_unfilled_event(
+        self,
+        *,
+        event_type: str,
+        side: str,
+        signal_date: date,
+        fill_date: date,
+        timing: str,
+        price_basis: str,
+    ) -> Dict[str, Any]:
+        return self._build_execution_event(
+            event_type=event_type,
+            state="unfilled",
+            side=side,
+            signal_date=signal_date,
+            fill_date=fill_date,
+            timing=timing,
+            price_basis=price_basis,
+            fill_basis=None,
+            fill_price=None,
+            reason=f"required_{price_basis}_unavailable",
+        )
 
     @staticmethod
     def _apply_entry_execution(
@@ -3426,6 +3789,9 @@ class RuleBacktestEngine:
         fee_amount: Optional[float] = None,
         slippage_amount: Optional[float] = None,
         notes: Optional[str] = None,
+        execution_state: Optional[str] = None,
+        execution_reason: Optional[str] = None,
+        execution_events: Optional[List[Dict[str, Any]]] = None,
     ) -> RuleBacktestPoint:
         holdings_value = max(0.0, float(shares)) * float(close_price)
         total_portfolio_value = float(cash) + holdings_value
@@ -3451,6 +3817,9 @@ class RuleBacktestEngine:
             fee_amount=float(fee_amount) if fee_amount is not None else None,
             slippage_amount=float(slippage_amount) if slippage_amount is not None else None,
             notes=notes,
+            execution_state=execution_state,
+            execution_reason=execution_reason,
+            execution_events=list(execution_events or []),
         )
 
     @staticmethod

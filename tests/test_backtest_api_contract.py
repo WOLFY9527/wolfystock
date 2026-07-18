@@ -70,6 +70,10 @@ from api.v1.schemas.backtest import (  # noqa: E402
     RuleBacktestSupportBundleManifestResponse,
     RuleBacktestSupportBundleReproducibilityManifestResponse,
 )
+from src.services.rule_backtest_execution_model_registry import (  # noqa: E402
+    build_current_rule_backtest_execution_model_metadata,
+    build_periodic_rule_backtest_execution_model_metadata,
+)
 
 EXPECTED_TRACE_EXPORT_JSON_KEYS = [
     "version",
@@ -342,6 +346,12 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
     @staticmethod
     def _rule_run_payload(*, run_id: int = 123, status: str = "queued") -> dict:
+        execution_model_available = status not in {"queued", "parsing"}
+        execution_model = (
+            build_current_rule_backtest_execution_model_metadata()
+            if execution_model_available
+            else None
+        )
         artifact_availability = {
             "version": "v1",
             "source": "summary.artifact_availability",
@@ -349,7 +359,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "has_summary": True,
             "has_parsed_strategy": True,
             "has_metrics": True,
-            "has_execution_model": True,
+            "has_execution_model": execution_model_available,
             "has_comparison": status == "completed",
             "has_trade_rows": status == "completed",
             "has_equity_curve": status == "completed",
@@ -456,9 +466,15 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "metrics_source": "summary.metrics",
                 "metrics_completeness": "complete",
                 "metrics_missing_fields": [],
-                "execution_model_source": "summary.execution_model",
-                "execution_model_completeness": "complete",
-                "execution_model_missing_fields": [],
+                "execution_model_source": (
+                    "summary.execution_model" if execution_model_available else "unavailable"
+                ),
+                "execution_model_completeness": (
+                    "complete" if execution_model_available else "unavailable"
+                ),
+                "execution_model_missing_fields": (
+                    [] if execution_model_available else ["strategy_not_parsed"]
+                ),
                 "execution_assumptions_source": "summary.execution_assumptions_snapshot",
                 "trade_rows_source": "stored_rule_backtest_trades",
                 "trade_rows_completeness": "complete",
@@ -482,10 +498,14 @@ class BacktestApiContractTestCase(unittest.TestCase):
                         "missing_kind": "fields",
                     },
                     "execution_model": {
-                        "source": "summary.execution_model",
-                        "completeness": "complete",
-                        "state": "available",
-                        "missing": [],
+                        "source": (
+                            "summary.execution_model" if execution_model_available else "unavailable"
+                        ),
+                        "completeness": (
+                            "complete" if execution_model_available else "unavailable"
+                        ),
+                        "state": "available" if execution_model_available else "unavailable",
+                        "missing": [] if execution_model_available else ["strategy_not_parsed"],
                         "missing_kind": "fields",
                     },
                     "execution_assumptions_snapshot": {
@@ -550,25 +570,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "indicator_price_basis": "close",
                 },
             },
-            "execution_model": {
-                "version": "v1",
-                "timeframe": "daily",
-                "signal_evaluation_timing": "bar_close",
-                "entry_timing": "next_bar_open",
-                "exit_timing": "next_bar_open",
-                "entry_fill_price_basis": "open",
-                "exit_fill_price_basis": "open",
-                "position_sizing": "single_position_full_notional",
-                "fee_model": "bps_per_side",
-                "fee_bps_per_side": 0.0,
-                "slippage_model": "bps_per_side",
-                "slippage_bps_per_side": 0.0,
-                "market_rules": {
-                    "trading_day_execution": "available_bars_only",
-                    "terminal_bar_fill_fallback": "same_bar_close",
-                    "window_end_position_handling": "force_flatten",
-                },
-            },
+            "execution_model": execution_model,
             "execution_assumptions": {},
             "benchmark_curve": [],
             "benchmark_summary": {"method": "same_symbol_buy_and_hold", "resolved_mode": "same_symbol_buy_and_hold"},
@@ -1521,6 +1523,55 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(service.submit_backtest.call_args.kwargs["execution_model"], {"version": "v1"})
         service.run_backtest.assert_not_called()
         self.assertEqual(len(background_tasks.tasks), 1)
+
+    def test_run_rule_backtest_preserves_omitted_and_explicit_zero_cost_fields(self) -> None:
+        requests = (
+            (
+                RuleBacktestRunRequest(
+                    code="600519",
+                    strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                    confirmed=True,
+                ),
+                False,
+            ),
+            (
+                RuleBacktestRunRequest(
+                    code="600519",
+                    strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                    fee_bps=0.0,
+                    slippage_bps=0.0,
+                    confirmed=True,
+                ),
+                True,
+            ),
+        )
+
+        for request, configured in requests:
+            background_tasks = BackgroundTasks()
+            service = MagicMock()
+            service.submit_backtest.return_value = self._rule_run_payload(status="queued")
+            with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+                run_rule_backtest(request, background_tasks, db_manager=MagicMock())
+
+            kwargs = service.submit_backtest.call_args.kwargs
+            self.assertIs(kwargs["fee_bps_configured"], configured)
+            self.assertIs(kwargs["slippage_bps_configured"], configured)
+
+    def test_run_rule_backtest_rejects_partial_fill_request_before_service(self) -> None:
+        request = RuleBacktestRunRequest(
+            code="600519",
+            strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            execution_model={"version": "v1", "partial_fills": True},
+            confirmed=True,
+        )
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService") as service_cls:
+            with self.assertRaises(HTTPException) as ctx:
+                run_rule_backtest(request, BackgroundTasks(), db_manager=MagicMock())
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(ctx.exception.detail["error"], "unsupported_execution_model")
+        service_cls.assert_not_called()
 
     def test_run_rule_backtest_rejects_v2_before_service_or_background_task(self) -> None:
         request = RuleBacktestRunRequest(
@@ -3567,25 +3618,32 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.registry["default_version"], "v1")
         self.assertEqual(response.registry["supported_versions"], ["v1"])
         self.assertEqual(response.registry["default_model"]["version"], "v1")
-        self.assertEqual(response.registry["models"]["v1"]["posture"], "current_default")
-        self.assertTrue(response.registry["models"]["v1"]["supported"])
-        self.assertTrue(response.registry["models"]["v1"]["executable"])
+        default_model = response.registry["models"]["rule_backtest_default_execution_model_v1"]
+        periodic_model = response.registry["models"]["rule_backtest_periodic_execution_model_v1"]
+        future_model = response.registry["models"]["rule_backtest_default_execution_model_v2"]
+        self.assertEqual(default_model["posture"], "current_default")
+        self.assertTrue(default_model["supported"])
+        self.assertTrue(default_model["executable"])
+        self.assertEqual(periodic_model["posture"], "strategy_selected")
+        self.assertTrue(periodic_model["supported"])
+        self.assertTrue(periodic_model["executable"])
 
-        self.assertEqual(response.registry["models"]["v2"]["version"], "v2")
-        self.assertEqual(response.registry["models"]["v2"]["posture"], "future_fail_closed")
-        self.assertFalse(response.registry["models"]["v2"]["supported"])
-        self.assertFalse(response.registry["models"]["v2"]["executable"])
-        self.assertEqual(response.registry["models"]["v2"]["availability"], "unavailable")
-        self.assertEqual(response.registry["models"]["v2"]["failure_policy"], "fail_closed_before_execution")
-        self.assertFalse(response.registry["models"]["v2"]["provider_calls_required"])
-        self.assertFalse(response.registry["models"]["v2"]["live_provider_calls_required"])
-        self.assertFalse(response.registry["models"]["v2"]["decision_grade"])
+        self.assertEqual(future_model["version"], "v2")
+        self.assertEqual(future_model["posture"], "future_fail_closed")
+        self.assertFalse(future_model["supported"])
+        self.assertFalse(future_model["executable"])
+        self.assertEqual(future_model["availability"], "unavailable")
+        self.assertEqual(future_model["failure_policy"], "fail_closed_before_execution")
+        self.assertFalse(future_model["provider_calls_required"])
+        self.assertFalse(future_model["live_provider_calls_required"])
+        self.assertFalse(future_model["decision_grade"])
 
         self.assertTrue(response.registry["guardrails"]["unsupported_versions_fail_closed"])
         self.assertFalse(response.registry["guardrails"]["unsupported_versions_silently_downgraded"])
-        self.assertFalse(response.registry["guardrails"]["engine_math_changed"])
+        self.assertTrue(response.registry["guardrails"]["engine_math_changed"])
         self.assertFalse(response.registry["guardrails"]["fill_cost_model_changed"])
-        self.assertFalse(response.registry["guardrails"]["stored_result_semantics_changed"])
+        self.assertTrue(response.registry["guardrails"]["fill_state_model_changed"])
+        self.assertTrue(response.registry["guardrails"]["stored_result_semantics_changed"])
         self.assertFalse(response.registry["guardrails"]["provider_calls_executed"])
         self.assertFalse(response.registry["guardrails"]["decision_grade"])
         service.get_run.assert_called_once_with(123)
@@ -3994,6 +4052,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
         response = RuleBacktestRunResponse(
             **{
                 **self._rule_run_payload(status="completed"),
+                "execution_model": build_periodic_rule_backtest_execution_model_metadata(),
                 "parsed_strategy": {
                     "strategy_kind": "periodic_accumulation",
                     "strategy_spec": {

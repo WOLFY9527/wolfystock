@@ -179,7 +179,6 @@ class RuleBacktestReopenAcceptanceTestCase(unittest.TestCase):
             "summary",
             "parsed_strategy",
             "metrics",
-            "execution_model",
             "comparison",
         ]:
             self.assertEqual(
@@ -190,6 +189,16 @@ class RuleBacktestReopenAcceptanceTestCase(unittest.TestCase):
                 detail["result_authority"]["domains"][domain]["completeness"],
                 "stored_partial_repaired",
             )
+        self.assertEqual(
+            detail["result_authority"]["domains"]["execution_model"],
+            item["result_authority"]["domains"]["execution_model"],
+        )
+        self.assertEqual(
+            detail["result_authority"]["domains"]["execution_model"]["completeness"],
+            "unavailable",
+        )
+        self.assertIsNone(detail["execution_model"])
+        self.assertIsNone(item["execution_model"])
 
         self.assertEqual(detail["summary"]["execution_trace"], detail["execution_trace"])
         self.assertEqual(
@@ -261,7 +270,7 @@ class RuleBacktestReopenAcceptanceTestCase(unittest.TestCase):
         self.assertTrue(status["readback_integrity"]["has_summary_storage_drift"])
         self.assertEqual(status["readback_integrity"]["drift_domains"], ["execution_trace"])
 
-    def test_reopen_acceptance_legacy_fallback_surfaces_are_explicit_across_status_detail_history(self) -> None:
+    def test_reopen_acceptance_corrupt_summary_fails_closed_across_status_detail_history(self) -> None:
         service, _, run_row = self._run_completed_backtest()
         service.repo.update_run(run_row.id, summary_json="")
 
@@ -273,34 +282,32 @@ class RuleBacktestReopenAcceptanceTestCase(unittest.TestCase):
         item = history["items"][0]
 
         for payload in [detail, item]:
-            self.assertEqual(payload["artifact_availability"]["source"], "derived_from_live_storage")
-            self.assertEqual(payload["artifact_availability"]["completeness"], "legacy_derived")
+            self.assertEqual(payload["artifact_availability"]["source"], "persisted_json_validation")
+            self.assertEqual(payload["artifact_availability"]["completeness"], "unavailable")
             self.assertFalse(payload["artifact_availability"]["has_summary"])
-            self.assertEqual(payload["readback_integrity"]["source"], "derived_from_result_authority+legacy_fallback")
-            self.assertEqual(payload["readback_integrity"]["completeness"], "legacy_derived")
-            self.assertTrue(payload["readback_integrity"]["used_legacy_fallback"])
+            self.assertEqual(payload["readback_integrity"]["source"], "persisted_json_validation")
+            self.assertEqual(payload["readback_integrity"]["completeness"], "unavailable")
+            self.assertFalse(payload["readback_integrity"]["used_legacy_fallback"])
             self.assertFalse(payload["readback_integrity"]["used_live_storage_repair"])
             self.assertFalse(payload["readback_integrity"]["has_summary_storage_drift"])
-            self.assertEqual(payload["readback_integrity"]["integrity_level"], "legacy_fallback")
+            self.assertEqual(payload["readback_integrity"]["integrity_level"], "unavailable")
+            self.assertEqual(payload["status"], "unavailable")
+            self.assertEqual(payload["no_result_reason"], "stored_data_integrity_unavailable")
             self.assertEqual(payload["summary"]["artifact_availability"], payload["artifact_availability"])
             self.assertEqual(payload["summary"]["readback_integrity"], payload["readback_integrity"])
-            self.assertEqual(payload["summary"]["run_diagnostics"]["current_status"], "completed")
-            self.assertEqual(payload["summary"]["run_timing"]["finished_at"], payload["completed_at"])
 
         self.assertEqual(detail["readback_integrity"], item["readback_integrity"])
         self.assertEqual(detail["artifact_availability"], item["artifact_availability"])
-        self.assertEqual(status["artifact_availability"]["source"], "derived_from_live_storage")
-        self.assertEqual(status["artifact_availability"]["completeness"], "legacy_derived")
+        self.assertEqual(status["artifact_availability"]["source"], "persisted_json_validation")
+        self.assertEqual(status["artifact_availability"]["completeness"], "unavailable")
         self.assertFalse(status["artifact_availability"]["has_summary"])
-        self.assertEqual(status["readback_integrity"]["source"], "derived_from_status_row_columns")
-        self.assertEqual(status["readback_integrity"]["completeness"], "legacy_derived")
-        self.assertTrue(status["readback_integrity"]["used_legacy_fallback"])
+        self.assertEqual(status["readback_integrity"]["source"], "persisted_json_validation")
+        self.assertEqual(status["readback_integrity"]["completeness"], "unavailable")
+        self.assertFalse(status["readback_integrity"]["used_legacy_fallback"])
         self.assertFalse(status["readback_integrity"]["used_live_storage_repair"])
         self.assertFalse(status["readback_integrity"]["has_summary_storage_drift"])
-        self.assertEqual(status["readback_integrity"]["integrity_level"], "legacy_fallback")
+        self.assertEqual(status["readback_integrity"]["integrity_level"], "unavailable")
         self.assertIn("stored_summary", status["readback_integrity"]["missing_summary_fields"])
-        self.assertIn("run_timing", status["readback_integrity"]["missing_summary_fields"])
-        self.assertIn("run_diagnostics", status["readback_integrity"]["missing_summary_fields"])
         self.assertEqual(status["run_timing"], {})
         self.assertEqual(status["run_diagnostics"], {})
 

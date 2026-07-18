@@ -51,8 +51,8 @@ class BacktestProfessionalReadiness:
     trading_calendar_state: str = "available_bars_only"
     trading_calendar_ready: bool = False
     fill_model: str = "next_open_baseline"
-    terminal_fallback: str = "same_bar_close"
-    open_missing_fallback: str = "close_fallback_when_open_missing"
+    terminal_fallback: str = "unknown"
+    open_missing_fallback: str = "unknown"
     no_fill_supported: bool = False
     partial_fill_supported: bool = False
     volume_participation_limit: float | None = None
@@ -316,20 +316,47 @@ def _derive_calendar(readiness: BacktestProfessionalReadiness, data_quality: dic
     )
 
 
-def _derive_fill_model(readiness: BacktestProfessionalReadiness, execution_assumptions: dict[str, Any]) -> BacktestReadinessDescriptor:
+def _derive_fill_model(
+    readiness: BacktestProfessionalReadiness,
+    execution_assumptions: dict[str, Any],
+    execution_model: dict[str, Any],
+) -> BacktestReadinessDescriptor:
     volume_limit = _optional_float(execution_assumptions.get("volume_participation_limit"))
-    partial_fill_supported = _is_positive(execution_assumptions.get("partial_fill_supported"))
-    no_fill_supported = _is_positive(execution_assumptions.get("no_fill_supported"))
+    capabilities = _mapping(execution_model.get("capabilities"))
+    market_rules = _mapping(execution_model.get("market_rules"))
+    terminal_liquidation = _mapping(execution_model.get("terminal_liquidation"))
+    partial_fill_supported = _is_positive(
+        capabilities.get(
+            "partial_fills_supported",
+            execution_assumptions.get("partial_fill_supported"),
+        )
+    )
+    no_fill_supported = (
+        capabilities.get("missing_required_price_state") == "unfilled"
+        or _is_positive(execution_assumptions.get("no_fill_supported"))
+    )
     limit_ready = _is_positive(execution_assumptions.get("limit_up_down_handling"))
     halt_ready = _is_positive(execution_assumptions.get("halt_handling"))
 
     readiness.volume_participation_limit = volume_limit
     readiness.partial_fill_supported = partial_fill_supported
     readiness.no_fill_supported = no_fill_supported
+    readiness.terminal_fallback = _text(
+        terminal_liquidation.get("event_type"),
+        _text(execution_assumptions.get("terminal_position_behavior"), "unknown"),
+    )
+    readiness.open_missing_fallback = _text(
+        market_rules.get("missing_required_fill_price"),
+        _text(execution_assumptions.get("open_missing_behavior"), "unknown"),
+    )
     readiness.fill_model = (
         "explicit_capacity_and_fallback_controls"
         if volume_limit is not None and partial_fill_supported and no_fill_supported and limit_ready and halt_ready
-        else "next_open_baseline"
+        else (
+            "next_open_with_explicit_no_fill"
+            if no_fill_supported
+            else "next_open_baseline"
+        )
     )
 
     blockers: list[str] = []
@@ -348,7 +375,12 @@ def _derive_fill_model(readiness: BacktestProfessionalReadiness, execution_assum
         summary=(
             "Capacity, no-fill, partial-fill, limit, and halt controls are explicit."
             if not blockers
-            else "Execution assumes next-open baseline fills with terminal same-bar-close fallback."
+            else (
+                "Execution uses next-open fills, preserves missing required prices as unfilled, "
+                "and records terminal liquidation separately."
+                if no_fill_supported
+                else "Execution uses next-open baseline fills without a complete no-fill policy."
+            )
         ),
         details={
             "terminal_fallback": readiness.terminal_fallback,
@@ -498,7 +530,11 @@ def build_backtest_professional_readiness(
             data_quality_payload,
             execution_assumptions_payload,
         ),
-        BacktestReadinessCategory.FILL_MODEL.value: _derive_fill_model(readiness, execution_assumptions_payload),
+        BacktestReadinessCategory.FILL_MODEL.value: _derive_fill_model(
+            readiness,
+            execution_assumptions_payload,
+            execution_model_payload,
+        ),
         BacktestReadinessCategory.COST_MODEL.value: _derive_cost_model(
             readiness,
             {**execution_assumptions_payload, **execution_model_payload},
