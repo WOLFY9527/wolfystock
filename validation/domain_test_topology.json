@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8081,
-      "sha256": "8569923b0edfa618e19474942a906ee7cf6bdb3ec714debfea0d58cfbd942b05"
+      "count": 8113,
+      "sha256": "c5ae1bd41adf52579aca06c045bddc6d5769c0429da27810013e1884fda99823"
     },
     "tests": [
       {
@@ -6204,6 +6204,21 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_authenticated_uat_contract.py::test_authenticated_uat_smoke_fails_closed_when_session_establishment_fails",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_authenticated_uat_contract.py::test_authenticated_uat_smoke_uses_real_cookie_sessions_and_exact_capability_matrix",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_authenticated_uat_contract.py::test_seed_authenticated_uat_accounts_assigns_only_required_admin_capability",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_bootstrap_worktree.py::test_posix_entrypoint_is_a_thin_wolfy_delegate",
         "domain": "runtime_operator_tooling",
         "baseline": false
@@ -6349,12 +6364,12 @@
         "baseline": false
       },
       {
-        "id": "tests/scripts/test_docker_python_lock.py::test_docker_runtime_projection_has_reviewed_distribution_and_artifact_identity[amd64-140-155-7]",
+        "id": "tests/scripts/test_docker_python_lock.py::test_docker_runtime_projection_has_reviewed_distribution_and_artifact_identity[amd64-141-156-7]",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
       {
-        "id": "tests/scripts/test_docker_python_lock.py::test_docker_runtime_projection_has_reviewed_distribution_and_artifact_identity[arm64-140-155-8]",
+        "id": "tests/scripts/test_docker_python_lock.py::test_docker_runtime_projection_has_reviewed_distribution_and_artifact_identity[arm64-141-156-8]",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -6374,22 +6389,22 @@
         "baseline": false
       },
       {
-        "id": "tests/scripts/test_docker_python_lock.py::test_docker_target_arch_selects_reviewed_runtime_projection[aarch64-linux-aarch64-cpython311-runtime-d79ef9a552f1298b9a241952c1a26298543fe4d836238aecbf6105bf75dd94ef]",
+        "id": "tests/scripts/test_docker_python_lock.py::test_docker_target_arch_selects_reviewed_runtime_projection[aarch64-linux-aarch64-cpython311-runtime-7f77a9b32e210309cb3f26710f295d04cb9a21a72228d7e96a44ef1458885cff]",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
       {
-        "id": "tests/scripts/test_docker_python_lock.py::test_docker_target_arch_selects_reviewed_runtime_projection[amd64-linux-x86_64-cpython311-runtime-231e24f155659cde4c0474d1859f78ed8f76a63e311a0e02f5f60d59c7202d86]",
+        "id": "tests/scripts/test_docker_python_lock.py::test_docker_target_arch_selects_reviewed_runtime_projection[amd64-linux-x86_64-cpython311-runtime-3cbe8e7f8865cbe0cbf138baeb17968111335fe08376484fc845e7d030fdadf7]",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
       {
-        "id": "tests/scripts/test_docker_python_lock.py::test_docker_target_arch_selects_reviewed_runtime_projection[arm64-linux-aarch64-cpython311-runtime-d79ef9a552f1298b9a241952c1a26298543fe4d836238aecbf6105bf75dd94ef]",
+        "id": "tests/scripts/test_docker_python_lock.py::test_docker_target_arch_selects_reviewed_runtime_projection[arm64-linux-aarch64-cpython311-runtime-7f77a9b32e210309cb3f26710f295d04cb9a21a72228d7e96a44ef1458885cff]",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
       {
-        "id": "tests/scripts/test_docker_python_lock.py::test_docker_target_arch_selects_reviewed_runtime_projection[x86_64-linux-x86_64-cpython311-runtime-231e24f155659cde4c0474d1859f78ed8f76a63e311a0e02f5f60d59c7202d86]",
+        "id": "tests/scripts/test_docker_python_lock.py::test_docker_target_arch_selects_reviewed_runtime_projection[x86_64-linux-x86_64-cpython311-runtime-3cbe8e7f8865cbe0cbf138baeb17968111335fe08376484fc845e7d030fdadf7]",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -6829,21 +6844,6 @@
         "baseline": false
       },
       {
-        "id": "tests/scripts/test_uat_runtime_harness.py::test_frontend_dependency_bootstrap_records_install_failure",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_uat_runtime_harness.py::test_frontend_dependency_bootstrap_runs_npm_ci_when_required",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/scripts/test_uat_runtime_harness.py::test_frontend_dependency_bootstrap_skips_when_toolchain_usable",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
         "id": "tests/scripts/test_uat_runtime_harness.py::test_interpreter_identity_accepts_same_macos_framework_version",
         "domain": "runtime_operator_tooling",
         "baseline": true
@@ -6924,6 +6924,21 @@
         "baseline": true
       },
       {
+        "id": "tests/scripts/test_uat_runtime_harness.py::test_prepare_canonical_web_artifact_builds_missing_identity_then_verifies",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_uat_runtime_harness.py::test_prepare_canonical_web_artifact_rejects_mismatch_without_build",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_uat_runtime_harness.py::test_prepare_canonical_web_artifact_reuses_verified_identity_without_build",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_uat_runtime_harness.py::test_release_evidence_sanitizer_normalizes_reviewed_roots_and_rejects_unknown_private_path",
         "domain": "runtime_operator_tooling",
         "baseline": false
@@ -6944,9 +6959,9 @@
         "baseline": true
       },
       {
-        "id": "tests/scripts/test_uat_runtime_harness.py::test_run_harness_fails_when_dependency_bootstrap_fails",
+        "id": "tests/scripts/test_uat_runtime_harness.py::test_run_harness_fails_when_canonical_artifact_build_fails",
         "domain": "runtime_operator_tooling",
-        "baseline": true
+        "baseline": false
       },
       {
         "id": "tests/scripts/test_uat_runtime_harness.py::test_run_harness_rejects_existing_port_owner_without_starting_runtime",
@@ -7299,6 +7314,21 @@
         "baseline": true
       },
       {
+        "id": "tests/scripts/test_web_build_artifact.py::test_build_artifact_rejects_existing_mismatch_without_replacing_identity",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_web_build_artifact.py::test_build_artifact_reuses_existing_verified_identity_without_rebuild",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_web_build_artifact.py::test_build_artifact_uses_temporary_output_and_binds_managed_environment",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_web_build_artifact.py::test_manifest_regeneration_is_deterministic",
         "domain": "runtime_operator_tooling",
         "baseline": true
@@ -7334,7 +7364,42 @@
         "baseline": true
       },
       {
+        "id": "tests/scripts/test_wolfy_browser_tools.py::test_browser_contract_is_derived_from_reviewed_web_dependency_graph",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_browser_tools.py::test_browser_snapshot_rejects_wrong_revision_even_when_executable_launches",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_browser_tools.py::test_concurrent_browser_provisioning_builds_once_and_survives_interrupted_staging",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_browser_tools.py::test_missing_browser_cannot_be_silently_skipped_offline",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_browser_tools.py::test_online_browser_install_uses_reviewed_playwright_cli_and_launches_exact_revision",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_browser_tools.py::test_rg_is_copied_to_managed_snapshot_and_verified_by_content_identity",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_cli.py::test_cli_help_exposes_single_canonical_command_surface",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_cli.py::test_exec_parser_exposes_one_repeatable_reviewed_config_override_surface",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -7559,7 +7624,17 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_manager.py::test_verify_rejects_pointer_component_identity_mismatch[browser-installedFingerprint-9999999999999999999999999999999999999999999999999999999999999999]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_manager.py::test_verify_rejects_pointer_component_identity_mismatch[python-installedFingerprint-ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_manager.py::test_verify_rejects_pointer_component_identity_mismatch[rg-installedFingerprint-8888888888888888888888888888888888888888888888888888888888888888]",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -7615,6 +7690,11 @@
       },
       {
         "id": "tests/scripts/test_wolfy_python_lock.py::test_every_direct_requirement_maps_to_exact_hashed_pins",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_python_lock.py::test_every_supported_projection_selects_one_reviewed_parquet_wheel",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -7834,7 +7914,42 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_runtime.py::test_profile_defaults_are_deterministic_without_freezing_product_settings",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_runtime.py::test_pytest_child_projection_extends_only_reviewed_override_keys",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_runtime.py::test_release_projection_preserves_only_non_secret_identity_controls",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_runtime.py::test_reviewed_process_override_is_allowlisted_and_order_isolated",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_runtime.py::test_reviewed_process_override_rejects_unknown_or_invalid_values[UNKNOWN_FLAG=true]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_runtime.py::test_reviewed_process_override_rejects_unknown_or_invalid_values[WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED=maybe]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_runtime.py::test_reviewed_process_override_rejects_unknown_or_invalid_values[WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED=true=WAT]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_runtime.py::test_test_override_is_rejected_for_release_or_production_controls",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -13399,9 +13514,44 @@
         "baseline": true
       },
       {
+        "id": "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_arbitrary_system_tmp_path",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
         "id": "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_incomplete_real_restore_evidence",
         "domain": "database_storage_migrations",
         "baseline": true
+      },
+      {
+        "id": "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_missing_managed_run_identity",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_path_outside_current_managed_temp_root[managed-run-parent]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_path_outside_current_managed_temp_root[managed-user-home]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_path_outside_current_managed_temp_root[repository-tree]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_path_outside_current_managed_temp_root[sibling-managed-run]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_path_outside_current_managed_temp_root[unknown-cache-root]",
+        "domain": "database_storage_migrations",
+        "baseline": false
       },
       {
         "id": "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_production_dsn_without_leaking_value",
@@ -13432,6 +13582,26 @@
         "id": "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_real_evidence_without_no_overwrite_assertion",
         "domain": "database_storage_migrations",
         "baseline": true
+      },
+      {
+        "id": "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_remote_or_production_dsn_in_safe_test_mode[local-production-dsn]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_remote_or_production_dsn_in_safe_test_mode[remote-test-dsn]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_symlink_escape",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_symlink_loop_without_leaking_path",
+        "domain": "database_storage_migrations",
+        "baseline": false
       },
       {
         "id": "tests/test_backup_restore_drill_check.py::test_backup_restore_drill_check_rejects_unsafe_db_path",
@@ -14870,11 +15040,6 @@
       },
       {
         "id": "tests/test_data_coverage_surface_fixtures.py::test_surface_fixture_catalog_projects_consumer_safe_fail_closed_states",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_fixtures.py::test_surface_fixture_doc_matches_catalog_and_stays_consumer_safe",
         "domain": "residual_repository_integration",
         "baseline": true
       },
@@ -22295,11 +22460,6 @@
       },
       {
         "id": "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_times_out_live_smoke_probe_and_keeps_partial_results",
-        "domain": "market",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_market_intelligence_smoke_checklist.py::test_market_intelligence_checklist_captures_scope_and_validation_commands",
         "domain": "market",
         "baseline": true
       },
@@ -37374,6 +37534,21 @@
         "baseline": true
       },
       {
+        "id": "tests/test_staging_ingress_smoke.py::test_staging_ingress_live_evidence_checks_health_admin_and_redaction_without_approval",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_staging_ingress_smoke.py::test_staging_ingress_live_evidence_rejects_secret_or_debug_payload_without_leaking_value",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_staging_ingress_smoke.py::test_staging_ingress_live_evidence_timeout_is_actionable_sanitized_and_non_approving",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/test_staging_ingress_smoke.py::test_staging_ingress_operator_evidence_accepts_sanitized_artifact",
         "domain": "runtime_operator_tooling",
         "baseline": true
@@ -37400,21 +37575,6 @@
       },
       {
         "id": "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_defaults_to_dry_run_without_network",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_fails_on_secret_or_debug_payload_without_leaking_value",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_live_mode_checks_health_admin_and_redaction",
-        "domain": "runtime_operator_tooling",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_timeout_output_is_actionable_and_sanitized",
         "domain": "runtime_operator_tooling",
         "baseline": true
       },
@@ -40204,9 +40364,9 @@
         "baseline": true
       },
       {
-        "id": "tests/test_ws2_multi_instance_preflight.py::test_staging_target_remains_dry_run_when_network_opt_in_is_set",
+        "id": "tests/test_ws2_multi_instance_preflight.py::test_staging_target_opt_in_remains_non_network_non_approval_evidence",
         "domain": "residual_repository_integration",
-        "baseline": true
+        "baseline": false
       },
       {
         "id": "tests/test_ws2_multi_instance_preflight.py::test_synthetic_preflight_runs_disposable_smoke_and_sanitized_evidence",
@@ -40510,13 +40670,23 @@
       "tests/scripts/test_bootstrap_worktree.py::test_windows_to_posix_path_is_deterministic[msys-/c/Users/test/repo]",
       "tests/scripts/test_bootstrap_worktree.py::test_windows_to_posix_path_is_deterministic[posix-C:\\\\\\\\Users\\\\\\\\test\\\\\\\\repo]",
       "tests/scripts/test_bootstrap_worktree.py::test_windows_to_posix_path_is_deterministic[wsl-/mnt/c/Users/test/repo]",
+      "tests/scripts/test_uat_runtime_harness.py::test_frontend_dependency_bootstrap_records_install_failure",
+      "tests/scripts/test_uat_runtime_harness.py::test_frontend_dependency_bootstrap_runs_npm_ci_when_required",
+      "tests/scripts/test_uat_runtime_harness.py::test_frontend_dependency_bootstrap_skips_when_toolchain_usable",
+      "tests/scripts/test_uat_runtime_harness.py::test_run_harness_fails_when_dependency_bootstrap_fails",
       "tests/test_auth_api.py::AuthApiTestCase::test_logout_requires_session_when_auth_enabled",
       "tests/test_backtest_execution_model_registry.py::test_registry_exposes_v1_as_current_default_supported_model",
+      "tests/test_data_coverage_surface_fixtures.py::test_surface_fixture_doc_matches_catalog_and_stays_consumer_safe",
       "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_main_returns_zero_when_probe_times_out",
+      "tests/test_market_intelligence_smoke_checklist.py::test_market_intelligence_checklist_captures_scope_and_validation_commands",
       "tests/test_rule_backtest_reopen_acceptance.py::RuleBacktestReopenAcceptanceTestCase::test_reopen_acceptance_legacy_fallback_surfaces_are_explicit_across_status_detail_history",
       "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_derives_execution_model_for_legacy_runs_without_structured_config",
       "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_marks_execution_model_as_derived_when_snapshot_missing",
-      "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_repairs_partial_stored_execution_model_with_provenance"
+      "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_repairs_partial_stored_execution_model_with_provenance",
+      "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_fails_on_secret_or_debug_payload_without_leaking_value",
+      "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_live_mode_checks_health_admin_and_redaction",
+      "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_timeout_output_is_actionable_and_sanitized",
+      "tests/test_ws2_multi_instance_preflight.py::test_staging_target_remains_dry_run_when_network_opt_in_is_set"
     ],
     "networkTests": [],
     "knownBaselineFailures": [
