@@ -34,7 +34,11 @@ from src.services.source_confidence_contract import (
 )
 from src.services.starter_market_data import is_starter_market_data_symbol
 from src.services.stock_service_provider_adapter import StockServiceProviderAdapter
-from src.services.akshare_cn_ohlcv_cache import AkshareCnOhlcvRuntime, is_cn_a_share_symbol
+from src.services.akshare_cn_ohlcv_cache import (
+    AkshareCnOhlcvRuntime,
+    historical_ohlcv_runtime_enabled,
+    is_cn_a_share_symbol,
+)
 from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE, fetch_daily_history_with_local_us_fallback
 from src.services.uat_provider_isolation import (
     UatProviderIsolationError,
@@ -409,7 +413,15 @@ class StockService:
             elif period == "yearly":
                 fetch_days = max(days, 365 * 5)
 
-            if uat_no_live_providers_enabled() and is_cn_a_share_symbol(stock_code):
+            cn_a_share = is_cn_a_share_symbol(stock_code)
+            if cn_a_share and not historical_ohlcv_runtime_enabled():
+                return self._get_cn_history_data(
+                    stock_code=stock_code,
+                    period=period,
+                    fetch_days=fetch_days,
+                )
+
+            if uat_no_live_providers_enabled() and cn_a_share:
                 return self._build_provider_isolated_history_state(
                     stock_code=stock_code,
                     period=period,
@@ -417,7 +429,7 @@ class StockService:
                     unavailable_reason="provider_missing",
                 )
 
-            if is_cn_a_share_symbol(stock_code):
+            if cn_a_share:
                 return self._get_cn_history_data(
                     stock_code=stock_code,
                     period=period,

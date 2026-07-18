@@ -11,6 +11,7 @@ from src.services.akshare_cn_ohlcv_cache import (
     LOCAL_CN_DB_SOURCE,
     AkshareCnOhlcvRuntime,
     build_akshare_cn_ohlcv_runtime_status,
+    historical_ohlcv_runtime_enabled,
 )
 from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvReadinessRequest,
@@ -99,6 +100,21 @@ def test_stock_service_default_disabled_cn_history_skips_general_fetcher_manager
     assert payload["source"] == "unavailable"
     assert payload["diagnostics"]["status"] == "disabled"
     assert payload["diagnostics"]["reason"] == "disabled_by_config"
+
+
+def test_process_scoped_cn_runtime_activation_is_read_without_cached_settings(tmp_path) -> None:
+    fetcher = _FakeAkshareFetcher(error=AssertionError("provider call attempted"))
+    runtime = AkshareCnOhlcvRuntime(
+        repository=_repo(tmp_path),
+        dependency_checker=lambda: False,
+        fetcher_factory=lambda: fetcher,
+    )
+
+    payload = runtime.get_history_data("600519", days=30)
+
+    expected_status = "dependency_missing" if historical_ohlcv_runtime_enabled() else "disabled"
+    assert payload["diagnostics"]["status"] == expected_status
+    assert fetcher.calls == []
 
 
 def test_enabled_runtime_dependency_missing_returns_safe_status_without_provider_call(tmp_path) -> None:

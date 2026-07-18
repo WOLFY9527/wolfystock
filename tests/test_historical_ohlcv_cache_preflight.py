@@ -183,6 +183,22 @@ def test_disabled_default_preflight_is_dry_run_without_provider_or_mutation() ->
     assert "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED=true" in us_item["nextAction"]["requiredConfig"]
 
 
+def test_explicit_empty_environment_remains_disabled_by_config() -> None:
+    fetcher = _FakeDailyFetcher(error=AssertionError("provider called"))
+    payload = HistoricalOhlcvCachePreflightService(
+        env={},
+        spec_finder=_spec_finder({"akshare", "yfinance"}),
+        cn_repository=_FakeCnRepository(),
+        us_cache=_FakeUsCache(),
+        cn_fetcher_factory=lambda: fetcher,
+        us_fetcher=fetcher,
+    ).preflight(symbols_by_market={"cn": ["600519"], "us": ["AAPL"]}, required_bars=5)
+
+    assert payload["markets"]["cn"]["runtimeEnabled"] is False
+    assert payload["markets"]["us"]["runtimeEnabled"] is False
+    assert fetcher.calls == []
+
+
 def test_disabled_default_seed_reports_disabled_by_config_without_provider_or_mutation() -> None:
     fetcher = _FakeDailyFetcher(error=AssertionError("US provider called"))
     us_cache = _FakeUsCache()
@@ -592,18 +608,49 @@ def test_preflight_reports_adjusted_available_for_common_real_adjusted_alias() -
 
 def test_seed_requires_allowlisted_symbols_runtime_flag_and_seed_flag() -> None:
     fetcher = _FakeDailyFetcher(_frame(7))
-    no_seed = HistoricalOhlcvCachePreflightService(
-        env={"WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true"},
-        spec_finder=_spec_finder({"yfinance"}),
-        us_cache=_FakeUsCache(),
-        us_fetcher=fetcher,
-    ).seed(symbols_by_market={"us": ["TSLA", "AAPL"]}, required_bars=5, dry_run=False)
 
+    def seed(env: dict[str, str], symbol: str) -> dict[str, Any]:
+        payload = HistoricalOhlcvCachePreflightService(
+            env=env,
+            spec_finder=_spec_finder({"yfinance"}),
+            us_cache=_FakeUsCache(),
+            us_fetcher=fetcher,
+        ).seed(symbols_by_market={"us": [symbol]}, required_bars=5, dry_run=False)
+        return _first_us_symbol(payload, symbol)
+
+    full_activation = {
+        "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+        "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+        HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV: "true",
+    }
+    assert seed(full_activation, "ORCL")["seedState"] == "symbol_not_allowlisted"
+    assert seed(
+        {
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+            HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV: "true",
+        },
+        "AAPL",
+    )["seedResult"] == "disabled_by_config"
+    assert seed(
+        {
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV: "true",
+        },
+        "AAPL",
+    )["seedResult"] == "disabled_by_config"
+    assert seed(
+        {
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+        },
+        "AAPL",
+    )["seedResult"] == "disabled_by_config"
     assert fetcher.calls == []
-    assert [item["seedState"] for item in no_seed["markets"]["us"]["symbols"]] == [
-        "symbol_not_allowlisted",
-        "seed_disabled_by_config",
-    ]
+
+    seeded = seed(full_activation, "AAPL")
+    assert seeded["seedState"] == "cache_updated"
+    assert seeded["seedResult"] == "seeded"
+    assert len(fetcher.calls) == 1
 
 
 def test_recursive_redaction_removes_unsafe_admin_and_consumer_payload_fragments() -> None:

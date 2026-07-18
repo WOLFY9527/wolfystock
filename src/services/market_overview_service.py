@@ -6035,11 +6035,33 @@ class MarketOverviewService:
             degradation_reason = item_reason
         if bool(normalized_payload.get("isPartial")) and degradation_reason in {"delayed_source", "fallback_source"}:
             degradation_reason = "partial_coverage"
-        normalized_payload["sourceConfidence"] = self._source_confidence_for_freshness(
+        source_confidence_state = self._source_confidence_for_freshness(
             normalized_payload,
             normalized_freshness,
             is_proxy=proxy_source,
         )
+        raw_source_confidence = payload.get("sourceConfidence")
+        if isinstance(raw_source_confidence, Mapping):
+            source_confidence_contract = coerce_source_confidence_contract(
+                {
+                    **dict(raw_source_confidence),
+                    "source": normalized_payload.get("source"),
+                    "sourceLabel": normalized_payload.get("sourceLabel"),
+                    "asOf": normalized_payload.get("asOf"),
+                    "freshness": normalized_freshness,
+                    "isFallback": bool(normalized_payload.get("isFallback")),
+                    "isStale": bool(normalized_payload.get("isStale")),
+                    "isPartial": bool(normalized_payload.get("isPartial")),
+                    "isUnavailable": bool(normalized_payload.get("isUnavailable")),
+                    "degradationReason": degradation_reason,
+                }
+            ).to_dict()
+            normalized_payload["sourceConfidence"] = {
+                **dict(raw_source_confidence),
+                **source_confidence_contract,
+            }
+        else:
+            normalized_payload["sourceConfidence"] = source_confidence_state
         original_reason = str(payload.get("degradationReason") or payload.get("fallbackReason") or "").strip()
         should_write_reason = bool(
             degradation_reason

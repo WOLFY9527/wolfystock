@@ -73,7 +73,7 @@ class HistoricalOhlcvCachePreflightService:
         us_fetcher: Any | None = None,
         today: date | None = None,
     ) -> None:
-        self.env = dict(env or os.environ)
+        self.env = dict(os.environ if env is None else env)
         self.spec_finder = spec_finder
         self.cn_repository = cn_repository or StockRepository()
         self.us_cache = us_cache or LocalUsOhlcvParquetCache.from_env(self.env)
@@ -699,12 +699,12 @@ def _operator_status(
         return "not_configured"
     if data_state == "runtime_unavailable":
         return "unavailable"
+    if runtime_state in {"disabled_by_config", "seed_disabled_by_config", "dependency_missing"}:
+        return "not_configured"
     if data_state == "cache_missing" and cache_configured:
         return "missing"
     if data_state == "cache_missing" and runtime_state == "available":
         return "missing"
-    if runtime_state in {"disabled_by_config", "seed_disabled_by_config", "dependency_missing"}:
-        return "not_configured"
     return "unavailable"
 
 
@@ -738,12 +738,6 @@ def _next_action(
     elif cache_state == "cache_hit":
         state = _ACTIVATION_STATE_CACHED
         summary = "Representative cache is already present; validate bars, freshness, and adjustments before widening coverage."
-    elif cache_state == "cache_not_configured":
-        state = _ACTIVATION_STATE_DISABLED
-        summary = "Configure LOCAL_US_PARQUET_DIR or US_STOCK_PARQUET_DIR before product readiness can inspect local OHLCV cache rows."
-    elif cache_state == "cache_missing":
-        state = _ACTIVATION_STATE_READY_TO_SEED
-        summary = "Configured cache directory is readable, but representative symbol parquet files are missing."
     elif seed_state == "symbol_not_allowlisted":
         state = "symbol_not_allowlisted"
         summary = "Use the documented small representative symbol set for cache seed."
@@ -759,6 +753,12 @@ def _next_action(
     elif runtime_state == "runtime_unavailable" or cache_state == "cache_error" or data_state == "runtime_unavailable":
         state = _ACTIVATION_STATE_FAILED_SAFELY
         summary = "Retry only after the provider runtime issue is resolved."
+    elif cache_state == "cache_not_configured":
+        state = _ACTIVATION_STATE_DISABLED
+        summary = "Configure LOCAL_US_PARQUET_DIR or US_STOCK_PARQUET_DIR before product readiness can inspect local OHLCV cache rows."
+    elif cache_state == "cache_missing":
+        state = _ACTIVATION_STATE_READY_TO_SEED
+        summary = "Configured cache directory is readable, but representative symbol parquet files are missing."
     else:
         state = _ACTIVATION_STATE_READY_TO_SEED
         summary = "Runtime and dependency checks are green; operator approval can move this market into explicit seed."

@@ -444,6 +444,40 @@ def test_market_overview_live_payload_round_trips_through_json() -> None:
     assert round_tripped["sourceConfidence"]["freshness"] == "live"
 
 
+def test_market_overview_remote_projection_preserves_structured_source_confidence_fields() -> None:
+    service = MarketOverviewService()
+    service._market_cache.clear()
+    service._market_data_cache.clear()
+    as_of = datetime.now(CN_TZ).isoformat(timespec="seconds")
+    source_confidence = {
+        "source": "yfinance",
+        "sourceLabel": "Yahoo Finance",
+        "freshness": "live",
+        "scoreReliabilityAllowed": False,
+        "isFallback": False,
+        "asOf": as_of,
+        "updatedAt": as_of,
+    }
+
+    with patch.object(
+        service,
+        "_fetch_indices",
+        return_value={
+            "source": "yfinance",
+            "sourceLabel": "Yahoo Finance",
+            "updatedAt": as_of,
+            "asOf": as_of,
+            "sourceConfidence": source_confidence,
+            "items": [{"symbol": "SPX", "value": 5200.12, "source": "yfinance", "asOf": as_of}],
+        },
+    ):
+        projected = _project_payload_for_remote_persistence(service.get_indices())
+
+    assert projected["sourceConfidence"]["freshness"] == "live"
+    assert projected["sourceConfidence"]["scoreReliabilityAllowed"] is False
+    assert projected["sourceConfidence"]["updatedAt"] == as_of
+
+
 def test_market_overview_stale_refreshing_payload_round_trips_through_json() -> None:
     service = MarketOverviewService()
     service._market_cache.clear()
@@ -585,18 +619,21 @@ def test_market_overview_fallback_payload_round_trips_through_json() -> None:
 
     round_tripped = _json_round_trip(payload)
 
-    assert round_tripped["freshness"] == "fallback"
+    assert round_tripped["freshness"] == "unavailable"
     assert round_tripped["isFallback"] is True
     assert round_tripped["isStale"] is False
     assert round_tripped["isPartial"] is False
+    assert round_tripped["isUnavailable"] is True
     assert round_tripped["isRefreshing"] is False
     assert round_tripped["lastError"] is not None
-    assert round_tripped["source"] == "fallback"
-    assert round_tripped["sourceLabel"] == "备用数据"
-    assert round_tripped["providerHealth"]["status"] == "fallback"
-    assert round_tripped["evidenceSnapshot"]["freshness"] == "fallback"
+    assert round_tripped["source"] == "unavailable"
+    assert round_tripped["sourceLabel"] == "未接入"
+    assert round_tripped["providerHealth"]["status"] == "unavailable"
+    assert round_tripped["evidenceSnapshot"]["freshness"] == "unavailable"
     assert round_tripped["evidenceSnapshot"]["isFallback"] is True
+    assert round_tripped["evidenceSnapshot"]["isUnavailable"] is True
     assert round_tripped["evidenceSnapshot"]["scoreReliabilityAllowed"] is False
+    assert round_tripped["sourceConfidence"] == "unavailable"
     assert "isSynthetic" not in round_tripped
 
 
@@ -610,11 +647,12 @@ def test_market_overview_fallback_payload_projects_without_persisting_last_error
 
     projected = _project_payload_for_remote_persistence(payload)
 
-    assert projected["freshness"] == "fallback"
-    assert projected["source"] == "fallback"
-    assert projected["sourceLabel"] == "备用数据"
-    assert projected["providerHealth"]["status"] == "fallback"
-    assert projected["evidenceSnapshot"]["freshness"] == "fallback"
+    assert projected["freshness"] == "unavailable"
+    assert projected["source"] == "unavailable"
+    assert projected["sourceLabel"] == "未接入"
+    assert projected["providerHealth"]["status"] == "unavailable"
+    assert projected["evidenceSnapshot"]["freshness"] == "unavailable"
+    assert projected["evidenceSnapshot"]["isUnavailable"] is True
     assert "lastError" not in projected
     assert "refreshError" not in projected
     assert "isRefreshing" not in projected
