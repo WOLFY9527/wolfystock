@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -40,7 +39,6 @@ ACCEPTANCE_EVIDENCE_PROFILE = "PROFILE_WS2_ACCEPTANCE_EVIDENCE_SCOPED"
 PASS_STATUS = "preflight-pass-review-required"
 FAIL_STATUS = "preflight-fail-review-required"
 DRY_RUN_STATUS = "dry-run-review-required"
-NETWORK_OPT_IN_ENV = "WOLFYSTOCK_WS2_MULTI_INSTANCE_SMOKE_ENABLE_NETWORK"
 EXIT_OK = 0
 EXIT_FAILED = 1
 
@@ -134,10 +132,6 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def _network_opt_in_enabled() -> bool:
-    return str(os.environ.get(NETWORK_OPT_IN_ENV) or "").strip() == "1"
-
-
 def _staging_target_label(staging_base_url: str | None) -> str:
     return "staging-url-configured" if str(staging_base_url or "").strip() else "not-configured"
 
@@ -148,7 +142,6 @@ def _base_summary(
     status: str,
     staging_base_url: str | None,
 ) -> dict[str, Any]:
-    network_opt_in = _network_opt_in_enabled()
     return {
         "schemaVersion": SCHEMA_VERSION,
         "validationProfile": VALIDATION_PROFILE,
@@ -161,9 +154,11 @@ def _base_summary(
         "taskRuntimeSemanticsChanged": False,
         "apiRuntimeTouched": False,
         "networkCallsExecuted": False,
-        "stagingCallsEnabled": bool(staging_base_url and network_opt_in),
-        "stagingOptInSatisfied": bool(staging_base_url and network_opt_in),
+        "stagingCallsEnabled": False,
+        "stagingOptInSatisfied": False,
         "stagingTargetLabel": _staging_target_label(staging_base_url),
+        "releaseApproved": False,
+        "publicLaunchReady": False,
         "storageMode": "disposable-sqlite",
         "topologyMode": "synthetic-durable-polling-preflight",
         "sseBroadcastScope": "process-local",
@@ -547,7 +542,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Run an offline WS2 multi-instance smoke preflight. "
-            f"Staging checks are descriptive unless {NETWORK_OPT_IN_ENV}=1 is set."
+            "Staging targets remain descriptive because live staging calls are not implemented here."
         )
     )
     mode = parser.add_mutually_exclusive_group()

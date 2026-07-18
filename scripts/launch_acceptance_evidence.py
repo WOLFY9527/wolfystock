@@ -521,6 +521,25 @@ CATEGORY_SPECS: tuple[CategorySpec, ...] = (
         ),
     ),
     CategorySpec(
+        id="provider_sla_licensing_evidence",
+        title="Provider SLA/licensing operator evidence validator evidence",
+        required_evidence=(
+            "accepted sanitized provider SLA/licensing evidence validated by "
+            "scripts/provider_sla_licensing_evidence_check.py, with entitlement/licensing review recorded, "
+            "no runtime enforcement claim, unchanged provider order/fallback/cache behavior, no network calls by "
+            "the validator, unchanged runtime behavior, and a manual review gate"
+        ),
+        required_checks=(
+            "providerSlaLicensingValidatorPassed",
+            "entitlementLicensingReviewRecorded",
+            "providerRuntimeEnforcementNotClaimed",
+            "providerOrderFallbackCacheBehaviorUnchanged",
+            "networkCallsExecutedByValidatorFalse",
+            "runtimeBehaviorUnchanged",
+            "manualReviewGateRecorded",
+        ),
+    ),
+    CategorySpec(
         id="restore_pitr_operator_evidence",
         title="Restore/PITR operator evidence validator evidence",
         required_evidence=(
@@ -609,6 +628,27 @@ CATEGORY_SPECS: tuple[CategorySpec, ...] = (
             "pollingFallbackOrSingleInstanceLimitationRecorded",
             "networkCallsExecutedByValidatorFalse",
             "runtimeBehaviorUnchanged",
+            "manualReviewGateRecorded",
+        ),
+    ),
+    CategorySpec(
+        id="ws2_target_environment_evidence",
+        title="WS2 target-environment operator evidence validator evidence",
+        required_evidence=(
+            "accepted sanitized WS2 target-environment evidence validated by "
+            "scripts/ws2_target_environment_evidence_check.py, with target-environment and accepted-staging "
+            "evidence, manual review and rollback recorded, no network calls by the validator, unchanged runtime "
+            "behavior, releaseApproved=false, publicLaunchReady=false, and a manual review gate"
+        ),
+        required_checks=(
+            "ws2TargetEnvironmentValidatorPassed",
+            "targetEnvironmentEvidenceRecorded",
+            "acceptedStagingEvidenceRecorded",
+            "manualReviewAndRollbackRecorded",
+            "networkCallsExecutedByValidatorFalse",
+            "runtimeBehaviorUnchanged",
+            "releaseApprovedFalse",
+            "publicLaunchReadyFalse",
             "manualReviewGateRecorded",
         ),
     ),

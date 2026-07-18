@@ -138,6 +138,17 @@ def test_cli_json_and_human_summary_are_compact_and_deterministic() -> None:
     assert payload["status"] == "pass"
     assert payload["networkFree"] is True
 
+    repeated_json_result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--json"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=20,
+    )
+    assert repeated_json_result.returncode == 0, repeated_json_result.stderr
+    assert repeated_json_result.stdout == json_result.stdout
+
     text_result = subprocess.run(
         [sys.executable, str(SCRIPT)],
         cwd=REPO_ROOT,

@@ -283,14 +283,14 @@ DEFAULT_CATEGORY_SPECS: tuple[AcceptanceCategory, ...] = (
         requirements=(
             EvidenceRequirement(
                 id="mobile_route_canonicalization",
-                path="apps/dsa-web/e2e/viewport-route-canonicalization.smoke.spec.ts",
+                path="apps/dsa-web/e2e/route-truth-smoke-guard.spec.ts",
                 tokens=(
-                    "mobile",
-                    "390",
-                    "844",
-                    "canonical",
+                    "const mobileViewport = { width: 390, height: 844 }",
+                    "preserves the same route classes on mobile where viewport-specific misreads are likely",
+                    "page.setViewportSize(mobileViewport)",
+                    "expectNoHorizontalOverflow",
                 ),
-                description="Product and admin routes are checked at the mobile viewport.",
+                description="Canonical route classes and overflow guards are checked at the mobile viewport.",
             ),
             EvidenceRequirement(
                 id="mobile_shell_affordance",

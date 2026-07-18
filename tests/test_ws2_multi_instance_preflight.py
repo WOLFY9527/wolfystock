@@ -182,7 +182,7 @@ def test_staging_target_is_dry_run_only_without_network_opt_in() -> None:
     _assert_bounded_sanitized_output(result)
 
 
-def test_staging_target_remains_dry_run_when_network_opt_in_is_set() -> None:
+def test_staging_target_opt_in_remains_non_network_non_approval_evidence() -> None:
     result = _run_preflight(
         "--dry-run",
         "--staging-base-url",
@@ -194,8 +194,10 @@ def test_staging_target_remains_dry_run_when_network_opt_in_is_set() -> None:
     payload = _stdout_json(result)
     assert payload["mode"] == "dry-run"
     assert payload["networkCallsExecuted"] is False
-    assert payload["stagingCallsEnabled"] is True
-    assert payload["stagingOptInSatisfied"] is True
+    assert payload["stagingCallsEnabled"] is False
+    assert payload["stagingOptInSatisfied"] is False
+    assert payload["releaseApproved"] is False
+    assert payload["publicLaunchReady"] is False
     _assert_bounded_sanitized_output(result)
 
 
@@ -205,4 +207,4 @@ def test_script_help_runs_directly() -> None:
     assert result.returncode == 0
     assert "--dry-run" in result.stdout
     assert "--synthetic" in result.stdout
-    assert "WOLFYSTOCK_WS2_MULTI_INSTANCE_SMOKE_ENABLE_NETWORK" in result.stdout
+    assert "WOLFYSTOCK_WS2_MULTI_INSTANCE_SMOKE_ENABLE_NETWORK" not in result.stdout

@@ -525,6 +525,29 @@
         "productionDataPathsIncluded": false
       }
     },
+    "provider_sla_licensing_evidence": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-08T00:00:00Z",
+      "evidenceRef": "provider-sla-licensing-evidence-validator-synthetic-json",
+      "checks": {
+        "providerSlaLicensingValidatorPassed": true,
+        "entitlementLicensingReviewRecorded": true,
+        "providerRuntimeEnforcementNotClaimed": true,
+        "providerOrderFallbackCacheBehaviorUnchanged": true,
+        "networkCallsExecutedByValidatorFalse": true,
+        "runtimeBehaviorUnchanged": true,
+        "manualReviewGateRecorded": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
     "restore_pitr_operator_evidence": {
       "status": "accepted",
       "acceptedBy": "release-operator",
@@ -633,6 +656,31 @@
         "pollingFallbackOrSingleInstanceLimitationRecorded": true,
         "networkCallsExecutedByValidatorFalse": true,
         "runtimeBehaviorUnchanged": true,
+        "manualReviewGateRecorded": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "ws2_target_environment_evidence": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-08T00:00:00Z",
+      "evidenceRef": "ws2-target-environment-evidence-validator-synthetic-json",
+      "checks": {
+        "ws2TargetEnvironmentValidatorPassed": true,
+        "targetEnvironmentEvidenceRecorded": true,
+        "acceptedStagingEvidenceRecorded": true,
+        "manualReviewAndRollbackRecorded": true,
+        "networkCallsExecutedByValidatorFalse": true,
+        "runtimeBehaviorUnchanged": true,
+        "releaseApprovedFalse": true,
+        "publicLaunchReadyFalse": true,
         "manualReviewGateRecorded": true
       },
       "sanitization": {

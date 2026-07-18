@@ -84,7 +84,7 @@ def test_synthetic_preflight_passes_with_review_required_non_approval_summary() 
     assert {check["id"] for check in summary["checks"]} == {
         "workflow-smoke",
         "docs-safety-guard",
-        "cli-contract-smoke",
+        "evidence-gap-analysis",
         "fixture-pack-validation",
     }
     assert {check["status"] for check in summary["checks"]} == {"pass"}

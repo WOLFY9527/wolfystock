@@ -21,6 +21,7 @@ EXPECTED_CATEGORIES = {
     "security",
     "quota-budget",
     "staging-ingress",
+    "ws2-target-environment",
     "ws2-sse",
     "config-snapshot",
     "manual-release-approval",

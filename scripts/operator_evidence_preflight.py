@@ -81,12 +81,12 @@ def _default_checks(temp_root: Path) -> tuple[CheckSpec, ...]:
             ),
         ),
         CheckSpec(
-            "cli-contract-smoke",
+            "evidence-gap-analysis",
             (
                 sys.executable,
                 "-m",
                 "pytest",
-                "tests/test_evidence_cli_contracts.py",
+                "tests/test_operator_evidence_gap_analyzer.py",
                 "-q",
             ),
         ),

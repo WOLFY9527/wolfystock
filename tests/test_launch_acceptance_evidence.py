@@ -34,21 +34,27 @@ EXPECTED_CATEGORY_IDS = {
     "api_abuse_request_safety",
     "final_clean_full_ci_gate",
     "provider_operator_evidence",
+    "provider_sla_licensing_evidence",
     "restore_pitr_operator_evidence",
     "security_operator_acceptance",
     "quota_budget_operator_evidence",
     "staging_ingress_operator_evidence",
     "ws2_sse_operator_decision_evidence",
+    "ws2_target_environment_evidence",
     "config_snapshot_evidence",
     "manual_release_approval_review_record",
 }
-NEW_OPERATOR_CATEGORY_IDS = {
+OPERATOR_EVIDENCE_CATEGORY_IDS = {
+    "api_abuse_request_safety",
+    "notifications_delivery_rehearsal",
     "provider_operator_evidence",
+    "provider_sla_licensing_evidence",
     "restore_pitr_operator_evidence",
     "security_operator_acceptance",
     "quota_budget_operator_evidence",
     "staging_ingress_operator_evidence",
     "ws2_sse_operator_decision_evidence",
+    "ws2_target_environment_evidence",
     "config_snapshot_evidence",
     "manual_release_approval_review_record",
 }
@@ -106,7 +112,7 @@ def test_launch_acceptance_evidence_missing_categories_remain_no_go() -> None:
         "runtimeDefaultsChanged": False,
     }
     assert evidence["summary"]["accepted"] == 0
-    assert evidence["summary"]["blocking"] == 31
+    assert evidence["summary"]["blocking"] == 33
     blocker_ids = {item["id"] for item in evidence["hardBlockers"]}
     assert EXPECTED_CATEGORY_IDS == blocker_ids
 
@@ -126,7 +132,7 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
     assert evidence["finalStatus"] == "GO-REVIEW-REQUIRED"
     assert evidence["releaseApproved"] is False
     assert evidence["statusReason"] == "All hard blockers have accepted sanitized evidence; release approval remains manual."
-    assert evidence["summary"]["accepted"] == 31
+    assert evidence["summary"]["accepted"] == 33
     assert evidence["summary"]["blocking"] == 0
     assert evidence["hardBlockers"] == []
     categories = {item["id"]: item for item in evidence["categories"]}
@@ -295,6 +301,15 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
         "runtimeBehaviorUnchanged",
         "advisoryReviewGateRecorded",
     ]
+    assert categories["provider_sla_licensing_evidence"]["requiredChecks"] == [
+        "providerSlaLicensingValidatorPassed",
+        "entitlementLicensingReviewRecorded",
+        "providerRuntimeEnforcementNotClaimed",
+        "providerOrderFallbackCacheBehaviorUnchanged",
+        "networkCallsExecutedByValidatorFalse",
+        "runtimeBehaviorUnchanged",
+        "manualReviewGateRecorded",
+    ]
     assert categories["restore_pitr_operator_evidence"]["requiredChecks"] == [
         "restorePitrOperatorValidatorPassed",
         "restorePitrGuideReferenced",
@@ -337,6 +352,17 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
         "runtimeBehaviorUnchanged",
         "manualReviewGateRecorded",
     ]
+    assert categories["ws2_target_environment_evidence"]["requiredChecks"] == [
+        "ws2TargetEnvironmentValidatorPassed",
+        "targetEnvironmentEvidenceRecorded",
+        "acceptedStagingEvidenceRecorded",
+        "manualReviewAndRollbackRecorded",
+        "networkCallsExecutedByValidatorFalse",
+        "runtimeBehaviorUnchanged",
+        "releaseApprovedFalse",
+        "publicLaunchReadyFalse",
+        "manualReviewGateRecorded",
+    ]
     assert categories["config_snapshot_evidence"]["requiredChecks"] == [
         "configSnapshotValidatorPassed",
         "configSnapshotGuideReferenced",
@@ -366,7 +392,7 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
 
 def test_launch_acceptance_evidence_missing_new_operator_categories_keep_no_go(tmp_path: Path) -> None:
     payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
-    for category_id in NEW_OPERATOR_CATEGORY_IDS:
+    for category_id in OPERATOR_EVIDENCE_CATEGORY_IDS:
         payload["categories"].pop(category_id, None)
     evidence_path = tmp_path / "missing-new-operator-evidence.json"
     evidence_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -377,9 +403,9 @@ def test_launch_acceptance_evidence_missing_new_operator_categories_keep_no_go(t
     evidence = _json(result)
     assert evidence["finalStatus"] == "NO-GO"
     assert evidence["releaseApproved"] is False
-    assert evidence["summary"]["blocking"] == len(NEW_OPERATOR_CATEGORY_IDS)
+    assert evidence["summary"]["blocking"] == len(OPERATOR_EVIDENCE_CATEGORY_IDS)
     blocker_ids = {item["id"] for item in evidence["hardBlockers"]}
-    assert blocker_ids == NEW_OPERATOR_CATEGORY_IDS
+    assert blocker_ids == OPERATOR_EVIDENCE_CATEGORY_IDS
 
 
 def test_launch_acceptance_evidence_admin_log_retention_capacity_rehearsal_is_backed_by_repo_local_offline_anchors() -> None:
@@ -499,7 +525,7 @@ def test_launch_acceptance_evidence_market_data_freshness_fallback_is_backed_by_
             ),
             (
                 stock_freshness_source,
-                "def test_quote_endpoint_exposes_provider_source_and_market_timestamp_without_breaking_existing_fields() -> None:",
+                "def test_quote_endpoint_exposes_safe_source_label_and_market_timestamp_without_runtime_taxonomy() -> None:",
             ),
             (
                 stock_freshness_source,

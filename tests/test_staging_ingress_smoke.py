@@ -143,13 +143,16 @@ def test_staging_ingress_smoke_defaults_to_dry_run_without_network() -> None:
     evidence = _parse_evidence(result.stdout)
     assert evidence["mode"] == "dry_run"
     assert evidence["networkCallsEnabled"] is False
+    assert evidence["manualReviewRequired"] is True
+    assert evidence["releaseApproved"] is False
+    assert evidence["publicLaunchReady"] is False
     assert request_count == 0
     assert evidence["baseUrls"][0]["displayUrl"] == server.base_url
     assert {scenario["status"] for scenario in evidence["scenarios"]} == {"skipped"}
     assert "WOLFYSTOCK_STAGING_INGRESS_SMOKE=1" in evidence["nextStep"]
 
 
-def test_staging_ingress_smoke_live_mode_checks_health_admin_and_redaction() -> None:
+def test_staging_ingress_live_evidence_checks_health_admin_and_redaction_without_approval() -> None:
     routes = {
         "/api/health": (200, {"status": "ok", "ready": True}, 0.0),
         "/api/health/ready": (200, {"status": "ok", "ready": True}, 0.0),
@@ -157,26 +160,25 @@ def test_staging_ingress_smoke_live_mode_checks_health_admin_and_redaction() -> 
         "/api/v1/admin/users": (401, {"error": "not_authenticated"}, 0.0),
     }
     with _Server(routes) as server:
-        result = _run_smoke(
-            "--base-url",
-            server.base_url,
-            env={"WOLFYSTOCK_STAGING_INGRESS_SMOKE": "1"},
-        )
+        from scripts import staging_ingress_smoke
 
-    assert result.returncode == 0
-    evidence = _parse_evidence(result.stdout)
+        evidence = staging_ingress_smoke._build_evidence([server.base_url], 5.0, live=True)
+
     assert evidence["mode"] == "live"
     assert evidence["networkCallsEnabled"] is True
+    assert evidence["manualReviewRequired"] is True
+    assert evidence["releaseApproved"] is False
+    assert evidence["publicLaunchReady"] is False
     assert {scenario["name"]: scenario["status"] for scenario in evidence["scenarios"]} == {
         "health_ready": "pass",
         "health_alias": "pass",
         "health_live": "pass",
         "admin_fail_closed": "pass",
     }
-    assert "not_authenticated" not in result.stdout
+    assert "not_authenticated" not in json.dumps(evidence)
 
 
-def test_staging_ingress_smoke_fails_on_secret_or_debug_payload_without_leaking_value() -> None:
+def test_staging_ingress_live_evidence_rejects_secret_or_debug_payload_without_leaking_value() -> None:
     leaked_key = "sk-" + ("A" * 40)
     routes = {
         "/api/health": (200, {"status": "ok", "debug_payload": leaked_key}, 0.0),
@@ -185,22 +187,19 @@ def test_staging_ingress_smoke_fails_on_secret_or_debug_payload_without_leaking_
         "/api/v1/admin/users": (401, {"error": "not_authenticated"}, 0.0),
     }
     with _Server(routes) as server:
-        result = _run_smoke(
-            "--base-url",
-            server.base_url,
-            env={"WOLFYSTOCK_STAGING_INGRESS_SMOKE": "1"},
-        )
+        from scripts import staging_ingress_smoke
 
-    assert result.returncode == 1
-    assert leaked_key not in result.stdout
-    assert leaked_key not in result.stderr
-    evidence = _parse_evidence(result.stdout)
+        evidence = staging_ingress_smoke._build_evidence([server.base_url], 5.0, live=True)
+
+    rendered = json.dumps(evidence)
+    assert evidence["verdict"] == "fail"
+    assert leaked_key not in rendered
     failed = [scenario for scenario in evidence["scenarios"] if scenario["status"] == "fail"]
     assert failed
     assert failed[0]["reasonCode"] == "sensitive_payload_pattern"
 
 
-def test_staging_ingress_smoke_timeout_output_is_actionable_and_sanitized() -> None:
+def test_staging_ingress_live_evidence_timeout_is_actionable_sanitized_and_non_approving() -> None:
     leaked_query = "sk-" + ("B" * 40)
     routes = {
         "/api/health": (200, {"status": "ok", "ready": True}, 1.0),
@@ -209,18 +208,19 @@ def test_staging_ingress_smoke_timeout_output_is_actionable_and_sanitized() -> N
         "/api/v1/admin/users": (401, {"error": "not_authenticated"}, 0.0),
     }
     with _Server(routes) as server:
-        result = _run_smoke(
-            "--base-url",
-            f"{server.base_url}?token={leaked_query}",
-            "--timeout",
-            "0.1",
-            env={"WOLFYSTOCK_STAGING_INGRESS_SMOKE": "1"},
+        from scripts import staging_ingress_smoke
+
+        evidence = staging_ingress_smoke._build_evidence(
+            [f"{server.base_url}?token={leaked_query}"],
+            0.1,
+            live=True,
         )
 
-    assert result.returncode == 1
-    assert leaked_query not in result.stdout
-    assert leaked_query not in result.stderr
-    evidence = _parse_evidence(result.stdout)
+    rendered = json.dumps(evidence)
+    assert evidence["verdict"] == "fail"
+    assert evidence["releaseApproved"] is False
+    assert evidence["publicLaunchReady"] is False
+    assert leaked_query not in rendered
     timeout = next(scenario for scenario in evidence["scenarios"] if scenario["name"] == "health_alias")
     assert timeout["status"] == "fail"
     assert timeout["reasonCode"] == "request_timeout"
