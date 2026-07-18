@@ -711,6 +711,85 @@ describe('Shell', () => {
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 
+  it('exposes explicit trigger ownership for mobile navigation and the account menu', async () => {
+    const rendered = render(
+      <MemoryRouter initialEntries={['/market-overview']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const accountTrigger = await screen.findByRole('button', { name: '账户中心' });
+    expect(accountTrigger).toHaveAttribute('id', 'shell-account-center-trigger');
+    expect(accountTrigger).toHaveAttribute('aria-controls', 'shell-account-center-menu');
+    expect(accountTrigger).toHaveAttribute('aria-owns', 'shell-account-center-menu');
+    fireEvent.click(accountTrigger);
+    const accountMenu = screen.getByRole('menu', { name: '账户中心菜单' });
+    expect(accountMenu).toHaveAttribute('id', 'shell-account-center-menu');
+
+    fireEvent.keyDown(accountMenu, { key: 'Escape' });
+    window.innerWidth = 390;
+    fireEvent(window, new Event('resize'));
+    rendered.rerender(
+      <MemoryRouter initialEntries={['/market-overview']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const mobileTrigger = await screen.findByRole('button', { name: '打开导航菜单' });
+    expect(mobileTrigger).toHaveAttribute('id', 'shell-mobile-navigation-trigger');
+    expect(mobileTrigger).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(mobileTrigger).toHaveAttribute('aria-expanded', 'false');
+    expect(mobileTrigger).toHaveAttribute('aria-controls', 'shell-mobile-navigation-menu');
+    expect(mobileTrigger).toHaveAttribute('aria-owns', 'shell-mobile-navigation-menu');
+    fireEvent.click(mobileTrigger);
+    const mobileMenu = await screen.findByTestId('shell-mobile-navigation-menu');
+    expect(mobileMenu).toHaveAttribute('id', 'shell-mobile-navigation-menu');
+    expect(mobileMenu).toHaveAttribute('aria-labelledby', 'shell-mobile-navigation-trigger');
+    expect(mobileTrigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('cleans account-menu listeners and focus work across repeated cycles without delayed callbacks', () => {
+    render(
+      <MemoryRouter initialEntries={['/market-overview']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const trigger = screen.getByRole('button', { name: '账户中心' });
+    const addEventListenerSpy = vi.spyOn(document, 'addEventListener');
+    const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
+
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      fireEvent.click(trigger);
+      const menu = screen.getByRole('menu', { name: '账户中心菜单' });
+      expect(within(menu).getByRole('menuitem', { name: '账户中心' })).toHaveFocus();
+      fireEvent.keyDown(menu, { key: 'Escape' });
+      expect(screen.queryByRole('menu', { name: '账户中心菜单' })).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+    }
+
+    const accountListenerTypes = new Set(['mousedown', 'keydown']);
+    const addedAccountListeners = addEventListenerSpy.mock.calls.filter(([type]) => accountListenerTypes.has(type));
+    const removedAccountListeners = removeEventListenerSpy.mock.calls.filter(([type]) => accountListenerTypes.has(type));
+    addEventListenerSpy.mockRestore();
+    removeEventListenerSpy.mockRestore();
+
+    expect(addedAccountListeners).toHaveLength(6);
+    expect(removedAccountListeners).toHaveLength(6);
+  });
+
   it('keeps language/logout controls inside the mobile drawer instead of duplicating them in the top bar', async () => {
     window.innerWidth = 375;
 
@@ -1027,22 +1106,15 @@ describe('Shell', () => {
     fireEvent.click(menuTrigger);
     expect(await screen.findByRole('heading', { name: '导航菜单' })).toBeInTheDocument();
 
-    await act(async () => {
-      await settleDrawerStability();
-    });
-
     const drawerNav = screen.getByRole('navigation', { name: '导航菜单' });
     const homeLink = within(drawerNav).getByRole('link', { name: '市场总览' });
     homeLink.focus();
     expect(homeLink).toHaveFocus();
 
-    fireEvent.pointerDown(screen.getByTestId('drawer-backdrop'));
+    fireEvent.keyDown(document, { key: 'Escape' });
 
-    await act(async () => {
-      await settleDrawerMotion();
-    });
-
-    expect(menuTrigger).toHaveFocus();
+    await waitFor(() => expect(screen.queryByRole('heading', { name: '导航菜单' })).not.toBeInTheDocument());
+    await waitFor(() => expect(menuTrigger).toHaveFocus());
   });
 
   it('does not restore focus to the mobile menu trigger after route-driven drawer close', async () => {
@@ -1065,19 +1137,127 @@ describe('Shell', () => {
     fireEvent.click(menuTrigger);
     const drawerNav = await screen.findByRole('navigation', { name: '导航菜单' });
 
-    await act(async () => {
-      await settleDrawerStability();
-    });
-
     fireEvent.click(within(drawerNav).getByRole('link', { name: '观察列表' }));
 
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/watchlist'));
-    await act(async () => {
-      await settleDrawerMotion();
-    });
-
-    expect(screen.queryByRole('heading', { name: '导航菜单' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('heading', { name: '导航菜单' })).not.toBeInTheDocument());
     expect(menuTrigger).not.toHaveFocus();
+    expect(document.getElementById('main-content')).toHaveFocus();
+  });
+
+  it('moves focus to the main landmark when a mobile menu is removed by desktop resize', async () => {
+    window.innerWidth = 390;
+
+    render(
+      <MemoryRouter initialEntries={['/market-overview']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '打开导航菜单' }));
+    const drawerNav = await screen.findByRole('navigation', { name: '导航菜单' });
+    const watchlistLink = within(drawerNav).getByRole('link', { name: '观察列表' });
+    watchlistLink.focus();
+    expect(watchlistLink).toHaveFocus();
+
+    window.innerWidth = 1280;
+    fireEvent(window, new Event('resize'));
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: '导航菜单' })).not.toBeInTheDocument());
+    expect(document.getElementById('main-content')).toHaveFocus();
+    expect(document.activeElement).not.toBe(watchlistLink);
+  });
+
+  it('does not restore focus to a removed account trigger after session loss', async () => {
+    const rendered = render(
+      <MemoryRouter initialEntries={['/market-overview']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const accountTrigger = await screen.findByRole('button', { name: '账户中心' });
+    fireEvent.click(accountTrigger);
+    const accountItem = screen.getByRole('menuitem', { name: '账户中心' });
+    await waitFor(() => expect(accountItem).toHaveFocus());
+
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: false,
+      currentUser: null,
+      logout: mockLogout,
+    });
+    rendered.rerender(
+      <MemoryRouter initialEntries={['/market-overview']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.queryByRole('menu', { name: '账户中心菜单' })).not.toBeInTheDocument());
+    expect(accountTrigger.isConnected).toBe(false);
+    expect(document.getElementById('main-content')).toHaveFocus();
+  });
+
+  it('closes stale mobile navigation when the authenticated capability set changes', async () => {
+    window.innerWidth = 390;
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      currentUser: { id: 'admin-1', username: 'admin', ...fullCapabilityAdminUser },
+      logout: mockLogout,
+    });
+    const rendered = render(
+      <MemoryRouter initialEntries={['/settings/system']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '打开导航菜单' }));
+    const adminNav = await screen.findByTestId('shell-admin-primary-nav');
+    const notificationsLink = within(adminNav).getByRole('link', { name: '通知通道' });
+    notificationsLink.focus();
+    expect(notificationsLink).toHaveFocus();
+
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      currentUser: {
+        id: 'admin-1',
+        username: 'admin',
+        isAdmin: true,
+        canReadNotifications: false,
+        canReadSystemConfig: true,
+      },
+      logout: mockLogout,
+    });
+    rendered.rerender(
+      <MemoryRouter initialEntries={['/settings/system']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: '导航菜单' })).not.toBeInTheDocument());
+    expect(notificationsLink.isConnected).toBe(false);
+    expect(document.getElementById('main-content')).toHaveFocus();
   });
 
   it('adds dedicated shell modifiers for the scanner route', () => {

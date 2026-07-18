@@ -3,7 +3,7 @@
  * unchanged while the shared frame owns the Linear OS canvas and rhythm.
  */
 import type React from 'react';
-import { useEffect, useEffectEvent, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, LockKeyhole, LogOut, Menu, Moon, ShieldCheck, SlidersHorizontal, Sun } from 'lucide-react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
@@ -23,12 +23,70 @@ import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '
 import { useIsDesktopViewport } from './useIsDesktopViewport';
 import { useThemeStyle } from '../theme/themeState';
 import { resolveCurrentConsumerRoute } from './coreProductRoutes';
+import type { CurrentUser } from '../../api/auth';
 
 type ShellProps = {
   children?: React.ReactNode;
 };
 
 const MOBILE_MENU_TOUCH_TARGET_PX = 44;
+const MOBILE_NAV_TRIGGER_ID = 'shell-mobile-navigation-trigger';
+const MOBILE_NAV_MENU_ID = 'shell-mobile-navigation-menu';
+const ACCOUNT_MENU_TRIGGER_ID = 'shell-account-center-trigger';
+const ACCOUNT_MENU_ID = 'shell-account-center-menu';
+const MAIN_CONTENT_ID = 'main-content';
+
+type FocusRecoveryTarget = 'mobile-navigation-trigger' | 'account-menu-trigger' | 'main-content';
+
+type FocusRecoveryRequest = {
+  surfaceId: string;
+  target: FocusRecoveryTarget;
+  pathname?: string;
+};
+
+let pendingShellFocusRecovery: FocusRecoveryRequest | null = null;
+
+function isValidFocusTarget(target: HTMLElement | null): target is HTMLElement {
+  if (!target?.isConnected || target.matches(':disabled, [aria-disabled="true"]')) {
+    return false;
+  }
+  if (target.closest('[hidden], [inert], [aria-hidden="true"]')) {
+    return false;
+  }
+
+  let element: HTMLElement | null = target;
+  while (element) {
+    const style = window.getComputedStyle(element);
+    if (style.display === 'none' || style.visibility === 'hidden') {
+      return false;
+    }
+    element = element.parentElement;
+  }
+  return true;
+}
+
+function buildSessionSurfaceIdentity(loggedIn: boolean, currentUser: CurrentUser | null): string {
+  const capabilityFields = [
+    currentUser?.canReadUsers,
+    currentUser?.canReadUserActivity,
+    currentUser?.canReadUserPortfolio,
+    currentUser?.canWriteUserSecurity,
+    currentUser?.canReadCostObservability,
+    currentUser?.canReadOpsLogs,
+    currentUser?.canReadProviders,
+    currentUser?.canReadNotifications,
+    currentUser?.canReadSystemConfig,
+  ].map((value) => value === true ? '1' : '0').join('');
+  const namedCapabilities = [...(currentUser?.adminCapabilities ?? [])].sort().join(',');
+  return [
+    loggedIn ? 'authenticated' : 'anonymous',
+    currentUser?.id ?? '',
+    currentUser?.username ?? '',
+    currentUser?.isAdmin ? 'admin' : 'user',
+    capabilityFields,
+    namedCapabilities,
+  ].join('|');
+}
 
 function resolveRailTitle(t: (key: string) => string): string {
   return t('shell.archiveTitle');
@@ -296,11 +354,12 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const previousPathnameRef = useRef(pathname);
   const didInitializeViewportRef = useRef(false);
   const mobileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const mobileNavShouldReturnFocusRef = useRef(false);
   const accountTriggerRef = useRef<HTMLButtonElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const accountMenuItemRefs = useRef<Array<HTMLAnchorElement | HTMLButtonElement | null>>([]);
   const accountMenuFocusIndexRef = useRef<number | null>(null);
+  const focusRecoveryFrameRef = useRef<number | null>(null);
+  const focusContextRef = useRef({ isDesktop, loggedIn, pathname });
   const [overlayState, dispatchOverlay] = useReducer(overlayReducer, {
     mobileNavOpen: false,
     railOpen: false,
@@ -318,6 +377,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const nextColorMode = colorMode === 'dark' ? 'light' : 'dark';
   const MobileThemeIcon = colorMode === 'dark' ? Sun : Moon;
   const hasAdminIdentity = isAdminAccount || isAdmin || Boolean(currentUser?.isAdmin);
+  const sessionSurfaceIdentity = buildSessionSurfaceIdentity(loggedIn, currentUser);
+  const previousSessionSurfaceIdentityRef = useRef(sessionSurfaceIdentity);
   const shouldRenderStandardAdminAccountGate = loggedIn && isSystemControlRoute && !hasAdminIdentity;
   const standardAdminAccountGateCopy = shouldRenderStandardAdminAccountGate
     ? buildStandardAdminAccountGateCopy(language, routeLocale)
@@ -360,13 +421,39 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     { label: accountCopy.preferences, to: buildAccountPath(routeLocale, '/settings#preferences'), icon: SlidersHorizontal },
   ];
 
-  const closeMobileNav = (options?: { returnFocus?: boolean }) => {
-    mobileNavShouldReturnFocusRef.current = Boolean(options?.returnFocus);
+  const cancelFocusRecoveryFrame = useCallback(() => {
+    if (focusRecoveryFrameRef.current !== null) {
+      window.cancelAnimationFrame(focusRecoveryFrameRef.current);
+      focusRecoveryFrameRef.current = null;
+    }
+  }, []);
+
+  const clearFocusRecovery = () => {
+    cancelFocusRecoveryFrame();
+    pendingShellFocusRecovery = null;
+  };
+
+  const requestFocusRecovery = (target: FocusRecoveryTarget, surfaceId: string, destinationPathname?: string) => {
+    const pendingRequest = pendingShellFocusRecovery;
+    if (pendingRequest?.target === target && pendingRequest.surfaceId === surfaceId) {
+      if (destinationPathname && pendingRequest.pathname !== destinationPathname) {
+        pendingShellFocusRecovery = { ...pendingRequest, pathname: destinationPathname };
+      }
+      return;
+    }
+    cancelFocusRecoveryFrame();
+    pendingShellFocusRecovery = { target, surfaceId, pathname: destinationPathname };
+  };
+
+  const closeMobileNav = (options?: { focusTarget?: FocusRecoveryTarget }) => {
+    if (options?.focusTarget) {
+      requestFocusRecovery(options.focusTarget, MOBILE_NAV_MENU_ID);
+    }
     dispatchOverlay({ type: 'close_mobile_nav' });
   };
 
   const openMobileNav = () => {
-    mobileNavShouldReturnFocusRef.current = false;
+    clearFocusRecovery();
     dispatchOverlay({ type: 'open_mobile_nav' });
   };
 
@@ -374,17 +461,16 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     dispatchOverlay({ type: 'close_rail' });
   };
 
-  const closeAccountMenu = (options?: { returnFocus?: boolean }) => {
+  const closeAccountMenu = (options?: { focusTarget?: FocusRecoveryTarget }) => {
     accountMenuFocusIndexRef.current = null;
-    dispatchOverlay({ type: 'close_account_menu' });
-    if (options?.returnFocus) {
-      window.setTimeout(() => {
-        accountTriggerRef.current?.focus();
-      }, 0);
+    if (options?.focusTarget) {
+      requestFocusRecovery(options.focusTarget, ACCOUNT_MENU_ID);
     }
+    dispatchOverlay({ type: 'close_account_menu' });
   };
 
   const openAccountMenu = (focusIndex = 0) => {
+    clearFocusRecovery();
     accountMenuFocusIndexRef.current = focusIndex;
     dispatchOverlay({ type: 'open_account_menu' });
   };
@@ -393,9 +479,84 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     dispatchOverlay({ type: 'open_rail' });
   };
 
-  const closeAccountMenuForEffect = useEffectEvent((options?: { returnFocus?: boolean }) => {
+  const closeAccountMenuForEffect = useEffectEvent((options?: { focusTarget?: FocusRecoveryTarget }) => {
     closeAccountMenu(options);
   });
+
+  const closeSurfacesForTransition = useEffectEvent((destinationPathname?: string) => {
+    const surfaceId = accountMenuOpen
+      ? ACCOUNT_MENU_ID
+      : mobileNavOpen
+        ? MOBILE_NAV_MENU_ID
+        : pendingShellFocusRecovery?.surfaceId;
+    if (surfaceId) {
+      requestFocusRecovery('main-content', surfaceId, destinationPathname);
+    }
+    accountMenuFocusIndexRef.current = null;
+    dispatchOverlay({ type: 'close_all' });
+  });
+
+  const restoreFocusForClosedSurface = useCallback((surfaceId: string, surfaceDetached = false) => {
+    const request = pendingShellFocusRecovery;
+    if (
+      !request
+      || request.surfaceId !== surfaceId
+      || (!surfaceDetached && document.getElementById(surfaceId))
+    ) {
+      return false;
+    }
+
+    const { isDesktop: isDesktopNow, loggedIn: loggedInNow, pathname: pathnameNow } = focusContextRef.current;
+    if (request.pathname && request.pathname !== pathnameNow) {
+      pendingShellFocusRecovery = null;
+      return false;
+    }
+    const target = request.target === 'mobile-navigation-trigger'
+      ? (!isDesktopNow ? mobileMenuTriggerRef.current : null)
+      : request.target === 'account-menu-trigger'
+        ? (isDesktopNow && loggedInNow ? accountTriggerRef.current : null)
+        : document.getElementById(MAIN_CONTENT_ID);
+    if (!isValidFocusTarget(target)) {
+      if (request.target !== 'main-content') {
+        pendingShellFocusRecovery = null;
+      }
+      return false;
+    }
+    target.focus({ preventScroll: true });
+    const didRestoreFocus = document.activeElement === target;
+    if (didRestoreFocus) {
+      pendingShellFocusRecovery = null;
+    }
+    return didRestoreFocus;
+  }, []);
+
+  const scheduleFocusRecovery = useCallback((surfaceId: string) => {
+    cancelFocusRecoveryFrame();
+    focusRecoveryFrameRef.current = window.requestAnimationFrame(() => {
+      focusRecoveryFrameRef.current = null;
+      restoreFocusForClosedSurface(surfaceId);
+    });
+  }, [cancelFocusRecoveryFrame, restoreFocusForClosedSurface]);
+
+  const recoverFocusAfterSurfaceClose = useCallback((surfaceId: string, surfaceDetached = false) => {
+    if (pendingShellFocusRecovery?.target === 'main-content') {
+      scheduleFocusRecovery(surfaceId);
+      return;
+    }
+    restoreFocusForClosedSurface(surfaceId, surfaceDetached);
+  }, [restoreFocusForClosedSurface, scheduleFocusRecovery]);
+
+  const mobileNavigationMenuRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) {
+      recoverFocusAfterSurfaceClose(MOBILE_NAV_MENU_ID, true);
+    }
+  }, [recoverFocusAfterSurfaceClose]);
+
+  const accountMenuSurfaceRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) {
+      recoverFocusAfterSurfaceClose(ACCOUNT_MENU_ID, true);
+    }
+  }, [recoverFocusAfterSurfaceClose]);
 
   const shellMastheadInnerRef = (node: HTMLDivElement | null) => {
     setHeaderUtilityIsland(node?.querySelector<HTMLDivElement>('[data-testid="shell-header-utility-island"]') ?? null);
@@ -408,48 +569,51 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     isConnected: true,
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    focusContextRef.current = { isDesktop, loggedIn, pathname };
+  }, [isDesktop, loggedIn, pathname]);
+
+  useLayoutEffect(() => {
     if (pathname === previousPathnameRef.current) {
       return;
     }
 
     previousPathnameRef.current = pathname;
-    const timer = window.setTimeout(() => {
-      mobileNavShouldReturnFocusRef.current = false;
-      accountMenuFocusIndexRef.current = null;
-      dispatchOverlay({ type: 'close_all' });
-    }, 0);
-
-    return () => window.clearTimeout(timer);
+    closeSurfacesForTransition(pathname);
   }, [pathname]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!didInitializeViewportRef.current) {
       didInitializeViewportRef.current = true;
       return;
     }
 
-    const timer = window.setTimeout(() => {
-      mobileNavShouldReturnFocusRef.current = false;
-      accountMenuFocusIndexRef.current = null;
-      dispatchOverlay({ type: 'close_all' });
-    }, 0);
-
-    return () => window.clearTimeout(timer);
+    closeSurfacesForTransition();
   }, [isDesktop]);
 
-  useEffect(() => {
-    if (mobileNavOpen || !mobileNavShouldReturnFocusRef.current || isDesktop) {
+  useLayoutEffect(() => {
+    if (sessionSurfaceIdentity === previousSessionSurfaceIdentityRef.current) {
       return;
     }
 
-    mobileNavShouldReturnFocusRef.current = false;
-    const timer = window.setTimeout(() => {
-      mobileMenuTriggerRef.current?.focus();
-    }, 0);
+    previousSessionSurfaceIdentityRef.current = sessionSurfaceIdentity;
+    closeSurfacesForTransition();
+  }, [sessionSurfaceIdentity]);
 
-    return () => window.clearTimeout(timer);
-  }, [isDesktop, mobileNavOpen]);
+  useEffect(() => {
+    const surfaceId = pendingShellFocusRecovery?.surfaceId;
+    if (surfaceId && !document.getElementById(surfaceId)) {
+      recoverFocusAfterSurfaceClose(surfaceId);
+    }
+  }, [accountMenuOpen, mobileNavOpen, pathname, recoverFocusAfterSurfaceClose, sessionSurfaceIdentity]);
+
+  useEffect(() => () => {
+    cancelFocusRecoveryFrame();
+    const surfaceId = pendingShellFocusRecovery?.surfaceId;
+    if (pendingShellFocusRecovery?.target === 'main-content' && surfaceId) {
+      restoreFocusForClosedSurface(surfaceId, true);
+    }
+  }, [cancelFocusRecoveryFrame, restoreFocusForClosedSurface]);
 
   useEffect(() => {
     if (!accountMenuOpen) {
@@ -460,12 +624,12 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
       if (accountMenuRef.current?.contains(event.target as Node)) {
         return;
       }
-      closeAccountMenuForEffect({ returnFocus: true });
+      closeAccountMenuForEffect({ focusTarget: 'account-menu-trigger' });
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        closeAccountMenuForEffect({ returnFocus: true });
+        closeAccountMenuForEffect({ focusTarget: 'account-menu-trigger' });
       }
     };
 
@@ -477,20 +641,18 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     };
   }, [accountMenuOpen]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!accountMenuOpen || accountMenuFocusIndexRef.current === null) {
       return undefined;
     }
 
-    const timer = window.setTimeout(() => {
-      const focusIndex = accountMenuFocusIndexRef.current;
-      if (focusIndex === null) {
-        return;
-      }
-      accountMenuItemRefs.current[focusIndex]?.focus();
-    }, 0);
-
-    return () => window.clearTimeout(timer);
+    const focusIndex = accountMenuFocusIndexRef.current;
+    const target = focusIndex === null ? null : accountMenuItemRefs.current[focusIndex];
+    accountMenuFocusIndexRef.current = null;
+    if (isValidFocusTarget(target)) {
+      target.focus({ preventScroll: true });
+    }
+    return undefined;
   }, [accountMenuOpen]);
 
   const handleAccountTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
@@ -531,7 +693,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     }
     if (event.key === 'Escape') {
       event.preventDefault();
-      closeAccountMenu({ returnFocus: true });
+      closeAccountMenu({ focusTarget: 'account-menu-trigger' });
     }
   };
 
@@ -639,6 +801,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                   </button>
                   <button
                     ref={mobileMenuTriggerRef}
+                    id={MOBILE_NAV_TRIGGER_ID}
                     type="button"
                     onClick={openMobileNav}
                     className="shell-mobile-button"
@@ -649,6 +812,10 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                       minHeight: MOBILE_MENU_TOUCH_TARGET_PX,
                     }}
                     aria-label={t('shell.openMenu')}
+                    aria-haspopup="dialog"
+                    aria-expanded={mobileNavOpen}
+                    aria-controls={MOBILE_NAV_MENU_ID}
+                    aria-owns={MOBILE_NAV_MENU_ID}
                     title={t('shell.openMenu')}
                   >
                     <Menu className="size-4" />
@@ -663,7 +830,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
           className={`shell-content-frame relative flex flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isConsumerShellRoute ? ' shell-content-frame--consumer' : ''}${isPageScrollRoute ? ' shell-content-frame--page-scroll' : ''}${isHomeRoute ? ' shell-content-frame--home' : ''}${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}${isSystemControlRoute ? ' shell-content-frame--system-control' : ''}`}
         >
           <main
-            id="main-content"
+            id={MAIN_CONTENT_ID}
             tabIndex={-1}
             className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full${isSystemControlRoute ? ' p-0 shell-main-column--system-control' : isConsumerShellRoute ? ' p-0 shell-main-column--consumer' : ' px-6 pt-6 pb-12 md:px-8 xl:px-12'}${shellFrameOverflowClass}${isPageScrollRoute ? ' shell-main-column--page-scroll' : ''}${isHomeRoute ? ' shell-main-column--home' : ''}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}
           >
@@ -693,6 +860,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
           >
             <button
               ref={accountTriggerRef}
+              id={ACCOUNT_MENU_TRIGGER_ID}
               type="button"
               className={cn(
                 'flex h-9 min-w-0 max-w-[11rem] items-center gap-2 rounded-lg border border-transparent bg-[var(--wolfy-surface-input)] px-2.5 text-left text-[11px] font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-[var(--overlay-hover)] hover:text-[color:var(--wolfy-text-primary)]',
@@ -701,10 +869,11 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
               aria-label={accountCopy.accountCenter}
               aria-haspopup="menu"
               aria-expanded={accountMenuOpen}
-              aria-controls="shell-account-center-menu"
+              aria-controls={ACCOUNT_MENU_ID}
+              aria-owns={ACCOUNT_MENU_ID}
               onClick={() => {
                 if (accountMenuOpen) {
-                  closeAccountMenu({ returnFocus: true });
+                  closeAccountMenu({ focusTarget: 'account-menu-trigger' });
                   return;
                 }
                 openAccountMenu(0);
@@ -723,7 +892,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
 
             {accountMenuOpen ? (
               <div
-                id="shell-account-center-menu"
+                ref={accountMenuSurfaceRef}
+                id={ACCOUNT_MENU_ID}
                 role="menu"
                 tabIndex={-1}
                 aria-label={accountCopy.menuLabel}
@@ -745,7 +915,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                       'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-[var(--overlay-hover)] hover:text-[color:var(--wolfy-text-primary)]',
                       isActive ? 'bg-[var(--overlay-selected)] text-[color:var(--wolfy-text-primary)]' : '',
                     )}
-                    onClick={() => closeAccountMenu()}
+                    onClick={() => closeAccountMenu({ focusTarget: 'main-content' })}
                   >
                     <Icon className="size-4 shrink-0 text-[color:var(--wolfy-text-muted)]" />
                     <span className="truncate">{label}</span>
@@ -779,12 +949,18 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         {!isDesktop ? (
           <Drawer
             isOpen={isMobileNavVisible}
-            onClose={() => closeMobileNav({ returnFocus: true })}
+            onClose={() => closeMobileNav({ focusTarget: 'mobile-navigation-trigger' })}
             title={t('shell.drawerTitle')}
             width="max-w-xs"
             zIndex={90}
             side="left"
           >
+            <div
+              ref={mobileNavigationMenuRef}
+              id={MOBILE_NAV_MENU_ID}
+              data-testid={MOBILE_NAV_MENU_ID}
+              aria-labelledby={MOBILE_NAV_TRIGGER_ID}
+            >
             {loggedIn ? (
               <section
                 data-testid="shell-mobile-account-center"
@@ -806,7 +982,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                     <NavLink
                       key={label}
                       to={to}
-                      onClick={() => closeMobileNav()}
+                      onClick={() => closeMobileNav({ focusTarget: 'main-content' })}
                       className={({ isActive }) => cn('shell-drawer-action', isActive ? 'is-active' : '')}
                       aria-label={label}
                     >
@@ -839,10 +1015,11 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
             ) : null}
             <SidebarNav
               layout="drawer"
-              onNavigate={closeMobileNav}
+              onNavigate={() => closeMobileNav({ focusTarget: 'main-content' })}
               hasArchive={hasRailContent}
               onOpenArchive={openRail}
             />
+            </div>
           </Drawer>
         ) : null}
 

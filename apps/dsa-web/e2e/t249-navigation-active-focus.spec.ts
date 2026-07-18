@@ -184,3 +184,62 @@ test.describe('T249 navigation active state and focus closure', () => {
     });
   }
 });
+
+test.describe('T556 narrow shell focus recovery', () => {
+  test('mobile navigation restores focus deterministically across Escape, route change, and resize', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await installT249AdminHarness(page);
+    await page.goto('/en/settings/system');
+    await expect(page.getByTestId('system-settings-page')).toBeVisible({ timeout: 15_000 });
+
+    const trigger = page.getByRole('button', { name: /Open menu|Open navigation/i });
+    await expect(trigger).toHaveAttribute('id', 'shell-mobile-navigation-trigger');
+    await expect(trigger).toHaveAttribute('aria-controls', 'shell-mobile-navigation-menu');
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    await trigger.click();
+    const mobileMenu = page.getByTestId('shell-mobile-navigation-menu');
+    await expect(mobileMenu).toBeVisible();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await mobileMenu.getByRole('link', { name: 'Notification Channels' }).focus();
+    await page.keyboard.press('Escape');
+    await expect(mobileMenu).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+
+    await trigger.click();
+    await mobileMenu.getByRole('link', { name: 'Account Center' }).click();
+    await expect(page).toHaveURL(/\/en\/settings$/);
+    await expect(mobileMenu).toHaveCount(0);
+    await expect(page.locator('#main-content')).toBeFocused();
+
+    await trigger.click();
+    await expect(mobileMenu).toBeVisible();
+    await mobileMenu.getByRole('link', { name: 'Account Center' }).focus();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect(mobileMenu).toHaveCount(0);
+    await expect(page.locator('#main-content')).toBeFocused();
+    await expect(page.locator(':focus')).not.toHaveAttribute('aria-hidden', 'true');
+  });
+
+  test('desktop account menu restores its valid trigger without accumulating delayed focus work', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await installT249AdminHarness(page);
+    await page.goto('/en/settings/system');
+    await expect(page.getByTestId('system-settings-page')).toBeVisible({ timeout: 15_000 });
+
+    const trigger = page.getByRole('button', { name: 'Account Center' });
+    await expect(trigger).toHaveAttribute('id', 'shell-account-center-trigger');
+    await expect(trigger).toHaveAttribute('aria-controls', 'shell-account-center-menu');
+
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      await trigger.focus();
+      await page.keyboard.press('ArrowDown');
+      const menu = page.getByRole('menu', { name: 'Account center menu' });
+      await expect(menu).toBeVisible();
+      await expect(menu.getByRole('menuitem', { name: 'Account Center' })).toBeFocused();
+      await page.keyboard.press('Escape');
+      await expect(menu).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+    }
+  });
+});
