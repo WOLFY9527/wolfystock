@@ -7,11 +7,12 @@ import json
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from zoneinfo import ZoneInfo
 
+import exchange_calendars as xcals
 import numpy as np
 import pandas as pd
 
@@ -830,10 +831,13 @@ class MarketScannerService:
         self.ai_service = ai_interpretation_service or ScannerAiInterpretationService(owner_user_id=owner_id)
         self.include_all_owners = bool(include_all_owners)
         self.baostock_cn_history_observation_resolver = baostock_cn_history_observation_resolver
+        configured_local_us_ohlcv_provider = None
         if historical_ohlcv_provider is None:
-            historical_ohlcv_provider = build_readonly_local_us_ohlcv_cache_provider_from_env()
+            configured_local_us_ohlcv_provider = build_readonly_local_us_ohlcv_cache_provider_from_env()
+            historical_ohlcv_provider = configured_local_us_ohlcv_provider
         if historical_ohlcv_provider is None and _scanner_historical_ohlcv_runtime_enabled():
             historical_ohlcv_provider = HistoricalOhlcvRuntimeAdapter(history_runtime=self.data_manager)
+        self._uses_configured_local_us_ohlcv_cache = configured_local_us_ohlcv_provider is not None
         self.historical_ohlcv_provider = historical_ohlcv_provider
         self.ohlcv_readiness_service = ohlcv_readiness_service or HistoricalOhlcvReadinessService(
             provider=historical_ohlcv_provider
@@ -2223,6 +2227,14 @@ class MarketScannerService:
         for symbol in ranked_by_symbol:
             if symbol and symbol not in ordered_symbols:
                 ordered_symbols.append(symbol)
+        observation_limit = self._readiness_int(diagnostics.get("observationCandidateLimit"))
+        if not ordered_symbols and observation_limit > 0:
+            ordered_symbols = [
+                symbol
+                for symbol, payload in base_candidate_diagnostics.items()
+                if str(payload.get("status") or "").strip().lower()
+                in {"evaluated", "rejected", "data_failed", "error"}
+            ][:observation_limit]
 
         candidates: List[Dict[str, Any]] = []
         for index, symbol in enumerate(ordered_symbols, start=1):
@@ -2442,6 +2454,75 @@ class MarketScannerService:
             },
         }
 
+    @staticmethod
+    def _summarize_local_us_parquet_readiness(
+        *,
+        diagnostics: Mapping[str, Any],
+        candidates: Sequence[Mapping[str, Any]],
+    ) -> Dict[str, Any]:
+        by_symbol: Dict[str, Dict[str, Any]] = {}
+        diagnostic_candidates = diagnostics.get("candidate_diagnostics")
+        raw_items: List[Mapping[str, Any]] = []
+        if isinstance(diagnostic_candidates, Mapping):
+            raw_items.extend(
+                payload for payload in diagnostic_candidates.values() if isinstance(payload, Mapping)
+            )
+        raw_items.extend(candidate for candidate in candidates if isinstance(candidate, Mapping))
+        for item in raw_items:
+            readiness = item.get("localCacheReadiness")
+            if not isinstance(readiness, Mapping):
+                continue
+            symbol = str(readiness.get("symbol") or item.get("symbol") or "").strip().upper()
+            if symbol:
+                by_symbol[symbol] = dict(readiness)
+        if not by_symbol:
+            return {}
+
+        states = {str(item.get("state") or "unavailable").strip().lower() for item in by_symbol.values()}
+        if "unavailable" in states:
+            state = "unavailable"
+        elif "stale" in states:
+            state = "stale"
+        elif "insufficient" in states:
+            state = "insufficient"
+        elif states == {"available"}:
+            state = "available"
+        else:
+            state = "unavailable"
+        default_reasons = {
+            "available": "qualified_local_us_parquet_cache",
+            "stale": "stale_local_us_parquet_cache",
+            "insufficient": "insufficient_verified_sessions",
+            "unavailable": "local_us_parquet_unavailable",
+        }
+        reason = next(
+            (
+                str(item.get("reason") or "").strip()
+                for item in by_symbol.values()
+                if str(item.get("state") or "").strip().lower() == state
+                and str(item.get("reason") or "").strip()
+            ),
+            default_reasons[state],
+        )
+        return {
+            "state": state,
+            "reason": reason,
+            "sourceClass": "local_us_parquet_cache",
+            "lineageState": "explicit",
+            "freshness": "current" if state == "available" else state,
+            "qualifiedSymbols": sorted(
+                symbol
+                for symbol, item in by_symbol.items()
+                if str(item.get("state") or "").strip().lower() == "available"
+            ),
+            "blockedSymbols": sorted(
+                symbol
+                for symbol, item in by_symbol.items()
+                if str(item.get("state") or "").strip().lower() != "available"
+            ),
+            "consumerSafe": True,
+        }
+
     def _collect_data_readiness_evidence(
         self,
         *,
@@ -2458,6 +2539,12 @@ class MarketScannerService:
         diagnostics_payload = dict(diagnostics or {})
         summary_payload = dict(summary or {})
         candidate_payloads = list(candidates or [])
+        local_us_parquet_readiness = self._summarize_local_us_parquet_readiness(
+            diagnostics=diagnostics_payload,
+            candidates=candidate_payloads,
+        )
+        if local_us_parquet_readiness:
+            diagnostics_payload["localUsParquetReadiness"] = local_us_parquet_readiness
         ohlcv_readiness = summarize_scanner_ohlcv_readiness(
             market=market, profile=profile, diagnostics=diagnostics_payload, candidates=candidate_payloads
         )
@@ -3083,8 +3170,14 @@ class MarketScannerService:
         preselected_df = market_options["compute_pre_rank"](universe_df).head(resolved_detail_limit).reset_index(drop=True)
         use_history_only_quote_context = (
             profile_config.market == "us"
-            and str((universe_selection or {}).get("universe_type") or "default").strip().lower() == "default"
-            and coverage_strategy == "bounded_starter_local_only"
+            and (
+                self._uses_configured_local_us_ohlcv_cache
+                or (
+                    str((universe_selection or {}).get("universe_type") or "default").strip().lower()
+                    == "default"
+                    and coverage_strategy == "bounded_starter_local_only"
+                )
+            )
         )
         evaluated_candidates, quote_diag_rollup = self._evaluate_quote_market_candidates(
             preselected_rows=preselected_df.to_dict("records"),
@@ -3269,6 +3362,7 @@ class MarketScannerService:
                 if use_history_only_quote_context
                 else None
             ),
+            "observationCandidateLimit": resolved_shortlist_size if use_history_only_quote_context else None,
             "boundedStarterUniverse": list(universe_resolution.get("boundedStarterUniverse") or []),
         }
         source_summary = self._build_source_summary(
@@ -3884,6 +3978,9 @@ class MarketScannerService:
             readiness = sanitize_historical_ohlcv_readiness(history_diag.get("historicalOhlcvReadiness"))
             if readiness:
                 candidate_diagnostics[symbol]["historicalOhlcvReadiness"] = readiness
+            local_cache_readiness = history_diag.get("localCacheReadiness")
+            if isinstance(local_cache_readiness, Mapping):
+                candidate_diagnostics[symbol]["localCacheReadiness"] = dict(local_cache_readiness)
 
             if history_source == "local_db":
                 history_rollup["local_hits"] += 1
@@ -7689,6 +7786,173 @@ class MarketScannerService:
             },
         )
 
+    @staticmethod
+    def _latest_expected_us_session(reference_at: datetime | None = None) -> date | None:
+        resolved_at = pd.Timestamp(reference_at or datetime.now(timezone.utc))
+        if resolved_at.tzinfo is None:
+            resolved_at = resolved_at.tz_localize("UTC")
+        else:
+            resolved_at = resolved_at.tz_convert("UTC")
+        try:
+            calendar = xcals.get_calendar("XNYS")
+            sessions = calendar.sessions_in_range(
+                resolved_at.date() - timedelta(days=10),
+                resolved_at.date(),
+            )
+            for session in reversed(sessions):
+                if calendar.session_close(session) <= resolved_at:
+                    return session.date()
+        except Exception:
+            return None
+        return None
+
+    def _qualify_configured_local_us_history(
+        self,
+        *,
+        code: str,
+        profile: ScannerMarketProfile,
+        history_df: pd.DataFrame,
+        readiness: Mapping[str, Any],
+        expected_session: date | None,
+    ) -> Tuple[pd.DataFrame, Dict[str, Any], Dict[str, Any]]:
+        normalized_code = str(code or "").strip().upper()
+        normalized_readiness = dict(readiness or {})
+        required_sessions = max(
+            int(profile.min_history_bars or 0),
+            self._readiness_int(normalized_readiness.get("requiredBars")),
+        )
+        qualification = {
+            "state": "unavailable",
+            "reason": "local_us_parquet_unavailable",
+            "sourceClass": "local_us_parquet_cache",
+            "lineageState": "explicit",
+            "symbol": normalized_code,
+            "requiredSessions": required_sessions,
+            "verifiedSessions": 0,
+            "latestSession": None,
+            "expectedSession": expected_session.isoformat() if expected_session else None,
+            "freshness": str(normalized_readiness.get("freshnessState") or "unknown"),
+            "consumerSafe": True,
+        }
+
+        if (
+            profile.market != "us"
+            or str(normalized_readiness.get("symbol") or "").strip().upper() != normalized_code
+            or str(normalized_readiness.get("market") or "").strip().lower() != "us"
+        ):
+            qualification["reason"] = "local_cache_symbol_identity_mismatch"
+            return pd.DataFrame(), normalized_readiness, qualification
+
+        if expected_session is None:
+            qualification["reason"] = "us_session_calendar_unavailable"
+            return pd.DataFrame(), normalized_readiness, qualification
+
+        required_columns = ("date", "open", "high", "low", "close", "volume")
+        if history_df.empty or any(column not in history_df.columns for column in required_columns):
+            qualification["reason"] = "invalid_required_ohlcv"
+            return self._block_local_history_readiness(
+                readiness=normalized_readiness,
+                qualification=qualification,
+                verified_sessions=0,
+                required_sessions=required_sessions,
+            )
+
+        observed_dates = pd.to_datetime(history_df["date"], errors="coerce")
+        numeric = history_df[list(required_columns[1:])].apply(pd.to_numeric, errors="coerce")
+        numeric_values = numeric.to_numpy(dtype=float)
+        invalid_ohlcv = (
+            observed_dates.isna().any()
+            or not np.isfinite(numeric_values).all()
+            or (numeric[["open", "high", "low", "close"]] <= 0).any().any()
+            or (numeric["high"] < numeric[["open", "low", "close"]].max(axis=1)).any()
+            or (numeric["low"] > numeric[["open", "high", "close"]].min(axis=1)).any()
+            or (numeric["volume"] < 0).any()
+        )
+        if invalid_ohlcv:
+            qualification["reason"] = "invalid_required_ohlcv"
+            return self._block_local_history_readiness(
+                readiness=normalized_readiness,
+                qualification=qualification,
+                verified_sessions=0,
+                required_sessions=required_sessions,
+            )
+
+        unique_dates = sorted({value.date() for value in observed_dates})
+        try:
+            calendar = xcals.get_calendar("XNYS")
+            sessions = calendar.sessions_in_range(unique_dates[0], unique_dates[-1])
+            valid_sessions = {session.date() for session in sessions}
+        except Exception:
+            qualification["reason"] = "us_session_calendar_unavailable"
+            return pd.DataFrame(), normalized_readiness, qualification
+        verified_dates = [value for value in unique_dates if value in valid_sessions]
+        verified_sessions = len(verified_dates)
+        qualification["verifiedSessions"] = verified_sessions
+        qualification["latestSession"] = verified_dates[-1].isoformat() if verified_dates else None
+
+        if len(verified_dates) != len(unique_dates):
+            qualification["reason"] = "invalid_session_dates"
+            return self._block_local_history_readiness(
+                readiness=normalized_readiness,
+                qualification=qualification,
+                verified_sessions=verified_sessions,
+                required_sessions=required_sessions,
+            )
+        if verified_sessions < required_sessions:
+            qualification["state"] = "insufficient"
+            qualification["reason"] = "insufficient_verified_sessions"
+            return self._block_local_history_readiness(
+                readiness=normalized_readiness,
+                qualification=qualification,
+                verified_sessions=verified_sessions,
+                required_sessions=required_sessions,
+            )
+
+        freshness = str(normalized_readiness.get("freshnessState") or "").strip().lower()
+        missing_requirements = {
+            str(item or "").strip().lower()
+            for item in normalized_readiness.get("missingRequirements") or []
+        }
+        if freshness != "current" or "stale_data" in missing_requirements:
+            qualification["state"] = "stale"
+            qualification["reason"] = "stale_local_us_parquet_cache"
+            return pd.DataFrame(), normalized_readiness, qualification
+        if (
+            str(normalized_readiness.get("providerState") or "").strip().lower() != "available"
+            or str(normalized_readiness.get("overallState") or "").strip().lower() != "ready"
+            or missing_requirements
+            or verified_dates[-1] != expected_session
+        ):
+            qualification["reason"] = "local_us_parquet_readiness_blocked"
+            return pd.DataFrame(), normalized_readiness, qualification
+
+        qualification["state"] = "available"
+        qualification["reason"] = "qualified_local_us_parquet_cache"
+        qualification["freshness"] = "current"
+        return history_df, normalized_readiness, qualification
+
+    @staticmethod
+    def _block_local_history_readiness(
+        *,
+        readiness: Mapping[str, Any],
+        qualification: Dict[str, Any],
+        verified_sessions: int,
+        required_sessions: int,
+    ) -> Tuple[pd.DataFrame, Dict[str, Any], Dict[str, Any]]:
+        blocked_readiness = dict(readiness or {})
+        missing_requirements = list(blocked_readiness.get("missingRequirements") or [])
+        if "insufficient_history" not in missing_requirements:
+            missing_requirements.append("insufficient_history")
+        blocked_readiness.update(
+            {
+                "usableBars": int(verified_sessions),
+                "missingBars": max(0, int(required_sessions) - int(verified_sessions)),
+                "overallState": "blocked",
+                "missingRequirements": missing_requirements,
+            }
+        )
+        return pd.DataFrame(), blocked_readiness, qualification
+
     def _load_history_from_ohlcv_provider(
         self,
         *,
@@ -7697,6 +7961,11 @@ class MarketScannerService:
     ) -> Optional[Tuple[pd.DataFrame, Dict[str, Any]]]:
         if self.historical_ohlcv_provider is None:
             return None
+        expected_session = (
+            self._latest_expected_us_session()
+            if self._uses_configured_local_us_ohlcv_cache and profile.market == "us"
+            else None
+        )
         result = build_scanner_historical_ohlcv_readiness(
             symbol=code,
             profile=profile,
@@ -7705,16 +7974,32 @@ class MarketScannerService:
             readiness_service=self.ohlcv_readiness_service,
             historical_ohlcv_provider=self.historical_ohlcv_provider,
             require_adjusted=self.require_adjusted_ohlcv,
+            request_end=expected_session,
         )
         readiness = sanitize_historical_ohlcv_readiness(result.readiness)
         history_df = self._normalize_history_frame(pd.DataFrame([bar.as_dict() for bar in result.bars]))
+        local_cache_readiness = None
+        if self._uses_configured_local_us_ohlcv_cache and profile.market == "us":
+            history_df, readiness, local_cache_readiness = self._qualify_configured_local_us_history(
+                code=code,
+                profile=profile,
+                history_df=history_df,
+                readiness=readiness,
+                expected_session=expected_session,
+            )
         latest_trade_date = (
             pd.to_datetime(history_df["date"]).max().date().isoformat()
             if not history_df.empty and "date" in history_df.columns
             else None
         )
         history_diag = {
-            "source": "historical_ohlcv_runtime" if readiness.get("providerState") == "available" else "unavailable",
+            "source": (
+                "local_us_parquet_cache"
+                if local_cache_readiness is not None
+                else "historical_ohlcv_runtime"
+                if readiness.get("providerState") == "available"
+                else "unavailable"
+            ),
             "rows": int(len(history_df)),
             "latest_trade_date": latest_trade_date,
             "network_used": False,
@@ -7723,6 +8008,10 @@ class MarketScannerService:
             "historicalOhlcvReadiness": readiness,
             "unavailable_reason": result.unavailable_reason,
         }
+        if local_cache_readiness is not None:
+            history_diag["localCacheReadiness"] = local_cache_readiness
+            if local_cache_readiness.get("state") != "available":
+                return pd.DataFrame(), history_diag
         if historical_ohlcv_readiness_blocks_scanner(readiness):
             return pd.DataFrame(), history_diag
         return history_df, history_diag

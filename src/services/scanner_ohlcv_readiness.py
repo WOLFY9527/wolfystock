@@ -65,6 +65,7 @@ def build_scanner_historical_ohlcv_readiness(
     readiness_service: HistoricalOhlcvReadinessService,
     historical_ohlcv_provider: HistoricalOhlcvProvider | None = None,
     require_adjusted: bool = False,
+    request_end: date | None = None,
 ) -> HistoricalOhlcvAcquisitionResult:
     request = HistoricalOhlcvReadinessRequest(
         symbol=symbol,
@@ -72,7 +73,7 @@ def build_scanner_historical_ohlcv_readiness(
         timeframe="1d",
         lookback_bars=int(profile.history_days or 0),
         required_bars=int(profile.min_history_bars or 0),
-        end=date.today() if historical_ohlcv_provider is not None else None,
+        end=(request_end or date.today()) if historical_ohlcv_provider is not None else None,
         require_adjusted=bool(require_adjusted),
     )
     if historical_ohlcv_provider is not None:

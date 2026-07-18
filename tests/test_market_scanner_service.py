@@ -14,8 +14,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import exchange_calendars as xcals
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 from data_provider.base import BaseFetcher, DataFetchError, DataFetcherManager, normalize_stock_code
 from src.repositories.stock_repo import StockRepository
@@ -335,14 +338,27 @@ def _quote_snapshots(symbols: tuple[str, ...]) -> dict[str, QuoteSnapshot]:
     }
 
 
-def _write_local_us_parquet(cache_dir: Path, symbol: str, *, rows: int = 90) -> None:
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    end_date = datetime.now().date()
-    start_date = end_date - timedelta(days=max(rows - 1, 0))
-    frame = pd.DataFrame(
+def _local_us_parquet_frame(
+    *,
+    rows: int = 90,
+    end_date: date | None = None,
+    session_dates: list[date] | None = None,
+) -> pd.DataFrame:
+    if session_dates is None:
+        calendar = xcals.get_calendar("XNYS")
+        resolved_end = end_date or date.today()
+        search_start = resolved_end - timedelta(days=max(rows * 3, 30))
+        sessions = calendar.sessions_in_range(search_start, resolved_end)
+        if end_date is None:
+            now = pd.Timestamp.now(tz="UTC")
+            sessions = pd.DatetimeIndex(
+                session for session in sessions if calendar.session_close(session) <= now
+            )
+        session_dates = [session.date() for session in sessions[-rows:]]
+    return pd.DataFrame(
         [
             {
-                "date": (start_date + timedelta(days=index)).isoformat(),
+                "date": session_date.isoformat(),
                 "open": 100.0 + index,
                 "high": 101.0 + index,
                 "low": 99.0 + index,
@@ -352,10 +368,27 @@ def _write_local_us_parquet(cache_dir: Path, symbol: str, *, rows: int = 90) -> 
                 "pct_chg": 0.1,
                 "adjusted_close": 100.5 + index,
             }
-            for index in range(rows)
+            for index, session_date in enumerate(session_dates)
         ]
     )
-    frame.to_parquet(cache_dir / f"{symbol.upper()}.parquet", index=False)
+
+
+def _write_local_us_parquet(
+    cache_dir: Path,
+    symbol: str,
+    *,
+    rows: int = 90,
+    frame: pd.DataFrame | None = None,
+) -> Path:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    resolved_frame = frame.copy() if frame is not None else _local_us_parquet_frame(rows=rows)
+    table = pa.Table.from_pandas(resolved_frame, preserve_index=False)
+    sink = pa.BufferOutputStream()
+    pq.write_table(table, sink)
+    round_tripped = pq.read_table(pa.BufferReader(sink.getvalue()))
+    path = cache_dir / f"{symbol.upper()}.parquet"
+    pq.write_table(round_tripped, path)
+    return path
 
 
 class ObservationScannerDataManager(FakeScannerDataManager):
@@ -4097,16 +4130,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         for symbol in ("SPY", "QQQ", "AAPL", "MSFT"):
             _write_local_us_parquet(cache_dir, symbol, rows=90)
         data_manager = FakeUsScannerDataManager()
-        for index, symbol in enumerate(("SPY", "QQQ", "MSFT"), start=1):
-            data_manager.us_quotes[symbol] = SimpleNamespace(
-                price=100.0 + index,
-                pre_close=99.0 + index,
-                change_pct=1.0 + index,
-                volume=30_000_000 + index,
-                amount=3.0e9 + index,
-                name=symbol,
-                source=SimpleNamespace(value="local_quote_snapshot_cache"),
-            )
+        data_manager.us_quotes.clear()
 
         with patch.dict(
             os.environ,
@@ -4117,13 +4141,12 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "",
             },
             clear=False,
-        ):
+        ), patch(
+            "src.services.yfinance_us_ohlcv_cache_provider.YfinanceFetcher.get_daily_data"
+        ) as remote_history_fetch:
             service = MarketScannerService(
                 self.db,
                 data_manager=data_manager,
-                quote_snapshot_provider=FakeQuoteSnapshotProvider(
-                    _quote_snapshots(("SPY", "QQQ", "AAPL", "MSFT"))
-                ),
             )
             detail = service.run_scan(
                 market="us",
@@ -4138,10 +4161,19 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         readiness = detail["dataReadiness"]
         self.assertEqual(readiness["historyReadiness"]["state"], "available")
         self.assertEqual(readiness["cacheReadiness"]["state"], "available")
+        self.assertEqual(readiness["cacheReadiness"]["reason"], "qualified_local_us_parquet_cache")
+        self.assertEqual(readiness["cacheReadiness"]["sourceClass"], "local_us_parquet_cache")
+        self.assertEqual(readiness["cacheReadiness"]["lineageState"], "explicit")
+        self.assertEqual(
+            readiness["cacheReadiness"]["qualifiedSymbols"],
+            ["AAPL", "MSFT", "QQQ"],
+        )
         self.assertNotIn("historical_ohlcv", readiness["scannerUniverseReadiness"]["missingDataFamilies"])
         self.assertNotIn("missing_history", readiness["candidateGenerationBlockers"])
         self.assertEqual(readiness["ohlcvReadiness"]["blockedSymbols"], [])
         self.assertEqual(data_manager.daily_history_calls, [])
+        self.assertEqual(data_manager.realtime_quote_calls, [])
+        remote_history_fetch.assert_not_called()
 
     def test_default_us_scan_generates_bounded_starter_candidates_from_local_ohlcv_without_live_quotes(self) -> None:
         cache_dir = Path(self._cache_temp_dir.name) / "us-starter-cache"
@@ -4159,9 +4191,18 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "",
             },
             clear=False,
-        ):
+        ), patch(
+            "src.services.yfinance_us_ohlcv_cache_provider.YfinanceFetcher.get_daily_data"
+        ) as remote_history_fetch:
             service = MarketScannerService(self.db, data_manager=data_manager)
             detail = service.run_scan(
+                market="us",
+                profile="us_preopen_v1",
+                shortlist_size=3,
+                universe_limit=50,
+                detail_limit=10,
+            )
+            repeated = MarketScannerService(self.db, data_manager=data_manager).run_scan(
                 market="us",
                 profile="us_preopen_v1",
                 shortlist_size=3,
@@ -4171,27 +4212,215 @@ class MarketScannerServiceTestCase(unittest.TestCase):
 
         self.assertEqual(detail["status"], "completed")
         self.assertEqual(detail["shortlist"], [])
+        self.assertEqual(detail["selected"], [])
         self.assertEqual(data_manager.realtime_quote_calls, [])
+        self.assertEqual(data_manager.daily_history_calls, [])
+        remote_history_fetch.assert_not_called()
         self.assertNotIn("PLTR", detail["dataReadiness"]["symbolsEvaluated"])
         self.assertEqual(detail["dataReadiness"]["universeSource"], "bounded_starter_market_data_spine")
         self.assertTrue(detail["dataReadiness"]["noExternalCalls"])
         self.assertFalse(detail["dataReadiness"]["providerCallsEnabled"])
-        self.assertEqual(detail["dataReadiness"]["candidateGenerationState"], "degraded")
-        self.assertEqual(detail["dataReadiness"]["candidateGenerationLimitations"], ["quote_unavailable_or_stale"])
-        self.assertEqual(detail["dataReadiness"]["candidateGenerationBlockers"], [])
-        self.assertEqual(detail["dataReadiness"]["blockedStates"], [])
+        self.assertEqual(detail["dataReadiness"]["cacheReadiness"]["state"], "available")
+        self.assertEqual(detail["dataReadiness"]["candidateGenerationState"], "blocked")
+        self.assertIn("missing_quote_snapshot", detail["dataReadiness"]["candidateGenerationBlockers"])
+        self.assertIn("factor_evidence_unavailable", detail["dataReadiness"]["candidateGenerationBlockers"])
+        self.assertIn("quote_unavailable_or_stale", detail["dataReadiness"]["blockedStates"])
         self.assertEqual(detail["dataReadiness"]["historicalOhlcvReadinessSummary"]["executionState"], "executable")
         self.assertTrue(set(detail["dataReadiness"]["symbolsEvaluated"]).issubset({"QQQ", "AAPL", "MSFT", "NVDA", "TSLA"}))
 
-        candidate = detail["shortlist"][0]
-        self.assertEqual(candidate["market"], "us")
-        self.assertIn(candidate["priority"], {"high", "medium", "low"})
-        self.assertTrue(candidate["reason"])
-        self.assertIn("Latest quote freshness", candidate["limitation"])
-        self.assertTrue(candidate["nextCheck"])
-        self.assertEqual(candidate["evidenceQuality"], "sufficient_ohlcv")
-        self.assertEqual(candidate["dataFreshness"]["quoteState"], "unavailable_or_stale")
-        self.assertEqual(candidate["noAdviceDisclosure"], "Observation-only research context; not investment advice.")
+        observations = detail["candidates"]
+        self.assertGreater(len(observations), 0)
+        self.assertLessEqual(len(observations), 3)
+        self.assertEqual(
+            [item["symbol"] for item in observations],
+            [item["symbol"] for item in repeated["candidates"]],
+        )
+        for candidate in observations:
+            self.assertEqual(candidate["rank"], 0)
+            self.assertIsNone(candidate["score"])
+            self.assertEqual(candidate["status"], "data_failed")
+            self.assertFalse(candidate["factorEvidence"]["rankingEligible"])
+            self.assertEqual(candidate["provider"], "local_us_parquet_cache")
+            quote_context = detail["diagnostics"]["candidate_diagnostics"][candidate["symbol"]]["quote_context"]
+            self.assertFalse(quote_context["available"])
+            self.assertIsNone(quote_context["price"])
+            self.assertIsNone(quote_context["change_pct"])
+
+    def test_local_us_parquet_fixture_round_trips_through_reviewed_pyarrow(self) -> None:
+        cache_dir = Path(self._cache_temp_dir.name) / "reviewed-pyarrow-roundtrip"
+        expected = _local_us_parquet_frame(rows=90)
+
+        path = _write_local_us_parquet(cache_dir, "AAPL", frame=expected)
+        actual = pq.read_table(path).to_pandas()
+
+        self.assertEqual(actual.to_dict("records"), expected.to_dict("records"))
+
+    def test_local_us_parquet_expected_session_requires_a_completed_us_session(self) -> None:
+        during_session = datetime(2026, 7, 17, 18, 0, tzinfo=timezone.utc)
+        after_session = datetime(2026, 7, 17, 21, 0, tzinfo=timezone.utc)
+
+        self.assertEqual(
+            MarketScannerService._latest_expected_us_session(during_session),
+            date(2026, 7, 16),
+        )
+        self.assertEqual(
+            MarketScannerService._latest_expected_us_session(after_session),
+            date(2026, 7, 17),
+        )
+
+    def test_configured_local_us_parquet_cache_blocks_malformed_columns(self) -> None:
+        cache_dir = Path(self._cache_temp_dir.name) / "malformed-us-cache"
+        malformed = _local_us_parquet_frame(rows=90).drop(columns=["volume"])
+        for symbol in ("SPY", "QQQ", "AAPL", "MSFT"):
+            _write_local_us_parquet(cache_dir, symbol, frame=malformed)
+        data_manager = FakeUsScannerDataManager()
+        data_manager.us_quotes.clear()
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": str(cache_dir),
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "",
+                "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "",
+            },
+            clear=False,
+        ), patch(
+            "src.services.yfinance_us_ohlcv_cache_provider.YfinanceFetcher.get_daily_data"
+        ) as remote_history_fetch:
+            with self.assertRaises(ScannerRuntimeError) as caught:
+                MarketScannerService(self.db, data_manager=data_manager).run_scan(
+                    market="us",
+                    profile="us_preopen_v1",
+                    shortlist_size=3,
+                    universe_limit=50,
+                    detail_limit=10,
+                )
+
+        self.assertEqual(caught.exception.reason_code, "insufficient_history")
+        cache_readiness = caught.exception.diagnostics["dataReadiness"]["cacheReadiness"]
+        self.assertEqual(cache_readiness["state"], "unavailable")
+        self.assertEqual(cache_readiness["reason"], "invalid_required_ohlcv")
+        self.assertEqual(data_manager.daily_history_calls, [])
+        self.assertEqual(data_manager.realtime_quote_calls, [])
+        remote_history_fetch.assert_not_called()
+
+    def test_configured_local_us_parquet_cache_blocks_invalid_session_dates(self) -> None:
+        cache_dir = Path(self._cache_temp_dir.name) / "invalid-session-us-cache"
+        frame = _local_us_parquet_frame(rows=90)
+        first_session = date.fromisoformat(frame.loc[0, "date"])
+        next_saturday = first_session + timedelta(days=(5 - first_session.weekday()) % 7)
+        frame.loc[0, "date"] = next_saturday.isoformat()
+        for symbol in ("SPY", "QQQ", "AAPL", "MSFT"):
+            _write_local_us_parquet(cache_dir, symbol, frame=frame)
+        data_manager = FakeUsScannerDataManager()
+        data_manager.us_quotes.clear()
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": str(cache_dir),
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "",
+                "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "",
+            },
+            clear=False,
+        ), patch(
+            "src.services.yfinance_us_ohlcv_cache_provider.YfinanceFetcher.get_daily_data"
+        ) as remote_history_fetch:
+            with self.assertRaises(ScannerRuntimeError) as caught:
+                MarketScannerService(self.db, data_manager=data_manager).run_scan(
+                    market="us",
+                    profile="us_preopen_v1",
+                    shortlist_size=3,
+                    universe_limit=50,
+                    detail_limit=10,
+                )
+
+        self.assertEqual(caught.exception.reason_code, "insufficient_history")
+        cache_readiness = caught.exception.diagnostics["dataReadiness"]["cacheReadiness"]
+        self.assertEqual(cache_readiness["state"], "unavailable")
+        self.assertEqual(cache_readiness["reason"], "invalid_session_dates")
+        self.assertEqual(data_manager.daily_history_calls, [])
+        self.assertEqual(data_manager.realtime_quote_calls, [])
+        remote_history_fetch.assert_not_called()
+
+    def test_configured_local_us_parquet_cache_blocks_insufficient_verified_sessions(self) -> None:
+        cache_dir = Path(self._cache_temp_dir.name) / "duplicate-session-us-cache"
+        last_session = _local_us_parquet_frame(rows=1)["date"].iloc[0]
+        duplicated = _local_us_parquet_frame(
+            session_dates=[date.fromisoformat(last_session)] * 90
+        )
+        for symbol in ("SPY", "QQQ", "AAPL", "MSFT"):
+            _write_local_us_parquet(cache_dir, symbol, frame=duplicated)
+        data_manager = FakeUsScannerDataManager()
+        data_manager.us_quotes.clear()
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": str(cache_dir),
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "",
+                "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "",
+            },
+            clear=False,
+        ), patch(
+            "src.services.yfinance_us_ohlcv_cache_provider.YfinanceFetcher.get_daily_data"
+        ) as remote_history_fetch:
+            with self.assertRaises(ScannerRuntimeError) as caught:
+                MarketScannerService(self.db, data_manager=data_manager).run_scan(
+                    market="us",
+                    profile="us_preopen_v1",
+                    shortlist_size=3,
+                    universe_limit=50,
+                    detail_limit=10,
+                )
+
+        self.assertEqual(caught.exception.reason_code, "insufficient_history")
+        cache_readiness = caught.exception.diagnostics["dataReadiness"]["cacheReadiness"]
+        self.assertEqual(cache_readiness["state"], "insufficient")
+        self.assertEqual(cache_readiness["reason"], "insufficient_verified_sessions")
+        self.assertEqual(data_manager.daily_history_calls, [])
+        self.assertEqual(data_manager.realtime_quote_calls, [])
+        remote_history_fetch.assert_not_called()
+
+    def test_configured_local_us_parquet_cache_blocks_stale_evidence(self) -> None:
+        cache_dir = Path(self._cache_temp_dir.name) / "stale-us-cache"
+        stale = _local_us_parquet_frame(rows=90, end_date=date.today() - timedelta(days=60))
+        for symbol in ("SPY", "QQQ", "AAPL", "MSFT"):
+            _write_local_us_parquet(cache_dir, symbol, frame=stale)
+        data_manager = FakeUsScannerDataManager()
+        data_manager.us_quotes.clear()
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": str(cache_dir),
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "",
+                "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "",
+            },
+            clear=False,
+        ), patch(
+            "src.services.yfinance_us_ohlcv_cache_provider.YfinanceFetcher.get_daily_data"
+        ) as remote_history_fetch:
+            with self.assertRaises(ScannerRuntimeError) as caught:
+                MarketScannerService(self.db, data_manager=data_manager).run_scan(
+                    market="us",
+                    profile="us_preopen_v1",
+                    shortlist_size=3,
+                    universe_limit=50,
+                    detail_limit=10,
+                )
+
+        self.assertEqual(caught.exception.reason_code, "insufficient_history")
+        cache_readiness = caught.exception.diagnostics["dataReadiness"]["cacheReadiness"]
+        self.assertEqual(cache_readiness["state"], "stale")
+        self.assertEqual(cache_readiness["reason"], "stale_local_us_parquet_cache")
+        self.assertEqual(data_manager.daily_history_calls, [])
+        self.assertEqual(data_manager.realtime_quote_calls, [])
+        remote_history_fetch.assert_not_called()
 
     def test_default_us_scan_payload_exposes_bounded_lineage_and_skipped_symbols(self) -> None:
         cache_dir = Path(self._cache_temp_dir.name) / "us-lineage-cache"

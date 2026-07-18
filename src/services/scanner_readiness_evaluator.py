@@ -388,7 +388,31 @@ def _operator_action(cache_status: str, quote: str, benchmark_missing: bool, req
     return None
 
 
-def _cache_readiness(state: str, requirements: Sequence[str], history: str, freshness: str) -> dict[str, Any]:
+def _cache_readiness(
+    state: str,
+    requirements: Sequence[str],
+    history: str,
+    freshness: str,
+    local_us_parquet_readiness: Mapping[str, Any],
+) -> dict[str, Any]:
+    local_state = str(local_us_parquet_readiness.get("state") or "").strip().lower()
+    local_source = str(local_us_parquet_readiness.get("sourceClass") or "").strip().lower()
+    local_lineage = str(local_us_parquet_readiness.get("lineageState") or "").strip().lower()
+    if (
+        local_state in {"available", "insufficient", "stale", "unavailable"}
+        and local_source == "local_us_parquet_cache"
+        and local_lineage == "explicit"
+    ):
+        return {
+            "state": local_state,
+            "reason": str(local_us_parquet_readiness.get("reason") or "local_us_parquet_unavailable"),
+            "freshness": str(local_us_parquet_readiness.get("freshness") or local_state),
+            "sourceClass": "local_us_parquet_cache",
+            "lineageState": "explicit",
+            "qualifiedSymbols": list(local_us_parquet_readiness.get("qualifiedSymbols") or []),
+            "blockedSymbols": list(local_us_parquet_readiness.get("blockedSymbols") or []),
+            "consumerSafe": True,
+        }
     requirement_set = set(requirements)
     cases = (
         ("provider_missing", "missing", "missing_cache"),
@@ -733,7 +757,13 @@ def evaluate_scanner_readiness(evidence: ScannerReadinessEvidence) -> EvaluatedS
         candidate_state = "not_run"
     else:
         candidate_state = "blocked"
-    cache_readiness = _cache_readiness(state, requirements, history, freshness)
+    cache_readiness = _cache_readiness(
+        state,
+        requirements,
+        history,
+        freshness,
+        _mapping(diagnostics.get("localUsParquetReadiness")),
+    )
     consumer_summary, next_action = _copy(blocker, state)
     lineage = _lineage(evidence, ohlcv)
 
