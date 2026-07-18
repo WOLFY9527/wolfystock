@@ -5,11 +5,12 @@ from __future__ import annotations
 
 import json
 import socket
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 import pytest
 import requests
 
+from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import market
 from src.services.market_data_readiness_diagnostics import build_market_data_readiness_diagnostics
 
@@ -106,9 +107,44 @@ class _Payload:
         return dict(self._payload)
 
 
+def _provider_read_admin() -> CurrentUser:
+    return CurrentUser(
+        user_id="provider-admin",
+        username="provider-admin",
+        display_name="Provider Admin",
+        role="admin",
+        is_admin=True,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+        admin_capabilities=("ops:providers:read",),
+    )
+
+
+def _regular_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="member-1",
+        username="member",
+        display_name="Member",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
+
+
+def _unauthenticated_user() -> CurrentUser:
+    raise HTTPException(
+        status_code=401,
+        detail={"error": "unauthorized", "message": "Login required"},
+    )
+
+
 def _client() -> TestClient:
     app = FastAPI()
     app.include_router(market.router, prefix="/api/v1/market")
+    app.dependency_overrides[get_current_user] = _provider_read_admin
     return TestClient(app)
 
 
@@ -121,6 +157,16 @@ def _spec_finder_with(available_modules: set[str]):
 
 def test_market_data_readiness_route_is_exposed() -> None:
     with _client() as client:
+        client.app.dependency_overrides[get_current_user] = _unauthenticated_user
+        unauthenticated = client.get("/api/v1/market/data-readiness")
+        assert unauthenticated.status_code == 401
+
+        client.app.dependency_overrides[get_current_user] = _regular_user
+        member = client.get("/api/v1/market/data-readiness")
+        assert member.status_code == 403
+        assert member.json()["detail"]["error"] == "admin_required"
+
+        client.app.dependency_overrides[get_current_user] = _provider_read_admin
         response = client.get("/api/v1/market/data-readiness")
 
     assert response.status_code == 200

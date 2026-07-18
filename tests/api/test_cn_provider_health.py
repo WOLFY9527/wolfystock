@@ -3,11 +3,13 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 import pytest
 
+from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import market
+from tests.api.route_table_helpers import iter_effective_api_routes
 from src.services import cn_provider_health_service as health_service_module
 
 
@@ -46,6 +48,40 @@ FORBIDDEN_PROVIDER_FIELDS = {
 }
 
 
+def _provider_read_admin() -> CurrentUser:
+    return CurrentUser(
+        user_id="provider-admin",
+        username="provider-admin",
+        display_name="Provider Admin",
+        role="admin",
+        is_admin=True,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+        admin_capabilities=("ops:providers:read",),
+    )
+
+
+def _regular_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="member-1",
+        username="member",
+        display_name="Member",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
+
+
+def _unauthenticated_user() -> CurrentUser:
+    raise HTTPException(
+        status_code=401,
+        detail={"error": "unauthorized", "message": "Login required"},
+    )
+
+
 def _client(
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -64,6 +100,7 @@ def _client(
     )
     app = FastAPI()
     app.include_router(market.router, prefix="/api/v1/market")
+    app.dependency_overrides[get_current_user] = _provider_read_admin
     return TestClient(app)
 
 
@@ -72,8 +109,7 @@ def test_cn_provider_health_route_is_exposed() -> None:
     app.include_router(market.router, prefix="/api/v1/market")
     routes = {
         (method, route.path)
-        for route in app.routes
-        if hasattr(route, "methods")
+        for route in iter_effective_api_routes(app.routes)
         for method in (route.methods or set())
         if method not in {"HEAD", "OPTIONS"}
     }
@@ -157,6 +193,16 @@ def test_cn_provider_health_route_returns_metadata_only_snapshot(monkeypatch: py
         },
     )
 
+    client.app.dependency_overrides[get_current_user] = _unauthenticated_user
+    unauthenticated = client.get("/api/v1/market/cn-provider-health")
+    assert unauthenticated.status_code == 401
+
+    client.app.dependency_overrides[get_current_user] = _regular_user
+    member = client.get("/api/v1/market/cn-provider-health")
+    assert member.status_code == 403
+    assert member.json()["detail"]["error"] == "admin_required"
+
+    client.app.dependency_overrides[get_current_user] = _provider_read_admin
     response = client.get("/api/v1/market/cn-provider-health")
 
     assert response.status_code == 200

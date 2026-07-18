@@ -18,7 +18,7 @@ import src.auth as auth
 from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import admin_logs
 from src.auth import hash_password_for_storage
-from src.admin_rbac import SUPPORT_ADMIN_ROLE
+from src.admin_rbac import SECURITY_ADMIN_ROLE, SUPPORT_ADMIN_ROLE
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.storage import AdminUserRole, AppUserSession, DatabaseManager, ExecutionLogSession
 
@@ -167,6 +167,8 @@ class AdminSecurityApiTestCase(unittest.TestCase):
             is_active=True,
         )
         with self.db.get_session() as session:
+            session.add(AdminUserRole(user_id=BOOTSTRAP_ADMIN_USER_ID, role_key=SECURITY_ADMIN_ROLE))
+            session.add(AdminUserRole(user_id="admin-2", role_key=SECURITY_ADMIN_ROLE))
             session.add(AdminUserRole(user_id="support-admin-1", role_key=SUPPORT_ADMIN_ROLE))
             session.add_all(
                 [

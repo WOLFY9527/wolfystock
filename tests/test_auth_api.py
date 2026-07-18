@@ -31,9 +31,10 @@ import src.auth as auth
 from api.deps import CurrentUser
 from api.middlewares.auth import AuthMiddleware
 from api.v1.endpoints import auth as auth_endpoint
+from src.admin_rbac import ADMIN_RBAC_ROLE_CAPABILITIES, OPS_ADMIN_ROLE
 from src.config import Config
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
-from src.storage import DatabaseManager
+from src.storage import AdminUserRole, DatabaseManager
 
 
 def _reset_auth_globals() -> None:
@@ -67,6 +68,11 @@ class AuthApiTestCase(unittest.TestCase):
         self.data_dir_patcher = patch.object(auth, "_get_data_dir", return_value=self.data_dir)
         self.auth_patcher.start()
         self.data_dir_patcher.start()
+
+        self.db = DatabaseManager.get_instance()
+        with self.db.get_session() as session:
+            session.add(AdminUserRole(user_id=BOOTSTRAP_ADMIN_USER_ID, role_key=OPS_ADMIN_ROLE))
+            session.commit()
 
     def tearDown(self) -> None:
         self.auth_patcher.stop()
@@ -368,13 +374,11 @@ class AuthApiTestCase(unittest.TestCase):
             self.assertTrue(payload["isAdmin"])
             self.assertTrue(payload["isAuthenticated"])
             capabilities = payload["adminCapabilities"]
-            self.assertEqual(capabilities, sorted(capabilities))
-            self.assertIn("users:security:write", capabilities)
-            self.assertIn("users:portfolio:read", capabilities)
-            self.assertTrue(payload["canReadUsers"])
-            self.assertTrue(payload["canReadUserActivity"])
-            self.assertTrue(payload["canReadUserPortfolio"])
-            self.assertTrue(payload["canWriteUserSecurity"])
+            self.assertEqual(capabilities, sorted(ADMIN_RBAC_ROLE_CAPABILITIES[OPS_ADMIN_ROLE]))
+            self.assertFalse(payload["canReadUsers"])
+            self.assertFalse(payload["canReadUserActivity"])
+            self.assertFalse(payload["canReadUserPortfolio"])
+            self.assertFalse(payload["canWriteUserSecurity"])
             self.assertTrue(payload["canReadCostObservability"])
             self.assertTrue(payload["canReadOpsLogs"])
             self.assertTrue(payload["canReadProviders"])
@@ -396,11 +400,12 @@ class AuthApiTestCase(unittest.TestCase):
         self.assertEqual(current_user["role"], "admin")
         self.assertTrue(current_user["isAdmin"])
         self.assertTrue(current_user["isAuthenticated"])
-        self.assertIn("adminCapabilities", current_user)
-        self.assertIn("users:security:write", current_user["adminCapabilities"])
-        self.assertIn("users:portfolio:read", current_user["adminCapabilities"])
-        self.assertTrue(current_user["canWriteUserSecurity"])
-        self.assertTrue(current_user["canReadUserPortfolio"])
+        self.assertEqual(
+            current_user["adminCapabilities"],
+            sorted(ADMIN_RBAC_ROLE_CAPABILITIES[OPS_ADMIN_ROLE]),
+        )
+        self.assertFalse(current_user["canWriteUserSecurity"])
+        self.assertFalse(current_user["canReadUserPortfolio"])
 
     def test_non_admin_current_user_has_no_admin_capability_summary(self) -> None:
         response = self._login_user(username="normal-user", password="secret123")
@@ -1580,7 +1585,7 @@ class AuthApiTestCase(unittest.TestCase):
         with patch.object(auth, "_is_auth_enabled_from_env", side_effect=self._read_auth_enabled_from_env):
             # 1. Setup an existing password, auth is currently disabled
             auth.set_initial_password("passwd6")
-            
+
             # 2. Simulate the race condition:
             # The middleware let the request through because auth was supposedly False.
             # But just before the handler runs, another thread enables auth.
@@ -1588,7 +1593,7 @@ class AuthApiTestCase(unittest.TestCase):
                 "STOCK_LIST=600519\nGEMINI_API_KEY=test\nADMIN_AUTH_ENABLED=true\n",
                 encoding="utf-8",
             )
-            auth.refresh_auth_state() # simulate the flip to True
+            auth.refresh_auth_state()  # simulate the flip to True
 
             # 3. The attacker tries to re-enable auth without a password or valid cookie
             response = asyncio.run(

@@ -62,6 +62,7 @@ def _legacy_admin_user(*, admin_capabilities=()) -> CurrentUser:
         transitional=False,
         auth_enabled=True,
         session_id="raw-session-id",
+        legacy_admin=True,
         admin_capabilities=tuple(admin_capabilities),
     )
 
@@ -153,7 +154,7 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         self.assertFalse(report.break_glass_enabled_by_default)
         self.assertTrue(report.coarse_admin_fallback_present)
         self.assertEqual(report.coarse_admin_fallback_status, "transitional")
-        self.assertTrue(report.coarse_admin_fallback_default_enabled)
+        self.assertFalse(report.coarse_admin_fallback_default_enabled)
         self.assertTrue(report.coarse_admin_fallback_disable_preflight_ready)
         self.assertTrue(report.coarse_admin_fallback_guarded_disable_switch_available)
         self.assertEqual(report.coarse_admin_fallback_production_switch_status, "guarded_disable_available")
@@ -163,7 +164,7 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         self.assertNotIn("admin_route_capability_dependency_gap", report.launch_blockers)
         self.assertTrue(report.explicit_capability_grants_without_fallback)
         self.assertTrue(report.missing_capability_dependency_fail_closed)
-        self.assertIn("coarse_admin_fallback_default_enabled_until_switch_applied", report.launch_blockers)
+        self.assertIn("coarse_admin_fallback_present", report.launch_blockers)
         self.assertTrue(report.missing_admin_capabilities_fail_closed)
 
     def test_mfa_operator_acceptance_artifact_requires_admin_only_scope_and_redaction(self) -> None:
@@ -283,16 +284,22 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
             self.assertNotIn(forbidden, text)
 
     def test_coarse_admin_fallback_remains_present_and_marked_launch_blocker(self) -> None:
-        capabilities = expand_admin_capabilities(_legacy_admin_user())
+        with patch.dict(
+            os.environ,
+            {"WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED": "true"},
+            clear=False,
+        ):
+            capabilities = expand_admin_capabilities(_legacy_admin_user())
         report = build_security_launch_preflight()
 
         self.assertEqual(set(ADMIN_RBAC_CAPABILITIES), capabilities)
         self.assertTrue(report.coarse_admin_fallback_present)
         self.assertEqual(report.coarse_admin_fallback_status, "transitional")
-        self.assertTrue(report.coarse_admin_fallback_default_enabled)
+        self.assertFalse(report.coarse_admin_fallback_default_enabled)
         self.assertTrue(report.coarse_admin_fallback_guarded_disable_switch_available)
-        self.assertIn("coarse_admin_fallback_default_enabled_until_switch_applied", report.launch_blockers)
-        self.assertIn("WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED=false", report.rollback_safe_next_step)
+        self.assertIn("coarse_admin_fallback_present", report.launch_blockers)
+        self.assertIn("WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED", report.rollback_safe_next_step)
+        self.assertIn("unset or false", report.rollback_safe_next_step)
 
     def test_coarse_fallback_production_switch_status_reports_no_route_gap(self) -> None:
         report = build_security_launch_preflight()
@@ -301,7 +308,7 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         self.assertTrue(report.coarse_admin_fallback_production_switch_ready)
         self.assertEqual(
             {
-                "fallback_default_enabled": True,
+                "fallback_default_enabled": False,
                 "fallback_disabled_fail_closed": True,
                 "explicit_capability_payloads_without_fallback": True,
                 "legacy_admin_without_payload_denied_without_fallback": True,
@@ -351,7 +358,7 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         self.assertFalse(evidence["public_launch_approved"])
         self.assertTrue(evidence["denial_details_sanitized"])
         self.assertTrue(evidence["audit_payload_sanitized"])
-        self.assertTrue(evidence["default_enabled_without_explicit_config"])
+        self.assertFalse(evidence["default_enabled_without_explicit_config"])
         self.assertFalse(evidence["runtime_default_changed"])
         rendered = json.dumps(evidence, sort_keys=True).lower()
         for forbidden in ("raw-session-id", "raw-password", "raw-cookie", "raw-token", "super-admin", ".env"):

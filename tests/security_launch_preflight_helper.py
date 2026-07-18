@@ -434,8 +434,16 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
 
     payload = _missing_capabilities_payload()
     flag_values = [value for key, value in payload.items() if key.startswith("can")]
-    coarse_fallback_present = set(expand_admin_capabilities(_legacy_admin_user())) == set(ADMIN_RBAC_CAPABILITIES)
-    fallback_default_enabled = is_coarse_admin_fallback_enabled()
+    with patch.dict(
+        "os.environ",
+        {"WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED": "true"},
+        clear=False,
+    ):
+        coarse_fallback_present = set(expand_admin_capabilities(_legacy_admin_user())) == set(
+            ADMIN_RBAC_CAPABILITIES
+        )
+    with patch.dict("os.environ", {}, clear=True):
+        fallback_default_enabled = is_coarse_admin_fallback_enabled()
     explicit_capability_grants_work = require_admin_capability("users:read")(_explicit_capability_admin()) is not None
     legacy_admin_without_payload_denied_without_fallback = False
     missing_payload_without_fallback_fail_closed = False
@@ -510,7 +518,7 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
         and staging_rehearsal_evidence["frontend_admin_gates_capability_based"]
         and staging_rehearsal_evidence["frontend_admin_missing_capabilities_fail_closed"]
         and not staging_rehearsal_evidence["public_launch_approved"]
-        and staging_rehearsal_evidence["default_enabled_without_explicit_config"]
+        and not staging_rehearsal_evidence["default_enabled_without_explicit_config"]
         and not staging_rehearsal_evidence["runtime_default_changed"]
     )
     blockers = []
@@ -638,7 +646,7 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
         ),
         role_assignment_runtime_behavior_changed=False,
         launch_blockers=tuple(blockers),
-        rollback_safe_next_step="Set WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED=false only for the guarded "
-        "production-disable path; do not delete the compatibility code until explicit role assignments, telemetry, "
-        "MFA/reauth evidence, fail-closed browser proof, and rollback evidence are complete.",
+        rollback_safe_next_step="Keep WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED unset or false; remove the "
+        "opt-in migration path only after explicit role assignments, telemetry, MFA/reauth evidence, fail-closed "
+        "browser proof, and rollback evidence are complete.",
     )

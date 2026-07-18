@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user
@@ -67,6 +67,13 @@ def _admin_without_cost_capability() -> CurrentUser:
     )
 
 
+def _unauthenticated_user() -> CurrentUser:
+    raise HTTPException(
+        status_code=401,
+        detail={"error": "unauthorized", "message": "Login required"},
+    )
+
+
 class AdminCostSummaryApiTestCase(unittest.TestCase):
     def setUp(self) -> None:
         reset_llm_event_counters()
@@ -79,6 +86,7 @@ class AdminCostSummaryApiTestCase(unittest.TestCase):
 
         self.app = FastAPI()
         self.app.include_router(admin_cost.router, prefix="/api/v1/admin")
+        self.app.dependency_overrides[get_current_user] = _unauthenticated_user
         self.client = TestClient(self.app)
 
     def tearDown(self) -> None:

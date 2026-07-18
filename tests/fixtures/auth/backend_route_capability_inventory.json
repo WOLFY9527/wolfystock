@@ -2436,7 +2436,7 @@
       "auth_dependency_label": "admin_capability",
       "capability_label": "users:security:write",
       "no_go_marker": null,
-      "transitional_note": "Capability-gated route projected from live FastAPI dependency metadata."
+      "transitional_note": "Security-write capability is followed by recent admin reauthentication; only the local auth-disabled non-production bootstrap path is transitional."
     },
     {
       "route_id": "api.v1.admin.users.user_id.disable",
@@ -2446,7 +2446,7 @@
       "auth_dependency_label": "admin_capability",
       "capability_label": "users:security:write",
       "no_go_marker": null,
-      "transitional_note": "Capability-gated route projected from live FastAPI dependency metadata."
+      "transitional_note": "Security-write capability is followed by recent admin reauthentication; only the local auth-disabled non-production bootstrap path is transitional."
     },
     {
       "route_id": "api.v1.admin.users.user_id.enable",
@@ -2456,7 +2456,7 @@
       "auth_dependency_label": "admin_capability",
       "capability_label": "users:security:write",
       "no_go_marker": null,
-      "transitional_note": "Capability-gated route projected from live FastAPI dependency metadata."
+      "transitional_note": "Security-write capability is followed by recent admin reauthentication; only the local auth-disabled non-production bootstrap path is transitional."
     },
     {
       "route_id": "api.v1.admin.users.user_id.revoke_sessions",
@@ -2466,7 +2466,7 @@
       "auth_dependency_label": "admin_capability",
       "capability_label": "users:security:write",
       "no_go_marker": null,
-      "transitional_note": "Capability-gated route projected from live FastAPI dependency metadata."
+      "transitional_note": "Security-write capability is followed by recent admin reauthentication; only the local auth-disabled non-production bootstrap path is transitional."
     },
     {
       "route_id": "api.v1.agent.chat",
@@ -2646,7 +2646,7 @@
       "auth_dependency_label": "request_current_user",
       "capability_label": null,
       "no_go_marker": null,
-      "transitional_note": "Auth routes retain their explicit request-local public or current-user guard contract."
+      "transitional_note": "Authenticated administrators require explicit system-config write capability plus admin unlock or recent reauthentication; only the local auth-disabled non-production bootstrap path is transitional."
     },
     {
       "route_id": "api.v1.auth.verify_password",
@@ -3342,7 +3342,13 @@
       "route_id": "auth.settings",
       "path": "/api/v1/auth/settings",
       "method": "POST",
-      "guard_kind": "request_current_user"
+      "guard_kind": "request_current_user",
+      "authentication_requirement": "authenticated_admin",
+      "capability_label": "ops:system_config:write",
+      "reauthentication_requirement": "admin_unlock_or_recent_reauthentication",
+      "expected_status_contract": "401_unauthenticated_403_missing_capability_or_reauthentication_200_authorized",
+      "public_ingress_status": "not_public",
+      "transitional_note": "Authenticated administrators require explicit system-config write capability plus admin unlock or recent reauthentication; only the local auth-disabled non-production bootstrap path is transitional."
     },
     {
       "route_id": "auth.login",

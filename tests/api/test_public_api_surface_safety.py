@@ -397,6 +397,7 @@ def test_launch_surface_route_inventory_remains_stable_and_fixture_safe() -> Non
 
 def test_docs_openapi_and_backend_diagnostics_have_explicit_surface_classification() -> None:
     classifications = _route_surface_classifications()
+    fixture = json.loads(BACKEND_ROUTE_CLASSIFICATION_FIXTURE.read_text(encoding="utf-8"))
 
     for signature, expected in DOCS_AND_SCHEMA_CLASSIFICATIONS.items():
         assert classifications[signature] == expected
@@ -414,6 +415,33 @@ def test_docs_openapi_and_backend_diagnostics_have_explicit_surface_classificati
     assert classifications[("GET", "/api/v1/market/data-readiness")] == "operator_diagnostic"
     assert classifications[("GET", "/api/v1/market/data-source-gap-registry")] == "operator_diagnostic"
     assert classifications[("GET", "/api/v1/agent/provider-health")] == "operator_diagnostic"
+
+    auth_settings = next(
+        entry
+        for entry in fixture["request_guarded_auth_routes"]
+        if entry["method"] == "POST" and entry["path"] == "/api/v1/auth/settings"
+    )
+    assert auth_settings["capability_label"] == "ops:system_config:write"
+    assert auth_settings["authentication_requirement"] == "authenticated_admin"
+    assert auth_settings["reauthentication_requirement"] == "admin_unlock_or_recent_reauthentication"
+    assert auth_settings["expected_status_contract"] == (
+        "401_unauthenticated_403_missing_capability_or_reauthentication_200_authorized"
+    )
+    assert auth_settings["public_ingress_status"] == "not_public"
+
+    surface_entries = {
+        (entry["method"], entry["path"]): entry
+        for entry in fixture["route_surface_classifications"]
+    }
+    for path in (
+        "/api/v1/admin/users/onboard",
+        "/api/v1/admin/users/{user_id}/disable",
+        "/api/v1/admin/users/{user_id}/enable",
+        "/api/v1/admin/users/{user_id}/revoke-sessions",
+    ):
+        entry = surface_entries[("POST", path)]
+        assert entry["capability_label"] == "users:security:write"
+        assert "recent admin reauthentication" in entry["transitional_note"]
 
     api_routes_with_doc_labels = [
         signature
@@ -440,6 +468,7 @@ def test_legacy_api_v1_openapi_path_is_unsupported_not_a_docs_surface() -> None:
 
     client = _auth_guarded_client()
     try:
+        _reset_auth_globals()
         with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
             fail_closed_response = client.get(LEGACY_UNSUPPORTED_OPENAPI_PATH)
         _reset_auth_globals()
@@ -450,6 +479,7 @@ def test_legacy_api_v1_openapi_path_is_unsupported_not_a_docs_surface() -> None:
         assert fail_closed_response.json() == _safe_error("unauthorized", "Login required", 401)
         _assert_public_surface_safe(fail_closed_response.json())
         assert unsupported_response.status_code == 404
+        _assert_public_surface_safe(unsupported_response.json())
     finally:
         client.close()
         _reset_auth_globals()

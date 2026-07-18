@@ -26,12 +26,13 @@ import src.auth as auth
 from api.app import create_app
 from api.deps import CurrentUser
 from api.v1.endpoints.analysis import get_task_list
+from src.admin_rbac import OPS_ADMIN_ROLE
 from src.config import Config
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.services.market_scanner_service import MarketScannerService
 from src.services.portfolio_service import PortfolioService
 from src.services.task_queue import AnalysisTaskQueue, TaskStatus
-from src.storage import BacktestRun, DatabaseManager, RuleBacktestRun
+from src.storage import AdminUserRole, BacktestRun, DatabaseManager, RuleBacktestRun
 
 
 def _reset_auth_globals() -> None:
@@ -87,6 +88,9 @@ class MultiUserAuthorizationApiTestCase(unittest.TestCase):
         self.user_a_client = TestClient(self.app)
         self.user_b_client = TestClient(self.app)
         self.db = DatabaseManager.get_instance()
+        with self.db.get_session() as session:
+            session.add(AdminUserRole(user_id=BOOTSTRAP_ADMIN_USER_ID, role_key=OPS_ADMIN_ROLE))
+            session.commit()
 
         self._login_admin()
         self.admin_unlock_token = self._verify_admin_password()

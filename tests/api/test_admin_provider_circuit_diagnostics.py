@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -70,6 +70,13 @@ def _regular_user() -> CurrentUser:
     )
 
 
+def _unauthenticated_user() -> CurrentUser:
+    raise HTTPException(
+        status_code=401,
+        detail={"error": "unauthorized", "message": "Login required"},
+    )
+
+
 class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
     def setUp(self) -> None:
         os.environ.pop(PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED_ENV, None)
@@ -80,6 +87,7 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.db = DatabaseManager(db_url=f"sqlite:///{self.db_path}")
         self.app = FastAPI()
         self.app.include_router(admin_provider_circuits.router, prefix="/api/v1/admin")
+        self.app.dependency_overrides[get_current_user] = _unauthenticated_user
         self.client = TestClient(self.app)
 
     def tearDown(self) -> None:

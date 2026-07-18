@@ -319,6 +319,18 @@ def _surface_classification_for_route(route: dict[str, str | None]) -> tuple[str
         return "bounded_auth_endpoint", None, "Auth routes retain their explicit request-local public or current-user guard contract."
     if auth_label == "admin_capability":
         if path in {
+            "/api/v1/admin/users/onboard",
+            "/api/v1/admin/users/{user_id}/disable",
+            "/api/v1/admin/users/{user_id}/enable",
+            "/api/v1/admin/users/{user_id}/revoke-sessions",
+        }:
+            return (
+                "admin_capability",
+                None,
+                "Security-write capability is followed by recent admin reauthentication; only the local "
+                "auth-disabled non-production bootstrap path is transitional.",
+            )
+        if path in {
             "/api/v1/agent/status",
             "/api/v1/agent/models",
             "/api/v1/agent/provider-health",
@@ -343,15 +355,18 @@ def _surface_classification_for_route(route: dict[str, str | None]) -> tuple[str
 
 def _build_surface_classifications(live_routes: dict[tuple[str, str], dict[str, str | None]]) -> list[dict[str, Any]]:
     entries = list(DOCS_AND_SCHEMA_SURFACES)
-    auth_guards = {
-        (entry["method"], entry["path"]): entry["guard_kind"]
+    auth_contracts = {
+        (entry["method"], entry["path"]): entry
         for entry in _collect_auth_route_source_inventory()
     }
     for (method, path), route in live_routes.items():
         classification, no_go, note = _surface_classification_for_route(route)
         auth_label = _public_dependency_label(method, path, route["auth_dependency_label"])
+        capability_label = route["capability_label"]
         if classification == "bounded_auth_endpoint":
-            auth_label = auth_guards[(method, path)]
+            auth_contract = auth_contracts[(method, path)]
+            auth_label = auth_contract["guard_kind"]
+            note = auth_contract.get("transitional_note") or note
         elif classification == "public_consumer_safe_read":
             auth_label = "public"
         entries.append(
@@ -361,7 +376,7 @@ def _build_surface_classifications(live_routes: dict[tuple[str, str], dict[str, 
                 path=path,
                 surface_classification=classification,
                 auth_dependency_label=auth_label,
-                capability_label=route["capability_label"],
+                capability_label=capability_label,
                 no_go_marker=no_go,
                 transitional_note=note,
             )
@@ -385,7 +400,24 @@ def _collect_auth_route_source_inventory() -> list[dict[str, Any]]:
         {"route_id": "auth.mfa_recovery_verify", "path": "/api/v1/auth/mfa/recovery-codes/verify", "method": "POST", "guard_kind": "request_current_user"},
         {"route_id": "auth.mfa_recovery_rotate", "path": "/api/v1/auth/mfa/recovery-codes/rotate", "method": "POST", "guard_kind": "request_current_user"},
         {"route_id": "auth.verify_password", "path": "/api/v1/auth/verify-password", "method": "POST", "guard_kind": "request_current_user"},
-        {"route_id": "auth.settings", "path": "/api/v1/auth/settings", "method": "POST", "guard_kind": "request_current_user"},
+        {
+            "route_id": "auth.settings",
+            "path": "/api/v1/auth/settings",
+            "method": "POST",
+            "guard_kind": "request_current_user",
+            "authentication_requirement": "authenticated_admin",
+            "capability_label": "ops:system_config:write",
+            "reauthentication_requirement": "admin_unlock_or_recent_reauthentication",
+            "expected_status_contract": (
+                "401_unauthenticated_403_missing_capability_or_reauthentication_200_authorized"
+            ),
+            "public_ingress_status": "not_public",
+            "transitional_note": (
+                "Authenticated administrators require explicit system-config write capability plus admin unlock "
+                "or recent reauthentication; only the local auth-disabled non-production bootstrap path is "
+                "transitional."
+            ),
+        },
         {"route_id": "auth.login", "path": "/api/v1/auth/login", "method": "POST", "guard_kind": "public"},
         {"route_id": "auth.reset_password_request", "path": "/api/v1/auth/reset-password/request", "method": "POST", "guard_kind": "public"},
         {"route_id": "auth.change_password", "path": "/api/v1/auth/change-password", "method": "POST", "guard_kind": "request_current_user"},
