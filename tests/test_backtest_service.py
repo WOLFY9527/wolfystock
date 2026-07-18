@@ -494,6 +494,46 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(result.simulated_exit_reason, "take_profit")
         self.assertAlmostEqual(result.simulated_return_pct, 10.0)
 
+    def test_result_exposes_raw_basis_and_does_not_invent_verified_sessions(self) -> None:
+        service = BacktestService(self.db)
+        service.run_backtest(code="600519", force=False, eval_window_days=3, min_age_days=0, limit=10)
+
+        item = service.get_recent_evaluations(code="600519", eval_window_days=3, limit=10, page=1)["items"][0]
+        data_basis = item["data_basis"]
+
+        self.assertEqual(data_basis["contract_version"], "backtest_data_basis.v1")
+        self.assertEqual(data_basis["price_basis"]["basis_id"], "raw_ohlc")
+        self.assertEqual(data_basis["price_basis"]["strategy"]["basis_id"], "raw_ohlc")
+        self.assertEqual(data_basis["price_basis"]["benchmark"]["basis_id"], "raw_ohlc")
+        self.assertTrue(data_basis["price_basis"]["compatible"])
+        self.assertEqual(
+            data_basis["price_basis"]["corporate_action_adjustment"],
+            {"mode": "none", "application_count": 0},
+        )
+        self.assertEqual(data_basis["calendar_identity"]["calendar_id"], "XSHG")
+        self.assertEqual(data_basis["calendar_identity"]["state"], "observed_bars_only")
+        self.assertEqual(data_basis["calendar_identity"]["verified_session_dates"], [])
+        self.assertEqual(
+            data_basis["calendar_identity"]["observed_bar_dates"],
+            ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"],
+        )
+        self.assertEqual(
+            data_basis["date_range"]["requested"],
+            {"start": "2024-01-01", "end": None, "sessions": 4},
+        )
+        self.assertEqual(
+            data_basis["date_range"]["effective"],
+            {"start": "2024-01-01", "end": "2024-01-04", "sessions": 4},
+        )
+        self.assertEqual(
+            data_basis["warmup_history"],
+            {"required_sessions": 0, "available_sessions": 0, "state": "not_required"},
+        )
+        self.assertFalse(data_basis["decision_grade"])
+        self.assertIn("calendar_identity_unverified", data_basis["blocking_reasons"])
+        self.assertIn("corporate_action_adjustment_not_applied", data_basis["blocking_reasons"])
+        self.assertEqual(item["reproducibility_manifest"]["dataset_lineage"]["state"], "blocked_data_basis")
+
     def test_summaries_created_after_run(self) -> None:
         """Verify both overall and per-stock BacktestSummary rows are created."""
         service = BacktestService(self.db)

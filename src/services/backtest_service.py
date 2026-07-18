@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from sqlalchemy import and_, select
 
 from src.config import get_config
 from src.core.backtest_engine import OVERALL_SENTINEL_CODE, BacktestEngine, EvaluationConfig
+from src.core.trading_calendar import MARKET_EXCHANGE, MARKET_TIMEZONE, get_market_for_stock
 from src.repositories.backtest_repo import BacktestRepository
 from src.repositories.stock_repo import StockRepository
 from src.services.backtest_response_contract import (
@@ -23,6 +25,10 @@ from src.services.backtest_response_contract import (
 )
 from src.services.backtest_data_sufficiency import assess_backtest_data_sufficiency
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
+from src.services.backtest_reproducibility_manifest import (
+    build_backtest_price_basis_contract,
+    build_backtest_reproducibility_manifest,
+)
 from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvReadinessRequest,
     HistoricalOhlcvReadinessService,
@@ -1022,13 +1028,176 @@ class BacktestService:
             "module_type": "historical_analysis_evaluation",
             "evaluation_window_unit": "trading_bars",
             "maturity_unit": "calendar_days",
-            "price_basis": "close",
+            "strategy_price_basis": "raw_ohlc",
+            "benchmark_price_basis": "raw_ohlc",
+            "corporate_action_adjustment": "none",
             "analysis_signal_timing": "analysis snapshot on analysis_date",
             "simulated_entry_timing": "analysis_date close",
             "simulated_exit_timing": "first forward bar target touch or evaluation-window end close",
             "position_sizing": "binary long_or_cash; simulated long leg uses 100% notional exposure",
             "fees_slippage": "not applied",
         }
+
+    @classmethod
+    def _standard_result_data_basis(
+        cls,
+        *,
+        code: str,
+        rows: List[StockDaily],
+        analysis_date: Optional[date],
+        eval_window_days: int,
+    ) -> Dict[str, Any]:
+        ordered_rows = sorted(
+            [row for row in rows if isinstance(getattr(row, "date", None), date)],
+            key=lambda row: row.date,
+        )
+        observed_dates = sorted({row.date.isoformat() for row in ordered_rows})
+        required_fields_available = bool(ordered_rows) and all(
+            cls._positive_price(getattr(row, field, None))
+            for row in ordered_rows
+            for field in ("close", "high", "low")
+        )
+        market = get_market_for_stock(code)
+        calendar_id = MARKET_EXCHANGE.get(market) if market else None
+        timezone_name = MARKET_TIMEZONE.get(market) if market else None
+        calendar_state = "observed_bars_only" if calendar_id and timezone_name else "missing"
+        requested_sessions = max(0, int(eval_window_days or 0)) + 1
+        effective_sessions = len(observed_dates)
+        warmup_history = {
+            "required_sessions": 0,
+            "available_sessions": 0,
+            "state": "not_required",
+        }
+        blockers = [
+            "calendar_identity_unverified" if calendar_state == "observed_bars_only" else "calendar_identity_missing",
+            "corporate_action_adjustment_not_applied",
+        ]
+        if not required_fields_available:
+            blockers.append("required_price_fields_missing")
+        if effective_sessions < requested_sessions:
+            blockers.append("insufficient_usable_sessions")
+
+        return {
+            "contract_version": "backtest_data_basis.v1",
+            "price_basis": build_backtest_price_basis_contract(
+                basis_id="raw_ohlc",
+                benchmark_basis_id="raw_ohlc",
+                strategy_price_fields=("close", "high", "low"),
+                benchmark_price_fields=("close",),
+                corporate_action_adjustment_mode="none",
+            ),
+            "calendar_identity": {
+                "contract_version": "backtest_trading_calendar.v1",
+                "state": calendar_state,
+                "calendar_id": calendar_id,
+                "timezone": timezone_name,
+                "session_source": "observed_market_bars" if observed_dates else "none",
+                "observed_bar_dates": observed_dates,
+                "verified_session_dates": [],
+            },
+            "date_range": {
+                "requested": {
+                    "start": analysis_date.isoformat() if analysis_date else None,
+                    "end": None,
+                    "sessions": requested_sessions,
+                },
+                "effective": {
+                    "start": observed_dates[0] if observed_dates else None,
+                    "end": observed_dates[-1] if observed_dates else None,
+                    "sessions": effective_sessions,
+                },
+            },
+            "warmup_history": warmup_history,
+            "required_price_fields_available": required_fields_available,
+            "decision_grade": False,
+            "blocking_reasons": blockers,
+        }
+
+    @staticmethod
+    def _positive_price(value: Any) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+
+    @staticmethod
+    def _standard_result_content_identity(*, code: str, rows: List[StockDaily]) -> str:
+        records = [
+            {
+                "code": code,
+                "date": row.date.isoformat() if isinstance(getattr(row, "date", None), date) else None,
+                "open": row.open,
+                "high": row.high,
+                "low": row.low,
+                "close": row.close,
+                "volume": row.volume,
+                "source": row.data_source,
+            }
+            for row in sorted(rows, key=lambda item: getattr(item, "date", date.min) or date.min)
+        ]
+        serialized = json.dumps(records, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def _standard_result_reproducibility_manifest(
+        cls,
+        *,
+        code: str,
+        rows: List[StockDaily],
+        data_basis: Dict[str, Any],
+        market_data_sources: List[str],
+        evaluated_at: Optional[datetime],
+    ) -> Dict[str, Any]:
+        date_range = data_basis["date_range"]
+        effective = date_range["effective"]
+        source = market_data_sources[0] if market_data_sources else "database_cache"
+        authority = assess_backtest_data_source_eligibility(code=code, source=source)
+        blockers = list(data_basis.get("blocking_reasons") or [])
+        lineage = {
+            "manifest_version": "backtest_dataset_reproducibility_manifest.v1",
+            "dataset_id": f"historical_analysis:{source}:{code}",
+            "content_identity": cls._standard_result_content_identity(code=code, rows=rows),
+            "source_lineage": {
+                "source": source,
+                "authority_status": authority.authority_status,
+                "authority_source_type": authority.source_type,
+                "authority_reason_codes": list(authority.reason_codes),
+            },
+            "price_basis": data_basis["price_basis"],
+            "calendar_identity": data_basis["calendar_identity"],
+            "universe_membership_mode": "single_symbol_request",
+            "pit_membership_available": False,
+            "missing_bar_policy": {
+                "policy": "fail_closed",
+                "required_price_fields_available": data_basis["required_price_fields_available"],
+            },
+            "date_range": date_range,
+            "warmup_history": data_basis["warmup_history"],
+            "symbol_coverage": {
+                "requested_symbols": [code],
+                "covered_symbols": [code] if rows else [],
+                "bar_count": effective["sessions"],
+            },
+            "freshness_as_of": effective["end"],
+            "fail_closed": True,
+            "reason_codes": blockers + ["pit_membership_not_available"],
+        }
+        return build_backtest_reproducibility_manifest(
+            generated_at=evaluated_at,
+            strategy_type="historical_analysis_evaluation",
+            data_window=date_range,
+            symbols=[code],
+            universe={
+                "mode": "single_symbol_request",
+                "pit_membership_available": False,
+            },
+            dataset_lineage=lineage,
+            execution_cost_assumptions=cls._signal_evaluation_assumptions(),
+            engine_contract_flags={
+                "engine_math_changed": False,
+                "fills_changed": False,
+                "costs_changed": False,
+                "metrics_changed": False,
+            },
+            warnings=blockers,
+        ).to_dict()
 
     def _collect_market_data_sources(self, *, code: str, analysis_date: Optional[date], eval_window_days: int) -> List[str]:
         if analysis_date is None:
@@ -1078,17 +1247,11 @@ class BacktestService:
     ) -> Dict[str, Any]:
         source = market_data_sources[0] if market_data_sources else "database_cache"
         authority = assess_backtest_data_source_eligibility(code=code, source=source)
-        requested_end = analysis_date + timedelta(days=max(eval_window_days * 2, eval_window_days)) if analysis_date else None
         warnings = [
             {
-                "code": "adjustment_status_unknown",
-                "severity": "info",
-                "message": "Adjustment status is unknown for historical analysis evaluation results.",
-            },
-            {
-                "code": "dividends_splits_unknown",
-                "severity": "info",
-                "message": "Dividend and split handling is unknown for historical analysis evaluation results.",
+                "code": "unadjusted_price_basis",
+                "severity": "warning",
+                "message": "Historical analysis evaluation uses raw OHLC with no corporate-action adjustment.",
             },
         ]
         if not market_data_sources:
@@ -1120,13 +1283,14 @@ class BacktestService:
             "authority_reason_codes": list(authority.reason_codes),
             "frequency": "1d",
             "requested_start": analysis_date.isoformat() if analysis_date else None,
-            "requested_end": requested_end.isoformat() if requested_end else None,
+            "requested_end": None,
             "bar_count": None,
             "expected_bar_count": eval_window_days,
             "missing_bar_count": None,
-            "adjustment_mode": "unknown",
-            "dividends_handled": "unknown",
-            "splits_handled": "unknown",
+            "adjustment_mode": "none",
+            "return_basis": "raw_price_return_ex_distributions",
+            "dividends_handled": "not_applied",
+            "splits_handled": "not_applied",
             "warnings": warnings,
         }
 
@@ -2183,6 +2347,11 @@ class BacktestService:
 
     def _result_to_dict(self, row: BacktestResult) -> Dict[str, Any]:
         assumptions = self._signal_evaluation_assumptions()
+        ohlcv_rows = self._standard_result_ohlcv_rows(
+            code=row.code,
+            analysis_date=row.analysis_date,
+            eval_window_days=row.eval_window_days,
+        )
         market_data_sources = self._collect_market_data_sources(
             code=row.code,
             analysis_date=row.analysis_date,
@@ -2194,13 +2363,28 @@ class BacktestService:
             eval_window_days=row.eval_window_days,
             market_data_sources=market_data_sources,
         )
+        data_basis = self._standard_result_data_basis(
+            code=row.code,
+            rows=ohlcv_rows,
+            analysis_date=row.analysis_date,
+            eval_window_days=row.eval_window_days,
+        )
+        data_quality.update(
+            {
+                "actual_start": data_basis["date_range"]["effective"]["start"],
+                "actual_end": data_basis["date_range"]["effective"]["end"],
+                "bar_count": data_basis["date_range"]["effective"]["sessions"],
+                "price_basis": data_basis["price_basis"],
+                "calendar_identity": data_basis["calendar_identity"],
+                "date_range": data_basis["date_range"],
+                "warmup_history": data_basis["warmup_history"],
+                "decision_grade": data_basis["decision_grade"],
+                "decision_grade_blockers": data_basis["blocking_reasons"],
+            }
+        )
         historical_ohlcv_readiness = self._build_historical_ohlcv_readiness(
             code=row.code,
-            rows=self._standard_result_ohlcv_rows(
-                code=row.code,
-                analysis_date=row.analysis_date,
-                eval_window_days=row.eval_window_days,
-            ),
+            rows=ohlcv_rows,
             required_bars=row.eval_window_days,
             allow_runtime_probe=False,
         )
@@ -2215,6 +2399,13 @@ class BacktestService:
                 ),
                 "data_quality": data_quality,
             }
+        )
+        reproducibility_manifest = self._standard_result_reproducibility_manifest(
+            code=row.code,
+            rows=ohlcv_rows,
+            data_basis=data_basis,
+            market_data_sources=market_data_sources,
+            evaluated_at=row.evaluated_at,
         )
         payload = {
             "analysis_history_id": row.analysis_history_id,
@@ -2251,6 +2442,8 @@ class BacktestService:
             "data_sufficiency": data_sufficiency,
             "historicalOhlcvReadiness": historical_ohlcv_readiness,
             "execution_assumptions": assumptions,
+            "data_basis": data_basis,
+            "reproducibility_manifest": reproducibility_manifest,
         }
         payload.update(build_standard_result_contract(payload))
         return payload

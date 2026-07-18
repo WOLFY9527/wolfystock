@@ -5,11 +5,62 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from src.services.backtest_reproducibility_manifest import (
     BACKTEST_REPRODUCIBILITY_MANIFEST_SCHEMA_VERSION,
     BacktestReproducibilityManifest,
     build_backtest_reproducibility_manifest,
+    build_backtest_price_basis_contract,
 )
+
+
+def _verified_lineage(**overrides):
+    payload = {
+        "manifest_version": "backtest_dataset_reproducibility_manifest.v1",
+        "dataset_id": "rule_backtest:local_us_parquet:AAPL",
+        "content_identity": "fixture-content-v1",
+        "source_lineage": {
+            "source": "local_us_parquet",
+            "authority_status": "allowed",
+        },
+        "price_basis": build_backtest_price_basis_contract(
+            basis_id="raw_ohlc",
+            benchmark_basis_id="raw_ohlc",
+            strategy_price_fields=("close", "high", "low"),
+            benchmark_price_fields=("close",),
+            corporate_action_adjustment_mode="none",
+        ),
+        "calendar_identity": {
+            "contract_version": "backtest_trading_calendar.v1",
+            "state": "verified",
+            "calendar_id": "XNYS",
+            "timezone": "America/New_York",
+            "session_source": "exchange_calendar",
+        },
+        "universe_membership_mode": "single_symbol_request",
+        "pit_membership_available": True,
+        "missing_bar_policy": {
+            "policy": "fail_closed",
+            "required_price_fields_available": True,
+        },
+        "date_range": {
+            "requested": {"start": "2024-01-01", "end": "2024-01-31", "sessions": 21},
+            "effective": {"start": "2024-01-02", "end": "2024-01-31", "sessions": 21},
+        },
+        "warmup_history": {
+            "required_sessions": 20,
+            "available_sessions": 20,
+            "state": "sufficient",
+        },
+        "symbol_coverage": {
+            "requested_symbols": ["AAPL"],
+            "covered_symbols": ["AAPL"],
+        },
+        "freshness_as_of": "2024-01-31",
+    }
+    payload.update(overrides)
+    return payload
 
 
 def _manifest(**overrides):
@@ -92,6 +143,110 @@ def test_changed_research_inputs_change_content_hash_and_manifest_id() -> None:
     assert changed.to_dict()["strategy_fingerprint"] != base.to_dict()["strategy_fingerprint"]
     assert changed.to_dict()["content_hash"] != base.to_dict()["content_hash"]
     assert changed.to_dict()["manifest_id"] != base.to_dict()["manifest_id"]
+
+
+def test_price_basis_rejects_strategy_and_benchmark_basis_mismatch() -> None:
+    with pytest.raises(ValueError, match="strategy and benchmark price basis must match"):
+        build_backtest_price_basis_contract(
+            basis_id="raw_ohlc",
+            strategy_price_fields=("close",),
+            benchmark_price_fields=("adjusted_close",),
+            corporate_action_adjustment_mode="none",
+            benchmark_basis_id="split_dividend_adjusted_close",
+        )
+    with pytest.raises(ValueError, match="unsupported benchmark price basis: missing"):
+        build_backtest_price_basis_contract(
+            basis_id="raw_ohlc",
+            benchmark_basis_id="",
+            strategy_price_fields=("close",),
+            benchmark_price_fields=("close",),
+            corporate_action_adjustment_mode="none",
+        )
+
+
+def test_price_basis_rejects_adjusted_field_under_raw_basis() -> None:
+    with pytest.raises(ValueError, match="raw_ohlc does not allow price fields: adjusted_close"):
+        build_backtest_price_basis_contract(
+            basis_id="raw_ohlc",
+            benchmark_basis_id="raw_ohlc",
+            strategy_price_fields=("adjusted_close",),
+            benchmark_price_fields=("close",),
+            corporate_action_adjustment_mode="none",
+        )
+
+
+def test_manifest_hash_binds_price_basis_calendar_range_and_warmup_truth() -> None:
+    base = _manifest(dataset_lineage=_verified_lineage()).to_dict()
+    changed_price_basis = _manifest(
+        dataset_lineage=_verified_lineage(
+            price_basis=build_backtest_price_basis_contract(
+                basis_id="split_dividend_adjusted_close",
+                benchmark_basis_id="split_dividend_adjusted_close",
+                strategy_price_fields=("adjusted_close",),
+                benchmark_price_fields=("adjusted_close",),
+                corporate_action_adjustment_mode="split_dividend_adjusted_once",
+            )
+        )
+    ).to_dict()
+    changed_calendar = _manifest(
+        dataset_lineage=_verified_lineage(
+            calendar_identity={
+                "contract_version": "backtest_trading_calendar.v1",
+                "state": "verified",
+                "calendar_id": "XNAS",
+                "timezone": "America/New_York",
+                "session_source": "exchange_calendar",
+            }
+        )
+    ).to_dict()
+    changed_range = _manifest(
+        dataset_lineage=_verified_lineage(
+            date_range={
+                "requested": {"start": "2024-01-01", "end": "2024-01-31", "sessions": 21},
+                "effective": {"start": "2024-01-03", "end": "2024-01-31", "sessions": 20},
+            }
+        )
+    ).to_dict()
+    changed_warmup = _manifest(
+        dataset_lineage=_verified_lineage(
+            warmup_history={
+                "required_sessions": 30,
+                "available_sessions": 30,
+                "state": "sufficient",
+            }
+        )
+    ).to_dict()
+
+    assert base["dataset_lineage"]["state"] == "available"
+    assert changed_price_basis["content_hash"] != base["content_hash"]
+    assert changed_calendar["content_hash"] != base["content_hash"]
+    assert changed_range["content_hash"] != base["content_hash"]
+    assert changed_warmup["content_hash"] != base["content_hash"]
+
+
+def test_manifest_fails_closed_for_unverified_calendar_and_insufficient_warmup() -> None:
+    manifest = _manifest(
+        dataset_lineage=_verified_lineage(
+            calendar_identity={
+                "contract_version": "backtest_trading_calendar.v1",
+                "state": "observed_bars_only",
+                "calendar_id": "XNYS",
+                "timezone": "America/New_York",
+                "session_source": "observed_market_bars",
+            },
+            warmup_history={
+                "required_sessions": 20,
+                "available_sessions": 19,
+                "state": "insufficient",
+            },
+        )
+    ).to_dict()
+
+    lineage = manifest["dataset_lineage"]
+    assert lineage["state"] == "blocked_data_basis"
+    assert lineage["fail_closed"] is True
+    assert "calendar_identity_unverified" in lineage["reason_codes"]
+    assert "warmup_history_insufficient" in lineage["reason_codes"]
 
 
 def test_missing_optional_sections_are_explicit_without_placeholder_hashes() -> None:
@@ -184,10 +339,12 @@ def test_dataset_lineage_represents_no_pit_membership_without_pretending_availab
 
     lineage = manifest["dataset_lineage"]
     assert lineage["dataset_id"] == "rule_backtest:database_cache:AAPL"
-    assert lineage["state"] == "partial_no_pit_membership"
+    assert lineage["state"] == "blocked_unknown_lineage"
     assert lineage["pit_membership_available"] is False
     assert lineage["fail_closed"] is True
-    assert lineage["missing_fields"] == []
+    assert lineage["missing_fields"] == ["price_basis", "warmup_history"]
+    assert "price_basis_missing" in lineage["reason_codes"]
+    assert "warmup_history_missing" in lineage["reason_codes"]
     assert manifest["content_hash"]
 
 

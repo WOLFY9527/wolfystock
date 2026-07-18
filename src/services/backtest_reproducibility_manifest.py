@@ -14,8 +14,17 @@ from typing import Any, Mapping, Sequence
 
 
 BACKTEST_REPRODUCIBILITY_MANIFEST_SCHEMA_VERSION = "backtest_reproducibility_manifest.v1"
+BACKTEST_PRICE_BASIS_CONTRACT_VERSION = "backtest_price_basis.v1"
 _MANIFEST_ID_PREFIX = "bt_repro_manifest_"
 _REDACTED_TEXT = "[REDACTED_SENSITIVE_TEXT]"
+_PRICE_BASIS_ADJUSTMENT_MODES = {
+    "raw_ohlc": ("none", 0),
+    "split_dividend_adjusted_close": ("split_dividend_adjusted_once", 1),
+}
+_PRICE_BASIS_ALLOWED_FIELDS = {
+    "raw_ohlc": frozenset({"open", "high", "low", "close"}),
+    "split_dividend_adjusted_close": frozenset({"adjusted_close"}),
+}
 
 _SENSITIVE_KEY_TERMS = (
     "api_key",
@@ -48,6 +57,82 @@ _SENSITIVE_TEXT_TERMS = (
     "session",
     "token",
 )
+_SAFE_FINANCIAL_SESSION_KEYS = {
+    "available_sessions",
+    "observed_session_dates",
+    "required_sessions",
+    "session_source",
+    "sessions",
+    "verified_session_dates",
+}
+
+
+def build_backtest_price_basis_contract(
+    *,
+    basis_id: str,
+    strategy_price_fields: Sequence[str],
+    benchmark_price_fields: Sequence[str],
+    corporate_action_adjustment_mode: str,
+    benchmark_basis_id: str,
+) -> dict[str, Any]:
+    """Build the single strict representation used for backtest price basis."""
+
+    strategy_basis = str(basis_id or "").strip()
+    benchmark_basis = str(benchmark_basis_id or "").strip()
+    if strategy_basis not in _PRICE_BASIS_ADJUSTMENT_MODES:
+        raise ValueError(f"unsupported backtest price basis: {strategy_basis or 'missing'}")
+    if benchmark_basis not in _PRICE_BASIS_ADJUSTMENT_MODES:
+        raise ValueError(f"unsupported benchmark price basis: {benchmark_basis or 'missing'}")
+    if strategy_basis != benchmark_basis:
+        raise ValueError("strategy and benchmark price basis must match")
+
+    strategy_fields = _strict_price_fields(strategy_price_fields, role="strategy")
+    benchmark_fields = _strict_price_fields(benchmark_price_fields, role="benchmark")
+    _require_price_fields_match_basis(strategy_fields, basis_id=strategy_basis)
+    _require_price_fields_match_basis(benchmark_fields, basis_id=benchmark_basis)
+    expected_mode, application_count = _PRICE_BASIS_ADJUSTMENT_MODES[strategy_basis]
+    adjustment_mode = str(corporate_action_adjustment_mode or "").strip()
+    if adjustment_mode != expected_mode:
+        raise ValueError(
+            f"price basis {strategy_basis} requires corporate-action mode {expected_mode}"
+        )
+
+    return {
+        "contract_version": BACKTEST_PRICE_BASIS_CONTRACT_VERSION,
+        "basis_id": strategy_basis,
+        "strategy": {
+            "basis_id": strategy_basis,
+            "price_fields": strategy_fields,
+        },
+        "benchmark": {
+            "basis_id": benchmark_basis,
+            "price_fields": benchmark_fields,
+        },
+        "corporate_action_adjustment": {
+            "mode": adjustment_mode,
+            "application_count": application_count,
+        },
+        "compatible": True,
+    }
+
+
+def _strict_price_fields(values: Sequence[str], *, role: str) -> list[str]:
+    if isinstance(values, (str, bytes, bytearray)):
+        raise ValueError(f"{role} price fields must be a sequence of field names")
+    fields = [str(value or "").strip() for value in values]
+    if not fields or any(not field for field in fields):
+        raise ValueError(f"{role} price fields must not be empty")
+    if len(set(fields)) != len(fields):
+        raise ValueError(f"{role} price fields must not contain duplicates")
+    return fields
+
+
+def _require_price_fields_match_basis(fields: Sequence[str], *, basis_id: str) -> None:
+    disallowed = sorted(set(fields) - _PRICE_BASIS_ALLOWED_FIELDS[basis_id])
+    if disallowed:
+        raise ValueError(
+            f"{basis_id} does not allow price fields: {', '.join(disallowed)}"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,12 +348,13 @@ def _normalize_dataset_lineage(value: Mapping[str, Any] | None) -> dict[str, Any
         "dataset_id",
         "content_identity",
         "source_lineage",
-        "adjusted_basis",
+        "price_basis",
         "calendar_identity",
         "universe_membership_mode",
         "pit_membership_available",
         "missing_bar_policy",
         "date_range",
+        "warmup_history",
         "symbol_coverage",
         "freshness_as_of",
         "manifest_version",
@@ -287,6 +373,23 @@ def _normalize_dataset_lineage(value: Mapping[str, Any] | None) -> dict[str, Any
         payload["missing_fields"] = missing_fields
         return payload
 
+    evidence_blockers = [
+        *_price_basis_blockers(payload.get("price_basis")),
+        *_calendar_identity_blockers(payload.get("calendar_identity")),
+        *_date_range_blockers(payload.get("date_range")),
+        *_warmup_history_blockers(payload.get("warmup_history")),
+        *_missing_bar_policy_blockers(payload.get("missing_bar_policy")),
+    ]
+    if evidence_blockers:
+        payload["reason_codes"] = sorted(
+            set(_dedupe_strings(payload.get("reason_codes")) + evidence_blockers)
+        )
+        payload["state"] = "blocked_data_basis"
+        payload["fail_closed"] = True
+        payload["missing_fields"] = []
+        payload["pit_membership_available"] = bool(payload.get("pit_membership_available"))
+        return payload
+
     payload["pit_membership_available"] = bool(payload.get("pit_membership_available"))
     if payload["pit_membership_available"]:
         payload["state"] = "available"
@@ -296,6 +399,106 @@ def _normalize_dataset_lineage(value: Mapping[str, Any] | None) -> dict[str, Any
     payload["reason_codes"] = _dedupe_strings(payload.get("reason_codes"))
     payload["missing_fields"] = []
     return payload
+
+
+def _price_basis_blockers(value: Any) -> list[str]:
+    payload = value if isinstance(value, Mapping) else {}
+    if payload.get("contract_version") != BACKTEST_PRICE_BASIS_CONTRACT_VERSION:
+        return ["price_basis_contract_invalid"]
+    basis_id = payload.get("basis_id")
+    strategy = payload.get("strategy") if isinstance(payload.get("strategy"), Mapping) else {}
+    benchmark = payload.get("benchmark") if isinstance(payload.get("benchmark"), Mapping) else {}
+    adjustment = (
+        payload.get("corporate_action_adjustment")
+        if isinstance(payload.get("corporate_action_adjustment"), Mapping)
+        else {}
+    )
+    if basis_id not in _PRICE_BASIS_ADJUSTMENT_MODES:
+        return ["price_basis_unsupported"]
+    if strategy.get("basis_id") != basis_id or benchmark.get("basis_id") != basis_id:
+        return ["price_basis_incompatible"]
+    if payload.get("compatible") is not True:
+        return ["price_basis_incompatible"]
+    if not _valid_price_field_list(strategy.get("price_fields")):
+        return ["strategy_price_fields_missing"]
+    if not _valid_price_field_list(benchmark.get("price_fields")):
+        return ["benchmark_price_fields_missing"]
+    if not _price_fields_match_basis(strategy.get("price_fields"), basis_id=str(basis_id)):
+        return ["strategy_price_fields_incompatible"]
+    if not _price_fields_match_basis(benchmark.get("price_fields"), basis_id=str(basis_id)):
+        return ["benchmark_price_fields_incompatible"]
+    expected_mode, expected_count = _PRICE_BASIS_ADJUSTMENT_MODES[str(basis_id)]
+    if adjustment.get("mode") != expected_mode:
+        return ["corporate_action_adjustment_basis_invalid"]
+    application_count = adjustment.get("application_count")
+    if type(application_count) is not int or application_count != expected_count:
+        return ["corporate_action_adjustment_count_invalid"]
+    return []
+
+
+def _valid_price_field_list(value: Any) -> bool:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return False
+    fields = list(value)
+    return (
+        bool(fields)
+        and len(set(fields)) == len(fields)
+        and all(isinstance(field, str) and bool(field.strip()) for field in fields)
+    )
+
+
+def _price_fields_match_basis(value: Any, *, basis_id: str) -> bool:
+    return set(value).issubset(_PRICE_BASIS_ALLOWED_FIELDS[basis_id])
+
+
+def _calendar_identity_blockers(value: Any) -> list[str]:
+    payload = value if isinstance(value, Mapping) else {}
+    if payload.get("contract_version") != "backtest_trading_calendar.v1":
+        return ["calendar_identity_contract_invalid"]
+    required = ("calendar_id", "timezone", "session_source")
+    if any(not isinstance(payload.get(field), str) or not str(payload.get(field)).strip() for field in required):
+        return ["calendar_identity_missing"]
+    if payload.get("state") != "verified":
+        return ["calendar_identity_unverified"]
+    return []
+
+
+def _date_range_blockers(value: Any) -> list[str]:
+    payload = value if isinstance(value, Mapping) else {}
+    requested = payload.get("requested") if isinstance(payload.get("requested"), Mapping) else {}
+    effective = payload.get("effective") if isinstance(payload.get("effective"), Mapping) else {}
+    blockers: list[str] = []
+    if requested.get("start") in (None, "") and requested.get("sessions") in (None, 0):
+        blockers.append("requested_range_missing")
+    if effective.get("start") in (None, "") or effective.get("end") in (None, ""):
+        blockers.append("effective_range_missing")
+    effective_sessions = effective.get("sessions")
+    if type(effective_sessions) is not int or effective_sessions <= 0:
+        blockers.append("effective_sessions_missing")
+    return blockers
+
+
+def _warmup_history_blockers(value: Any) -> list[str]:
+    payload = value if isinstance(value, Mapping) else {}
+    required = payload.get("required_sessions")
+    available = payload.get("available_sessions")
+    if not isinstance(required, int) or isinstance(required, bool) or required < 0:
+        return ["warmup_history_invalid"]
+    if not isinstance(available, int) or isinstance(available, bool) or available < 0:
+        return ["warmup_history_invalid"]
+    if available < required or payload.get("state") == "insufficient":
+        return ["warmup_history_insufficient"]
+    expected_state = "not_required" if required == 0 else "sufficient"
+    if payload.get("state") != expected_state:
+        return ["warmup_history_state_invalid"]
+    return []
+
+
+def _missing_bar_policy_blockers(value: Any) -> list[str]:
+    payload = value if isinstance(value, Mapping) else {}
+    if payload.get("required_price_fields_available") is not True:
+        return ["required_price_fields_missing"]
+    return []
 
 
 def _dedupe_strings(value: Any) -> list[str]:
@@ -375,6 +578,8 @@ def _sanitize_string(value: str) -> str:
 
 def _is_sensitive_key(key: str) -> bool:
     normalized = key.lower().replace("-", "_").replace(" ", "_")
+    if normalized in _SAFE_FINANCIAL_SESSION_KEYS:
+        return False
     return any(term in normalized for term in _SENSITIVE_KEY_TERMS)
 
 

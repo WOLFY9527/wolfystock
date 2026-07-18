@@ -11,6 +11,79 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from src.services.backtest_response_contract import BACKTEST_NO_ADVICE_DISCLOSURE
 
 
+class BacktestPriceBasisLegResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    basis_id: Literal["raw_ohlc", "split_dividend_adjusted_close"]
+    price_fields: List[str]
+
+
+class BacktestCorporateActionAdjustmentResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    mode: Literal["none", "split_dividend_adjusted_once"]
+    application_count: Literal[0, 1]
+
+
+class BacktestPriceBasisResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    contract_version: Literal["backtest_price_basis.v1"]
+    basis_id: Literal["raw_ohlc", "split_dividend_adjusted_close"]
+    strategy: BacktestPriceBasisLegResponse
+    benchmark: BacktestPriceBasisLegResponse
+    corporate_action_adjustment: BacktestCorporateActionAdjustmentResponse
+    compatible: bool
+
+
+class BacktestCalendarIdentityResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    contract_version: Literal["backtest_trading_calendar.v1"]
+    state: Literal["verified", "observed_bars_only", "missing"]
+    calendar_id: Optional[str]
+    timezone: Optional[str]
+    session_source: Literal["exchange_calendar", "observed_market_bars", "none"]
+    observed_bar_dates: List[str]
+    verified_session_dates: List[str]
+
+
+class BacktestRangeBoundResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    start: Optional[str]
+    end: Optional[str]
+    sessions: int = Field(..., ge=0)
+
+
+class BacktestDateRangeResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    requested: BacktestRangeBoundResponse
+    effective: BacktestRangeBoundResponse
+
+
+class BacktestWarmupHistoryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    required_sessions: int = Field(..., ge=0)
+    available_sessions: int = Field(..., ge=0)
+    state: Literal["not_required", "sufficient", "insufficient"]
+
+
+class BacktestDataBasisResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    contract_version: Literal["backtest_data_basis.v1"]
+    price_basis: BacktestPriceBasisResponse
+    calendar_identity: BacktestCalendarIdentityResponse
+    date_range: BacktestDateRangeResponse
+    warmup_history: BacktestWarmupHistoryResponse
+    required_price_fields_available: bool
+    decision_grade: bool
+    blocking_reasons: List[str]
+
+
 class BacktestResponseContractFields(BaseModel):
     data_status: str = "ready"
     calculation_status: str = "ready"
@@ -1521,6 +1594,8 @@ class BacktestResultItem(BacktestResponseContractFields):
     data_sufficiency: Dict[str, Any] = Field(default_factory=dict)
     historicalOhlcvReadiness: Dict[str, Any] = Field(default_factory=dict)
     execution_assumptions: Dict[str, Any] = Field(default_factory=dict)
+    data_basis: BacktestDataBasisResponse
+    reproducibility_manifest: Dict[str, Any]
 
 
 class BacktestResultsResponse(BaseModel):

@@ -8,6 +8,7 @@ import unittest
 import warnings
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi import BackgroundTasks, HTTPException
 from fastapi.routing import APIRoute
 
@@ -45,6 +46,7 @@ from api.v1.endpoints.backtest import (  # noqa: E402
 )
 from api.v1.schemas.backtest import (  # noqa: E402
     BacktestCodeRequest,
+    BacktestDataBasisResponse,
     BacktestSampleStatusResponse,
     RuleBacktestCancelResponse,
     RuleBacktestCompareRequest,
@@ -127,6 +129,59 @@ FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS = (
     "training_score",
     "training score",
 )
+
+
+def _data_basis_payload() -> dict:
+    return {
+        "contract_version": "backtest_data_basis.v1",
+        "price_basis": {
+            "contract_version": "backtest_price_basis.v1",
+            "basis_id": "raw_ohlc",
+            "strategy": {"basis_id": "raw_ohlc", "price_fields": ["close", "high", "low"]},
+            "benchmark": {"basis_id": "raw_ohlc", "price_fields": ["close"]},
+            "corporate_action_adjustment": {"mode": "none", "application_count": 0},
+            "compatible": True,
+        },
+        "calendar_identity": {
+            "contract_version": "backtest_trading_calendar.v1",
+            "state": "observed_bars_only",
+            "calendar_id": "XSHG",
+            "timezone": "Asia/Shanghai",
+            "session_source": "observed_market_bars",
+            "observed_bar_dates": ["2024-01-01", "2024-01-02"],
+            "verified_session_dates": [],
+        },
+        "date_range": {
+            "requested": {"start": "2024-01-01", "end": None, "sessions": 2},
+            "effective": {"start": "2024-01-01", "end": "2024-01-02", "sessions": 2},
+        },
+        "warmup_history": {
+            "required_sessions": 0,
+            "available_sessions": 0,
+            "state": "not_required",
+        },
+        "required_price_fields_available": True,
+        "decision_grade": False,
+        "blocking_reasons": [
+            "calendar_identity_unverified",
+            "corporate_action_adjustment_not_applied",
+        ],
+    }
+
+
+def test_backtest_data_basis_schema_preserves_explicit_financial_truth() -> None:
+    payload = _data_basis_payload()
+
+    assert BacktestDataBasisResponse.model_validate(payload).model_dump() == payload
+
+
+def test_backtest_data_basis_schema_rejects_permissive_boolean_coercion() -> None:
+    payload = _data_basis_payload()
+    payload["decision_grade"] = "false"
+
+    with pytest.raises(ValueError):
+        BacktestDataBasisResponse.model_validate(payload)
+
 
 class BacktestApiContractTestCase(unittest.TestCase):
     @staticmethod
