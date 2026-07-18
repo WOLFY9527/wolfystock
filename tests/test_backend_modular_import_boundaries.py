@@ -215,6 +215,7 @@ EXPECTED_OPTIONS_LAB_SERVICE_SCHEMA_IMPORT_NAMES = {
     "OptionsDecisionLeg",
     "OptionsDecisionRequest",
     "OptionsScenarioRequest",
+    "OptionsStrategyAnalyzerRequest",
     "OptionsStrategyCompareRequest",
 }
 EXPLICITLY_FORBIDDEN_OPTIONS_LAB_SCHEMA_IMPORT_NAMES = {
@@ -238,6 +239,47 @@ EXPECTED_API_SCHEMA_UPWARD_IMPORTS = {
     "src/services/factor_registry.py": {"api.v1.schemas.factors"},
     "src/services/factor_research_report.py": {"api.v1.schemas.factors"},
     "src/services/options_lab_service.py": {"api.v1.schemas.options"},
+    "src/services/dashboard_overview_service.py": {"api.v1.schemas.dashboard_overview"},
+    "src/services/event_radar_service.py": {"api.v1.schemas.event_radar"},
+    "src/services/event_window_service.py": {"api.v1.schemas.event_window"},
+    "src/services/homepage_after_close_developments_service.py": {"api.v1.schemas.homepage_after_close_developments"},
+    "src/services/homepage_ai_capex_infrastructure_service.py": {"api.v1.schemas.homepage_ai_capex_infrastructure"},
+    "src/services/homepage_capabilities_service.py": {"api.v1.schemas.homepage_capabilities"},
+    "src/services/homepage_cross_asset_indicators_service.py": {"api.v1.schemas.homepage_cross_asset_indicators"},
+    "src/services/homepage_daily_market_brief_service.py": {"api.v1.schemas.homepage_daily_market_brief"},
+    "src/services/homepage_demo_payload_service.py": {"api.v1.schemas.event_radar", "api.v1.schemas.research_queue"},
+    "src/services/homepage_driver_chain_service.py": {"api.v1.schemas.homepage_driver_chain"},
+    "src/services/homepage_earnings_catalysts_service.py": {"api.v1.schemas.homepage_earnings_catalysts"},
+    "src/services/homepage_empty_state_service.py": {"api.v1.schemas.homepage_empty_state"},
+    "src/services/homepage_event_impact_map_service.py": {"api.v1.schemas.homepage_event_impact_map"},
+    "src/services/homepage_evidence_quality_service.py": {"api.v1.schemas.homepage_evidence_quality"},
+    "src/services/homepage_explanation_service.py": {"api.v1.schemas.homepage_explanation"},
+    "src/services/homepage_geopolitical_commodity_risk_service.py": {"api.v1.schemas.homepage_geopolitical_commodity_risk"},
+    "src/services/homepage_intelligence_service.py": {"api.v1.schemas.homepage_intelligence"},
+    "src/services/homepage_liquidity_credit_service.py": {"api.v1.schemas.homepage_liquidity_credit"},
+    "src/services/homepage_market_breadth_service.py": {"api.v1.schemas.homepage_market_breadth"},
+    "src/services/homepage_module_manifest_service.py": {"api.v1.schemas.homepage_module_manifest"},
+    "src/services/homepage_policy_regulation_watch_service.py": {"api.v1.schemas.homepage_policy_regulation_watch"},
+    "src/services/homepage_pre_session_research_checklist_service.py": {"api.v1.schemas.homepage_pre_session_research_checklist"},
+    "src/services/homepage_rates_pricing_service.py": {"api.v1.schemas.homepage_rates_pricing"},
+    "src/services/homepage_research_priorities_service.py": {"api.v1.schemas.homepage_research_priorities"},
+    "src/services/homepage_risk_regime_service.py": {"api.v1.schemas.homepage_risk_regime"},
+    "src/services/homepage_scenario_watchlist_service.py": {"api.v1.schemas.homepage_scenario_watchlist"},
+    "src/services/homepage_section_layout_service.py": {"api.v1.schemas.homepage_section_layout"},
+    "src/services/homepage_style_leadership_rotation_service.py": {"api.v1.schemas.homepage_style_leadership_rotation"},
+    "src/services/homepage_theme_capital_flow_service.py": {"api.v1.schemas.homepage_theme_capital_flow"},
+    "src/services/homepage_uat_readiness_service.py": {"api.v1.schemas.homepage_uat_readiness"},
+    "src/services/homepage_volatility_positioning_service.py": {"api.v1.schemas.homepage_volatility_positioning"},
+    "src/services/market_pulse_service.py": {"api.v1.schemas.market_pulse"},
+    "src/services/market_session_status_service.py": {"api.v1.schemas.market_session_status"},
+    "src/services/money_flow_service.py": {"api.v1.schemas.money_flow"},
+    "src/services/options_structure_service.py": {"api.v1.schemas.options"},
+    "src/services/personal_summary_service.py": {"api.v1.schemas.personal_summary"},
+    "src/services/public_data_quality_service.py": {"api.v1.schemas.public_data_quality"},
+    "src/services/research_queue_service.py": {"api.v1.schemas.research_queue"},
+    "src/services/research_stock_service.py": {"api.v1.schemas.research_stock"},
+    "src/services/sector_theme_strength_service.py": {"api.v1.schemas.sector_theme_strength"},
+    "src/services/source_freshness_summary_service.py": {"api.v1.schemas.source_freshness_summary"},
 }
 # Transitional, owned upward imports from services into API schemas.
 # These are inventory items, not a pattern to copy into new services.
@@ -254,12 +296,17 @@ MARKET_OVERVIEW_RUNTIME_DIRECT_IMPORT_PREFIXES = ("requests", "yfinance")
 # Transitional provider-runtime touch points. Owners are the domain listed in
 # the importing path plus provider-runtime; new entries need architecture review.
 EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
+    "src/services/akshare_cn_ohlcv_cache.py": {"data_provider.akshare_fetcher"},
     "src/services/cn_provider_health_service.py": {
         "data_provider.akshare_fetcher",
         "data_provider.baostock_fetcher",
         "data_provider.pytdx_fetcher",
     },
     "src/services/crypto_realtime_service.py": {"src.services.market_cache"},
+    "src/services/historical_ohlcv_cache_preflight.py": {
+        "data_provider.akshare_fetcher",
+        "data_provider.yfinance_fetcher",
+    },
     "src/services/liquidity_monitor_service.py": {"src.services.market_cache"},
     "src/services/market_cache_redis_backend.py": {"src.services.market_cache"},
     "src/services/market_overview_service.py": {
@@ -272,6 +319,7 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
     "src/services/market_scanner_context_adapter.py": {"src.services.market_cache"},
     "src/services/market_scanner_service.py": {"data_provider.base"},
     "src/services/portfolio_risk_board_lookup.py": {"data_provider.base"},
+    "src/services/provider_operations_matrix_service.py": {"data_provider.provider_credentials"},
     "src/services/rotation_radar_quote_provider.py": {
         "data_provider.alpaca_fetcher",
         "data_provider.provider_credentials",
@@ -287,6 +335,9 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
         "data_provider.realtime_types",
     },
     "src/services/us_history_helper.py": {"data_provider.base"},
+    "src/services/us_fundamentals_service.py": {"data_provider.us_fundamentals_provider"},
+    "src/services/us_ohlcv_cache_refresh.py": {"data_provider.yfinance_fetcher"},
+    "src/services/yfinance_us_ohlcv_cache_provider.py": {"data_provider.yfinance_fetcher"},
 }
 EXPECTED_DIRECT_PROVIDER_CLIENT_IMPORTS = {
     "src/services/market_overview_yfinance_transport.py": {"yfinance"},

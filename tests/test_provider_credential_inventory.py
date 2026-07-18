@@ -8,6 +8,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_CONFIG_PATH = REPO_ROOT / "src/config.py"
+RUNTIME_SETTINGS_PATH = REPO_ROOT / "src/runtime/settings.py"
 CONFIG_REGISTRY_PATH = REPO_ROOT / "src/core/config_registry.py"
 ENV_EXAMPLE_PATH = REPO_ROOT / ".env.example"
 READINESS_SCRIPT_PATH = REPO_ROOT / "scripts/production_config_readiness.py"
@@ -25,6 +26,7 @@ OFFICIAL_MACRO_SOURCE_REGISTRY_PATH = REPO_ROOT / "src/services/official_macro_s
 OFFICIAL_MACRO_TRANSPORT_PATH = REPO_ROOT / "src/services/official_macro_transport.py"
 
 SRC_CONFIG_TEXT = SRC_CONFIG_PATH.read_text(encoding="utf-8")
+RUNTIME_SETTINGS_TEXT = RUNTIME_SETTINGS_PATH.read_text(encoding="utf-8")
 CONFIG_REGISTRY_TEXT = CONFIG_REGISTRY_PATH.read_text(encoding="utf-8")
 ENV_EXAMPLE_TEXT = ENV_EXAMPLE_PATH.read_text(encoding="utf-8")
 READINESS_SCRIPT_TEXT = READINESS_SCRIPT_PATH.read_text(encoding="utf-8")
@@ -122,7 +124,7 @@ def test_provider_credential_inventory_freezes_configured_and_wired_sources_with
         for env_name in contract["env_names"]:
             assert env_name in CONFIG_REGISTRY_TEXT
         for marker in contract["config_markers"]:
-            assert marker in SRC_CONFIG_TEXT
+            assert marker in RUNTIME_SETTINGS_TEXT
         for marker in contract["runtime_markers"]:
             assert (
                 marker in PROVIDER_BASE_TEXT

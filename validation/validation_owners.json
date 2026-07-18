@@ -546,6 +546,17 @@
       }
     },
     {
+      "id": "protected-root-environment-entrypoints",
+      "include": ["wolfy", "wolfy.ps1"],
+      "protected": true,
+      "reason": "root_environment_bootstrap_and_lock_authority",
+      "owners": {
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
       "id": "protected-existing-gate-domain-baseline",
       "include": [
         "api/**",

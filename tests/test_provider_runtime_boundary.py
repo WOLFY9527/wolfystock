@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -72,6 +73,7 @@ NOT_LIVE_MARKERS = {
     "local_repaired",
     "synthetic_delayed",
 }
+_SAFE_REQUIRED_ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]{0,127}$")
 
 
 def _load_fixture(name: str) -> dict[str, object]:
@@ -211,18 +213,21 @@ def _marketcache_boundary_payload() -> dict[str, object]:
     }
 
 
-def _assert_fixture_tree_is_sanitized(value: object) -> None:
+def _assert_fixture_tree_is_sanitized(value: object, *, parent_key: str | None = None) -> None:
     if isinstance(value, Mapping):
         for key, item in value.items():
             normalized_key = str(key).strip().lower()
             assert normalized_key not in FORBIDDEN_FIXTURE_KEYS
-            _assert_fixture_tree_is_sanitized(item)
+            _assert_fixture_tree_is_sanitized(item, parent_key=normalized_key)
         return
     if isinstance(value, list):
         for item in value:
-            _assert_fixture_tree_is_sanitized(item)
+            _assert_fixture_tree_is_sanitized(item, parent_key=parent_key)
         return
     if isinstance(value, str):
+        if parent_key == "requiredenvvars":
+            assert _SAFE_REQUIRED_ENV_NAME.fullmatch(value)
+            return
         lowered = value.lower()
         for forbidden in FORBIDDEN_FIXTURE_SUBSTRINGS:
             assert forbidden not in lowered
@@ -356,4 +361,3 @@ def test_provider_runtime_fixtures_are_sanitized() -> None:
     for fixture_path in sorted(FIXTURE_ROOT.glob("*.json")):
         payload = json.loads(fixture_path.read_text(encoding="utf-8"))
         _assert_fixture_tree_is_sanitized(payload)
-

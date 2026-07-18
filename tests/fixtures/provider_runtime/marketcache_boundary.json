@@ -78,6 +78,99 @@
     "cacheMutation": false,
     "externalProviderCalls": false,
     "providerDiagnostics": {
+      "macroFredReadiness": {
+        "admin": {
+          "nextActions": [
+            "Enable FRED_MACRO_PROVIDER_ENABLED before macro data can unlock product surfaces."
+          ],
+          "requiredEnvVars": ["FRED_API_KEY"],
+          "requiredFlags": ["FRED_MACRO_PROVIDER_ENABLED"]
+        },
+        "categories": [
+          {
+            "categoryKey": "rates",
+            "label": "Rates and policy rates",
+            "nextAction": "Enable FRED_MACRO_PROVIDER_ENABLED before macro data can unlock product surfaces.",
+            "productSurfacesUnlocked": [],
+            "reason": "Macro provider category is disabled by flag, so no macro conclusion is generated.",
+            "seriesIds": ["DGS2", "DGS10", "DGS30", "DFF", "SOFR", "T10Y2Y", "T10Y3M"],
+            "state": "disabled_by_flag"
+          },
+          {
+            "categoryKey": "inflation",
+            "label": "Inflation",
+            "nextAction": "Enable FRED_MACRO_PROVIDER_ENABLED before macro data can unlock product surfaces.",
+            "productSurfacesUnlocked": [],
+            "reason": "Macro provider category is disabled by flag, so no macro conclusion is generated.",
+            "seriesIds": ["CPIAUCSL", "PPIACO"],
+            "state": "disabled_by_flag"
+          },
+          {
+            "categoryKey": "labor",
+            "label": "Labor market",
+            "nextAction": "Enable FRED_MACRO_PROVIDER_ENABLED before macro data can unlock product surfaces.",
+            "productSurfacesUnlocked": [],
+            "reason": "Macro provider category is disabled by flag, so no macro conclusion is generated.",
+            "seriesIds": [],
+            "state": "disabled_by_flag"
+          },
+          {
+            "categoryKey": "growth",
+            "label": "Growth",
+            "nextAction": "Enable FRED_MACRO_PROVIDER_ENABLED before macro data can unlock product surfaces.",
+            "productSurfacesUnlocked": [],
+            "reason": "Macro provider category is disabled by flag, so no macro conclusion is generated.",
+            "seriesIds": [],
+            "state": "disabled_by_flag"
+          },
+          {
+            "categoryKey": "liquidity",
+            "label": "Liquidity",
+            "nextAction": "Enable FRED_MACRO_PROVIDER_ENABLED before macro data can unlock product surfaces.",
+            "productSurfacesUnlocked": [],
+            "reason": "Macro provider category is disabled by flag, so no macro conclusion is generated.",
+            "seriesIds": ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"],
+            "state": "disabled_by_flag"
+          },
+          {
+            "categoryKey": "credit",
+            "label": "Credit",
+            "nextAction": "Enable FRED_MACRO_PROVIDER_ENABLED before macro data can unlock product surfaces.",
+            "productSurfacesUnlocked": [],
+            "reason": "Macro provider category is disabled by flag, so no macro conclusion is generated.",
+            "seriesIds": ["BAMLH0A0HYM2"],
+            "state": "disabled_by_flag"
+          },
+          {
+            "categoryKey": "usd_currency",
+            "label": "USD and currency",
+            "nextAction": "Enable FRED_MACRO_PROVIDER_ENABLED before macro data can unlock product surfaces.",
+            "productSurfacesUnlocked": [],
+            "reason": "Macro provider category is disabled by flag, so no macro conclusion is generated.",
+            "seriesIds": ["DTWEXBGS"],
+            "state": "disabled_by_flag"
+          },
+          {
+            "categoryKey": "recession",
+            "label": "Recession indicators",
+            "nextAction": "Enable FRED_MACRO_PROVIDER_ENABLED before macro data can unlock product surfaces.",
+            "productSurfacesUnlocked": [],
+            "reason": "Macro provider category is disabled by flag, so no macro conclusion is generated.",
+            "seriesIds": [],
+            "state": "disabled_by_flag"
+          }
+        ],
+        "contractVersion": "macro_provider_readiness_v1",
+        "networkCallsEnabled": false,
+        "provider": {
+          "configured": false,
+          "enabled": false,
+          "providerKey": "fred",
+          "providerLabel": "FRED macro provider category",
+          "state": "disabled_by_flag"
+        },
+        "runtimeProviderCalls": false
+      },
       "tickflowCnBreadth": {
         "breadthEntitlementState": "unknown",
         "breadthEntitlementUsable": null,
@@ -98,8 +191,9 @@
     "readOnly": true,
     "source": "market_cache_and_admin_logs",
     "summaryCache": {
-      "asOf": "2026-05-12T01:00:00+08:00",
+      "asOf": null,
       "cacheAgeMs": 0,
+      "cachedAt": "2026-05-12T01:00:00+08:00",
       "enabled": true,
       "hit": false,
       "key": "GET:/api/v1/admin/market-providers/operations:v1:24h",

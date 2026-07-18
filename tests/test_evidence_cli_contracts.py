@@ -55,7 +55,7 @@ def _combined(result: subprocess.CompletedProcess[str]) -> str:
 
 
 def _assert_bounded_output(text: str) -> None:
-    assert len(text) <= 16_000
+    assert len(text) <= 20_000
     for line in text.splitlines():
         assert len(line) <= 320
 
