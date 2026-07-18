@@ -16,6 +16,7 @@ from src.repositories.portfolio_repo import (
     DuplicateBrokerConnectionRefError,
     DuplicateTradeDedupHashError,
     DuplicateTradeUidError,
+    PORTFOLIO_PERFORMANCE_CONTRACT_VERSION,
     PortfolioBusyError as RepoPortfolioBusyError,
     PortfolioRepository,
 )
@@ -146,6 +147,7 @@ class PortfolioOversellError(ValueError):
 class _AvgState:
     quantity: float = 0.0
     total_cost: float = 0.0
+    price_cost: float = 0.0
 
 
 class PortfolioService:
@@ -2649,6 +2651,7 @@ class PortfolioService:
             "fx_stale": False,
         }
         market_breakdown: Dict[str, Dict[str, float]] = {}
+        aggregate_valuation_coverage = self._new_conversion_coverage()
 
         for account in account_rows:
             account_fx_rates = self._build_fx_rate_snapshot(
@@ -2708,6 +2711,11 @@ class PortfolioService:
                     fx_rates=account_fx_rates,
                 )
             accounts_payload.append(public_snapshot)
+            self._merge_coverage_payload(
+                aggregate_valuation_coverage,
+                dict(public_snapshot.get("valuation") or {}),
+                prefix=f"account:{account.id}",
+            )
             self._accumulate_market_breakdown(
                 market_breakdown=market_breakdown,
                 account_snapshot=public_snapshot,
@@ -2715,13 +2723,13 @@ class PortfolioService:
                 as_of_date=as_of_date,
             )
 
-            cash_cny, stale_cash, _ = self._convert_amount(
+            cash_cny, stale_cash, cash_source = self._convert_amount(
                 amount=account_snapshot["total_cash"],
                 from_currency=account.base_currency,
                 to_currency=aggregate_currency,
                 as_of_date=as_of_date,
             )
-            mv_cny, stale_mv, _ = self._convert_amount(
+            mv_cny, stale_mv, mv_source = self._convert_amount(
                 amount=account_snapshot["total_market_value"],
                 from_currency=account.base_currency,
                 to_currency=aggregate_currency,
@@ -2757,6 +2765,22 @@ class PortfolioService:
                 to_currency=aggregate_currency,
                 as_of_date=as_of_date,
             )
+            self._record_conversion_coverage(
+                aggregate_valuation_coverage,
+                component=f"account:{account.id}:cash",
+                amount=account_snapshot["total_cash"],
+                from_currency=account.base_currency,
+                to_currency=aggregate_currency,
+                source=cash_source,
+            )
+            self._record_conversion_coverage(
+                aggregate_valuation_coverage,
+                component=f"account:{account.id}:market_value",
+                amount=account_snapshot["total_market_value"],
+                from_currency=account.base_currency,
+                to_currency=aggregate_currency,
+                source=mv_source,
+            )
 
             aggregate["total_cash"] += cash_cny
             aggregate["total_market_value"] += mv_cny
@@ -2777,6 +2801,7 @@ class PortfolioService:
                 ]
             )
 
+        valuation = self._conversion_coverage_payload(aggregate_valuation_coverage)
         snapshot_payload = {
             "as_of": as_of_date.isoformat(),
             "cost_method": method,
@@ -2790,6 +2815,7 @@ class PortfolioService:
             "fee_total": round(aggregate["fee_total"], 6),
             "tax_total": round(aggregate["tax_total"], 6),
             "fx_stale": aggregate["fx_stale"],
+            "valuation": valuation,
             "market_breakdown": self._build_market_breakdown_payload(
                 market_breakdown=market_breakdown,
                 total_market_value=aggregate["total_market_value"],
@@ -2801,6 +2827,11 @@ class PortfolioService:
             ),
             "accounts": accounts_payload,
         }
+        snapshot_payload["performance"] = self._build_portfolio_performance(
+            snapshot=snapshot_payload,
+            aggregate_currency=aggregate_currency,
+            as_of_date=as_of_date,
+        )
         self._attach_snapshot_availability(snapshot_payload)
         snapshot_payload["portfolio_attribution"] = self._build_portfolio_attribution(
             snapshot=snapshot_payload,
@@ -2828,15 +2859,8 @@ class PortfolioService:
         return snapshot_payload
 
     def _attach_account_availability(self, account_payload: Dict[str, Any], *, loaded_from_cache: bool) -> None:
-        if (
-            loaded_from_cache
-            and account_payload.get("data_status")
-            and account_payload.get("calculation_status")
-            and isinstance(account_payload.get("availability"), dict)
-        ):
-            return
-
         position_count = len(account_payload.get("positions") or [])
+        valuation = dict(account_payload.get("valuation") or {})
         if position_count == 0:
             data_status = PORTFOLIO_DATA_STATUS_NO_POSITIONS
         elif self._account_has_unavailable_provider_data(account_payload):
@@ -2859,11 +2883,14 @@ class PortfolioService:
             "metrics_ready": calculation_status == PORTFOLIO_CALCULATION_STATUS_READY,
             "account_count": 1,
             "position_count": position_count,
+            "valuation": valuation,
+            "performance": self._performance_availability(account_payload.get("performance")),
         }
 
     def _attach_snapshot_availability(self, snapshot_payload: Dict[str, Any]) -> None:
         accounts = list(snapshot_payload.get("accounts") or [])
         position_count = sum(len(account.get("positions") or []) for account in accounts)
+        valuation = dict(snapshot_payload.get("valuation") or {})
         if not accounts:
             data_status = PORTFOLIO_DATA_STATUS_NO_ACCOUNT
         elif position_count == 0:
@@ -2888,6 +2915,18 @@ class PortfolioService:
             "metrics_ready": calculation_status == PORTFOLIO_CALCULATION_STATUS_READY,
             "account_count": len(accounts),
             "position_count": position_count,
+            "valuation": valuation,
+            "performance": self._performance_availability(snapshot_payload.get("performance")),
+        }
+
+    @staticmethod
+    def _performance_availability(value: Any) -> Dict[str, Any]:
+        performance = value if isinstance(value, dict) else {}
+        return_contract = performance.get("return") if isinstance(performance.get("return"), dict) else {}
+        return {
+            "calculation_state": str(performance.get("calculation_state") or "unavailable"),
+            "return_status": str(return_contract.get("status") or "unavailable"),
+            "return_reason": return_contract.get("reason"),
         }
 
     @staticmethod
@@ -3889,9 +3928,16 @@ class PortfolioService:
         fees_total_base = 0.0
         taxes_total_base = 0.0
         realized_pnl_base = 0.0
+        realized_price_pnl_base = 0.0
+        income_pnl_base = 0.0
+        deposits_base = 0.0
+        withdrawals_base = 0.0
+        external_cash_flows: List[Tuple[date, float]] = []
         realized_pnl_by_symbol: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
         fx_stale = False
         fx_currencies_used: Set[str] = set()
+        valuation_coverage = self._new_conversion_coverage()
+        performance_coverage = self._new_conversion_coverage()
 
         fifo_lots: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = defaultdict(list)
         avg_state: Dict[Tuple[str, str, str], _AvgState] = defaultdict(_AvgState)
@@ -3900,10 +3946,29 @@ class PortfolioService:
             if event_type == "cash":
                 currency = self._normalize_currency(event.currency)
                 amount = float(event.amount or 0.0)
+                converted_flow, stale_flow, flow_source = self._convert_amount(
+                    amount=amount,
+                    from_currency=currency,
+                    to_currency=account.base_currency,
+                    as_of_date=event_date,
+                )
+                self._record_conversion_coverage(
+                    performance_coverage,
+                    component=f"cash_flow:{event.id}",
+                    amount=amount,
+                    from_currency=currency,
+                    to_currency=account.base_currency,
+                    source=flow_source,
+                )
+                fx_stale = fx_stale or stale_flow
                 if event.direction == "in":
                     cash_balances[currency] += amount
+                    deposits_base += converted_flow
+                    external_cash_flows.append((event_date, converted_flow))
                 elif event.direction == "out":
                     cash_balances[currency] -= amount
+                    withdrawals_base += converted_flow
+                    external_cash_flows.append((event_date, -converted_flow))
                 else:
                     raise ValueError(f"Unsupported cash direction: {event.direction}")
                 continue
@@ -3935,6 +4000,7 @@ class PortfolioService:
                                 "open_date": event_date,
                                 "remaining_quantity": qty,
                                 "unit_cost": unit_cost,
+                                "unit_price_cost": price,
                                 "source_trade_id": event.id,
                             }
                         )
@@ -3942,26 +4008,29 @@ class PortfolioService:
                         state = avg_state[key]
                         state.quantity += qty
                         state.total_cost += (gross + fee + tax)
+                        state.price_cost += gross
                     elif cost_method == "futu_diluted":
                         state = avg_state[key]
                         state.quantity += qty
                         state.total_cost += gross
+                        state.price_cost += gross
                     elif cost_method == "ths_pnl":
                         state = avg_state[key]
                         state.quantity += qty
                         state.total_cost += (gross + fee + tax)
+                        state.price_cost += gross
                 elif side == "sell":
                     cash_balances[key[2]] += (gross - fee - tax)
                     proceeds_net = gross - fee - tax
                     if cost_method == "fifo":
-                        cost_basis = self._consume_fifo_lots(
+                        cost_basis, price_cost_basis = self._consume_fifo_lots(
                             fifo_lots[key],
                             qty,
                             key[0],
                             event_date,
                         )
                     elif cost_method == "avg":
-                        cost_basis = self._consume_avg_position(
+                        cost_basis, price_cost_basis = self._consume_avg_position(
                             avg_state[key],
                             qty,
                             key[0],
@@ -3969,7 +4038,7 @@ class PortfolioService:
                         )
                     else:
                         state = avg_state[key]
-                        cost_basis = self._consume_avg_position(
+                        cost_basis, price_cost_basis = self._consume_avg_position(
                             state,
                             qty,
                             key[0],
@@ -3979,6 +4048,22 @@ class PortfolioService:
                             state.total_cost -= gross - cost_basis
                         elif state.quantity > EPS and cost_method == "ths_pnl":
                             state.total_cost -= proceeds_net - cost_basis
+                    realized_price_local = gross - price_cost_basis
+                    realized_price_base, stale_price, price_source = self._convert_amount(
+                        amount=realized_price_local,
+                        from_currency=key[2],
+                        to_currency=account.base_currency,
+                        as_of_date=event_date,
+                    )
+                    self._record_conversion_coverage(
+                        performance_coverage,
+                        component=f"realized_price_pnl:{event.id}",
+                        amount=realized_price_local,
+                        from_currency=key[2],
+                        to_currency=account.base_currency,
+                        source=price_source,
+                    )
+                    realized_price_pnl_base += realized_price_base
                     realized_local = proceeds_net - cost_basis
                     realized_base, stale_realized, realized_source = self._convert_amount(
                         amount=realized_local,
@@ -4009,16 +4094,17 @@ class PortfolioService:
                         self._fx_status(stale_realized, realized_source),
                     )
                     fx_stale = fx_stale or stale_realized
+                    fx_stale = fx_stale or stale_price
                 else:
                     raise ValueError(f"Unsupported trade side: {event.side}")
 
-                fee_base, stale_fee, _ = self._convert_amount(
+                fee_base, stale_fee, fee_source = self._convert_amount(
                     amount=fee,
                     from_currency=key[2],
                     to_currency=account.base_currency,
                     as_of_date=event_date,
                 )
-                tax_base, stale_tax, _ = self._convert_amount(
+                tax_base, stale_tax, tax_source = self._convert_amount(
                     amount=tax,
                     from_currency=key[2],
                     to_currency=account.base_currency,
@@ -4028,6 +4114,22 @@ class PortfolioService:
                     fx_currencies_used.add(self._normalize_currency(key[2]))
                 fees_total_base += fee_base
                 taxes_total_base += tax_base
+                self._record_conversion_coverage(
+                    performance_coverage,
+                    component=f"fee:{event.id}",
+                    amount=fee,
+                    from_currency=key[2],
+                    to_currency=account.base_currency,
+                    source=fee_source,
+                )
+                self._record_conversion_coverage(
+                    performance_coverage,
+                    component=f"tax:{event.id}",
+                    amount=tax,
+                    from_currency=key[2],
+                    to_currency=account.base_currency,
+                    source=tax_source,
+                )
                 fx_stale = fx_stale or stale_fee or stale_tax
                 continue
 
@@ -4049,9 +4151,26 @@ class PortfolioService:
                         avg_state=avg_state,
                     )
                     if qty_held > EPS:
-                        cash_balances[key[2]] += qty_held * per_share
+                        income_native = qty_held * per_share
+                        cash_balances[key[2]] += income_native
+                        income_base, stale_income, income_source = self._convert_amount(
+                            amount=income_native,
+                            from_currency=key[2],
+                            to_currency=account.base_currency,
+                            as_of_date=event_date,
+                        )
+                        self._record_conversion_coverage(
+                            performance_coverage,
+                            component=f"income:{event.id}",
+                            amount=income_native,
+                            from_currency=key[2],
+                            to_currency=account.base_currency,
+                            source=income_source,
+                        )
+                        income_pnl_base += income_base
+                        fx_stale = fx_stale or stale_income
                         if cost_method in {"futu_diluted", "ths_pnl"}:
-                            avg_state[key].total_cost -= qty_held * per_share
+                            avg_state[key].total_cost -= income_native
                 elif action_type == "split_adjustment":
                     split_ratio = float(event.split_ratio or 0.0)
                     if split_ratio <= 0:
@@ -4062,13 +4181,23 @@ class PortfolioService:
                         for lot in fifo_lots[key]:
                             lot["remaining_quantity"] *= split_ratio
                             lot["unit_cost"] /= split_ratio
+                            lot["unit_price_cost"] /= split_ratio
                     else:
                         state = avg_state[key]
                         state.quantity *= split_ratio
                 else:
                     raise ValueError(f"Unsupported corporate action type: {event.action_type}")
 
-        position_rows, lot_rows, market_value_base, total_cost_base, stale_pos = self._build_positions(
+        (
+            position_rows,
+            lot_rows,
+            market_value_base,
+            total_cost_base,
+            unrealized_price_pnl_base,
+            stale_pos,
+            position_valuation_coverage,
+            position_performance_coverage,
+        ) = self._build_positions(
             account=account,
             as_of_date=as_of_date,
             cost_method=cost_method,
@@ -4077,14 +4206,24 @@ class PortfolioService:
             fx_currencies_used=fx_currencies_used,
         )
         fx_stale = fx_stale or stale_pos
+        self._merge_conversion_coverage(valuation_coverage, position_valuation_coverage)
+        self._merge_conversion_coverage(performance_coverage, position_performance_coverage)
 
         total_cash_base = 0.0
         for currency, amount in cash_balances.items():
-            converted, stale, _ = self._convert_amount(
+            converted, stale, source = self._convert_amount(
                 amount=amount,
                 from_currency=currency,
                 to_currency=account.base_currency,
                 as_of_date=as_of_date,
+            )
+            self._record_conversion_coverage(
+                valuation_coverage,
+                component=f"cash:{currency}",
+                amount=amount,
+                from_currency=currency,
+                to_currency=account.base_currency,
+                source=source,
             )
             if self._normalize_currency(currency) != self._normalize_currency(account.base_currency):
                 fx_currencies_used.add(self._normalize_currency(currency))
@@ -4093,6 +4232,22 @@ class PortfolioService:
 
         unrealized_pnl_base = market_value_base - total_cost_base
         total_equity_base = total_cash_base + market_value_base
+        valuation = self._conversion_coverage_payload(valuation_coverage)
+        performance = self._build_account_performance(
+            as_of_date=as_of_date,
+            currency=account.base_currency,
+            total_equity=total_equity_base,
+            realized_price_pnl=realized_price_pnl_base,
+            unrealized_price_pnl=unrealized_price_pnl_base,
+            income_pnl=income_pnl_base,
+            fees=fees_total_base,
+            taxes=taxes_total_base,
+            deposits=deposits_base,
+            withdrawals=withdrawals_base,
+            external_cash_flows=external_cash_flows,
+            valuation=valuation,
+            conversion_coverage=performance_coverage,
+        )
 
         account_payload = {
             "account_id": account.id,
@@ -4111,6 +4266,8 @@ class PortfolioService:
             "fee_total": round(fees_total_base, 6),
             "tax_total": round(taxes_total_base, 6),
             "fx_stale": fx_stale,
+            "valuation": valuation,
+            "performance": performance,
             "positions": position_rows,
             "realized_pnl_by_symbol": self._realized_symbol_payload(realized_pnl_by_symbol),
         }
@@ -4214,6 +4371,23 @@ class PortfolioService:
             "fx_stale": bool(sync_state.get("fx_stale")),
             "positions": positions,
         }
+        valuation_components = [f"broker_position:{item['symbol']}" for item in positions]
+        if abs(float(payload["total_cash"])) > EPS:
+            valuation_components.append("broker_cash")
+        payload["valuation"] = {
+            "state": "available",
+            "value_semantics": "covered_subtotal",
+            "covered_component_count": len(valuation_components),
+            "unavailable_component_count": 0,
+            "covered_components": valuation_components,
+            "unavailable_components": [],
+            "missing_fx_pairs": [],
+        }
+        payload["performance"] = self._unavailable_performance(
+            currency=str(payload["base_currency"]),
+            valuation=payload["valuation"],
+            reason="broker_sync_performance_components_unavailable",
+        )
         payload["industry_attribution"] = self._build_snapshot_industry_attribution(
             snapshot=self._wrap_account_snapshot_payload(payload),
             as_of_date=as_of_date,
@@ -4333,12 +4507,24 @@ class PortfolioService:
         fifo_lots: Dict[Tuple[str, str, str], List[Dict[str, Any]]],
         avg_state: Dict[Tuple[str, str, str], _AvgState],
         fx_currencies_used: Optional[Set[str]] = None,
-    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], float, float, bool]:
+    ) -> Tuple[
+        List[Dict[str, Any]],
+        List[Dict[str, Any]],
+        float,
+        float,
+        float,
+        bool,
+        Dict[str, Any],
+        Dict[str, Any],
+    ]:
         position_rows: List[Dict[str, Any]] = []
         lot_rows: List[Dict[str, Any]] = []
         market_value_base = 0.0
         total_cost_base = 0.0
+        unrealized_price_pnl_base = 0.0
         fx_stale = False
+        valuation_coverage = self._new_conversion_coverage()
+        performance_coverage = self._new_conversion_coverage()
 
         keys: Iterable[Tuple[str, str, str]]
         if cost_method == "fifo":
@@ -4359,12 +4545,17 @@ class PortfolioService:
                 if qty <= EPS:
                     continue
                 total_cost = sum(float(lot["remaining_quantity"]) * float(lot["unit_cost"]) for lot in active_lots)
+                price_cost = sum(
+                    float(lot["remaining_quantity"]) * float(lot["unit_price_cost"])
+                    for lot in active_lots
+                )
                 avg_cost = total_cost / qty
                 lot_rows.extend(active_lots)
             else:
                 state = avg_state[key]
                 qty = float(state.quantity)
                 total_cost = float(state.total_cost)
+                price_cost = float(state.price_cost)
                 if qty <= EPS:
                     continue
                 avg_cost = total_cost / qty
@@ -4376,6 +4567,7 @@ class PortfolioService:
                         "open_date": as_of_date,
                         "remaining_quantity": qty,
                         "unit_cost": avg_cost,
+                        "unit_price_cost": price_cost / qty,
                         "source_trade_id": None,
                     }
                 )
@@ -4427,10 +4619,33 @@ class PortfolioService:
                 to_currency=account.base_currency,
                 as_of_date=as_of_date,
             )
+            unrealized_price_native = local_market_value - price_cost
+            unrealized_price_base, stale_price, price_source = self._convert_amount(
+                amount=unrealized_price_native,
+                from_currency=currency,
+                to_currency=account.base_currency,
+                as_of_date=as_of_date,
+            )
+            self._record_conversion_coverage(
+                valuation_coverage,
+                component=f"position:{symbol}:{market}:{currency}",
+                amount=local_market_value,
+                from_currency=currency,
+                to_currency=account.base_currency,
+                source=market_source,
+            )
+            self._record_conversion_coverage(
+                performance_coverage,
+                component=f"unrealized_price_pnl:{symbol}:{market}:{currency}",
+                amount=unrealized_price_native,
+                from_currency=currency,
+                to_currency=account.base_currency,
+                source=price_source,
+            )
             unrealized_base = market_base - cost_base
             unrealized_native = local_market_value - total_cost
             unrealized_pct = (unrealized_native / abs(total_cost)) * 100.0 if abs(total_cost) > EPS else None
-            fx_stale = fx_stale or stale_market or stale_cost
+            fx_stale = fx_stale or stale_market or stale_cost or stale_price
             display_fx_status = self._combine_fx_statuses(
                 self._fx_status(stale_market, market_source),
                 self._fx_status(stale_cost, cost_source),
@@ -4449,7 +4664,9 @@ class PortfolioService:
                     "unrealized_pnl_base": round(unrealized_base, 8),
                     "valuation_currency": account.base_currency,
                     "cost_basis_native": round(total_cost, 8),
+                    "price_cost_basis_native": round(price_cost, 8),
                     "market_value_native": round(local_market_value, 8),
+                    "price_pnl_native": round(unrealized_price_native, 8),
                     "unrealized_pnl_native": round(unrealized_native, 8),
                     "unrealized_pnl_pct": round(unrealized_pct, 6) if unrealized_pct is not None else None,
                     "display_market_value": round(market_base, 8),
@@ -4462,8 +4679,18 @@ class PortfolioService:
 
             market_value_base += market_base
             total_cost_base += cost_base
+            unrealized_price_pnl_base += unrealized_price_base
 
-        return position_rows, lot_rows, market_value_base, total_cost_base, fx_stale
+        return (
+            position_rows,
+            lot_rows,
+            market_value_base,
+            total_cost_base,
+            unrealized_price_pnl_base,
+            fx_stale,
+            valuation_coverage,
+            performance_coverage,
+        )
 
     @staticmethod
     def _build_position_price_metadata(
@@ -4506,9 +4733,10 @@ class PortfolioService:
         quantity: float,
         symbol: str,
         trade_date: Optional[date] = None,
-    ) -> float:
+    ) -> Tuple[float, float]:
         remaining = quantity
         cost_basis = 0.0
+        price_cost_basis = 0.0
         while remaining > EPS:
             if not lots:
                 raise PortfolioOversellError(
@@ -4520,11 +4748,12 @@ class PortfolioService:
             head = lots[0]
             take = min(remaining, float(head["remaining_quantity"]))
             cost_basis += take * float(head["unit_cost"])
+            price_cost_basis += take * float(head["unit_price_cost"])
             head["remaining_quantity"] = float(head["remaining_quantity"]) - take
             remaining -= take
             if head["remaining_quantity"] <= EPS:
                 lots.pop(0)
-        return cost_basis
+        return cost_basis, price_cost_basis
 
     @staticmethod
     def _consume_avg_position(
@@ -4532,7 +4761,7 @@ class PortfolioService:
         quantity: float,
         symbol: str,
         trade_date: Optional[date] = None,
-    ) -> float:
+    ) -> Tuple[float, float]:
         if state.quantity + EPS < quantity:
             raise PortfolioOversellError(
                 symbol=symbol,
@@ -4548,13 +4777,17 @@ class PortfolioService:
                 available_quantity=0.0,
             )
         avg_cost = state.total_cost / state.quantity
+        avg_price_cost = state.price_cost / state.quantity
         cost_basis = avg_cost * quantity
+        price_cost_basis = avg_price_cost * quantity
         state.quantity -= quantity
         state.total_cost -= cost_basis
+        state.price_cost -= price_cost_basis
         if state.quantity <= EPS:
             state.quantity = 0.0
             state.total_cost = 0.0
-        return cost_basis
+            state.price_cost = 0.0
+        return cost_basis, price_cost_basis
 
     @staticmethod
     def _held_quantity(
@@ -4567,6 +4800,254 @@ class PortfolioService:
         if cost_method == "fifo":
             return sum(float(lot["remaining_quantity"]) for lot in fifo_lots.get(key, []))
         return float(avg_state.get(key, _AvgState()).quantity)
+
+    @staticmethod
+    def _new_conversion_coverage() -> Dict[str, Any]:
+        return {
+            "covered_components": set(),
+            "unavailable_components": set(),
+            "missing_fx_pairs": set(),
+            "unavailable_native_values": {},
+        }
+
+    @classmethod
+    def _record_conversion_coverage(
+        cls,
+        coverage: Dict[str, Any],
+        *,
+        component: str,
+        amount: float,
+        from_currency: str,
+        to_currency: str,
+        source: str,
+    ) -> None:
+        if abs(float(amount)) <= EPS:
+            return
+        component_key = str(component)
+        if source == "missing_rate":
+            coverage["unavailable_components"].add(component_key)
+            from_norm = cls._normalize_currency(from_currency)
+            to_norm = cls._normalize_currency(to_currency)
+            coverage["missing_fx_pairs"].add(f"{from_norm}/{to_norm}")
+            coverage["unavailable_native_values"][component_key] = {
+                "component": component_key,
+                "amount": round(float(amount), 8),
+                "currency": from_norm,
+            }
+            return
+        coverage["covered_components"].add(component_key)
+
+    @staticmethod
+    def _merge_conversion_coverage(
+        target: Dict[str, Any],
+        source: Dict[str, Any],
+    ) -> None:
+        for key in ("covered_components", "unavailable_components", "missing_fx_pairs"):
+            target[key].update(source.get(key) or set())
+        target["unavailable_native_values"].update(source.get("unavailable_native_values") or {})
+
+    @staticmethod
+    def _merge_coverage_payload(
+        target: Dict[str, Any],
+        payload: Dict[str, Any],
+        *,
+        prefix: str,
+    ) -> None:
+        for key in ("covered_components", "unavailable_components"):
+            for component in list(payload.get(key) or []):
+                target[key].add(f"{prefix}:{component}")
+        target["missing_fx_pairs"].update(str(item) for item in list(payload.get("missing_fx_pairs") or []))
+        for item in list(payload.get("unavailable_native_values") or []):
+            if not isinstance(item, dict) or not str(item.get("component") or ""):
+                continue
+            component = f"{prefix}:{item['component']}"
+            target["unavailable_native_values"][component] = {
+                **item,
+                "component": component,
+            }
+
+    @staticmethod
+    def _conversion_coverage_payload(coverage: Dict[str, Any]) -> Dict[str, Any]:
+        covered = sorted(coverage.get("covered_components") or set())
+        unavailable = sorted(coverage.get("unavailable_components") or set())
+        native_values = sorted(
+            list((coverage.get("unavailable_native_values") or {}).values()),
+            key=lambda item: str(item.get("component") or ""),
+        )
+        if unavailable and covered:
+            state = "partial"
+        elif unavailable:
+            state = "unavailable"
+        else:
+            state = "available"
+        return {
+            "state": state,
+            "value_semantics": "covered_subtotal",
+            "covered_component_count": len(covered),
+            "unavailable_component_count": len(unavailable),
+            "covered_components": covered,
+            "unavailable_components": unavailable,
+            "missing_fx_pairs": sorted(coverage.get("missing_fx_pairs") or set()),
+            "unavailable_native_values": native_values,
+        }
+
+    @staticmethod
+    def _modified_dietz_denominator(
+        *,
+        external_cash_flows: List[Tuple[date, float]],
+        as_of_date: date,
+    ) -> Optional[float]:
+        if not external_cash_flows:
+            return None
+        first_date = min(flow_date for flow_date, _ in external_cash_flows)
+        span_days = (as_of_date - first_date).days
+        denominator = 0.0
+        for flow_date, signed_amount in external_cash_flows:
+            if span_days <= 0:
+                weight = 1.0
+            else:
+                weight = max(0.0, min(1.0, (as_of_date - flow_date).days / span_days))
+            denominator += float(signed_amount) * weight
+        return denominator if denominator > EPS else None
+
+    def _build_account_performance(
+        self,
+        *,
+        as_of_date: date,
+        currency: str,
+        total_equity: float,
+        realized_price_pnl: float,
+        unrealized_price_pnl: float,
+        income_pnl: float,
+        fees: float,
+        taxes: float,
+        deposits: float,
+        withdrawals: float,
+        external_cash_flows: List[Tuple[date, float]],
+        valuation: Dict[str, Any],
+        conversion_coverage: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        component_coverage = self._conversion_coverage_payload(conversion_coverage)
+        valuation_state = str(valuation.get("state") or "unavailable")
+        component_state = str(component_coverage.get("state") or "unavailable")
+        if valuation_state == "unavailable" or component_state == "unavailable":
+            calculation_state = "unavailable"
+        elif valuation_state == "partial" or component_state == "partial":
+            calculation_state = "partial"
+        else:
+            calculation_state = "available"
+
+        net_cash_flow = deposits - withdrawals
+        denominator = None
+        net_pnl = None
+        gross_pnl = None
+        price_pnl = None
+        fx_pnl = None
+        if calculation_state == "available":
+            net_pnl = total_equity - net_cash_flow
+            gross_pnl = net_pnl + fees + taxes
+            price_pnl = realized_price_pnl + unrealized_price_pnl
+            fx_pnl = gross_pnl - price_pnl - income_pnl
+            denominator = self._modified_dietz_denominator(
+                external_cash_flows=external_cash_flows,
+                as_of_date=as_of_date,
+            )
+
+        return_status = "available" if denominator is not None and net_pnl is not None else "unavailable"
+        return_percent = (net_pnl / denominator) * 100.0 if return_status == "available" else None
+        if calculation_state != "available":
+            return_reason = "partial_or_unavailable_valuation"
+        elif denominator is None:
+            return_reason = "non_positive_denominator"
+        else:
+            return_reason = None
+
+        def rounded(value: Optional[float]) -> Optional[float]:
+            return round(float(value), 6) if value is not None else None
+
+        return {
+            "contract_version": PORTFOLIO_PERFORMANCE_CONTRACT_VERSION,
+            "calculation_state": calculation_state,
+            "currency": self._normalize_currency(currency),
+            "price_basis": "snapshot_valuation_price_not_executable",
+            "cash_flows": {
+                "deposits": rounded(deposits) if calculation_state == "available" else None,
+                "withdrawals": rounded(withdrawals) if calculation_state == "available" else None,
+                "net": rounded(net_cash_flow) if calculation_state == "available" else None,
+                "performance_treatment": "excluded_from_investment_pnl",
+            },
+            "pnl": {
+                "price": rounded(price_pnl),
+                "income": rounded(income_pnl) if calculation_state == "available" else None,
+                "fx": rounded(fx_pnl),
+                "fees": rounded(fees) if calculation_state == "available" else None,
+                "taxes": rounded(taxes) if calculation_state == "available" else None,
+                "gross": rounded(gross_pnl),
+                "net": rounded(net_pnl),
+            },
+            "return": {
+                "status": return_status,
+                "method": "modified_dietz",
+                "numerator": rounded(net_pnl),
+                "denominator": rounded(denominator),
+                "denominator_semantics": "time_weighted_external_cash_flows",
+                "cash_flow_timing": "end_of_day",
+                "percent": rounded(return_percent),
+                "reason": return_reason,
+            },
+            "valuation": dict(valuation),
+            "component_coverage": component_coverage,
+        }
+
+    def _unavailable_performance(
+        self,
+        *,
+        currency: str,
+        valuation: Dict[str, Any],
+        reason: str,
+    ) -> Dict[str, Any]:
+        return {
+            "contract_version": PORTFOLIO_PERFORMANCE_CONTRACT_VERSION,
+            "calculation_state": "unavailable",
+            "currency": self._normalize_currency(currency),
+            "price_basis": "snapshot_valuation_price_not_executable",
+            "cash_flows": {
+                "deposits": None,
+                "withdrawals": None,
+                "net": None,
+                "performance_treatment": "excluded_from_investment_pnl",
+            },
+            "pnl": {
+                "price": None,
+                "income": None,
+                "fx": None,
+                "fees": None,
+                "taxes": None,
+                "gross": None,
+                "net": None,
+            },
+            "return": {
+                "status": "unavailable",
+                "method": "modified_dietz",
+                "numerator": None,
+                "denominator": None,
+                "denominator_semantics": "time_weighted_external_cash_flows",
+                "cash_flow_timing": "end_of_day",
+                "percent": None,
+                "reason": reason,
+            },
+            "valuation": dict(valuation),
+            "component_coverage": {
+                "state": "unavailable",
+                "value_semantics": "covered_subtotal",
+                "covered_component_count": 0,
+                "unavailable_component_count": 1,
+                "covered_components": [],
+                "unavailable_components": [reason],
+                "missing_fx_pairs": [],
+                "unavailable_native_values": [],
+            },
+        }
 
     def _convert_amount(
         self,
@@ -4599,8 +5080,7 @@ class PortfolioService:
         if inverse is not None and inverse.rate > 0:
             return float(amount) / float(inverse.rate), bool(inverse.is_stale), "inverse_rate"
 
-        # P0 fallback: keep pipeline available even when FX cache is missing.
-        return float(amount), True, "fallback_1_to_1"
+        return 0.0, True, "missing_rate"
 
     def convert_amount(
         self,
@@ -4959,6 +5439,15 @@ class PortfolioService:
         positions = payload.get("positions")
         if not isinstance(positions, list) or not all(isinstance(item, dict) for item in positions):
             return False
+        performance = payload.get("performance")
+        if (
+            not isinstance(performance, dict)
+            or performance.get("contract_version") != PORTFOLIO_PERFORMANCE_CONTRACT_VERSION
+        ):
+            return False
+        valuation = payload.get("valuation")
+        if not isinstance(valuation, dict) or valuation.get("state") not in {"available", "partial", "unavailable"}:
+            return False
         return (
             payload.get("account_id") == int(account.id)
             and str(payload.get("as_of") or "") == as_of_date.isoformat()
@@ -5031,6 +5520,144 @@ class PortfolioService:
             as_of_date=as_of_date,
         )
 
+    def _build_portfolio_performance(
+        self,
+        *,
+        snapshot: Dict[str, Any],
+        aggregate_currency: str,
+        as_of_date: date,
+    ) -> Dict[str, Any]:
+        coverage = self._new_conversion_coverage()
+        totals = {
+            "deposits": 0.0,
+            "withdrawals": 0.0,
+            "price": 0.0,
+            "income": 0.0,
+            "fx": 0.0,
+            "fees": 0.0,
+            "taxes": 0.0,
+            "gross": 0.0,
+            "net": 0.0,
+            "denominator": 0.0,
+        }
+        denominator_count = 0
+        unavailable_accounts = 0
+        covered_accounts = 0
+        display_currency = self._normalize_currency(aggregate_currency)
+
+        for account in list(snapshot.get("accounts") or []):
+            account_id = int(account.get("account_id") or 0)
+            performance = account.get("performance") if isinstance(account.get("performance"), dict) else {}
+            if str(performance.get("calculation_state") or "unavailable") != "available":
+                unavailable_accounts += 1
+                coverage["unavailable_components"].add(f"account:{account_id}:performance")
+                continue
+            covered_accounts += 1
+            account_currency = self._normalize_currency(performance.get("currency") or account.get("base_currency"))
+            values = {
+                "deposits": dict(performance.get("cash_flows") or {}).get("deposits"),
+                "withdrawals": dict(performance.get("cash_flows") or {}).get("withdrawals"),
+                "price": dict(performance.get("pnl") or {}).get("price"),
+                "income": dict(performance.get("pnl") or {}).get("income"),
+                "fx": dict(performance.get("pnl") or {}).get("fx"),
+                "fees": dict(performance.get("pnl") or {}).get("fees"),
+                "taxes": dict(performance.get("pnl") or {}).get("taxes"),
+                "gross": dict(performance.get("pnl") or {}).get("gross"),
+                "net": dict(performance.get("pnl") or {}).get("net"),
+            }
+            for component, raw_value in values.items():
+                amount = float(raw_value or 0.0)
+                converted, _stale, source = self._convert_amount(
+                    amount=amount,
+                    from_currency=account_currency,
+                    to_currency=display_currency,
+                    as_of_date=as_of_date,
+                )
+                self._record_conversion_coverage(
+                    coverage,
+                    component=f"account:{account_id}:{component}",
+                    amount=amount,
+                    from_currency=account_currency,
+                    to_currency=display_currency,
+                    source=source,
+                )
+                totals[component] += converted
+
+            denominator = dict(performance.get("return") or {}).get("denominator")
+            if denominator is not None:
+                converted, _stale, source = self._convert_amount(
+                    amount=float(denominator),
+                    from_currency=account_currency,
+                    to_currency=display_currency,
+                    as_of_date=as_of_date,
+                )
+                self._record_conversion_coverage(
+                    coverage,
+                    component=f"account:{account_id}:return_denominator",
+                    amount=float(denominator),
+                    from_currency=account_currency,
+                    to_currency=display_currency,
+                    source=source,
+                )
+                totals["denominator"] += converted
+                denominator_count += 1
+
+        component_coverage = self._conversion_coverage_payload(coverage)
+        valuation = dict(snapshot.get("valuation") or {})
+        if unavailable_accounts and covered_accounts:
+            calculation_state = "partial"
+        elif unavailable_accounts or not list(snapshot.get("accounts") or []):
+            calculation_state = "unavailable"
+        elif str(component_coverage.get("state")) != "available":
+            calculation_state = str(component_coverage.get("state"))
+        elif str(valuation.get("state") or "unavailable") != "available":
+            calculation_state = str(valuation.get("state") or "unavailable")
+        else:
+            calculation_state = "available"
+
+        denominator = totals["denominator"] if denominator_count > 0 and totals["denominator"] > EPS else None
+        return_available = calculation_state == "available" and denominator is not None
+        return_percent = (totals["net"] / denominator) * 100.0 if return_available else None
+        if calculation_state != "available":
+            return_reason = "partial_or_unavailable_valuation"
+        elif denominator is None:
+            return_reason = "non_positive_denominator"
+        else:
+            return_reason = None
+
+        def rounded(value: Optional[float]) -> Optional[float]:
+            return round(float(value), 6) if value is not None else None
+
+        values_available = calculation_state == "available"
+        return {
+            "contract_version": PORTFOLIO_PERFORMANCE_CONTRACT_VERSION,
+            "calculation_state": calculation_state,
+            "currency": display_currency,
+            "price_basis": "snapshot_valuation_price_not_executable",
+            "cash_flows": {
+                "deposits": rounded(totals["deposits"]) if values_available else None,
+                "withdrawals": rounded(totals["withdrawals"]) if values_available else None,
+                "net": rounded(totals["deposits"] - totals["withdrawals"]) if values_available else None,
+                "performance_treatment": "excluded_from_investment_pnl",
+            },
+            "pnl": {
+                key: rounded(totals[key]) if values_available else None
+                for key in ("price", "income", "fx", "fees", "taxes", "gross", "net")
+            },
+            "return": {
+                "status": "available" if return_available else "unavailable",
+                "method": "modified_dietz",
+                "numerator": rounded(totals["net"]) if values_available else None,
+                "denominator": rounded(denominator),
+                "denominator_semantics": "time_weighted_external_cash_flows",
+                "cash_flow_timing": "end_of_day",
+                "percent": rounded(return_percent),
+                "reason": return_reason,
+            },
+            "valuation": valuation,
+            "component_coverage": component_coverage,
+        }
+
     def _build_portfolio_attribution(
         self,
         *,
@@ -5041,6 +5668,7 @@ class PortfolioService:
 
         risk_service = PortfolioRiskService(repo=self.repo, portfolio_service=self)
         return {
+            "performance": dict(snapshot.get("performance") or {}),
             "account_attribution": risk_service._build_account_attribution(
                 snapshot=snapshot,
                 as_of_date=as_of_date,
@@ -5240,10 +5868,17 @@ class PortfolioService:
         total_cash = float(snapshot.get("total_cash") or 0.0)
         realized_amount = float(snapshot.get("realized_pnl") or 0.0)
         unrealized_amount = float(snapshot.get("unrealized_pnl") or 0.0)
-        total_pnl = realized_amount + unrealized_amount
+        performance = snapshot.get("performance") if isinstance(snapshot.get("performance"), dict) else {}
+        performance_pnl = performance.get("pnl") if isinstance(performance.get("pnl"), dict) else {}
+        performance_return = performance.get("return") if isinstance(performance.get("return"), dict) else {}
+        total_pnl = float(performance_pnl.get("net") or 0.0)
         cost_basis = total_market_value - unrealized_amount
-        pnl_percent = (total_pnl / abs(cost_basis)) * 100.0 if abs(cost_basis) > EPS else None
-        fx_status = FX_STATUS_STALE if snapshot.get("fx_stale") else FX_STATUS_LIVE
+        pnl_percent_raw = performance_return.get("percent")
+        pnl_percent = float(pnl_percent_raw) if pnl_percent_raw is not None else None
+        if str(performance.get("calculation_state") or "unavailable") != "available":
+            fx_status = FX_STATUS_UNAVAILABLE
+        else:
+            fx_status = FX_STATUS_STALE if snapshot.get("fx_stale") else FX_STATUS_LIVE
 
         by_account: List[Dict[str, Any]] = []
         by_currency: Dict[str, Dict[str, Any]] = {}
@@ -5425,7 +6060,7 @@ class PortfolioService:
                 "display_currency": display_currency,
                 "realized": self._pnl_metric(
                     amount=realized_amount,
-                    percent=(realized_amount / abs(cost_basis)) * 100.0 if abs(cost_basis) > EPS else None,
+                    percent=None,
                     currency=display_currency,
                     fx_status=fx_status,
                 ),
@@ -5543,7 +6178,7 @@ class PortfolioService:
 
     @staticmethod
     def _fx_status(stale: bool, source: str) -> str:
-        if source == "fallback_1_to_1":
+        if source == "missing_rate":
             return FX_STATUS_UNAVAILABLE
         if stale:
             return FX_STATUS_STALE

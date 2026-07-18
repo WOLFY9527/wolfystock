@@ -1399,7 +1399,7 @@ class PortfolioImportService:
             to_currency=account_base,
             as_of_date=as_of_date,
         )
-        return source != "fallback_1_to_1"
+        return source != "missing_rate"
 
     @staticmethod
     def _dedupe_ibkr_currency_issues(issues: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

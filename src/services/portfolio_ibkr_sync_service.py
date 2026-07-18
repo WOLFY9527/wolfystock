@@ -1142,7 +1142,7 @@ class PortfolioIbkrSyncService:
             to_currency=to_currency,
             as_of_date=as_of_date,
         )
-        if source == "fallback_1_to_1":
+        if source == "missing_rate":
             raise PortfolioIbkrSyncError(
                 code="ibkr_fx_unavailable",
                 message=f"IBKR {scope} 所需 FX 无 direct/inverse 证据，已拒绝整次同步。",

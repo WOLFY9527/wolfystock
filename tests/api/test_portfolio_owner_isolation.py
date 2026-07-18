@@ -269,7 +269,38 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
                     fee_total=0.0,
                     tax_total=0.0,
                     fx_stale=False,
-                    payload=json.dumps({"secret": secret}),
+                    payload=json.dumps(
+                        {
+                            "secret": secret,
+                            "account_id": account_id,
+                            "as_of": snapshot_date,
+                            "cost_method": "fifo",
+                            "base_currency": "USD",
+                            "total_cash": 1000.0,
+                            "total_market_value": total_equity - 1000.0,
+                            "total_equity": total_equity,
+                            "unrealized_pnl": 10.0,
+                            "realized_pnl": 5.0,
+                            "fee_total": 0.0,
+                            "tax_total": 0.0,
+                            "fx_stale": False,
+                            "positions": [],
+                            "valuation": {
+                                "state": "available",
+                                "value_semantics": "covered_subtotal",
+                                "covered_component_count": 1,
+                                "unavailable_component_count": 0,
+                                "covered_components": ["fixture_equity"],
+                                "unavailable_components": [],
+                                "missing_fx_pairs": [],
+                            },
+                            "performance": {
+                                "contract_version": "portfolio_performance_v1",
+                                "calculation_state": "available",
+                                "cash_flows": {"net": 0.0},
+                            },
+                        }
+                    ),
                 )
             )
             session.commit()

@@ -2218,7 +2218,41 @@ class PortfolioServiceTestCase(unittest.TestCase):
         ):
             second = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
 
-        self.assertEqual(second, first)
+        self.assertEqual(second["data_status"], "stale_or_cached")
+        self.assertEqual(second["accounts"][0]["data_status"], "stale_or_cached")
+        for field in (
+            "as_of",
+            "cost_method",
+            "currency",
+            "account_count",
+            "total_cash",
+            "total_market_value",
+            "total_equity",
+            "realized_pnl",
+            "unrealized_pnl",
+            "fee_total",
+            "tax_total",
+            "fx_stale",
+            "valuation",
+            "performance",
+            "market_breakdown",
+            "fx_rates",
+        ):
+            self.assertEqual(second[field], first[field], field)
+        for field in (
+            "account_id",
+            "total_cash",
+            "total_market_value",
+            "total_equity",
+            "realized_pnl",
+            "unrealized_pnl",
+            "fee_total",
+            "tax_total",
+            "valuation",
+            "performance",
+            "positions",
+        ):
+            self.assertEqual(second["accounts"][0][field], first["accounts"][0][field], field)
 
         with self.db.get_session() as session:
             snapshot_row_after = session.execute(

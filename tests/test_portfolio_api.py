@@ -252,6 +252,59 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(total_cash_logs, 1)
         self.assertEqual(cash_logs[0]["summary"]["portfolio_event"]["currency"], "CNY")
 
+    def test_snapshot_api_preserves_performance_and_partial_valuation_contracts(self) -> None:
+        service = PortfolioService()
+        account = service.create_account(
+            name="API Truth",
+            broker="Demo",
+            market="us",
+            base_currency="CNY",
+        )
+        account_id = int(account["id"])
+        service.record_cash_ledger(
+            account_id=account_id,
+            event_date=date(2026, 7, 1),
+            direction="in",
+            amount=100.0,
+            currency="USD",
+        )
+        service.record_trade(
+            account_id=account_id,
+            symbol="AAPL",
+            trade_date=date(2026, 7, 1),
+            side="buy",
+            quantity=1.0,
+            price=100.0,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("AAPL", date(2026, 7, 2), 100.0)
+
+        response = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"account_id": account_id, "as_of": "2026-07-02"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["availability"]["valuation"]["state"], "unavailable")
+        self.assertEqual(
+            payload["availability"]["valuation"]["unavailable_native_values"],
+            [
+                {
+                    "component": f"account:{account_id}:position:AAPL:us:USD",
+                    "amount": 100.0,
+                    "currency": "USD",
+                }
+            ],
+        )
+        position = payload["accounts"][0]["positions"][0]
+        self.assertEqual(position["market_value_native"], 100.0)
+        self.assertEqual(position["display_fx_status"], "unavailable")
+        performance = payload["portfolio_attribution"]["performance"]
+        self.assertEqual(performance["calculation_state"], "unavailable")
+        self.assertEqual(performance["price_basis"], "snapshot_valuation_price_not_executable")
+
     def test_delete_empty_account_archives_and_returns_next_account(self) -> None:
         first_resp = self.client.post(
             "/api/v1/portfolio/accounts",

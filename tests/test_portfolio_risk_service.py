@@ -119,9 +119,18 @@ class PortfolioRiskServiceDiagnosticsTestCase(unittest.TestCase):
         )
         self._save_close("AAPL", date(2026, 5, 10), 100.0)
 
+        snapshot = self.service.get_portfolio_snapshot(
+            account_id=aid,
+            as_of=date(2026, 5, 10),
+            cost_method="fifo",
+        )
         report = self.risk_service.get_risk_report(account_id=aid, as_of=date(2026, 5, 10), cost_method="fifo")
 
-        self.assertEqual(report["concentration"]["top_positions"][0]["market_value_base"], 100.0)
+        position = snapshot["accounts"][0]["positions"][0]
+        self.assertEqual(position["market_value_native"], 100.0)
+        self.assertEqual(position["display_fx_status"], "unavailable")
+        self.assertEqual(report["concentration"]["top_positions"][0]["market_value_base"], 0.0)
+        self.assertEqual(report["availability"]["valuation"]["state"], "unavailable")
         self.assertEqual(report["fxFreshnessState"], "unavailable")
         self.assertLessEqual(report["confidenceCap"]["value"], 40)
         self.assertIn("FX 汇率缺失", report["confidenceCap"]["limitation_labels"])

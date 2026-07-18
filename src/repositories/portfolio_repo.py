@@ -6,8 +6,10 @@ Provides DB access helpers for portfolio account/events/snapshot tables.
 
 from __future__ import annotations
 
+import json
 import logging
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -33,6 +35,17 @@ from src.storage import (
 )
 
 logger = logging.getLogger(__name__)
+PORTFOLIO_PERFORMANCE_CONTRACT_VERSION = "portfolio_performance_v1"
+
+
+@dataclass(frozen=True)
+class _PortfolioRiskSnapshotProjection:
+    account_id: int
+    snapshot_date: date
+    base_currency: str
+    total_equity: float
+    cumulative_cash_flow: float
+    fx_stale: bool
 
 
 class DuplicateTradeUidError(Exception):
@@ -1646,8 +1659,8 @@ class PortfolioRepository:
         lookback_days: int = 180,
         owner_id: Optional[str] = None,
         include_all_owners: bool = False,
-    ) -> List[PortfolioDailySnapshot]:
-        """Load snapshot rows in ascending date order for risk monitoring."""
+    ) -> List[_PortfolioRiskSnapshotProjection]:
+        """Load cash-flow-adjusted snapshot projections for risk monitoring."""
         with self.db.get_session() as session:
             query = select(PortfolioDailySnapshot).where(
                 and_(
@@ -1667,11 +1680,81 @@ class PortfolioRepository:
                     PortfolioDailySnapshot.account_id.asc(),
                 )
             ).scalars().all()
-            if lookback_days <= 0:
-                return list(rows)
-            # Keep only the latest N calendar days window for risk calculations.
-            cutoff_ordinal = as_of.toordinal() - lookback_days
-            return [row for row in rows if row.snapshot_date.toordinal() >= cutoff_ordinal]
+            if lookback_days > 0:
+                cutoff_ordinal = as_of.toordinal() - lookback_days
+                rows = [row for row in rows if row.snapshot_date.toordinal() >= cutoff_ordinal]
+            projections = [self._risk_snapshot_projection(row) for row in rows]
+            return self._unitize_risk_snapshot_projections(
+                [item for item in projections if item is not None]
+            )
+
+    @staticmethod
+    def _risk_snapshot_projection(
+        row: PortfolioDailySnapshot,
+    ) -> Optional[_PortfolioRiskSnapshotProjection]:
+        try:
+            payload = json.loads(str(row.payload or ""))
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        performance = payload.get("performance")
+        if not isinstance(performance, dict):
+            return None
+        if performance.get("contract_version") != PORTFOLIO_PERFORMANCE_CONTRACT_VERSION:
+            return None
+        if performance.get("calculation_state") != "available":
+            return None
+        cash_flows = performance.get("cash_flows")
+        if not isinstance(cash_flows, dict):
+            return None
+        cumulative_cash_flow = cash_flows.get("net")
+        if isinstance(cumulative_cash_flow, bool) or cumulative_cash_flow is None:
+            return None
+        try:
+            cumulative_cash_flow_value = float(cumulative_cash_flow)
+        except (TypeError, ValueError):
+            return None
+        return _PortfolioRiskSnapshotProjection(
+            account_id=int(row.account_id),
+            snapshot_date=row.snapshot_date,
+            base_currency=str(row.base_currency),
+            total_equity=float(row.total_equity or 0.0),
+            cumulative_cash_flow=cumulative_cash_flow_value,
+            fx_stale=bool(row.fx_stale),
+        )
+
+    @staticmethod
+    def _unitize_risk_snapshot_projections(
+        rows: List[_PortfolioRiskSnapshotProjection],
+    ) -> List[_PortfolioRiskSnapshotProjection]:
+        states: Dict[int, Tuple[float, float, float]] = {}
+        adjusted_rows: List[_PortfolioRiskSnapshotProjection] = []
+        for row in rows:
+            state = states.get(row.account_id)
+            if state is None or abs(state[0]) <= 1e-8:
+                unitized_equity = float(row.total_equity)
+            else:
+                previous_equity, previous_cash_flow, previous_unitized_equity = state
+                period_cash_flow = float(row.cumulative_cash_flow) - previous_cash_flow
+                period_factor = (float(row.total_equity) - period_cash_flow) / previous_equity
+                unitized_equity = previous_unitized_equity * period_factor
+            states[row.account_id] = (
+                float(row.total_equity),
+                float(row.cumulative_cash_flow),
+                unitized_equity,
+            )
+            adjusted_rows.append(
+                _PortfolioRiskSnapshotProjection(
+                    account_id=row.account_id,
+                    snapshot_date=row.snapshot_date,
+                    base_currency=row.base_currency,
+                    total_equity=unitized_equity,
+                    cumulative_cash_flow=row.cumulative_cash_flow,
+                    fx_stale=row.fx_stale,
+                )
+            )
+        return adjusted_rows
 
     def list_daily_snapshot_history(
         self,
