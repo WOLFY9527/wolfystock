@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -10,6 +11,7 @@ import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import src.auth as auth
 from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import admin_logs
 from src.services.execution_log_service import ExecutionLogService
@@ -82,11 +84,19 @@ def _regular_user() -> CurrentUser:
 
 class AdminLogsApiTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        self._prior_admin_auth_enabled = os.environ.get("ADMIN_AUTH_ENABLED")
+        os.environ["ADMIN_AUTH_ENABLED"] = "true"
+        auth.refresh_auth_state()
         DatabaseManager.reset_instance()
         self.db = DatabaseManager(db_url="sqlite:///:memory:")
 
     def tearDown(self) -> None:
         DatabaseManager.reset_instance()
+        if self._prior_admin_auth_enabled is None:
+            os.environ.pop("ADMIN_AUTH_ENABLED", None)
+        else:
+            os.environ["ADMIN_AUTH_ENABLED"] = self._prior_admin_auth_enabled
+        auth.refresh_auth_state()
 
     def _record_event(
         self,
@@ -2181,9 +2191,8 @@ class AdminLogsApiTestCase(unittest.TestCase):
     def test_business_event_list_requires_auth_and_admin_can_read_classification_fields(self) -> None:
         no_auth_app = FastAPI()
         no_auth_app.include_router(admin_logs.router, prefix="/api/v1/admin/logs")
-        no_auth_client = TestClient(no_auth_app)
-
-        no_auth_response = no_auth_client.get("/api/v1/admin/logs")
+        with TestClient(no_auth_app) as no_auth_client:
+            no_auth_response = no_auth_client.get("/api/v1/admin/logs")
 
         self.assertEqual(no_auth_response.status_code, 401)
 

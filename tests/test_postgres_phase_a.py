@@ -10,12 +10,15 @@ import sys
 import tempfile
 import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
+from sqlalchemy import inspect
+from sqlalchemy.exc import OperationalError
 from starlette.requests import Request
 
 try:
@@ -82,6 +85,7 @@ class PostgresPhaseAStorageTestCase(unittest.TestCase):
         Config.reset_instance()
         os.environ.pop("ENV_FILE", None)
         os.environ.pop("DATABASE_PATH", None)
+        os.environ.pop("ADMIN_AUTH_ENABLED", None)
         os.environ.pop("POSTGRES_PHASE_A_URL", None)
         os.environ.pop("POSTGRES_PHASE_A_APPLY_SCHEMA", None)
         self.temp_dir.cleanup()
@@ -104,6 +108,7 @@ class PostgresPhaseAStorageTestCase(unittest.TestCase):
         self.env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.sqlite_db_path)
+        os.environ["ADMIN_AUTH_ENABLED"] = "true" if auth_enabled else "false"
         if enable_phase_a:
             os.environ["POSTGRES_PHASE_A_URL"] = f"sqlite:///{self.phase_a_db_path}"
             os.environ["POSTGRES_PHASE_A_APPLY_SCHEMA"] = "true"
@@ -117,6 +122,96 @@ class PostgresPhaseAStorageTestCase(unittest.TestCase):
 
     def _db(self) -> DatabaseManager:
         return DatabaseManager.get_instance()
+
+    def test_fresh_sqlite_schema_initialization_does_not_create_bootstrap_identity(self) -> None:
+        self._configure_environment(auth_enabled=True, enable_phase_a=False)
+
+        db = self._db()
+
+        self.assertIn("app_users", inspect(db._engine).get_table_names())
+        self.assertIsNone(db.get_app_user(BOOTSTRAP_ADMIN_USER_ID))
+
+    def test_bootstrap_identity_is_created_only_on_explicit_request(self) -> None:
+        self._configure_environment(auth_enabled=True, enable_phase_a=False)
+        db = self._db()
+        self.assertIsNone(db.get_app_user(BOOTSTRAP_ADMIN_USER_ID))
+
+        bootstrap_admin = db.ensure_bootstrap_admin_user()
+
+        self.assertEqual(str(bootstrap_admin.id), BOOTSTRAP_ADMIN_USER_ID)
+        self.assertEqual(
+            db.get_app_user(BOOTSTRAP_ADMIN_USER_ID).username,
+            BOOTSTRAP_ADMIN_USERNAME,
+        )
+
+    def test_initialized_database_rejects_a_second_sqlite_authority(self) -> None:
+        self._configure_environment(auth_enabled=True, enable_phase_a=False)
+        db = self._db()
+        other_path = self.data_dir / "other.sqlite"
+
+        with self.assertRaisesRegex(RuntimeError, "different database URL"):
+            DatabaseManager(db_url=f"sqlite:///{other_path}")
+
+        self.assertIs(DatabaseManager.get_instance(), db)
+        self.assertFalse(other_path.exists())
+
+    def test_in_memory_sqlite_schema_is_shared_with_its_worker_thread(self) -> None:
+        self._configure_environment(auth_enabled=True, enable_phase_a=False)
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            bootstrap_admin = executor.submit(
+                db.get_app_user,
+                BOOTSTRAP_ADMIN_USER_ID,
+            ).result()
+
+        self.assertIsNone(bootstrap_admin)
+
+    def test_two_sqlite_database_lifecycles_do_not_share_identity_state(self) -> None:
+        self._configure_environment(auth_enabled=True, enable_phase_a=False)
+        first_path = self.data_dir / "first.sqlite"
+        second_path = self.data_dir / "second.sqlite"
+        first_db = DatabaseManager(db_url=f"sqlite:///{first_path}")
+        first_db.create_or_update_app_user(
+            user_id="first-owner",
+            username="first-owner",
+        )
+        DatabaseManager.reset_instance()
+
+        second_db = DatabaseManager(db_url=f"sqlite:///{second_path}")
+
+        self.assertIsNone(second_db.get_app_user("first-owner"))
+        self.assertNotEqual(first_path, second_path)
+
+    def test_transaction_rollback_preserves_schema_and_discards_rows(self) -> None:
+        self._configure_environment(auth_enabled=True, enable_phase_a=False)
+        db = self._db()
+
+        with self.assertRaisesRegex(RuntimeError, "force rollback"):
+            with db.session_scope() as session:
+                session.add(
+                    AppUser(
+                        id="rolled-back-owner",
+                        username="rolled-back-owner",
+                        role="user",
+                        is_active=True,
+                    )
+                )
+                raise RuntimeError("force rollback")
+
+        self.assertIsNone(db.get_app_user("rolled-back-owner"))
+        self.assertIn("app_users", inspect(db._engine).get_table_names())
+        self.assertTrue(self.sqlite_db_path.exists())
+
+    def test_missing_identity_table_raises_instead_of_returning_empty_result(self) -> None:
+        self._configure_environment(auth_enabled=True, enable_phase_a=False)
+        db = self._db()
+        with db._engine.begin() as connection:
+            connection.exec_driver_sql("DROP TABLE app_users")
+
+        with self.assertRaises(OperationalError):
+            db.get_app_user(BOOTSTRAP_ADMIN_USER_ID)
 
     def test_phase_a_disabled_keeps_current_sqlite_auth_storage(self) -> None:
         self._configure_environment(auth_enabled=True, enable_phase_a=False)
@@ -292,9 +387,11 @@ class PostgresPhaseAStorageTestCase(unittest.TestCase):
         from api.app import create_app
 
         app = create_app(static_dir=self.data_dir / "empty-static")
-        client = TestClient(app)
-        try:
+        with TestClient(app) as client:
             with patch(
+                "api.v1.endpoints.analysis._raise_if_llm_model_unavailable",
+                return_value=None,
+            ), patch(
                 "src.services.analysis_service.AnalysisService.analyze_stock",
                 return_value={
                     "query_id": "guest:test-session:20260416090000000000",
@@ -341,15 +438,12 @@ class PostgresPhaseAStorageTestCase(unittest.TestCase):
                 self.assertEqual(session.query(AnalysisHistory).count(), 0)
             with db._phase_a_store.session_scope() as session:
                 self.assertEqual(session.query(PhaseAGuestSession).count(), 0)
-        finally:
-            client.close()
 
     def test_phase_a_enabled_auth_api_and_notification_preferences_round_trip(self) -> None:
         from api.app import create_app
 
         app = create_app(static_dir=self.data_dir / "empty-static")
-        client = TestClient(app)
-        try:
+        with TestClient(app) as client:
             login_response = client.post(
                 "/api/v1/auth/login",
                 json={
@@ -399,8 +493,6 @@ class PostgresPhaseAStorageTestCase(unittest.TestCase):
                     .count(),
                     2,
                 )
-        finally:
-            client.close()
 
     def test_factory_reset_clears_phase_a_identity_rows_and_sqlite_user_owned_history(self) -> None:
         db = self._db()

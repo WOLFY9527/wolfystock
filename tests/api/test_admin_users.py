@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta
@@ -13,10 +14,11 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import src.auth as auth
 from api.deps import CurrentUser, get_current_user
-from src.auth import is_auth_enabled
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.storage import AppUser, AppUserSession, DatabaseManager
+from tests.api.route_table_helpers import iter_effective_api_routes
 
 FORBIDDEN_PRIVACY_EXPORT_MARKERS = (
     "password",
@@ -105,6 +107,9 @@ def _regular_user() -> CurrentUser:
 
 class AdminUsersApiTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        self._prior_admin_auth_enabled = os.environ.get("ADMIN_AUTH_ENABLED")
+        os.environ["ADMIN_AUTH_ENABLED"] = "true"
+        auth.refresh_auth_state()
         DatabaseManager.reset_instance()
         self.temp_dir = tempfile.TemporaryDirectory()
         self.db_path = Path(self.temp_dir.name) / "admin_users.db"
@@ -114,14 +119,20 @@ class AdminUsersApiTestCase(unittest.TestCase):
 
         self.app = FastAPI()
         self.app.include_router(admin_users.router, prefix="/api/v1/admin")
-        self.client = TestClient(self.app)
+        self.client_context = TestClient(self.app)
+        self.client = self.client_context.__enter__()
         self.now = datetime.now()
         self._seed_users()
 
     def tearDown(self) -> None:
-        self.client.close()
+        self.client_context.__exit__(None, None, None)
         self.app.dependency_overrides.clear()
         DatabaseManager.reset_instance()
+        if self._prior_admin_auth_enabled is None:
+            os.environ.pop("ADMIN_AUTH_ENABLED", None)
+        else:
+            os.environ["ADMIN_AUTH_ENABLED"] = self._prior_admin_auth_enabled
+        auth.refresh_auth_state()
         self.temp_dir.cleanup()
 
     def _seed_users(self) -> None:
@@ -222,7 +233,7 @@ class AdminUsersApiTestCase(unittest.TestCase):
 
     def test_admin_required_for_user_directory(self) -> None:
         unauthenticated = self.client.get("/api/v1/admin/users")
-        self.assertEqual(unauthenticated.status_code, 401 if is_auth_enabled() else 200)
+        self.assertEqual(unauthenticated.status_code, 401)
 
         self._as_user()
         forbidden = self.client.get("/api/v1/admin/users")
@@ -441,7 +452,7 @@ class AdminUsersApiTestCase(unittest.TestCase):
 
         user_routes = [
             route
-            for route in self.app.routes
+            for route in iter_effective_api_routes(self.app.routes)
             if getattr(route, "path", "").startswith("/api/v1/admin/users")
         ]
         self.assertGreaterEqual(len(user_routes), 3)

@@ -53,7 +53,9 @@ from sqlalchemy.orm import (
     sessionmaker,
     Session,
 )
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.pool import StaticPool
 
 from src.config import get_config
 from src.core.trading_calendar import MARKET_TIMEZONE, get_market_for_stock
@@ -2369,22 +2371,34 @@ class DatabaseManager:
         Args:
             db_url: 数据库连接 URL（可选，默认从配置读取）
         """
+        config = get_config()
+        resolved_db_url = db_url if db_url is not None else config.get_db_url()
         if getattr(self, '_initialized', False):
+            if make_url(resolved_db_url) != self._engine.url:
+                raise RuntimeError(
+                    "DatabaseManager is already initialized for a different database URL"
+                )
             return
 
         self._prime_runtime_state_defaults()
         try:
-            if db_url is None:
-                config = get_config()
-                db_url = config.get_db_url()
-            else:
-                config = get_config()
+            engine_options: Dict[str, Any] = {}
+            parsed_db_url = make_url(resolved_db_url)
+            if (
+                parsed_db_url.get_backend_name() == "sqlite"
+                and parsed_db_url.database == ":memory:"
+            ):
+                engine_options = {
+                    "connect_args": {"check_same_thread": False},
+                    "poolclass": StaticPool,
+                }
 
             # 创建数据库引擎
             self._engine = create_engine(
-                db_url,
+                resolved_db_url,
                 echo=False,  # 设为 True 可查看 SQL 语句
                 pool_pre_ping=True,  # 连接健康检查
+                **engine_options,
             )
 
             # 创建 Session 工厂
@@ -2396,7 +2410,10 @@ class DatabaseManager:
 
             # 创建所有表
             Base.metadata.create_all(self._engine)
-            self._run_multi_user_migrations()
+            bootstrap_identity_required = self._run_multi_user_migrations()
+            self._initialized = True
+            if bootstrap_identity_required:
+                self.ensure_bootstrap_admin_user()
             self._postgres_bridge_url = str(getattr(config, "postgres_phase_a_url", "") or "").strip() or None
             self._postgres_bridge_auto_apply_schema = bool(
                 getattr(config, "postgres_phase_a_apply_schema", True)
@@ -2416,9 +2433,7 @@ class DatabaseManager:
                             initialized_phases=getattr(exc, "initialized_phases", ()),
                         )
                     ) from exc
-
-            self._initialized = True
-            logger.info("数据库初始化完成: %s", _redact_db_url_for_log(db_url))
+            logger.info("数据库初始化完成: %s", _redact_db_url_for_log(resolved_db_url))
             topology = self.describe_database_topology()
             enabled_store_names = [
                 phase_key
@@ -2641,11 +2656,10 @@ class DatabaseManager:
             row.last_error = concise_error
             row.last_error_at = datetime.now()
 
-    def _run_multi_user_migrations(self) -> None:
+    def _run_multi_user_migrations(self) -> bool:
         """Apply lightweight SQLite-safe schema migrations for Phase 1 ownership."""
         bootstrap_user_id = BOOTSTRAP_ADMIN_USER_ID
         with self._engine.begin() as conn:
-            self._ensure_bootstrap_admin_user_row(conn)
             self._seed_admin_rbac_compatibility_rows(conn)
 
             self._add_column_if_missing(conn, "analysis_history", "owner_id", "VARCHAR(64)")
@@ -3079,6 +3093,30 @@ class DatabaseManager:
 
             self._backfill_market_scanner_ownership(conn, bootstrap_user_id=bootstrap_user_id)
             self._backfill_conversation_sessions(conn, bootstrap_user_id=bootstrap_user_id)
+            return self._has_bootstrap_owner_references(conn)
+
+    @staticmethod
+    def _has_bootstrap_owner_references(conn) -> bool:
+        owner_tables = (
+            "analysis_history",
+            "backtest_results",
+            "backtest_runs",
+            "backtest_summaries",
+            "conversation_sessions",
+            "market_scanner_runs",
+            "portfolio_accounts",
+            "rule_backtest_runs",
+            "rule_backtest_universe_jobs",
+            "rule_backtest_universe_symbol_results",
+        )
+        for table_name in owner_tables:
+            referenced = conn.exec_driver_sql(
+                f"SELECT 1 FROM {table_name} WHERE owner_id = :owner_id LIMIT 1",
+                {"owner_id": BOOTSTRAP_ADMIN_USER_ID},
+            ).fetchone()
+            if referenced is not None:
+                return True
+        return False
 
     @staticmethod
     def _quota_identity_component(value: Any, *, lowercase: bool = False, limit: int = 64) -> str:
@@ -3392,43 +3430,6 @@ class DatabaseManager:
     def _create_unique_index_if_missing(conn, index_name: str, table_name: str, columns_sql: str) -> None:
         conn.exec_driver_sql(
             f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} ON {table_name} ({columns_sql})"
-        )
-
-    @staticmethod
-    def _ensure_bootstrap_admin_user_row(conn) -> None:
-        now = datetime.now()
-        conn.exec_driver_sql(
-            """
-            INSERT OR IGNORE INTO app_users (
-                id,
-                username,
-                display_name,
-                password_hash,
-                mfa_enabled,
-                role,
-                is_active,
-                created_at,
-                updated_at
-            ) VALUES (
-                :id,
-                :username,
-                :display_name,
-                NULL,
-                0,
-                :role,
-                1,
-                :created_at,
-                :updated_at
-            )
-            """,
-            {
-                "id": BOOTSTRAP_ADMIN_USER_ID,
-                "username": BOOTSTRAP_ADMIN_USERNAME,
-                "display_name": BOOTSTRAP_ADMIN_DISPLAY_NAME,
-                "role": ROLE_ADMIN,
-                "created_at": now,
-                "updated_at": now,
-            },
         )
 
     @staticmethod

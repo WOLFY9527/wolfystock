@@ -14,8 +14,10 @@ from fastapi.testclient import TestClient
 
 import src.auth as auth
 from api.app import create_app
+from src.admin_rbac import SUPER_ADMIN_ROLE
 from src.config import Config
-from src.storage import DatabaseManager
+from src.runtime.composition import RuntimeContainer
+from src.storage import AdminUserRole, DatabaseManager
 
 
 EXPECTED_SECURITY_HEADERS = {
@@ -66,19 +68,38 @@ class AdminRealAuthSessionSmokeTestCase(unittest.TestCase):
         )
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.data_dir / "real_auth_smoke.db")
+        os.environ["ADMIN_AUTH_ENABLED"] = "true"
         Config.reset_instance()
         DatabaseManager.reset_instance()
 
+        db = DatabaseManager.get_instance()
+        bootstrap_admin = db.ensure_bootstrap_admin_user()
+        with db.session_scope() as session:
+            session.add(
+                AdminUserRole(
+                    user_id=str(bootstrap_admin.id),
+                    role_key=SUPER_ADMIN_ROLE,
+                )
+            )
+
         static_dir = self.data_dir / "empty-static"
         static_dir.mkdir()
-        self.client = TestClient(create_app(static_dir=static_dir))
+        self.runtime_container = RuntimeContainer()
+        self.client_context = TestClient(
+            create_app(self.runtime_container, static_dir=static_dir)
+        )
+        self.assertFalse(self.runtime_container.is_started)
+        self.client = self.client_context.__enter__()
+        self.assertTrue(self.runtime_container.is_started)
 
     def tearDown(self) -> None:
-        self.client.close()
+        self.client_context.__exit__(None, None, None)
+        self.assertFalse(self.runtime_container.is_started)
         DatabaseManager.reset_instance()
         Config.reset_instance()
         os.environ.pop("ENV_FILE", None)
         os.environ.pop("DATABASE_PATH", None)
+        os.environ.pop("ADMIN_AUTH_ENABLED", None)
         _reset_auth_globals()
         self.temp_dir.cleanup()
 
