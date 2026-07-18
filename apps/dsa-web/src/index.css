@@ -8062,7 +8062,7 @@ html[data-theme-style='paper'][data-theme='dark'] {
   --surface-soft: rgb(255 255 255 / 0.07);
   --ink: #f5f0eb;
   --ink-soft: #e4d9cb;
-  --muted: #c0b4a4;
+  --muted: #c9bdad;
   --muted-2: #9e9180;
   --line: rgb(245 240 235 / 0.16);
   --line-strong: rgb(245 240 235 / 0.28);
@@ -8072,6 +8072,7 @@ html[data-theme-style='paper'][data-theme='dark'] {
   --gold: #d8ad78;
   --gold-wash: rgb(212 165 116 / 0.18);
   --blue: #9bb4c0;
+  --state-info-text: var(--blue);
   --danger: #d08c82;
   --danger-wash: rgb(167 94 85 / 0.18);
   --ok: #9fbd9f;

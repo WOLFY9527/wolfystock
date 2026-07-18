@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
@@ -9,6 +11,18 @@ import { SynthesisEvidenceColumn } from '../SynthesisEvidenceColumn';
 import { buildOfficialMacroAuthorityDiagnosticsView } from '../officialMacroAuthorityDiagnosticsData';
 
 describe('shared visual foundation surfaces', () => {
+  it('owns dark muted and info label foregrounds in the canonical paper token block', () => {
+    const css = readFileSync(path.resolve(process.cwd(), 'src/index.css'), 'utf8');
+    const darkPaperBlock = css.match(
+      /html\[data-theme-style='paper'\]\[data-theme='dark'\] \{(?<tokens>[\s\S]*?)\n\}/,
+    )?.groups?.tokens;
+
+    expect(darkPaperBlock).toBeDefined();
+    expect(darkPaperBlock).toContain('--ink-soft: #e4d9cb;');
+    expect(darkPaperBlock).toContain('--muted: #c9bdad;');
+    expect(darkPaperBlock).toContain('--state-info-text: var(--blue);');
+  });
+
   it('renders consumer evidence packet with light-surface foreground ownership', () => {
     render(
       <ConsumerEvidencePacketStrip
