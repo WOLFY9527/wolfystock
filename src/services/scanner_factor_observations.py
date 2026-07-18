@@ -24,8 +24,7 @@ _COMPONENT_FACTOR_MAP: tuple[dict[str, str], ...] = (
     {"component": "gap_context", "factor_id": "trend.gap_context_1d"},
 )
 
-_QUOTE_PRIMARY_COMPONENTS = {"benchmark_relative", "gap_context"}
-_SNAPSHOT_PRIMARY_COMPONENTS = {"liquidity", "activity"}
+_QUOTE_PRIMARY_COMPONENTS = {"gap_context"}
 
 
 def _text(value: Any) -> str:
@@ -45,38 +44,8 @@ def _bool(value: Any) -> bool:
     return bool(value)
 
 
-def _as_of(candidate: Mapping[str, Any], diagnostics: Mapping[str, Any], observed_at: str) -> str:
-    history_diag = diagnostics.get("history")
-    if isinstance(history_diag, Mapping):
-        history_as_of = _text(history_diag.get("latest_trade_date"))
-        if history_as_of:
-            return history_as_of
-    candidate_as_of = _text(candidate.get("last_trade_date"))
-    if candidate_as_of:
-        return candidate_as_of
-    return observed_at[:10]
-
-
 def _profile_key(diagnostics: Mapping[str, Any]) -> str:
     return _text(diagnostics.get("profile")).lower()
-
-
-def _source_name_for_component(
-    component: str,
-    *,
-    candidate: Mapping[str, Any],
-    diagnostics: Mapping[str, Any],
-) -> str:
-    quote_diag = diagnostics.get("quote_context") if isinstance(diagnostics.get("quote_context"), Mapping) else {}
-    history_diag = diagnostics.get("history") if isinstance(diagnostics.get("history"), Mapping) else {}
-    quote_source = _text((quote_diag or {}).get("source"))
-    snapshot_source = _text(diagnostics.get("snapshot_source") or candidate.get("snapshot_source"))
-    history_source = _text((history_diag or {}).get("source") or candidate.get("history_source"))
-    if component in _QUOTE_PRIMARY_COMPONENTS:
-        return quote_source or snapshot_source or history_source or "scanner"
-    if component in _SNAPSHOT_PRIMARY_COMPONENTS:
-        return snapshot_source or quote_source or history_source or "scanner"
-    return history_source or snapshot_source or quote_source or "scanner"
 
 
 def _freshness_status(
@@ -152,17 +121,18 @@ def _build_observation_record(
     component: str,
     factor_id: str,
     candidate: Mapping[str, Any],
+    factor_evidence: Mapping[str, Any],
     market: str,
-    observed_at: str,
 ) -> dict[str, Any]:
     diagnostics = dict(candidate.get("_diagnostics") or {})
     explainability = dict(diagnostics.get("score_explainability") or {})
     source_confidence = dict(explainability.get("source_confidence") or {})
     quote_diag = dict(diagnostics.get("quote_context") or {})
     value = float(candidate["_component_scores"][component])
-    as_of = _as_of(candidate, diagnostics, observed_at)
+    as_of = _text(factor_evidence.get("asOf"))
+    observed_at = _text(factor_evidence.get("observedAt"))
     profile = _profile_key(diagnostics)
-    source_name = _source_name_for_component(component, candidate=candidate, diagnostics=diagnostics)
+    source_name = _text(factor_evidence.get("source"))
     candidate_is_partial = _bool(source_confidence.get("isPartial")) or bool(explainability.get("missing_evidence"))
     provenance = project_source_provenance(
         source=source_name,
@@ -248,6 +218,7 @@ def _build_observation_record(
         "degradation_reason": explainability.get("degradation_reason"),
         "missing_evidence": list(explainability.get("missing_evidence") or []),
         "source_confidence": source_confidence,
+        "factor_evidence": dict(factor_evidence),
         "observation": observation.model_dump(),
     }
 
@@ -262,10 +233,25 @@ def build_scanner_factor_observations(
     components = payload.get("_component_scores")
     if not isinstance(components, Mapping):
         return []
+    diagnostics = payload.get("_diagnostics")
+    factor_contract = diagnostics.get("factorEvidence") if isinstance(diagnostics, Mapping) else None
+    factors = factor_contract.get("factors") if isinstance(factor_contract, Mapping) else None
+    if not isinstance(factors, Sequence):
+        return []
+    factor_by_component = {
+        str(item.get("component")): item
+        for item in factors
+        if isinstance(item, Mapping)
+        and item.get("state") == "valid"
+        and item.get("scoreContributionAllowed") is True
+    }
     exported: list[dict[str, Any]] = []
     for item in _COMPONENT_FACTOR_MAP:
         component = item["component"]
         if component not in components:
+            continue
+        factor_evidence = factor_by_component.get(component)
+        if factor_evidence is None:
             continue
         value = _safe_float(components.get(component))
         if value is None:
@@ -275,8 +261,8 @@ def build_scanner_factor_observations(
                 component=component,
                 factor_id=item["factor_id"],
                 candidate=payload,
+                factor_evidence=factor_evidence,
                 market=market,
-                observed_at=observed_at,
             )
         )
     return exported

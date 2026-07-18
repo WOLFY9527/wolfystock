@@ -229,6 +229,26 @@
         "benchmark_return_pct": null,
         "outperformed_benchmark": null
       },
+      "factorEvidence": {
+        "contractVersion": "scanner_factor_evidence_v1",
+        "market": "us",
+        "overallState": "valid",
+        "rankingEligible": true,
+        "blockers": [],
+        "factors": [
+          {
+            "component": "momentum",
+            "state": "valid",
+            "requiredBars": 61,
+            "usableBars": 80,
+            "source": "fixture_local_history",
+            "sourceAuthority": "official",
+            "asOf": "2026-05-08T16:00:00-04:00",
+            "observedAt": "2026-05-11T08:35:00+08:00",
+            "scoreContributionAllowed": true
+          }
+        ]
+      },
       "diagnostics": {
         "score_explainability": {
           "raw_score": 91.25,
@@ -259,6 +279,14 @@
       "reason": "Selected by deterministic score and liquidity profile.",
       "failed_rules": [],
       "missing_fields": [],
+      "factorEvidence": {
+        "contractVersion": "scanner_factor_evidence_v1",
+        "market": "us",
+        "overallState": "valid",
+        "rankingEligible": true,
+        "blockers": [],
+        "factors": []
+      },
       "metrics": {
         "score": 91.25,
         "rank": 1
@@ -276,6 +304,14 @@
         "liquidity_below_profile_minimum"
       ],
       "missing_fields": [],
+      "factorEvidence": {
+        "contractVersion": "scanner_factor_evidence_v1",
+        "market": "us",
+        "overallState": "valid",
+        "rankingEligible": true,
+        "blockers": [],
+        "factors": []
+      },
       "metrics": {
         "score": 63.5,
         "rank": 2
@@ -294,6 +330,28 @@
         "history.close",
         "history.volume"
       ],
+      "factorEvidence": {
+        "contractVersion": "scanner_factor_evidence_v1",
+        "market": "us",
+        "overallState": "blocked",
+        "rankingEligible": false,
+        "blockers": [
+          "momentum:insufficient"
+        ],
+        "factors": [
+          {
+            "component": "momentum",
+            "state": "insufficient",
+            "requiredBars": 61,
+            "usableBars": 0,
+            "source": "fixture_local_history",
+            "sourceAuthority": "official",
+            "asOf": null,
+            "observedAt": "2026-05-11T08:35:00+08:00",
+            "scoreContributionAllowed": false
+          }
+        ]
+      },
       "metrics": {}
     }
   ],
@@ -365,6 +423,26 @@
         "benchmark_code": "SPY",
         "benchmark_return_pct": null,
         "outperformed_benchmark": null
+      },
+      "factorEvidence": {
+        "contractVersion": "scanner_factor_evidence_v1",
+        "market": "us",
+        "overallState": "valid",
+        "rankingEligible": true,
+        "blockers": [],
+        "factors": [
+          {
+            "component": "momentum",
+            "state": "valid",
+            "requiredBars": 61,
+            "usableBars": 80,
+            "source": "fixture_local_history",
+            "sourceAuthority": "official",
+            "asOf": "2026-05-08T16:00:00-04:00",
+            "observedAt": "2026-05-11T08:35:00+08:00",
+            "scoreContributionAllowed": true
+          }
+        ]
       },
       "diagnostics": {
         "score_explainability": {

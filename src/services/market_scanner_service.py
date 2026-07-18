@@ -25,7 +25,7 @@ from src.core.trading_calendar import MARKET_TIMEZONE, is_market_open
 from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER, normalize_scope
 from src.repositories.scanner_repo import ScannerRepository
 from src.repositories.stock_repo import StockRepository
-from src.contracts.source_confidence import coerce_source_confidence_contract
+from src.contracts.source_confidence import apply_source_confidence_caps, coerce_source_confidence_contract
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
 from src.services._persisted_json import PersistedJsonState, decode_persisted_json
 from src.services.market_scanner_context_adapter import (
@@ -55,6 +55,7 @@ from src.services.scanner_evidence_packet import (
     build_scanner_consumer_diagnostics,
     build_scanner_evidence_packet,
 )
+from src.services.scanner_factor_evidence import apply_scanner_factor_evidence, build_scanner_factor_evidence
 from src.services.scanner_factor_observations import attach_scanner_factor_observations
 from src.services.scanner_ohlcv_readiness import (
     build_scanner_historical_ohlcv_readiness,
@@ -1348,6 +1349,10 @@ class MarketScannerService:
             stock_list_source=stock_list_source,
             snapshot_source=snapshot_source,
         )
+        for candidate in evaluated_candidates:
+            candidate_diagnostics = dict(candidate.get("_diagnostics") or {})
+            candidate_diagnostics["scanner_observed_at"] = run_started_at.isoformat()
+            candidate["_diagnostics"] = candidate_diagnostics
         self._apply_relative_strength(evaluated_candidates)
         self._apply_base_scores(evaluated_candidates, profile=profile_config)
 
@@ -1496,8 +1501,16 @@ class MarketScannerService:
         evaluated_candidates: Sequence[Dict[str, Any]],
         resolved_shortlist_size: int,
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
+        ranking_eligible_candidates = []
+        for candidate in evaluated_candidates:
+            diagnostics = candidate.get("_diagnostics")
+            factor_evidence = diagnostics.get("factorEvidence") if isinstance(diagnostics, Mapping) else None
+            if isinstance(factor_evidence, Mapping) and factor_evidence.get("rankingEligible") is True:
+                ranking_eligible_candidates.append(candidate)
+            else:
+                candidate.pop("rank", None)
         ranked_candidates = sorted(
-            evaluated_candidates,
+            ranking_eligible_candidates,
             key=lambda item: (-float(item.get("score", 0.0)), str(item.get("symbol", ""))),
         )
         shortlist = ranked_candidates[:resolved_shortlist_size]
@@ -2176,6 +2189,7 @@ class MarketScannerService:
     def _build_candidate_diagnostics(
         self,
         *,
+        market: str,
         universe_selection: Optional[Dict[str, Any]],
         ranked_candidates: Sequence[Dict[str, Any]],
         shortlist: Sequence[Dict[str, Any]],
@@ -2197,6 +2211,11 @@ class MarketScannerService:
         ranked_by_symbol = {
             str(item.get("symbol") or "").upper(): item
             for item in ranked_candidates
+            if item.get("symbol")
+        }
+        rank_by_symbol = {
+            str(item.get("symbol") or "").upper(): index
+            for index, item in enumerate(ranked_candidates, start=1)
             if item.get("symbol")
         }
         ordered_symbols = accepted_symbols or list(ranked_by_symbol.keys())
@@ -2231,6 +2250,11 @@ class MarketScannerService:
                         "failed_rules": failed_rules,
                         "missing_fields": [],
                         "metrics": self._diagnostic_metrics_from_candidate(ranked),
+                        "factorEvidence": dict(
+                            ranked.get("factorEvidence")
+                            or (ranked.get("_diagnostics") or {}).get("factorEvidence")
+                            or build_scanner_factor_evidence({}, market=market)
+                        ),
                     }
                 )
                 if ohlcv_readiness:
@@ -2247,7 +2271,8 @@ class MarketScannerService:
                 base.setdefault("failed_rules", ["invalid_payload"] if base.get("status") == "error" else [])
                 base.setdefault("missing_fields", [])
                 base.setdefault("metrics", {})
-            base["rank"] = index
+                base.setdefault("factorEvidence", build_scanner_factor_evidence({}, market=market))
+            base["rank"] = rank_by_symbol.get(symbol, 0)
             base.update(self._build_candidate_consumer_projection(base, ranked_candidate=ranked))
             candidates.append(base)
 
@@ -2634,10 +2659,54 @@ class MarketScannerService:
             diagnostics or {},
             market=profile_config.market,
         )
+        candidate_diagnostics_payload = {
+            str(symbol).upper(): dict(payload)
+            for symbol, payload in dict(finalized_diagnostics.get("candidate_diagnostics") or {}).items()
+            if isinstance(payload, Mapping)
+        }
+        for candidate in evaluated_candidates:
+            candidate_diagnostics = dict(candidate.get("_diagnostics") or {})
+            factor_evidence = candidate_diagnostics.get("factorEvidence")
+            if not isinstance(factor_evidence, Mapping) or factor_evidence.get("rankingEligible") is True:
+                continue
+            symbol = str(candidate.get("symbol") or "").strip().upper()
+            factors = [item for item in factor_evidence.get("factors") or [] if isinstance(item, Mapping)]
+            blocked_factors = [
+                item for item in factors if item.get("required") is True and item.get("state") != "valid"
+            ]
+            states = {str(item.get("state") or "") for item in blocked_factors}
+            base = dict(candidate_diagnostics_payload.get(symbol) or {})
+            for key in (
+                "cn_provider_observation",
+                "history",
+                "quote_context",
+                "score_explainability",
+                "evidence_packet",
+                "factor_observations",
+            ):
+                if key in candidate_diagnostics:
+                    base[key] = candidate_diagnostics[key]
+            base.update(
+                {
+                    "symbol": symbol,
+                    "name": str(candidate.get("name") or symbol),
+                    "status": "rejected" if "rejected" in states else "data_failed",
+                    "score": None,
+                    "provider": next((item.get("source") for item in blocked_factors if item.get("source")), None),
+                    "reason": "factor_evidence_rejected" if "rejected" in states else "factor_evidence_blocked",
+                    "failed_rules": [f"factor_evidence_{state}" for state in sorted(states) if state],
+                    "missing_fields": [str(item.get("component")) for item in blocked_factors],
+                    "metrics": base.get("metrics") or {},
+                    "factorEvidence": dict(factor_evidence),
+                }
+            )
+            candidate_diagnostics_payload[symbol] = base
+        finalized_diagnostics["candidate_diagnostics"] = candidate_diagnostics_payload
         finalized_diagnostics["ai_interpretation"] = dict(ai_interpretation_diag or {})
         finalized_diagnostics["run_duration_seconds"] = round((run_completed_at - run_started_at).total_seconds(), 2)
         public_universe_selection = self._public_universe_selection(universe_selection)
         theme_payload, summary_payload, candidate_diagnostics = self._build_candidate_diagnostics(
+            market=profile_config.market,
             universe_selection=universe_selection,
             ranked_candidates=ranked_candidates_list,
             shortlist=shortlist_list,
@@ -3116,6 +3185,10 @@ class MarketScannerService:
         if not evaluated_candidates:
             raise ValueError(str(market_options["no_candidates_message"]))
 
+        for candidate in evaluated_candidates:
+            candidate_diagnostics = dict(candidate.get("_diagnostics") or {})
+            candidate_diagnostics["scanner_observed_at"] = run_started_at.isoformat()
+            candidate["_diagnostics"] = candidate_diagnostics
         self._apply_relative_strength(evaluated_candidates)
         market_options["apply_scores"](evaluated_candidates, profile=profile_config)
         market_options["finalize_candidates"](evaluated_candidates)
@@ -4083,6 +4156,11 @@ class MarketScannerService:
             "available": True,
             "status": "available",
             "source": str(source_name or "yfinance"),
+            "as_of": (
+                getattr(quote, "as_of").isoformat()
+                if isinstance(getattr(quote, "as_of", None), datetime)
+                else str(getattr(quote, "as_of", None) or getattr(quote, "timestamp", None) or "").strip() or None
+            ),
             "price": price,
             "change_pct": getattr(quote, "change_pct", None),
             "volume": getattr(quote, "volume", None),
@@ -4145,6 +4223,7 @@ class MarketScannerService:
             "available": True,
             "status": "available",
             "source": source,
+            "as_of": snapshot.as_of.isoformat(),
             "price": price,
             "change_pct": _round_optional(change_pct),
             "volume": snapshot.volume,
@@ -4207,6 +4286,7 @@ class MarketScannerService:
             "change_pct": live_change_pct,
             "volume": volume,
             "amount": amount,
+            "pre_rank_score": _safe_float(universe_row.get("pre_rank_score")),
             "close": _safe_float(features.get("close")),
             "ma10": _safe_float(features.get("ma10")),
             "ma20": _safe_float(features.get("ma20")),
@@ -5820,6 +5900,7 @@ class MarketScannerService:
             )
             shortlist.append(item)
         theme_payload, summary_payload, candidate_diagnostics = self._build_candidate_diagnostics(
+            market=run.market,
             universe_selection=universe_selection,
             ranked_candidates=shortlist,
             shortlist=shortlist,
@@ -7803,13 +7884,13 @@ class MarketScannerService:
         return candidate
 
     @staticmethod
-    def _period_return(series: pd.Series, lookback: int) -> float:
+    def _period_return(series: pd.Series, lookback: int) -> Optional[float]:
         if len(series) <= lookback:
-            return 0.0
-        latest = _safe_float(series.iloc[-1], default=0.0)
-        previous = _safe_float(series.iloc[-(lookback + 1)], default=0.0)
-        if previous <= 0:
-            return 0.0
+            return None
+        latest = _safe_float(series.iloc[-1], default=np.nan)
+        previous = _safe_float(series.iloc[-(lookback + 1)], default=np.nan)
+        if np.isnan(latest) or np.isnan(previous) or previous <= 0:
+            return None
         return (latest / previous - 1.0) * 100.0
 
     def _apply_relative_strength(self, candidates: List[Dict[str, Any]]) -> None:
@@ -8084,6 +8165,7 @@ class MarketScannerService:
 
     def _finalize_candidates(self, candidates: List[Dict[str, Any]]) -> None:
         for candidate in candidates:
+            apply_scanner_factor_evidence(candidate, market="cn")
             components = dict(candidate.get("_component_scores") or {})
             raw_score = (
                 _safe_float(components.get("pre_rank"))
@@ -8116,6 +8198,7 @@ class MarketScannerService:
 
     def _finalize_us_candidates(self, candidates: List[Dict[str, Any]]) -> None:
         for candidate in candidates:
+            apply_scanner_factor_evidence(candidate, market="us")
             components = dict(candidate.get("_component_scores") or {})
             raw_score = (
                 _safe_float(components.get("pre_rank"))
@@ -8148,6 +8231,7 @@ class MarketScannerService:
 
     def _finalize_hk_candidates(self, candidates: List[Dict[str, Any]]) -> None:
         for candidate in candidates:
+            apply_scanner_factor_evidence(candidate, market="hk")
             components = dict(candidate.get("_component_scores") or {})
             raw_score = (
                 _safe_float(components.get("pre_rank"))
@@ -8261,9 +8345,25 @@ class MarketScannerService:
         diagnostics = dict(candidate.get("_diagnostics") or {})
         history_diag = dict(diagnostics.get("history") or {})
         quote_diag = dict(diagnostics.get("quote_context") or {})
+        factor_evidence = dict(diagnostics.get("factorEvidence") or {})
+        factor_rows = [item for item in factor_evidence.get("factors") or [] if isinstance(item, Mapping)]
+        invalid_required_factors = [
+            item for item in factor_rows if item.get("required") is True and item.get("state") != "valid"
+        ]
+        factor_states = {str(item.get("state") or "") for item in invalid_required_factors}
         missing_evidence = self._score_cap_missing_evidence(candidate)
+        for item in invalid_required_factors:
+            component = str(item.get("component") or "").strip()
+            if component and component not in missing_evidence:
+                missing_evidence.append(component)
         core_missing = [item for item in missing_evidence if item in {"history", "history_depth", "trend", "momentum", "liquidity", "risk", "relative_strength"}]
-        evidence_coverage = round(max(0.0, 1.0 - (len(core_missing) / 6.0)), 4)
+        required_factor_count = int(factor_evidence.get("requiredFactorCount") or 0)
+        valid_required_factor_count = int(factor_evidence.get("validRequiredFactorCount") or 0)
+        evidence_coverage = (
+            round(valid_required_factor_count / required_factor_count, 4)
+            if required_factor_count
+            else round(max(0.0, 1.0 - (len(core_missing) / 6.0)), 4)
+        )
 
         quote_source = str(quote_diag.get("source") or "").strip().lower()
         history_source = str(history_diag.get("source") or candidate.get("history_source") or "").strip().lower()
@@ -8272,6 +8372,7 @@ class MarketScannerService:
         quote_source_type = self._quote_source_type(quote_diag, quote_source) if quote_source else ""
         history_source_type = resolve_source_type(history_source) if history_source else ""
         snapshot_source_type = resolve_source_type(snapshot_source) if snapshot_source else ""
+        primary_source_type = quote_source_type or history_source_type or snapshot_source_type
         is_proxy_quote = self._is_proxy_quote_context(
             quote_diag,
             quote_source_type=quote_source_type,
@@ -8297,6 +8398,14 @@ class MarketScannerService:
         cap_reason = degradation_reason
         confidence_weight = 1.0
         reason_codes: List[str] = []
+        if invalid_required_factors:
+            factor_state = next(
+                (state for state in ("unavailable", "insufficient", "stale", "rejected") if state in factor_states),
+                "unavailable",
+            )
+            cap_reason = f"factor_evidence_{factor_state}"
+            degradation_reason = cap_reason
+            confidence_weight = 0.0
         if cap_reason:
             _append_reason_code(reason_codes, cap_reason)
         if is_proxy_quote:
@@ -8317,23 +8426,31 @@ class MarketScannerService:
             confidence_source = history_source or "quote_context_missing"
             confidence_source_label = resolve_source_label(confidence_source)
 
-        confidence_contract = coerce_source_confidence_contract(
-            {
-                "source": confidence_source,
-                "sourceLabel": confidence_source_label,
-                "freshness": "delayed" if is_proxy_quote else "live" if quote_diag.get("available") else "unknown",
-                "isFallback": is_fallback,
-                "isStale": is_stale,
-                "isPartial": is_partial,
-                "confidenceWeight": confidence_weight,
-                "coverage": evidence_coverage,
-                "degradationReason": degradation_reason,
-                "capReason": cap_reason,
-            }
+        confidence_contract = apply_source_confidence_caps(
+            coerce_source_confidence_contract(
+                {
+                    "source": confidence_source,
+                    "sourceLabel": confidence_source_label,
+                    "freshness": "delayed" if is_proxy_quote else "live" if quote_diag.get("available") else "unknown",
+                    "isFallback": is_fallback,
+                    "isStale": is_stale,
+                    "isPartial": is_partial,
+                    "isSynthetic": primary_source_type == "synthetic_fixture",
+                    "isUnavailable": primary_source_type == "missing",
+                    "confidenceWeight": confidence_weight,
+                    "coverage": evidence_coverage,
+                    "degradationReason": degradation_reason,
+                    "capReason": cap_reason,
+                }
+            )
         ).to_dict()
         if quote_source_type:
             confidence_contract["sourceType"] = quote_source_type
-        score_grade_allowed = not bool(cap_reason) and not is_proxy_quote
+        score_grade_allowed = (
+            factor_evidence.get("rankingEligible") is True
+            and not bool(confidence_contract.get("capReason"))
+            and not is_proxy_quote
+        )
         confidence_contract["scoreContributionAllowed"] = score_grade_allowed
         confidence_contract["sourceAuthorityAllowed"] = score_grade_allowed
         confidence_contract["observationOnly"] = not score_grade_allowed
@@ -8737,6 +8854,7 @@ class MarketScannerService:
             "last_trade_date": diagnostics.get("history", {}).get("latest_trade_date") or diagnostics.get("last_trade_date"),
             "ai_interpretation": self.ai_service.public_payload_from_diagnostics(diagnostics.get("ai_interpretation")),
             "diagnostics": diagnostics if isinstance(diagnostics, dict) else {},
+            "factorEvidence": dict(diagnostics.get("factorEvidence") or {}),
             "consumerDiagnostics": build_scanner_consumer_diagnostics(diagnostics if isinstance(diagnostics, dict) else {}),
         }
         history_diag = diagnostics.get("history") if isinstance(diagnostics.get("history"), dict) else {}
@@ -8877,6 +8995,7 @@ class MarketScannerService:
             "scan_timestamp": candidate.get("scan_timestamp"),
             "ai_interpretation": self.ai_service.public_payload_from_diagnostics(diagnostics.get("ai_interpretation")),
             "diagnostics": diagnostics,
+            "factorEvidence": dict(diagnostics.get("factorEvidence") or {}),
             "consumerDiagnostics": build_scanner_consumer_diagnostics(diagnostics),
         }
         history_diag = diagnostics.get("history") if isinstance(diagnostics.get("history"), dict) else {}

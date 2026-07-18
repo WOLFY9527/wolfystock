@@ -80,6 +80,26 @@
     "benchmark_return_pct": null,
     "outperformed_benchmark": null
   },
+  "factorEvidence": {
+    "contractVersion": "scanner_factor_evidence_v1",
+    "market": "us",
+    "overallState": "valid",
+    "rankingEligible": true,
+    "blockers": [],
+    "factors": [
+      {
+        "component": "momentum",
+        "state": "valid",
+        "requiredBars": 61,
+        "usableBars": 80,
+        "source": "fixture_local_history",
+        "sourceAuthority": "official",
+        "asOf": "2026-05-08T16:00:00-04:00",
+        "observedAt": "2026-05-11T08:35:00+08:00",
+        "scoreContributionAllowed": true
+      }
+    ]
+  },
   "diagnostics": {
     "score_explainability": {
       "raw_score": 91.25,

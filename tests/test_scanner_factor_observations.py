@@ -5,6 +5,13 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+import pandas as pd
+
+from src.services.market_scanner_service import MarketScannerService
+from src.services.scanner_factor_evidence import (
+    apply_scanner_factor_evidence,
+    build_scanner_factor_evidence,
+)
 from src.services.scanner_factor_observations import (
     attach_scanner_factor_observations,
     build_scanner_factor_observations,
@@ -12,7 +19,7 @@ from src.services.scanner_factor_observations import (
 
 
 def _us_candidate() -> dict[str, object]:
-    return {
+    candidate = {
         "symbol": "NVDA",
         "name": "NVIDIA",
         "rank": 1,
@@ -21,12 +28,19 @@ def _us_candidate() -> dict[str, object]:
         "final_score": 82.2,
         "ret_5d": 4.1,
         "ret_20d": 12.7,
+        "ret_60d": 24.5,
         "benchmark_relative_20d": 4.2,
         "gap_pct": 1.8,
+        "pre_rank_score": 72.0,
+        "price": 145.0,
+        "close": 142.0,
+        "ma20": 136.0,
+        "ma60": 121.0,
         "avg_amount_20": 1.2e10,
         "amount": 1.1e10,
         "avg_volume_20": 22_000_000,
         "volume_expansion_20": 1.2,
+        "recent_up_days_10": 7,
         "atr20_pct": 3.7,
         "ma20_slope_pct": 1.1,
         "distance_to_20d_high_pct": -1.4,
@@ -34,6 +48,7 @@ def _us_candidate() -> dict[str, object]:
         "_relative_strength_pct": 0.81,
         "_matched_sectors": [],
         "_component_scores": {
+            "pre_rank": 8.6,
             "trend": 18.0,
             "momentum": 12.0,
             "liquidity": 15.2,
@@ -46,6 +61,7 @@ def _us_candidate() -> dict[str, object]:
         },
         "_diagnostics": {
             "profile": "us_preopen_v1",
+            "scanner_observed_at": "2026-05-16T13:40:00Z",
             "history": {
                 "source": "local_db",
                 "latest_trade_date": "2026-05-16",
@@ -53,7 +69,8 @@ def _us_candidate() -> dict[str, object]:
             },
             "quote_context": {
                 "available": True,
-                "source": "yfinance",
+                "source": "polygon_us_grouped_daily",
+                "as_of": "2026-05-16T13:39:00Z",
             },
             "score_explainability": {
                 "score_confidence": 1.0,
@@ -75,18 +92,28 @@ def _us_candidate() -> dict[str, object]:
             },
         },
     }
+    apply_scanner_factor_evidence(candidate, market="us")
+    return candidate
 
 
 def _cn_candidate() -> dict[str, object]:
-    return {
+    candidate = {
         "symbol": "600001",
         "name": "示例股份",
         "rank": 1,
         "score": 87.7,
         "raw_score": 87.7,
         "final_score": 87.7,
+        "pre_rank_score": 72.0,
+        "price": 18.2,
+        "ma20": 17.1,
+        "ma60": 15.8,
         "ret_5d": 5.6,
         "ret_20d": 14.4,
+        "recent_up_days_10": 7,
+        "amount_ratio_20": 1.4,
+        "turnover_rate": 3.2,
+        "volume_ratio": 1.5,
         "avg_amount_20": 8.4e8,
         "amount": 9.2e8,
         "avg_volume_20": 33_000_000,
@@ -95,6 +122,7 @@ def _cn_candidate() -> dict[str, object]:
         "ma20_slope_pct": 1.3,
         "distance_to_20d_high_pct": -1.2,
         "last_trade_date": "2026-05-16",
+        "snapshot_source": "snapshot",
         "_relative_strength_pct": 0.94,
         "_matched_sectors": ["算力", "AI 基建"],
         "_component_scores": {
@@ -110,6 +138,7 @@ def _cn_candidate() -> dict[str, object]:
         },
         "_diagnostics": {
             "profile": "cn_preopen_v1",
+            "scanner_observed_at": "2026-05-16T08:40:00+08:00",
             "history": {
                 "source": "local_db",
                 "latest_trade_date": "2026-05-16",
@@ -135,6 +164,8 @@ def _cn_candidate() -> dict[str, object]:
             },
         },
     }
+    apply_scanner_factor_evidence(candidate, market="cn")
+    return candidate
 
 
 def test_build_scanner_factor_observations_uses_deterministic_ids_and_contract_factor_ids() -> None:
@@ -169,10 +200,20 @@ def test_build_scanner_factor_observations_binds_symbol_and_timestamps_from_scan
     assert rows
     assert all(item["component"] for item in rows)
     assert all(item["observation"]["symbol"] == "NVDA" for item in rows)
-    assert all(item["observation"]["as_of"] == "2026-05-16" for item in rows)
+    assert all(
+        item["observation"]["as_of"] == "2026-05-16"
+        for item in rows
+        if item["component"] != "gap_context"
+    )
     assert all(item["observation"]["observed_at"] == "2026-05-16T13:40:00Z" for item in rows)
     assert all(item["observation"]["confidence"] == 1.0 for item in rows)
     assert all(item["profile"] == "us_preopen_v1" for item in rows)
+    benchmark = next(item for item in rows if item["component"] == "benchmark_relative")
+    gap = next(item for item in rows if item["component"] == "gap_context")
+    assert benchmark["observation"]["source_name"] == "local_db"
+    assert benchmark["factor_evidence"]["sourceAuthority"] == "verified_cache"
+    assert gap["observation"]["source_name"] == "polygon_us_grouped_daily"
+    assert gap["observation"]["as_of"] == "2026-05-16T13:39:00Z"
 
 
 def test_build_scanner_factor_observations_skips_missing_components_without_dropping_zero_values() -> None:
@@ -230,3 +271,112 @@ def test_attach_scanner_factor_observations_does_not_mutate_score_or_ranking_fie
     assert candidate["final_score"] == baseline["final_score"]
     assert candidate["_component_scores"] == baseline["_component_scores"]
     assert candidate["_diagnostics"]["factor_observations"] == exported
+
+
+def test_missing_required_factor_is_unavailable_and_cannot_keep_positive_component_score() -> None:
+    candidate = _us_candidate()
+    candidate["_diagnostics"]["quote_context"] = {
+        "available": True,
+        "source": "polygon_us_grouped_daily",
+        "as_of": "2026-05-16T13:39:00Z",
+    }
+    candidate["_diagnostics"]["history"]["rows"] = 70
+    candidate["gap_pct"] = None
+
+    contract = apply_scanner_factor_evidence(candidate, market="us")
+
+    gap = next(item for item in contract["factors"] if item["component"] == "gap_context")
+    assert gap["state"] == "unavailable"
+    assert gap["rawComponentScore"] == 5.2
+    assert gap["scoreContributionAllowed"] is False
+    assert candidate["_component_scores"]["gap_context"] == 0.0
+    assert contract["rankingEligible"] is False
+    assert "gap_context:unavailable" in contract["blockers"]
+    service = object.__new__(MarketScannerService)
+    service._apply_score_caps_and_explainability(candidate)
+    assert candidate["raw_score"] > 0
+    assert candidate["final_score"] == 0.0
+    assert candidate["score"] == 0.0
+
+    candidate = _us_candidate()
+    del candidate["_diagnostics"]["scanner_observed_at"]
+    without_observation_time = build_scanner_factor_evidence(candidate, market="us")
+    gap = next(item for item in without_observation_time["factors"] if item["component"] == "gap_context")
+    assert gap["state"] == "unavailable"
+    assert gap["missingFields"] == ["source.observedAt"]
+
+
+def test_factor_warmup_is_explicit_and_sixty_bars_do_not_satisfy_sixty_day_return() -> None:
+    assert MarketScannerService._period_return(pd.Series(range(1, 61)), 60) is None
+
+    candidate = _us_candidate()
+    candidate["_diagnostics"]["quote_context"] = {
+        "available": True,
+        "source": "polygon_us_grouped_daily",
+        "as_of": "2026-05-16T13:39:00Z",
+    }
+    candidate["_diagnostics"]["history"]["rows"] = 60
+
+    insufficient = build_scanner_factor_evidence(candidate, market="us")
+    insufficient_by_component = {item["component"]: item for item in insufficient["factors"]}
+
+    assert insufficient_by_component["trend"]["requiredBars"] == 60
+    assert insufficient_by_component["trend"]["state"] == "valid"
+    assert insufficient_by_component["momentum"]["requiredBars"] == 61
+    assert insufficient_by_component["momentum"]["usableBars"] == 60
+    assert insufficient_by_component["momentum"]["state"] == "insufficient"
+
+    candidate["_diagnostics"]["history"]["rows"] = 61
+    ready = build_scanner_factor_evidence(candidate, market="us")
+    ready_momentum = next(item for item in ready["factors"] if item["component"] == "momentum")
+    assert ready_momentum["state"] == "valid"
+
+
+def test_factor_evidence_distinguishes_stale_proxy_rejected_and_official_valid_sources() -> None:
+    stale_candidate = _us_candidate()
+    stale_candidate["_diagnostics"]["history"].update(
+        {
+            "rows": 70,
+            "freshnessState": "stale",
+            "observed_at": "2026-05-16T13:38:00Z",
+        }
+    )
+    stale_candidate["_diagnostics"]["quote_context"] = {
+        "available": True,
+        "source": "polygon_us_grouped_daily",
+        "as_of": "2026-05-16T13:39:00Z",
+    }
+
+    stale = build_scanner_factor_evidence(stale_candidate, market="us")
+    stale_trend = next(item for item in stale["factors"] if item["component"] == "trend")
+    assert stale_trend["state"] == "stale"
+    assert stale_trend["asOf"] == "2026-05-16"
+    assert stale_trend["observedAt"] == "2026-05-16T13:38:00Z"
+
+    proxy_candidate = _us_candidate()
+    proxy_candidate["_diagnostics"]["history"]["rows"] = 70
+    proxy_candidate["_diagnostics"]["quote_context"] = {
+        "available": True,
+        "source": "yfinance",
+        "as_of": "2026-05-16T13:39:00Z",
+    }
+    proxy = build_scanner_factor_evidence(proxy_candidate, market="us")
+    proxy_gap = next(item for item in proxy["factors"] if item["component"] == "gap_context")
+    assert proxy_gap["state"] == "rejected"
+    assert proxy_gap["sourceType"] == "unofficial_proxy"
+    assert proxy_gap["sourceAuthority"] == "proxy"
+    assert proxy_gap["asOf"] == "2026-05-16T13:39:00Z"
+
+    official_candidate = _us_candidate()
+    official_candidate["_diagnostics"]["history"]["rows"] = 70
+    official_candidate["_diagnostics"]["quote_context"] = {
+        "available": True,
+        "source": "polygon_us_grouped_daily",
+        "as_of": "2026-05-16T13:39:00Z",
+    }
+    official = build_scanner_factor_evidence(official_candidate, market="us")
+    official_gap = next(item for item in official["factors"] if item["component"] == "gap_context")
+    assert official_gap["state"] == "valid"
+    assert official_gap["sourceType"] == "authorized_licensed_feed"
+    assert official_gap["sourceAuthority"] == "authorized"
+    assert official_gap["scoreContributionAllowed"] is True

@@ -35,6 +35,65 @@ def _scanner_api_user() -> CurrentUser:
     )
 
 
+def _valid_factor_evidence() -> dict[str, object]:
+    return {
+        "contractVersion": "scanner_factor_evidence_v1",
+        "overallState": "valid",
+        "rankingEligible": True,
+        "blockers": [],
+        "factors": [
+            {
+                "component": "momentum",
+                "state": "valid",
+                "requiredBars": 61,
+                "usableBars": 80,
+                "source": "official_feed",
+                "sourceAuthority": "official",
+                "asOf": "2026-07-18T09:30:00+08:00",
+                "observedAt": "2026-07-18T09:31:00+08:00",
+                "scoreContributionAllowed": True,
+            }
+        ],
+    }
+
+
+def _blocked_factor_evidence(component: str = "momentum", state: str = "unavailable") -> dict[str, object]:
+    return {
+        "contractVersion": "scanner_factor_evidence_v1",
+        "overallState": "blocked",
+        "rankingEligible": False,
+        "blockers": [f"{component}:{state}"],
+        "factors": [
+            {
+                "component": component,
+                "state": state,
+                "requiredBars": 61,
+                "usableBars": 0,
+                "source": None,
+                "sourceAuthority": "unavailable",
+                "asOf": None,
+                "observedAt": "2026-07-18T09:31:00+08:00",
+                "scoreContributionAllowed": False,
+            }
+        ],
+    }
+
+
+def test_scanner_candidate_factor_evidence_is_required_and_survives_serialization() -> None:
+    evidence = _valid_factor_evidence()
+
+    candidate = ScannerCandidateResponse(
+        symbol="NVDA",
+        name="NVIDIA",
+        rank=1,
+        score=82.0,
+        factorEvidence=evidence,
+    ).model_dump()
+
+    assert ScannerCandidateResponse.model_fields["factorEvidence"].is_required()
+    assert candidate["factorEvidence"] == evidence
+
+
 def test_scanner_root_route_is_discoverable_and_points_to_canonical_routes() -> None:
     app = FastAPI()
     app.include_router(api_v1_router)
@@ -276,6 +335,7 @@ def test_scanner_consumer_payload_recursively_redacts_ohlcv_readiness_forbidden_
                     "missingEvidence": ["provider_missing"],
                     "warningFlags": ["provider_missing"],
                 },
+                "factorEvidence": _blocked_factor_evidence(),
             }
         ],
     }
@@ -390,6 +450,7 @@ def test_scanner_run_response_accepts_additive_candidate_evidence_and_readiness_
                     "scoreContributionAllowedCount": 0,
                     "entries": [],
                 },
+                "factorEvidence": _valid_factor_evidence(),
             }
         ],
         selected=[
@@ -427,6 +488,7 @@ def test_scanner_run_response_accepts_additive_candidate_evidence_and_readiness_
                     "noAdviceBoundary": True,
                     "debugRef": "scanner:candidate_summary:NVDA",
                 },
+                "factorEvidence": _valid_factor_evidence(),
             }
         ],
     )
@@ -493,6 +555,7 @@ def test_scanner_candidate_research_packet_summarizes_why_and_limits_without_ran
                     "missingEvidence": ["fundamentals", "news"],
                     "warningFlags": ["需人工复核"],
                 },
+                "factorEvidence": _valid_factor_evidence(),
             },
             {
                 "symbol": "MSFT",
@@ -503,6 +566,7 @@ def test_scanner_candidate_research_packet_summarizes_why_and_limits_without_ran
                 "final_score": 79.0,
                 "reason_summary": "趋势结构稳定。",
                 "reasons": ["趋势稳定"],
+                "factorEvidence": _valid_factor_evidence(),
             },
         ],
         selected=[
@@ -534,6 +598,7 @@ def test_scanner_candidate_research_packet_summarizes_why_and_limits_without_ran
                     "missingEvidence": ["fundamentals", "news"],
                     "warningFlags": ["需人工复核"],
                 },
+                "factorEvidence": _valid_factor_evidence(),
             }
         ],
     )
@@ -594,6 +659,7 @@ def test_scanner_candidate_research_packet_is_bounded_and_no_advice() -> None:
             "requestId": "abc",
             "provider_timeout": True,
         },
+        factorEvidence=_valid_factor_evidence(),
     )
 
     packet = candidate.model_dump()["candidateResearchPacket"]
@@ -727,6 +793,7 @@ def test_scanner_run_response_locks_score_explainability_metadata_without_score_
                     "userFacingLabels": ["仅供观察", "需人工复核"],
                     "warningFlags": ["仅供观察", "需人工复核"],
                 },
+                "factorEvidence": _valid_factor_evidence(),
             },
             {
                 "symbol": "600002",
@@ -735,6 +802,7 @@ def test_scanner_run_response_locks_score_explainability_metadata_without_score_
                 "score": 39.0,
                 "raw_score": 39.0,
                 "final_score": 39.0,
+                "factorEvidence": _valid_factor_evidence(),
             },
         ],
     )
@@ -820,6 +888,11 @@ def test_scanner_run_response_keeps_mixed_quality_candidates_fail_closed() -> No
             "score": score,
             "raw_score": score,
             "final_score": score,
+            "factorEvidence": (
+                _valid_factor_evidence()
+                if score_contribution_allowed
+                else _blocked_factor_evidence(state=freshness)
+            ),
             "diagnostics": {
                 "score_explainability": {
                     "raw_score": score,

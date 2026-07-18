@@ -11,7 +11,18 @@ from src.services.scanner_universe_readiness import build_scanner_universe_readi
 _BLOCKING_OHLCV_PRIORITY = ("provider_missing", "provider_unavailable", "entitlement_required", "insufficient_history")
 _BLOCKING_OHLCV_REQUIREMENTS = frozenset(_BLOCKING_OHLCV_PRIORITY)
 _CRITICAL_CANDIDATE_BLOCKERS = frozenset(
-    {"universe_missing", "empty_universe", "missing_quote_snapshot", "missing_history", "missing_adjustments", "missing_benchmark"}
+    {
+        "universe_missing",
+        "empty_universe",
+        "missing_quote_snapshot",
+        "missing_history",
+        "missing_adjustments",
+        "missing_benchmark",
+        "factor_evidence_unavailable",
+        "factor_evidence_insufficient",
+        "factor_evidence_stale",
+        "factor_evidence_rejected",
+    }
 )
 _SYNTHETIC_MARKERS = ("synthetic", "mock")
 _FIXTURE_MARKERS = ("fixture", "test_fixture")
@@ -34,6 +45,10 @@ _READINESS_COPY = {
     "insufficient_coverage": ("标的池可用，但行情或历史覆盖不足，暂不生成候选。", "补齐行情与历史覆盖后重新运行 Scanner。"),
     "profile_filters_rejected_all": ("本轮 profile 过滤后没有留下候选。", "复核扫描配置、标的池和数据覆盖后重新运行 Scanner。"),
     "source_quality_capped": ("本轮数据质量不足，候选结果被限制。", "补充可用于评分的数据覆盖后重新运行 Scanner。"),
+    "factor_evidence_unavailable": ("必需因子证据不可用，Scanner 未生成可排序候选。", "补齐缺失因子证据后重新运行 Scanner。"),
+    "factor_evidence_insufficient": ("必需因子尚未完成 warm-up，Scanner 未生成可排序候选。", "补齐所需历史 bars 后重新运行 Scanner。"),
+    "factor_evidence_stale": ("必需因子证据已过期，Scanner 未生成可排序候选。", "刷新过期观测后重新运行 Scanner。"),
+    "factor_evidence_rejected": ("必需因子来源不具备评分权威性，Scanner 未生成可排序候选。", "提供官方或已授权来源后重新运行 Scanner。"),
     "scanner_runtime_unavailable": ("Scanner 本轮运行未完成，暂时无法判断候选。", "修复运行条件后重新运行 Scanner。"),
 }
 
@@ -178,6 +193,29 @@ def _status_counts(summary: Mapping[str, Any], candidates: Sequence[Mapping[str,
     return values["selected_count"], values["rejected_count"], failed
 
 
+def _factor_evidence_blockers(
+    candidates: Sequence[Mapping[str, Any]],
+) -> tuple[list[str], list[str]]:
+    blockers: list[str] = []
+    symbols: list[str] = []
+    for candidate in candidates:
+        diagnostics = _mapping(candidate.get("diagnostics") or candidate.get("_diagnostics"))
+        factor_evidence = _mapping(candidate.get("factorEvidence") or diagnostics.get("factorEvidence"))
+        if not factor_evidence or factor_evidence.get("rankingEligible") is True:
+            continue
+        symbol = str(candidate.get("symbol") or "").strip().upper()
+        if symbol and symbol not in symbols:
+            symbols.append(symbol)
+        for item in factor_evidence.get("factors") or ():
+            if not isinstance(item, Mapping) or item.get("required") is not True:
+                continue
+            state = str(item.get("state") or "").strip().lower()
+            blocker = f"factor_evidence_{state}" if state in {"unavailable", "insufficient", "stale", "rejected"} else ""
+            if blocker and blocker not in blockers:
+                blockers.append(blocker)
+    return blockers, symbols
+
+
 def _blocker(status: str, diagnostics: Mapping[str, Any], reason_counts: Mapping[str, int], universe_size: int, selected_count: int) -> str:
     failure = _mapping(diagnostics.get("failure"))
     tokens = " ".join((
@@ -299,6 +337,12 @@ def _missing_data_families(universe: str, quote: str, history: str, benchmark_mi
         families.append("historical_ohlcv")
     if benchmark_missing or "missing_benchmark" in blockers:
         families.append("benchmark_ohlcv")
+    if any(str(item).startswith("factor_evidence_") for item in blockers):
+        families.append("factor_evidence")
+    if "factor_evidence_rejected" in blockers:
+        families.append("source_authority")
+    if "factor_evidence_stale" in blockers:
+        families.append("freshness")
     requirement_families = {
         "provider_missing": ("historical_ohlcv",),
         "provider_unavailable": ("historical_ohlcv",),
@@ -626,7 +670,12 @@ def evaluate_scanner_readiness(evidence: ScannerReadinessEvidence) -> EvaluatedS
         blockers.append("missing_benchmark")
     if blocker != "unknown" and blocker not in blockers:
         blockers.append(blocker)
+    factor_blockers, factor_blocked_symbols = _factor_evidence_blockers(evidence.candidates)
+    blockers.extend(factor_blockers)
     blockers = list(dict.fromkeys(blockers))
+    if factor_blockers and selected <= 0:
+        state = "blocked"
+        blocker = factor_blockers[0]
     limitation = _non_production_limitation(evidence.source_markers)
     if limitation:
         limitations.append(limitation)
@@ -666,7 +715,7 @@ def evaluate_scanner_readiness(evidence: ScannerReadinessEvidence) -> EvaluatedS
         historical_requirements=requirements,
         seeded_symbols=seeded_symbols,
         eligible_symbols=eligible_symbols,
-        blocked_symbols=ohlcv_blocked_symbols,
+        blocked_symbols=list(dict.fromkeys([*ohlcv_blocked_symbols, *factor_blocked_symbols])),
         missing_data_families=missing_families,
         operator_next_action=operator_action,
         source_metadata=_thaw(cache.get("sourceMetadata")) if isinstance(cache.get("sourceMetadata"), Mapping) else None,
@@ -726,7 +775,7 @@ def evaluate_scanner_readiness(evidence: ScannerReadinessEvidence) -> EvaluatedS
         "requiredBars": _projected_int(required_bars), "usableBars": _projected_int(usable_bars),
         "missingBars": _projected_int(missing_bars),
         "missingRequirements": requirements,
-        "blockedSymbols": list(ohlcv.get("blockedSymbols") or ()),
+        "blockedSymbols": list(dict.fromkeys([*list(ohlcv.get("blockedSymbols") or ()), *factor_blocked_symbols])),
         "degradedSymbols": list(ohlcv.get("degradedSymbols") or ()),
         "ohlcvReadiness": _thaw(ohlcv),
         "candidateEvaluationCount": _projected_int(evaluated_count), "selectedCount": _projected_int(selected_count),

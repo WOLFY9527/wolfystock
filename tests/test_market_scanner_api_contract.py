@@ -78,6 +78,13 @@ def _make_candidate(symbol: str, rank: int, *, benchmark_code: str = "000300") -
         "appeared_in_recent_runs": 0,
         "last_trade_date": "2026-04-10",
         "scan_timestamp": "2026-04-13T08:30:00",
+        "factorEvidence": {
+            "contractVersion": "scanner_factor_evidence_v1",
+            "overallState": "valid",
+            "rankingEligible": True,
+            "blockers": [],
+            "factors": [],
+        },
         "ai_interpretation": {
             "available": True,
             "status": "generated",
@@ -677,6 +684,13 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
                 "failed_rules": [],
                 "missing_fields": [],
                 "metrics": {},
+                "factorEvidence": {
+                    "contractVersion": "scanner_factor_evidence_v1",
+                    "overallState": "valid",
+                    "rankingEligible": True,
+                    "blockers": [],
+                    "factors": [],
+                },
                 "cn_provider_observation": provider_observation,
             }
         ]

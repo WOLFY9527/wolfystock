@@ -176,15 +176,15 @@ class FakeScannerDataManager:
         }
 
     def get_cn_stock_list(self):
-        return self.stock_list.copy(), "FakeListSource"
+        return self.stock_list.copy(), "local_universe_cache"
 
     def get_cn_realtime_snapshot(self):
-        return self.snapshot.copy(), "FakeSnapshotSource"
+        return self.snapshot.copy(), "snapshot"
 
     def get_daily_data(self, code: str, days: int = 140):
         normalized = str(code)
         self.daily_history_calls.append(normalized)
-        return self.histories[normalized].copy().tail(days).reset_index(drop=True), "FakeDailySource"
+        return self.histories[normalized].copy().tail(days).reset_index(drop=True), "snapshot"
 
     def get_sector_rankings(self, n: int = 5):
         return ([{"name": "AI算力"}, {"name": "机器人"}][:n], [])
@@ -212,7 +212,7 @@ class StructuredScannerDataManager(FakeScannerDataManager):
             return self._clone_result(self._stock_list_result)
         return {
             "success": True,
-            "source": "FakeListSource",
+            "source": "local_universe_cache",
             "data": self.stock_list.copy(),
             "attempts": [{"fetcher": "FakeListSource", "status": "success", "rows": int(len(self.stock_list))}],
             "error_code": None,
@@ -225,7 +225,7 @@ class StructuredScannerDataManager(FakeScannerDataManager):
             return self._clone_result(self._snapshot_result)
         return {
             "success": True,
-            "source": "FakeSnapshotSource",
+            "source": "snapshot",
             "data": self.snapshot.copy(),
             "attempts": [{"fetcher": "FakeSnapshotSource", "status": "success", "rows": int(len(self.snapshot))}],
             "error_code": None,
@@ -329,7 +329,7 @@ def _quote_snapshots(symbols: tuple[str, ...]) -> dict[str, QuoteSnapshot]:
             volume=1_000_000 + index,
             as_of=datetime.now().astimezone(),
             currency="USD",
-            source="local_test_cache",
+            source="polygon_us_grouped_daily",
         )
         for index, symbol in enumerate(symbols)
     }
@@ -487,7 +487,7 @@ class FakeUsScannerDataManager(FakeScannerDataManager):
                 volume=41_000_000,
                 amount=3.95e10,
                 name="NVIDIA",
-                source=SimpleNamespace(value="yfinance"),
+                source=SimpleNamespace(value="polygon_us_grouped_daily"),
             ),
             "AAPL": SimpleNamespace(
                 price=212.8,
@@ -496,7 +496,7 @@ class FakeUsScannerDataManager(FakeScannerDataManager):
                 volume=36_500_000,
                 amount=7.72e9,
                 name="Apple",
-                source=SimpleNamespace(value="yfinance"),
+                source=SimpleNamespace(value="polygon_us_grouped_daily"),
             ),
             "PLTR": SimpleNamespace(
                 price=27.4,
@@ -505,7 +505,7 @@ class FakeUsScannerDataManager(FakeScannerDataManager):
                 volume=28_000_000,
                 amount=7.67e8,
                 name="Palantir",
-                source=SimpleNamespace(value="yfinance"),
+                source=SimpleNamespace(value="polygon_us_grouped_daily"),
             ),
             "WULF": SimpleNamespace(
                 price=21.3,
@@ -514,7 +514,7 @@ class FakeUsScannerDataManager(FakeScannerDataManager):
                 volume=46_000_000,
                 amount=9.8e8,
                 name="TeraWulf",
-                source=SimpleNamespace(value="alpaca"),
+                source=SimpleNamespace(value="polygon_us_grouped_daily"),
             ),
             "MARA": SimpleNamespace(
                 price=27.0,
@@ -523,7 +523,7 @@ class FakeUsScannerDataManager(FakeScannerDataManager):
                 volume=34_000_000,
                 amount=9.1e8,
                 name="MARA Holdings",
-                source=SimpleNamespace(value="alpaca"),
+                source=SimpleNamespace(value="polygon_us_grouped_daily"),
             ),
             "RIOT": SimpleNamespace(
                 price=12.6,
@@ -532,7 +532,7 @@ class FakeUsScannerDataManager(FakeScannerDataManager):
                 volume=29_000_000,
                 amount=3.65e8,
                 name="Riot Platforms",
-                source=SimpleNamespace(value="alpaca"),
+                source=SimpleNamespace(value="polygon_us_grouped_daily"),
             ),
             "CLSK": SimpleNamespace(
                 price=16.2,
@@ -541,7 +541,7 @@ class FakeUsScannerDataManager(FakeScannerDataManager):
                 volume=24_000_000,
                 amount=3.88e8,
                 name="CleanSpark",
-                source=SimpleNamespace(value="alpaca"),
+                source=SimpleNamespace(value="polygon_us_grouped_daily"),
             ),
             "IREN": SimpleNamespace(
                 price=11.4,
@@ -550,7 +550,7 @@ class FakeUsScannerDataManager(FakeScannerDataManager):
                 volume=20_000_000,
                 amount=2.28e8,
                 name="IREN",
-                source=SimpleNamespace(value="alpaca"),
+                source=SimpleNamespace(value="polygon_us_grouped_daily"),
             ),
             "HUT": SimpleNamespace(
                 price=8.1,
@@ -559,7 +559,7 @@ class FakeUsScannerDataManager(FakeScannerDataManager):
                 volume=18_000_000,
                 amount=1.46e8,
                 name="Hut 8",
-                source=SimpleNamespace(value="alpaca"),
+                source=SimpleNamespace(value="polygon_us_grouped_daily"),
             ),
             "BTDR": SimpleNamespace(
                 price=10.4,
@@ -568,7 +568,7 @@ class FakeUsScannerDataManager(FakeScannerDataManager):
                 volume=15_000_000,
                 amount=1.56e8,
                 name="Bitdeer",
-                source=SimpleNamespace(value="alpaca"),
+                source=SimpleNamespace(value="polygon_us_grouped_daily"),
             ),
             "CORZ": SimpleNamespace(
                 price=12.2,
@@ -577,7 +577,7 @@ class FakeUsScannerDataManager(FakeScannerDataManager):
                 volume=14_000_000,
                 amount=1.71e8,
                 name="Core Scientific",
-                source=SimpleNamespace(value="alpaca"),
+                source=SimpleNamespace(value="polygon_us_grouped_daily"),
             ),
         }
 
@@ -611,7 +611,7 @@ class FakeHkScannerDataManager(FakeScannerDataManager):
                 volume=12_300_000,
                 amount=6.19e9,
                 name="Tencent Holdings",
-                source=SimpleNamespace(value="twelve_data"),
+                source=SimpleNamespace(value="snapshot"),
             ),
             "HK01810": SimpleNamespace(
                 price=18.9,
@@ -620,7 +620,7 @@ class FakeHkScannerDataManager(FakeScannerDataManager):
                 volume=68_000_000,
                 amount=1.27e9,
                 name="Xiaomi",
-                source=SimpleNamespace(value="twelve_data"),
+                source=SimpleNamespace(value="snapshot"),
             ),
             "HK03690": SimpleNamespace(
                 price=128.0,
@@ -629,7 +629,7 @@ class FakeHkScannerDataManager(FakeScannerDataManager):
                 volume=14_500_000,
                 amount=1.86e9,
                 name="Meituan",
-                source=SimpleNamespace(value="twelve_data"),
+                source=SimpleNamespace(value="snapshot"),
             ),
         }
 
@@ -838,7 +838,14 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             "_diagnostics": {
                 "history": {
                     "latest_trade_date": last_trade_date,
-                }
+                },
+                "factorEvidence": {
+                    "contractVersion": "scanner_factor_evidence_v1",
+                    "overallState": "valid",
+                    "rankingEligible": True,
+                    "blockers": [],
+                    "factors": [],
+                },
             },
         }
 
@@ -2093,9 +2100,9 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         ranked_candidates, shortlist, _ = service._prepare_shortlist(
             profile_config=get_scanner_profile(market="us", profile="us_preopen_v1"),
             evaluated_candidates=[
-                {"symbol": "NVDA", "score": 91.0},
-                {"symbol": "PLTR", "score": 88.5},
-                {"symbol": "AAPL", "score": 91.0},
+                {"symbol": "NVDA", "score": 91.0, "_diagnostics": {"factorEvidence": {"rankingEligible": True}}},
+                {"symbol": "PLTR", "score": 88.5, "_diagnostics": {"factorEvidence": {"rankingEligible": True}}},
+                {"symbol": "AAPL", "score": 91.0, "_diagnostics": {"factorEvidence": {"rankingEligible": True}}},
             ],
             resolved_shortlist_size=3,
         )
@@ -2114,6 +2121,96 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             expected_signature,
         )
         self.assertEqual(ai_service.received_signature, expected_signature)
+
+    def test_prepare_shortlist_excludes_blocked_candidates_without_assigning_rank(self) -> None:
+        ai_service = RecordingScannerAiService()
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeScannerDataManager(),
+            ai_interpretation_service=ai_service,
+        )
+        valid = {
+            "symbol": "AAPL",
+            "score": 71.0,
+            "_diagnostics": {"factorEvidence": {"rankingEligible": True, "blockers": []}},
+        }
+        blocked = {
+            "symbol": "NVDA",
+            "score": 99.0,
+            "_diagnostics": {
+                "factorEvidence": {
+                    "rankingEligible": False,
+                    "blockers": ["momentum:insufficient"],
+                }
+            },
+        }
+
+        ranked_candidates, shortlist, _ = service._prepare_shortlist(
+            profile_config=get_scanner_profile(market="us", profile="us_preopen_v1"),
+            evaluated_candidates=[blocked, valid],
+            resolved_shortlist_size=2,
+        )
+
+        self.assertEqual([item["symbol"] for item in ranked_candidates], ["AAPL"])
+        self.assertEqual([item["symbol"] for item in shortlist], ["AAPL"])
+        self.assertEqual(valid["rank"], 1)
+        self.assertEqual(blocked.get("rank", 0), 0)
+        self.assertEqual(ai_service.received_signature, [("AAPL", 1, 71.0)])
+
+    def test_candidate_diagnostics_keep_blocked_candidate_unranked_and_data_failed(self) -> None:
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeScannerDataManager(),
+            ai_interpretation_service=FakeScannerAiService(),
+        )
+        factor_evidence = {
+            "contractVersion": "scanner_factor_evidence_v1",
+            "overallState": "blocked",
+            "rankingEligible": False,
+            "blockers": ["momentum:insufficient"],
+            "factors": [],
+        }
+
+        _theme, summary, candidates = service._build_candidate_diagnostics(
+            market="us",
+            universe_selection={
+                "universe_type": "symbols",
+                "accepted_symbols": ["AAPL", "NVDA"],
+                "accepted_symbols_count": 2,
+                "requested_symbols_count": 2,
+            },
+            ranked_candidates=[
+                {
+                    "symbol": "AAPL",
+                    "name": "Apple",
+                    "score": 71.0,
+                    "_diagnostics": {"factorEvidence": {"rankingEligible": True}},
+                }
+            ],
+            shortlist=[{"symbol": "AAPL", "name": "Apple", "score": 71.0}],
+            diagnostics={
+                "candidate_diagnostics": {
+                    "NVDA": {
+                        "symbol": "NVDA",
+                        "status": "data_failed",
+                        "score": None,
+                        "reason": "factor_evidence_blocked",
+                        "failed_rules": ["insufficient_factor_warmup"],
+                        "missing_fields": ["momentum"],
+                        "metrics": {},
+                        "factorEvidence": factor_evidence,
+                    }
+                }
+            },
+        )
+
+        by_symbol = {item["symbol"]: item for item in candidates}
+        self.assertEqual(by_symbol["AAPL"]["rank"], 1)
+        self.assertEqual(by_symbol["NVDA"]["rank"], 0)
+        self.assertEqual(by_symbol["NVDA"]["status"], "data_failed")
+        self.assertEqual(by_symbol["NVDA"]["factorEvidence"], factor_evidence)
+        self.assertEqual(summary["selected_count"], 1)
+        self.assertEqual(summary["data_failed_count"], 1)
 
     def test_finalize_completed_scan_reuses_common_persistence_and_response_flow(self) -> None:
         service = MarketScannerService(
@@ -2321,11 +2418,11 @@ class MarketScannerServiceTestCase(unittest.TestCase):
 
         explainability = candidate["_diagnostics"]["score_explainability"]
         self.assertEqual(candidate["raw_score"], 81.6)
-        self.assertEqual(candidate["final_score"], 40.0)
-        self.assertEqual(candidate["score"], 40.0)
+        self.assertEqual(candidate["final_score"], 20.0)
+        self.assertEqual(candidate["score"], 20.0)
         self.assertEqual(explainability["cap_reason"], "fallback_source")
         self.assertEqual(explainability["degradation_reason"], "fallback_source")
-        self.assertEqual(explainability["score_confidence"], 0.4)
+        self.assertEqual(explainability["score_confidence"], 0.2)
         self.assertTrue(explainability["cap_applied"])
         self.assertIn("quote_context", explainability["missing_evidence"])
         self.assertEqual(explainability["source_confidence"]["capReason"], "fallback_source")
@@ -2396,7 +2493,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
 
         def make_candidate(
             *,
-            quote_source: str = "alpaca",
+            quote_source: str = "polygon_us_grouped_daily",
             history_source: str = "local_db",
             history_stale: bool = False,
             atr20_pct: float | None = 3.7,
@@ -2437,6 +2534,10 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                         "available": True,
                         "source": quote_source,
                     },
+                    "factorEvidence": {
+                        "rankingEligible": True,
+                        "blockers": [],
+                    },
                 },
             }
 
@@ -2473,8 +2574,8 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 "expected_source_type": "synthetic_fixture",
                 "expected_freshness": "synthetic",
                 "expected_missing_evidence": [],
-                "expected_score_grade_allowed": True,
-                "expected_observation_only": False,
+                "expected_score_grade_allowed": False,
+                "expected_observation_only": True,
                 "expected_flags": {
                     "isSynthetic": True,
                     "isUnavailable": False,
@@ -2494,8 +2595,8 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 "expected_source_type": "missing",
                 "expected_freshness": "unavailable",
                 "expected_missing_evidence": [],
-                "expected_score_grade_allowed": True,
-                "expected_observation_only": False,
+                "expected_score_grade_allowed": False,
+                "expected_observation_only": True,
                 "expected_flags": {
                     "isSynthetic": False,
                     "isUnavailable": True,
@@ -2515,8 +2616,8 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 "expected_source_type": "missing",
                 "expected_freshness": "unavailable",
                 "expected_missing_evidence": [],
-                "expected_score_grade_allowed": True,
-                "expected_observation_only": False,
+                "expected_score_grade_allowed": False,
+                "expected_observation_only": True,
                 "expected_flags": {
                     "isSynthetic": False,
                     "isUnavailable": True,
@@ -2554,7 +2655,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 "expected_score_confidence": 0.6,
                 "expected_score_cap": 60.0,
                 "expected_final_score": 60.0,
-                "expected_source_type": "official_public",
+                "expected_source_type": "authorized_licensed_feed",
                 "expected_freshness": "stale",
                 "expected_missing_evidence": [],
                 "expected_score_grade_allowed": False,
@@ -2575,7 +2676,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 "expected_score_confidence": 0.7,
                 "expected_score_cap": 70.0,
                 "expected_final_score": 70.0,
-                "expected_source_type": "official_public",
+                "expected_source_type": "authorized_licensed_feed",
                 "expected_freshness": "partial",
                 "expected_missing_evidence": ["risk"],
                 "expected_score_grade_allowed": False,
@@ -2834,8 +2935,12 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 },
                 "quote_context": {
                     "available": True,
-                    "source": "alpaca",
-                    "sourceType": "broker_authorized",
+                    "source": "polygon_us_grouped_daily",
+                    "sourceType": "authorized_licensed_feed",
+                },
+                "factorEvidence": {
+                    "rankingEligible": True,
+                    "blockers": [],
                 },
             },
         }
@@ -2872,36 +2977,35 @@ class MarketScannerServiceTestCase(unittest.TestCase):
 
         self.assertEqual(
             [(item["symbol"], item["rank"], item["score"]) for item in result["shortlist"]],
-            [("NVDA", 1, 65.8), ("AAPL", 2, 62.8), ("PLTR", 3, 40.0)],
+            [("NVDA", 1, 74.2), ("AAPL", 2, 70.3)],
         )
         self.assertEqual(len(data_manager.realtime_quote_calls), 3)
         self.assertEqual(set(data_manager.realtime_quote_calls), {"NVDA", "AAPL", "PLTR"})
 
-        pltr = next(item for item in result["shortlist"] if item["symbol"] == "PLTR")
-        packet = pltr["diagnostics"]["evidence_packet"]
-        self.assertEqual(packet["symbol"], "PLTR")
-        self.assertEqual(packet["rank"], 3)
-        self.assertEqual(packet["score"], 40.0)
-        self.assertEqual(packet["rawScore"], 81.6)
-        self.assertEqual(packet["finalScore"], 40.0)
-        self.assertEqual(packet["capReason"], "fallback_source")
-        self.assertEqual(packet["degradationReason"], "fallback_source")
-        self.assertEqual(packet["scoreConfidence"], 0.4)
+        nvda = next(item for item in result["shortlist"] if item["symbol"] == "NVDA")
+        packet = nvda["diagnostics"]["evidence_packet"]
+        self.assertEqual(packet["symbol"], "NVDA")
+        self.assertEqual(packet["rank"], 1)
+        self.assertEqual(packet["score"], 74.2)
+        self.assertEqual(packet["rawScore"], 74.2)
+        self.assertEqual(packet["finalScore"], 74.2)
+        self.assertIsNone(packet["capReason"])
+        self.assertIsNone(packet["degradationReason"])
+        self.assertEqual(packet["scoreConfidence"], 1.0)
         self.assertEqual(packet["evidenceVersion"], SCANNER_EVIDENCE_VERSION)
-        self.assertEqual(packet["freshnessState"], "fallback")
-        self.assertIn("仅供观察", packet["userFacingLabels"])
-        self.assertIn("需人工复核", packet["userFacingLabels"])
-        self.assertIn("部分外部数据暂不可用", packet["userFacingLabels"])
         self.assertNotIn("provider_timeout", json.dumps(packet, ensure_ascii=False))
-        self.assertEqual(pltr["raw_score"], 81.6)
-        self.assertEqual(pltr["final_score"], 40.0)
-        self.assertEqual(pltr["score"], 40.0)
-        self.assertEqual(pltr["diagnostics"]["score_explainability"]["cap_reason"], "fallback_source")
+        self.assertTrue(nvda["factorEvidence"]["rankingEligible"])
+
+        pltr = next(item for item in result["candidates"] if item["symbol"] == "PLTR")
+        self.assertEqual(pltr["status"], "data_failed")
+        self.assertEqual(pltr["rank"], 0)
+        self.assertFalse(pltr["factorEvidence"]["rankingEligible"])
+        self.assertIn("gap_context:unavailable", pltr["factorEvidence"]["blockers"])
 
         detail = service.get_run_detail(result["id"])
         assert detail is not None
-        persisted_packet = next(item for item in detail["shortlist"] if item["symbol"] == "PLTR")["diagnostics"]["evidence_packet"]
-        self.assertEqual(persisted_packet["symbol"], "PLTR")
+        persisted_packet = next(item for item in detail["shortlist"] if item["symbol"] == "NVDA")["diagnostics"]["evidence_packet"]
+        self.assertEqual(persisted_packet["symbol"], "NVDA")
         self.assertEqual(persisted_packet["evidenceVersion"], SCANNER_EVIDENCE_VERSION)
 
     def test_run_scan_attaches_additive_factor_observations_without_mutating_scores_or_ranks(self) -> None:
@@ -2927,14 +3031,13 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 for item in result["shortlist"]
             ],
             [
-                ("NVDA", 1, 65.8, 65.8, 65.8),
-                ("AAPL", 2, 62.8, 62.8, 62.8),
-                ("PLTR", 3, 40.0, 81.6, 40.0),
+                ("NVDA", 1, 74.2, 74.2, 74.2),
+                ("AAPL", 2, 70.3, 70.3, 70.3),
             ],
         )
 
-        pltr = next(item for item in result["shortlist"] if item["symbol"] == "PLTR")
-        exported = pltr["diagnostics"]["factor_observations"]
+        nvda = next(item for item in result["shortlist"] if item["symbol"] == "NVDA")
+        exported = nvda["diagnostics"]["factor_observations"]
         self.assertEqual(
             [item["component"] for item in exported],
             [
@@ -2948,20 +3051,20 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 "gap_context",
             ],
         )
-        self.assertEqual(exported[0]["observation"]["symbol"], "PLTR")
+        self.assertEqual(exported[0]["observation"]["symbol"], "NVDA")
         self.assertEqual(exported[0]["observation"]["observed_at"], result["run_at"])
-        self.assertEqual(exported[0]["observation"]["as_of"], pltr["last_trade_date"])
+        self.assertEqual(exported[0]["observation"]["as_of"], nvda["last_trade_date"])
         self.assertEqual(
             exported[0]["observation_id"],
             (
-                "scanner_factor_observation:us:us_preopen_v1:pltr:"
-                f"trend.trend_strength_20d:trend:{pltr['last_trade_date']}"
+                "scanner_factor_observation:us:us_preopen_v1:nvda:"
+                f"trend.trend_strength_20d:trend:{nvda['last_trade_date']}"
             ),
         )
 
         detail = service.get_run_detail(result["id"])
         assert detail is not None
-        persisted = next(item for item in detail["shortlist"] if item["symbol"] == "PLTR")["diagnostics"]["factor_observations"]
+        persisted = next(item for item in detail["shortlist"] if item["symbol"] == "NVDA")["diagnostics"]["factor_observations"]
         self.assertEqual([item["observation_id"] for item in persisted], [item["observation_id"] for item in exported])
 
     def test_run_scan_parallelizes_cn_remote_history_without_drifting_results(self) -> None:
@@ -2991,7 +3094,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             },
         )
         provider_diagnostics = result["diagnostics"]["provider_diagnostics"]
-        self.assertEqual(provider_diagnostics["history_source_used"], "FakeDailySource")
+        self.assertEqual(provider_diagnostics["history_source_used"], "snapshot")
         self.assertIn("unavailable", provider_diagnostics["providers_used"])
         self.assertFalse(provider_diagnostics["fallback_occurred"])
         self.assertEqual(provider_diagnostics["missing_data_symbol_count"], 1)
@@ -3016,7 +3119,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
 
         self.assertEqual(
             [(item["symbol"], item["rank"], item["score"]) for item in result["shortlist"]],
-            [("NVDA", 1, 65.8), ("AAPL", 2, 62.8), ("PLTR", 3, 40.0)],
+            [("NVDA", 1, 74.2), ("AAPL", 2, 70.3)],
         )
         self.assertEqual(result["diagnostics"]["live_quote_stats"]["attempted_candidates"], 3)
         self.assertEqual(result["diagnostics"]["live_quote_stats"]["available_candidates"], 2)
@@ -3024,10 +3127,9 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(result["diagnostics"]["provider_diagnostics"]["provider_failure_count"], 1)
         self.assertFalse(result["diagnostics"]["provider_diagnostics"]["fallback_occurred"])
         candidate_map = {item["symbol"]: item for item in result["candidates"]}
-        self.assertEqual(candidate_map["PLTR"]["provider"], "history_only_us_scan")
-        pltr = next(item for item in result["shortlist"] if item["symbol"] == "PLTR")
-        self.assertFalse(pltr["diagnostics"]["quote_context"]["available"])
-        self.assertIsNone(pltr["diagnostics"]["quote_context"]["source"])
+        self.assertEqual(candidate_map["PLTR"]["status"], "data_failed")
+        self.assertEqual(candidate_map["PLTR"]["rank"], 0)
+        self.assertFalse(candidate_map["PLTR"]["factorEvidence"]["rankingEligible"])
 
     def test_run_scan_supports_us_preopen_profile_and_preserves_market_context(self) -> None:
         seed_us_local_history(self.stock_repo)
@@ -3046,7 +3148,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
 
         self.assertEqual(result["market"], "us")
         self.assertEqual(result["profile"], "us_preopen_v1")
-        self.assertTrue(result["headline"].startswith("今日美股盘前优先观察："))
+        self.assertEqual(result["shortlist"], [])
         self.assertEqual(result["diagnostics"]["benchmark_context"]["benchmark_code"], "SPY")
         self.assertGreaterEqual(result["diagnostics"]["history_stats"]["local_hits"], 2)
         self.assertEqual(result["diagnostics"]["live_quote_stats"]["available_candidates"], 0)
@@ -3056,17 +3158,11 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(result["dataReadiness"]["universeSource"], "bounded_starter_market_data_spine")
         self.assertTrue(result["dataReadiness"]["noExternalCalls"])
         self.assertFalse(result["dataReadiness"]["providerCallsEnabled"])
-        self.assertEqual(result["dataReadiness"]["candidateGenerationState"], "degraded")
-        self.assertEqual(result["dataReadiness"]["candidateGenerationLimitations"], ["quote_unavailable_or_stale"])
+        self.assertEqual(result["dataReadiness"]["candidateGenerationState"], "blocked")
+        self.assertIn("missing_quote_snapshot", result["dataReadiness"]["candidateGenerationBlockers"])
         self.assertNotIn("curated_us_liquid_seed", result["source_summary"])
 
-        shortlist_symbols = [item["symbol"] for item in result["shortlist"]]
-        self.assertEqual(len(shortlist_symbols), 2)
-        self.assertNotIn("SPY", shortlist_symbols)
-        self.assertIn(shortlist_symbols[0], {"NVDA", "AAPL", "PLTR"})
-        self.assertEqual(result["shortlist"][0]["diagnostics"]["benchmark_code"], "SPY")
-        self.assertTrue(any(metric["label"] == "20D avg $vol" for metric in result["shortlist"][0]["key_metrics"]))
-        self.assertTrue(any("Gap" in note or "实时" in note for note in result["shortlist"][0]["risk_notes"]))
+        self.assertTrue(all(item["rank"] == 0 for item in result["candidates"] if item["status"] == "data_failed"))
 
         history = service.list_runs(market="us", profile="us_preopen_v1", page=1, limit=10)
         self.assertEqual(history["total"], 1)
@@ -3101,7 +3197,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         ]
         self.assertEqual(
             shortlist_signature,
-            [("NVDA", 1, 65.8, 65.8, 65.8), ("AAPL", 2, 62.8, 62.8, 62.8), ("PLTR", 3, 40.0, 81.6, 40.0)],
+            [("NVDA", 1, 74.2, 74.2, 74.2), ("AAPL", 2, 70.3, 70.3, 70.3)],
         )
         self.assertEqual(
             [
@@ -3115,7 +3211,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         candidate_status_by_symbol = {item["symbol"]: item["status"] for item in result["candidates"]}
         self.assertEqual(
             {symbol: candidate_status_by_symbol[symbol] for symbol, *_ in shortlist_signature},
-            {"NVDA": "selected", "AAPL": "selected", "PLTR": "selected"},
+            {"NVDA": "selected", "AAPL": "selected"},
         )
 
         candidate_map = {item["symbol"]: item for item in result["shortlist"]}
@@ -3164,19 +3260,11 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             "marketReadiness",
         )
 
-        pltr = candidate_map["PLTR"]
-        self.assertEqual(pltr["candidateEvidenceFrame"]["coverageState"], "observe_only")
-        self.assertEqual(pltr["candidateEvidenceFrame"]["domains"]["gapMomentum"]["state"], "partial")
-        self.assertTrue(pltr["candidateEvidenceFrame"]["domains"]["gapMomentum"]["observationOnly"])
-        self.assertEqual(pltr["candidateResearchReadiness"]["sourceAuthority"], "observationOnly")
-        self.assertIn("source_authority_not_score_grade", pltr["candidateResearchReadiness"]["blockingReasons"])
-        self.assertEqual(pltr["candidateResearchSummaryFrame"]["frameState"], "insufficient")
-        self.assertEqual(pltr["candidateResearchSummaryFrame"]["scoreBand"], "limited")
-        self.assertEqual(pltr["candidateResearchSummaryFrame"]["sourceAuthority"], "observationOnly")
-        self.assertIn(
-            "source_authority_not_score_grade",
-            pltr["candidateResearchSummaryFrame"]["blockingReasons"],
-        )
+        pltr = next(item for item in result["candidates"] if item["symbol"] == "PLTR")
+        self.assertEqual(pltr["status"], "data_failed")
+        self.assertEqual(pltr["rank"], 0)
+        self.assertFalse(pltr["factorEvidence"]["rankingEligible"])
+        self.assertIn("gap_context:unavailable", pltr["factorEvidence"]["blockers"])
 
         detail = service.get_run_detail(result["id"])
         assert detail is not None
@@ -3293,7 +3381,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(result["summary"]["universe_count"], 11)
         self.assertEqual(result["summary"]["submitted_count"], 11)
         self.assertEqual(result["summary"]["selected_count"], 1)
-        self.assertEqual(result["summary"]["data_failed_count"], 2)
+        self.assertEqual(result["summary"]["data_failed_count"], 3)
         self.assertFalse(result["summary"]["limited_by_result_cap"])
         self.assertEqual(len(result["candidates"]), 11)
         self.assertEqual(result["selected"], result["shortlist"])
@@ -3323,7 +3411,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 <= set(candidate_map[symbol])
             )
         self.assertEqual(candidate_map["WULF"]["status"], "selected")
-        self.assertEqual(candidate_map["WULF"]["provider"], "alpaca")
+        self.assertEqual(candidate_map["WULF"]["provider"], "polygon_us_grouped_daily")
         self.assertEqual(candidate_map["CIFR"]["status"], "data_failed")
         self.assertIn("history", candidate_map["CIFR"]["missing_fields"])
         self.assertEqual(candidate_map["BITF"]["status"], "data_failed")
@@ -3372,7 +3460,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         )
 
         self.assertEqual(result["summary"]["universe_count"], 11)
-        self.assertEqual(result["summary"]["evaluated_count"], 9)
+        self.assertEqual(result["summary"]["evaluated_count"], 8)
         self.assertEqual(result["summary"]["skipped_count"], 0)
         self.assertEqual({item["symbol"] for item in result["candidates"]}, set(get_scanner_theme("crypto_miners").symbols))
 
@@ -3767,7 +3855,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertIn("snapshot=local_history_degraded", result["source_summary"])
         self.assertIn("degraded=yes", result["source_summary"])
         self.assertTrue(any("降级快照" in note for note in result["universe_notes"]))
-        self.assertTrue(result["shortlist"])
+        self.assertEqual(result["shortlist"], [])
         readiness = result["scannerContextFrame"]["marketReadiness"]
         self.assertFalse(readiness["researchReady"])
         self.assertEqual(readiness["market"], "cn")
@@ -3776,10 +3864,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["providerAuthority"], "observation_only")
         self.assertEqual(readiness["freshness"], "fallback")
         self.assertEqual(readiness["sourceTier"], "fallback_static")
-        for item in result["shortlist"]:
-            self.assertLessEqual(float(item["score"]), 40.0)
-            self.assertEqual(item["diagnostics"]["score_explainability"]["cap_reason"], "fallback_source")
-            self.assertEqual(item["diagnostics"]["score_explainability"]["degradation_reason"], "fallback_source")
+        self.assertTrue(all(item["rank"] == 0 for item in result["candidates"] if item["status"] == "rejected"))
 
     def test_run_scan_raises_structured_error_when_no_snapshot_and_no_degraded_mode(self) -> None:
         DatabaseManager.reset_instance()
@@ -3902,16 +3987,16 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(excluded_reasons["filtered_by_profile_constraints"], 2)
 
         self.assertIsInstance(providers, dict)
-        self.assertEqual(providers["configured_primary_provider"], "FakeSnapshotSource")
-        self.assertEqual(providers["snapshot_source_used"], "FakeSnapshotSource")
-        self.assertEqual(providers["history_source_used"], "FakeDailySource")
+        self.assertEqual(providers["configured_primary_provider"], "snapshot")
+        self.assertEqual(providers["snapshot_source_used"], "snapshot")
+        self.assertEqual(providers["history_source_used"], "snapshot")
         self.assertFalse(providers["fallback_occurred"])
         self.assertEqual(providers["fallback_count"], 0)
         self.assertEqual(providers["provider_failure_count"], 0)
         self.assertEqual(providers["missing_data_symbol_count"], 0)
         self.assertEqual(
             providers["providers_used"],
-            ["FakeDailySource", "FakeSnapshotSource", "local_db", "local_universe_cache"],
+            ["local_db", "local_universe_cache", "snapshot"],
         )
         readiness = detail["diagnostics"]["dataReadiness"]
         self.assertEqual(readiness["state"], "ready")
@@ -3960,6 +4045,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         )
 
         readiness = detail["dataReadiness"]
+        self.assertEqual(readiness["state"], "blocked")
         self.assertEqual(readiness["availabilityState"], "available")
         self.assertEqual(readiness["executionState"], "executable")
         self.assertEqual(readiness["universeReadiness"]["state"], "available")
@@ -3968,39 +4054,25 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["quoteReadiness"]["missingSymbols"], [])
         self.assertEqual(readiness["historyReadiness"]["state"], "available")
         self.assertEqual(readiness["benchmarkReadiness"]["state"], "available")
-        self.assertEqual(readiness["cacheReadiness"]["state"], "available")
-        self.assertEqual(readiness["cacheReadiness"]["reason"], "cached_ohlcv_available")
+        self.assertEqual(readiness["cacheReadiness"]["state"], "unknown")
+        self.assertEqual(readiness["cacheReadiness"]["reason"], "cache_state_unknown")
         self.assertTrue(readiness["cacheReadiness"]["consumerSafe"])
         universe_readiness = readiness["scannerUniverseReadiness"]
-        self.assertEqual(universe_readiness["status"], "available")
+        self.assertEqual(universe_readiness["status"], "insufficient_coverage")
         self.assertEqual(universe_readiness["availableDataClasses"], ["universe", "historical_ohlcv", "quote_snapshot"])
-        self.assertEqual(universe_readiness["missingDataFamilies"], [])
+        self.assertEqual(universe_readiness["missingDataFamilies"], ["factor_evidence"])
         self.assertEqual(universe_readiness["seededSymbols"], ["NVDA", "AAPL", "PLTR"])
         self.assertEqual(universe_readiness["eligibleSymbols"], ["NVDA", "AAPL", "PLTR"])
-        self.assertEqual(universe_readiness["blockedSymbols"], [])
-        self.assertEqual(readiness["candidateGenerationState"], "ready")
-        self.assertEqual(readiness["candidateGenerationBlockers"], [])
+        self.assertEqual(universe_readiness["blockedSymbols"], ["NVDA", "AAPL", "PLTR"])
+        self.assertEqual(readiness["candidateGenerationState"], "blocked")
+        self.assertEqual(readiness["candidateGenerationBlockers"], ["factor_evidence_unavailable"])
         self.assertEqual(readiness["requiredBars"], 70)
         self.assertEqual(readiness["missingBars"], 0)
-        self.assertGreater(len(detail["shortlist"]), 0)
+        self.assertEqual(detail["shortlist"], [])
         self.assertEqual(data_manager.daily_history_calls, [])
-        candidate_readiness = detail["shortlist"][0]["historicalOhlcvReadiness"]
-        self.assertEqual(candidate_readiness["overallState"], "ready")
-        self.assertEqual(candidate_readiness["providerState"], "available")
-        candidate = detail["shortlist"][0]
-        self.assertEqual(candidate["noAdviceLabel"], "Observation-only research context; not investment advice.")
-        self.assertTrue(candidate["evidenceBoundaries"]["noAdvice"])
-        self.assertFalse(candidate["evidenceBoundaries"]["decisionGrade"])
-        self.assertEqual(candidate["evidenceBoundaries"]["boundaryType"], "observation_only")
-        self.assertTrue(candidate["candidateEvidenceFrame"])
-        self.assertTrue(candidate["candidateResearchReadiness"])
-        self.assertIn(candidate["consumerDiagnostics"]["dataQualityState"], {"ready", "cached", "partial"})
-        self.assertEqual(candidate["rankingConfidence"]["rankingUse"], "relative_observation_only")
-        self.assertIn(candidate["rankingConfidence"]["dataQualityState"], {"ready", "limited", "partial", "unknown"})
-        self.assertEqual(candidate["rankingConfidence"]["rank"], candidate["rank"])
-        serialized_candidate = json.dumps(candidate, ensure_ascii=False).lower()
-        for forbidden in ("buy now", "sell now", "hold", "recommendation", "best stock"):
-            self.assertNotIn(forbidden, serialized_candidate)
+        diagnostics = detail["diagnostics"]["candidate_diagnostics"]
+        self.assertTrue(all(item["status"] == "data_failed" for item in diagnostics.values()))
+        self.assertTrue(all(item["factorEvidence"]["rankingEligible"] is False for item in diagnostics.values()))
 
     def test_run_scan_uses_configured_local_us_parquet_cache_for_default_readiness(self) -> None:
         cache_dir = Path(self._cache_temp_dir.name) / "us-parquet-cache"
@@ -4080,7 +4152,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             )
 
         self.assertEqual(detail["status"], "completed")
-        self.assertGreater(len(detail["shortlist"]), 0)
+        self.assertEqual(detail["shortlist"], [])
         self.assertEqual(data_manager.realtime_quote_calls, [])
         self.assertNotIn("PLTR", detail["dataReadiness"]["symbolsEvaluated"])
         self.assertEqual(detail["dataReadiness"]["universeSource"], "bounded_starter_market_data_spine")
@@ -4430,14 +4502,14 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         )
 
         self.assertEqual(detail["status"], "completed")
-        self.assertGreater(len(detail["shortlist"]), 0)
+        self.assertEqual(detail["shortlist"], [])
         readiness = detail["dataReadiness"]
         self.assertEqual(readiness["quoteReadiness"]["state"], "available")
         self.assertEqual(readiness["quoteReadiness"]["availableSymbols"], ["NVDA", "AAPL"])
         self.assertEqual(readiness["scannerUniverseReadiness"]["availableDataClasses"], ["universe", "historical_ohlcv", "quote_snapshot"])
-        self.assertEqual(readiness["scannerUniverseReadiness"]["missingDataFamilies"], [])
-        self.assertEqual(readiness["candidateGenerationState"], "ready")
-        self.assertEqual(readiness["candidateGenerationBlockers"], [])
+        self.assertIn("factor_evidence", readiness["scannerUniverseReadiness"]["missingDataFamilies"])
+        self.assertEqual(readiness["candidateGenerationState"], "blocked")
+        self.assertIn("factor_evidence_unavailable", readiness["candidateGenerationBlockers"])
         self.assertEqual(data_manager.realtime_quote_calls, ["NVDA", "AAPL"])
 
     def test_stale_quote_snapshot_limits_scanner_candidates_with_freshness_family(self) -> None:
@@ -4474,17 +4546,17 @@ class MarketScannerServiceTestCase(unittest.TestCase):
 
         readiness = detail["dataReadiness"]
         self.assertEqual(detail["status"], "completed")
-        self.assertGreater(len(detail["shortlist"]), 0)
+        self.assertEqual(detail["shortlist"], [])
         self.assertEqual(readiness["quoteReadiness"]["state"], "stale")
         self.assertEqual(readiness["quoteReadiness"]["staleSymbols"], ["NVDA", "AAPL"])
-        self.assertEqual(readiness["candidateGenerationBlockers"], [])
-        self.assertEqual(readiness["candidateGenerationLimitations"], ["quote_unavailable_or_stale"])
+        self.assertIn("stale_quote_snapshot", readiness["candidateGenerationBlockers"])
+        self.assertIn("factor_evidence_unavailable", readiness["candidateGenerationBlockers"])
         self.assertIn("quote_snapshot", readiness["scannerUniverseReadiness"]["missingDataFamilies"])
         self.assertIn("freshness", readiness["scannerUniverseReadiness"]["missingDataFamilies"])
         self.assertIn("Refresh quote snapshot", readiness["scannerUniverseReadiness"]["nextOperatorAction"])
         self.assertNotIn("Configure", readiness["scannerUniverseReadiness"]["nextOperatorAction"])
         self.assertGreater(readiness["candidateEvaluationCount"], 0)
-        self.assertGreater(readiness["selectedCount"], 0)
+        self.assertEqual(readiness["selectedCount"], 0)
 
     def test_seeded_ohlcv_symbols_emit_observation_candidates_when_quotes_are_missing(self) -> None:
         provider = FakeHistoricalOhlcvProvider(
@@ -4516,22 +4588,22 @@ class MarketScannerServiceTestCase(unittest.TestCase):
 
         readiness = detail["dataReadiness"]
         self.assertEqual(detail["status"], "completed")
-        self.assertGreater(len(detail["shortlist"]), 0)
+        self.assertEqual(detail["shortlist"], [])
         self.assertEqual(readiness["universeSize"], 2)
         self.assertEqual(readiness["historyReadiness"]["state"], "available")
         self.assertEqual(readiness["quoteReadiness"]["state"], "missing")
-        self.assertEqual(readiness["candidateGenerationState"], "degraded")
-        self.assertEqual(readiness["candidateGenerationLimitations"], ["quote_unavailable_or_stale"])
-        self.assertEqual(readiness["candidateGenerationBlockers"], [])
+        self.assertEqual(readiness["candidateGenerationState"], "blocked")
+        self.assertIn("missing_quote_snapshot", readiness["candidateGenerationBlockers"])
+        self.assertIn("factor_evidence_unavailable", readiness["candidateGenerationBlockers"])
         universe_readiness = readiness["scannerUniverseReadiness"]
         self.assertEqual(universe_readiness["status"], "insufficient_coverage")
         self.assertEqual(universe_readiness["availableDataClasses"], ["universe", "historical_ohlcv"])
-        self.assertEqual(universe_readiness["missingDataFamilies"], ["quote_snapshot"])
+        self.assertEqual(universe_readiness["missingDataFamilies"], ["quote_snapshot", "factor_evidence"])
         self.assertEqual(universe_readiness["seededSymbols"], ["NVDA", "AAPL"])
         self.assertEqual(universe_readiness["eligibleSymbols"], ["NVDA", "AAPL"])
-        self.assertEqual(universe_readiness["blockedSymbols"], [])
+        self.assertEqual(set(universe_readiness["blockedSymbols"]), {"NVDA", "AAPL"})
         self.assertIn("Seeded historical OHLCV is usable", universe_readiness["nextOperatorAction"])
-        self.assertEqual(detail["shortlist"][0]["dataFreshness"]["quoteState"], "unavailable_or_stale")
+        self.assertEqual(readiness["selectedCount"], 0)
 
     def test_seeded_degraded_ohlcv_symbols_block_candidates_when_quotes_and_adjustments_are_missing(self) -> None:
         provider = FakeHistoricalOhlcvProvider(
@@ -4811,7 +4883,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["state"], "blocked")
         self.assertEqual(readiness["universeSize"], 4)
         self.assertEqual(readiness["quoteCoverage"], "unknown")
-        self.assertEqual(readiness["historyCoverage"], "missing")
+        self.assertEqual(readiness["historyCoverage"], "unknown")
         self.assertEqual(readiness["candidateEvaluationCount"], 0)
         self.assertEqual(readiness["selectedCount"], 0)
         self.assertEqual(readiness["rejectedCount"], 0)
@@ -4899,21 +4971,24 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 (item["symbol"], item["rank"], item["score"], item["raw_score"], item["final_score"])
                 for item in observed["shortlist"]
             ]
-            self.assertEqual(observed_shortlist, baseline_shortlist)
-            self.assertEqual(
-                [
-                    (item["symbol"], item["rank"], item["score"], item["raw_score"], item["final_score"])
-                    for item in observed["selected"]
-                ],
-                baseline_shortlist,
-            )
+            self.assertTrue(baseline_shortlist)
+            self.assertEqual(observed_shortlist, [])
+            self.assertEqual(observed["selected"], [])
             observed_history_calls_before_detail = list(observed_service.data_manager.daily_history_calls)
 
-            candidate = observed["shortlist"][0]
-            self.assertIn("candidateSourceProvenanceFrame", candidate)
-            self.assertEqual(candidate["candidateSourceProvenanceFrame"]["scoreContributionAllowedCount"], 0)
-            self.assertGreater(candidate["candidateSourceProvenanceFrame"]["observationOnlyCount"], 0)
-            observation = candidate["diagnostics"].get("cn_provider_observation")
+            candidate = observed["diagnostics"]["candidate_diagnostics"]["600001"]
+            self.assertEqual(candidate["status"], "rejected")
+            self.assertEqual(candidate["reason"], "factor_evidence_rejected")
+            self.assertIsNone(candidate.get("rank"))
+            factor_evidence = candidate["factorEvidence"]
+            self.assertFalse(factor_evidence["rankingEligible"])
+            self.assertIn("pre_rank:rejected", factor_evidence["blockers"])
+            required_factors = [item for item in factor_evidence["factors"] if item["required"]]
+            self.assertIn("proxy", {item["sourceAuthority"] for item in required_factors})
+            self.assertNotIn("official", {item["sourceAuthority"] for item in required_factors})
+            self.assertTrue(all(item["observedAt"] for item in factor_evidence["factors"]))
+
+            observation = candidate.get("cn_provider_observation")
             self.assertIsInstance(observation, dict)
             self.assertTrue(observation["observationOnly"])
             self.assertFalse(observation["scoreContributionAllowed"])
@@ -4926,35 +5001,13 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             self.assertEqual(entries[0]["sourceTier"], "unofficial_public_api")
             self.assertEqual(entries[1]["capability"], "cn_realtime_snapshot")
             self.assertEqual(entries[1]["trustLevel"], "weak")
-            self.assertEqual(candidate["raw_score"], candidate["final_score"])
-            self.assertEqual(candidate["score"], candidate["raw_score"])
-            explainability = candidate["diagnostics"]["score_explainability"]
-            self.assertIsNone(explainability["cap_reason"])
-            self.assertIsNone(explainability["degradation_reason"])
-            self.assertEqual(explainability["score_confidence"], 1.0)
-            self.assertFalse(explainability["cap_applied"])
-            self.assertTrue(explainability["score_grade_allowed"])
-            self.assertTrue(explainability["source_confidence"]["scoreContributionAllowed"])
-            self.assertFalse(explainability["source_confidence"]["observationOnly"])
-            self.assertIsNotNone(candidate["diagnostics"]["evidence_packet"]["providerObservation"])
-            self.assertTrue(candidate["diagnostics"]["evidence_packet"]["providerObservation"]["observationOnly"])
 
             detail = observed_service.get_run_detail(observed["id"])
             assert detail is not None
-            self.assertEqual(
-                [
-                    (item["symbol"], item["rank"], item["score"], item["raw_score"], item["final_score"])
-                    for item in detail["shortlist"]
-                ],
-                baseline_shortlist,
-            )
-            self.assertEqual(
-                [
-                    (item["symbol"], item["rank"], item["score"], item["raw_score"], item["final_score"])
-                    for item in detail["selected"]
-                ],
-                baseline_shortlist,
-            )
+            self.assertEqual(detail["shortlist"], [])
+            persisted = detail["diagnostics"]["candidate_diagnostics"]["600001"]
+            self.assertEqual(persisted["factorEvidence"], factor_evidence)
+            self.assertTrue(persisted["cn_provider_observation"]["observationOnly"])
             self.assertEqual(observed_service.data_manager.daily_history_calls, observed_history_calls_before_detail)
 
     def test_run_scan_attaches_baostock_scanner_diagnostics_sidecar_without_changing_scores_or_ranks(self) -> None:
@@ -5018,8 +5071,12 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             ]
             self.assertEqual(observed_shortlist, baseline_shortlist)
 
-            candidate = observed["shortlist"][0]
-            observation = candidate["diagnostics"].get("cn_provider_observation")
+            self.assertEqual(observed["shortlist"], [])
+            candidate = observed["diagnostics"]["candidate_diagnostics"]["600001"]
+            self.assertEqual(candidate["status"], "rejected")
+            self.assertEqual(candidate["reason"], "factor_evidence_rejected")
+            self.assertFalse(candidate["factorEvidence"]["rankingEligible"])
+            observation = candidate.get("cn_provider_observation")
             self.assertIsInstance(observation, dict)
             self.assertTrue(observation["observationOnly"])
             self.assertFalse(observation["scoreContributionAllowed"])
@@ -5046,11 +5103,6 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             self.assertEqual(baostock_entry["adjustmentMethod"], "baostock_adjustflag_2")
             self.assertTrue(baostock_entry["observationOnly"])
             self.assertFalse(baostock_entry["scoreContributionAllowed"])
-
-            evidence_observation = candidate["diagnostics"]["evidence_packet"]["providerObservation"]
-            self.assertIsInstance(evidence_observation, dict)
-            self.assertEqual(evidence_observation["entries"][2]["providerName"], "baostock")
-            self.assertEqual(evidence_observation["entries"][2]["freshness"], "stale")
 
     def test_public_candidate_dict_adds_cn_candidate_evidence_frame_for_observe_only_and_blocked_inputs(self) -> None:
         service = object.__new__(MarketScannerService)

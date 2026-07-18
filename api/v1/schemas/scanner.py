@@ -867,6 +867,18 @@ def _build_candidate_diagnostic_consumer_projection(
     }
 
 
+def _validate_factor_evidence_contract(value: Dict[str, Any]) -> Dict[str, Any]:
+    if value.get("contractVersion") != "scanner_factor_evidence_v1":
+        raise ValueError("factorEvidence.contractVersion is required")
+    if value.get("overallState") not in {"valid", "blocked"}:
+        raise ValueError("factorEvidence.overallState must be valid or blocked")
+    if not isinstance(value.get("rankingEligible"), bool):
+        raise ValueError("factorEvidence.rankingEligible must be explicit")
+    if not isinstance(value.get("factors"), list):
+        raise ValueError("factorEvidence.factors must be explicit")
+    return value
+
+
 class ScannerCandidateResponse(BaseModel):
     symbol: str
     market: Optional[str] = None
@@ -896,6 +908,7 @@ class ScannerCandidateResponse(BaseModel):
     ai_interpretation: ScannerAiInterpretationResponse = Field(default_factory=ScannerAiInterpretationResponse)
     realized_outcome: ScannerCandidateOutcomeResponse = Field(default_factory=ScannerCandidateOutcomeResponse)
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
+    factorEvidence: Dict[str, Any]
     consumerDiagnostics: Dict[str, Any] = Field(default_factory=dict)
     historicalOhlcvReadiness: Dict[str, Any] = Field(default_factory=dict)
     candidateEvidenceFrame: Dict[str, Any] = Field(default_factory=dict)
@@ -912,6 +925,11 @@ class ScannerCandidateResponse(BaseModel):
     @classmethod
     def _validate_explainability_diagnostics(cls, value: Dict[str, Any]) -> Dict[str, Any]:
         return _lock_candidate_diagnostics_metadata(value)
+
+    @field_validator("factorEvidence")
+    @classmethod
+    def _validate_factor_evidence(cls, value: Dict[str, Any]) -> Dict[str, Any]:
+        return _validate_factor_evidence_contract(value)
 
     @field_validator("consumerDiagnostics")
     @classmethod
@@ -976,11 +994,17 @@ class ScannerCandidateDiagnosticsResponse(BaseModel):
     consumerDiagnostics: Dict[str, Any] = Field(default_factory=dict)
     historicalOhlcvReadiness: Dict[str, Any] = Field(default_factory=dict)
     cn_provider_observation: Dict[str, Any] = Field(default_factory=dict)
+    factorEvidence: Dict[str, Any]
 
     @field_validator("consumerDiagnostics")
     @classmethod
     def _validate_consumer_diagnostics(cls, value: Dict[str, Any]) -> Dict[str, Any]:
         return _dump_metadata_model(ScannerConsumerDiagnosticsMetadata, value)
+
+    @field_validator("factorEvidence")
+    @classmethod
+    def _validate_factor_evidence(cls, value: Dict[str, Any]) -> Dict[str, Any]:
+        return _validate_factor_evidence_contract(value)
 
     @model_validator(mode="after")
     def _populate_consumer_projection(self) -> "ScannerCandidateDiagnosticsResponse":

@@ -553,7 +553,12 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["market"], "us")
         self.assertEqual(detail["profile"], "us_preopen_v1")
         self.assertEqual(detail["trigger_mode"], "scheduled")
-        self.assertTrue(detail["headline"].startswith("今日美股盘前优先观察："))
+        self.assertEqual(detail["headline"], "本次扫描未生成可执行观察名单。")
+        self.assertEqual(detail["shortlist"], [])
+        self.assertEqual(
+            detail["diagnostics"]["dataReadiness"]["candidateGenerationBlockers"],
+            ["missing_quote_snapshot"],
+        )
         self.assertEqual(detail["diagnostics"]["benchmark_context"]["benchmark_code"], "SPY")
 
         status = ops_service.get_operational_status(market="us", profile="us_preopen_v1")

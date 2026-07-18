@@ -54,6 +54,8 @@ SCANNER_UNIVERSE_SAFE_DATA_FAMILIES = (
     "date_coverage",
     "freshness",
     "adjusted_prices",
+    "factor_evidence",
+    "source_authority",
 )
 
 FileMtimeReader = Callable[[Path], float | None]
