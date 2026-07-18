@@ -23,6 +23,12 @@ from src.services.market_regime_evidence_service import (  # noqa: E402
 )
 
 
+# The evidence service owns these readiness states. This diagnostic command
+# explicitly permits partial output, but exit success never implies release approval.
+MARKET_REGIME_EVIDENCE_STATUSES = frozenset({"ready", "partial", "blocked", "failed_closed"})
+CLI_SUCCESS_STATUSES = frozenset({"ready", "partial"})
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
@@ -38,7 +44,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         quote_max_age_seconds=args.quote_max_age_seconds,
     )
     print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
-    return 0 if payload.get("status") in {"ok", "partial"} else 2
+    return _exit_code_for_status(payload.get("status"))
+
+
+def _exit_code_for_status(status: object) -> int:
+    if not isinstance(status, str) or status not in MARKET_REGIME_EVIDENCE_STATUSES:
+        return 2
+    return 0 if status in CLI_SUCCESS_STATUSES else 2
 
 
 def _build_parser() -> argparse.ArgumentParser:

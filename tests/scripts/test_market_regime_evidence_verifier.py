@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from scripts.market_regime_evidence_verifier import main
+from scripts import market_regime_evidence_verifier as verifier
 
 
 START_DATE = date(2026, 1, 2)
@@ -57,13 +57,13 @@ def _write_quote_cache(cache_path: Path) -> None:
     )
 
 
-def test_cli_outputs_market_regime_evidence_pack_from_explicit_local_paths(tmp_path: Path, capsys) -> None:
+def test_cli_outputs_market_regime_evidence_pack_from_explicit_local_paths(tmp_path: Path, capsys, monkeypatch) -> None:
     ohlcv_cache_dir = tmp_path / "us-parquet-cache"
     quote_cache_path = tmp_path / "quote-snapshot-cache" / "us-starter-quotes.json"
     _write_ohlcv_cache(ohlcv_cache_dir)
     _write_quote_cache(quote_cache_path)
 
-    exit_code = main(
+    exit_code = verifier.main(
         [
             "--market",
             "US",
@@ -85,8 +85,32 @@ def test_cli_outputs_market_regime_evidence_pack_from_explicit_local_paths(tmp_p
     payload = json.loads(captured.out)
 
     assert exit_code == 0
+    assert list(payload) == sorted(payload)
     assert payload["contractVersion"] == "market_regime_evidence_pack_v1"
-    assert payload["status"] == "ok"
+    assert payload["status"] == "ready"
     assert payload["consumerSafe"] is True
+    assert payload["providerCallsEnabled"] is False
+    assert payload["networkCallsEnabled"] is False
+    assert payload["mutationEnabled"] is False
     assert payload["evidence"]["historicalOhlcvCoverage"]["requiredBars"] == 60
     assert payload["quoteSnapshotEvidence"]["availableSymbols"] == SYMBOLS
+
+    for status, expected_exit_code in (
+        ("partial", 0),
+        ("blocked", 2),
+        ("failed", 2),
+        ("failed_closed", 2),
+        ("malformed", 2),
+        ("missing", 2),
+        ("unknown_future_status", 2),
+        (None, 2),
+        ([], 2),
+    ):
+        monkeypatch.setattr(
+            verifier,
+            "build_market_regime_evidence_pack",
+            lambda **_kwargs: {"status": status},
+        )
+
+        assert verifier.main(["--ohlcv-cache-dir", "/local-only-inputs"]) == expected_exit_code
+        assert json.loads(capsys.readouterr().out) == {"status": status}
