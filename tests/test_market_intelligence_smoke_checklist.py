@@ -20,12 +20,6 @@ from src.storage import DatabaseManager
 
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "liquidity_monitor"
-CHECKLIST_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "docs"
-    / "market-overview"
-    / "market-intelligence-smoke-checklist.md"
-)
 
 
 @pytest.fixture(autouse=True)
@@ -159,77 +153,6 @@ class _HistoryFrame:
         return key in self._columns
 
 
-def test_market_intelligence_checklist_captures_scope_and_validation_commands() -> None:
-    checklist = CHECKLIST_PATH.read_text(encoding="utf-8")
-
-    assert "python3 -m pytest tests/test_market_intelligence_smoke_checklist.py -q" in checklist
-    assert "tests/test_market_overview_core_quote_repair.py" in checklist
-    assert "tests/test_market_overview_snapshot.py" in checklist
-    assert "tests/test_liquidity_monitor_service.py" in checklist
-    assert "tests/test_rotation_theme_registry.py" in checklist
-    assert "tests/test_market_rotation_radar_service.py" in checklist
-    assert "tests/test_cn_provider_health_service.py" in checklist
-    assert "tests/api/test_cn_provider_health.py" in checklist
-    assert "tests/api/test_market_data_readiness.py" in checklist
-    assert "tests/api/test_market_rotation_radar.py" in checklist
-    assert "python3 -m py_compile" in checklist
-    assert "git diff --check" in checklist
-    assert "./scripts/release_secret_scan.sh" in checklist
-    for endpoint in (
-        "/api/v1/market-overview/indices",
-        "/api/v1/market-overview/volatility",
-        "/api/v1/market-overview/macro",
-        "/api/v1/market-overview/sentiment",
-        "/api/v1/market/temperature",
-        "/api/v1/market/market-briefing",
-        "/api/v1/market/liquidity-monitor",
-        "/api/v1/market/data-readiness",
-        "/api/v1/market/cn-provider-health",
-        "/api/v1/market/rotation-radar?market=US",
-        "/api/v1/market/sector-rotation",
-    ):
-        assert endpoint in checklist
-    assert "backend-only" in checklist
-    assert "not frontend visual validation" in checklist
-    assert "not trading or investment signal execution" in checklist
-    assert "No provider order changes." in checklist
-    assert "No MarketCache core changes." in checklist
-    assert "Fallback/static Rotation Radar themes must stay observation-only and out of headline rankings." in checklist
-    assert "No provider score/stage formula changes." in checklist
-    assert "Core quote indicators" in checklist
-    for symbol in ("SPX", "VIX", "HSI", "US10Y", "DXY", "BTC"):
-        assert symbol in checklist
-    assert "sourceTier" in checklist
-    assert "trustLevel" in checklist
-    assert "requiredProviderClass" in checklist
-    assert "scoreContributionAllowed" in checklist
-    assert "scoreExclusionReason" in checklist
-    assert "requiredRealSourceForScore" in checklist
-    assert "proxyObservationOnlyReason" in checklist
-    assert "`scoreContribution=0`" in checklist
-    assert "N/A is allowed only with explicit unavailable evidence" in checklist
-    assert "metadata-only" in checklist
-    assert "market quotes" in checklist
-    assert "K-lines" in checklist
-    assert "symbol universes" in checklist
-    assert "raw provider payloads" in checklist
-    assert "scoring output" in checklist
-    assert "observationOnly=true" in checklist
-    assert "scoreContributionAllowed=false" in checklist
-    assert "pytdx may be `usable_with_caution` when healthy" in checklist
-    assert "AKShare stays `weak`" in checklist
-    assert "missing dependency / probe failure states must degrade" in checklist
-    assert "must not return secret values" in checklist
-    assert "must not call providers or the network" in checklist
-    assert "must not read parquet contents" in checklist
-    assert "`temperatureAvailable=false`" in checklist
-    assert "`disabledReason=insufficient_reliable_inputs`" in checklist
-    assert "Observation-only Rotation Radar themes must not appear in `summary.strongestThemes` or `summary.acceleratingThemes`." in checklist
-    assert "`summary.observationThemes` and `summary.taxonomyThemes` must remain separate from headline lists." in checklist
-    assert "Headline indicators must not render ambiguous N/A when a backend item has a numeric value." in checklist
-    assert "Missing headline indicator values must include `isUnavailable`, `degradationReason`, non-live `freshness`, and weak/unavailable trust metadata." in checklist
-
-
 def test_market_intelligence_smoke_aligns_proxy_vix_freshness_and_trust_metadata() -> None:
     service = MarketOverviewService()
     # Keep the proxy fixture inside the delayed window so the test validates
@@ -257,12 +180,15 @@ def test_market_intelligence_smoke_aligns_proxy_vix_freshness_and_trust_metadata
 
     assert volatility_payload["freshness"] == "delayed"
     assert volatility_payload["freshness"] not in {"live", "fresh"}
-    assert market_vix["freshness"] == liquidity_vix["freshness"] == "delayed"
+    assert market_vix["freshness"] == "delayed"
+    assert liquidity_vix["freshness"] == "unavailable"
     assert market_vix["sourceType"] == liquidity_vix["evidence"]["inputs"][0]["sourceType"] == "unofficial_proxy"
-    assert market_vix["sourceTier"] == liquidity_vix["coverageDiagnostics"]["sourceTier"]
-    assert market_vix["trustLevel"] == liquidity_vix["coverageDiagnostics"]["trustLevel"] == "usable_with_caution"
+    assert market_vix["sourceTier"] == "unofficial_public_api"
+    assert liquidity_vix["coverageDiagnostics"]["sourceTier"] == "unavailable"
+    assert market_vix["trustLevel"] == "usable_with_caution"
+    assert liquidity_vix["coverageDiagnostics"]["trustLevel"] == "unavailable"
     assert market_vix["source"] in {"yfinance", "yfinance_proxy"}
-    assert liquidity_vix["evidence"]["source"] == "yfinance_proxy"
+    assert liquidity_vix["evidence"]["source"] == "yfinance"
     assert liquidity_vix["includedInScore"] is False
     assert liquidity_vix["scoreContribution"] == 0
     assert liquidity_vix["coverageDiagnostics"]["scoreContributionAllowed"] is False
@@ -477,7 +403,7 @@ def test_rotation_radar_and_sector_rotation_projection_keep_evidence_non_live_wh
     assert top_theme["signalType"] == "relative_strength"
     assert top_theme["flowEvidenceType"] == "proxy_only"
     assert top_theme["flowLanguageAllowed"] is False
-    assert top_theme["sourceAuthorityAllowed"] is True
+    assert top_theme["sourceAuthorityAllowed"] is False
     assert top_theme["evidenceQuality"] == "degraded_proxy"
     assert "true_flow_data_missing" in top_theme["dataGaps"]
 

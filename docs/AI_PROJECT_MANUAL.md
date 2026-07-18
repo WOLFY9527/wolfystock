@@ -19,6 +19,10 @@ Do not use as: launch approval, protected-domain authorization, stale audit auth
 - [Backend API And Service Structure](#backend-api-and-service-structure)
 - [Data Providers And Data Reality Boundaries](#data-providers-and-data-reality-boundaries)
 - [Market, Options, Macro, Liquidity, Backtest, Scenario, And Portfolio Domains](#market-options-macro-liquidity-backtest-scenario-and-portfolio-domains)
+- [Operator Evidence Boundary](#operator-evidence-boundary)
+- [Data Coverage Consumer Projection](#data-coverage-consumer-projection)
+- [DuckDB Diagnostic Boundary](#duckdb-diagnostic-boundary)
+- [Provider Provenance Vocabulary](#provider-provenance-vocabulary)
 - [Professional Analytics Roadmap And Readiness](#professional-analytics-roadmap-and-readiness)
 - [Production Readiness Documentation Authority](#production-readiness-documentation-authority)
 - [Protected Domains And Safety Rules](#protected-domains-and-safety-rules)
@@ -125,6 +129,44 @@ Scenario Lab compares bounded shocks. Request-supplied, fallback, static, sample
 Backtest owns deterministic rule evaluation, stored result readback, exports, compare workflows, and research-useful v1 semantics. Do not change fills, costs, metrics, benchmark semantics, parameter/winner meaning, local-only universe execution, or stored-result authority without explicit versioning and focused tests.
 
 Portfolio owns accounts, holdings, cash, transactions, P&L, FX/native currency, cost basis, broker sync/import overlays, ledger mutations, and read projections. UI work must not recalculate accounting authority or imply broker order execution.
+
+Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md).
+
+## Operator Evidence Boundary
+
+Operator evidence tooling works only with sanitized artifacts and supports manual review; it does not make a release, deployment, or launch decision. Use the repository-owned offline helpers for preflight, workflow smoke, workflow execution, schema reference rendering, archive packaging, gap analysis, bundle comparison, and artifact sanitization. Their script paths are `scripts/operator_evidence_preflight.py`, `scripts/operator_evidence_workflow_smoke.py`, `scripts/operator_evidence_workflow_run.py`, `scripts/operator_evidence_schema_reference.py`, `scripts/operator_evidence_archive_pack.py`, `scripts/operator_evidence_gap_analyzer.py`, `scripts/operator_evidence_bundle_diff.py`, and `scripts/evidence_artifact_sanitize.py`.
+
+Keep raw credentials, cookies, sessions, private URLs, private local paths, provider payloads, database material, request/response bodies, and raw logs out of evidence inputs and reports. The scripts' `--help` output is the command interface authority; their validators define the accepted sanitized artifact shapes.
+
+Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md).
+
+## Data Coverage Consumer Projection
+
+Consumer coverage communicates only the visible availability state and its short product message. It does not expose internal provider, source, routing, or scoring fields.
+
+| Surface | State | Consumer message |
+| --- | --- | --- |
+| Market Overview | AVAILABLE | No additional headline. |
+| Liquidity | PARTIAL | 部分数据暂不可用。 |
+| Scanner | INSUFFICIENT | 当前信号置信度较低，仅供观察。 |
+| Portfolio | DELAYED | 已使用最近一次可用数据。 |
+| Backtest | UNAVAILABLE | 本模块暂不可用，请稍后重试。 |
+
+Source provenance: [`README.md`](../README.md), [`AGENTS.md`](../AGENTS.md).
+
+## DuckDB Diagnostic Boundary
+
+DuckDB remains an optional diagnostic analytics capability, not a production readiness claim or a replacement for protected runtime semantics. Run only one DuckDB init/ingest/build action at a time during local smoke. Concurrent production operation requires a separately reviewed single-flight ownership design, explicit permissions, bounded inputs, cleanup, and deterministic comparison evidence.
+
+Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md).
+
+## Provider Provenance Vocabulary
+
+### Provenance vocabulary guard
+
+The following fields are not interchangeable and must not be used as aliases for one another: `diagnosticOnly`, `observationOnly`, `authorityGrant`, `sourceAuthorityAllowed`, `scoreContributionAllowed`, `scoreReliabilityAllowed`, `score_grade_allowed`, `scoreGradeEvidenceAllowed`, `freshness`, `stale`, `partial`, and `fallback`.
+
+A diagnostic or observation field does not grant source authority, score contribution, routing, live-call, or decision authority. Freshness describes evidence condition; stale, partial, and fallback evidence remains visible but cannot be silently promoted.
 
 Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md).
 
@@ -307,6 +349,10 @@ This map is generated from the hard-collapse source set. The manual contains abs
 | Backend API And Service Structure | `AGENTS.md`<br>`README.md` | API families, service boundaries, schema contracts, report payloads, or validation routing changes. | Backend gate or closest pytest/py_compile evidence; wider gates for protected/shared contracts. |
 | Data Providers And Data Reality Boundaries | `AGENTS.md`<br>`README.md` | Provider routing, source authority, data readiness, freshness, lineage, or professional-roadmap changes. | Provider/cache/freshness tests, no-live-call proof when relevant, and raw-provider leakage scans. |
 | Market, Options, Macro, Liquidity, Backtest, Scenario, And Portfolio Domains | `AGENTS.md`<br>`README.md` | Any domain readiness, public copy, protected math/accounting, options authority, or macro/liquidity source change. | Domain-focused tests plus no-advice and leakage checks; never use unrelated green tests as proof. |
+| Operator Evidence Boundary | `AGENTS.md`<br>`README.md` | Operator evidence script inventory, sanitization boundary, or review-only semantics change. | Focused operator evidence command-doc tests, safe placeholder scan, generator freshness, and AI asset check. |
+| Data Coverage Consumer Projection | `README.md`<br>`AGENTS.md` | Consumer data-coverage states or visible availability copy change. | Data-coverage projection tests, consumer leakage checks, generator freshness, and no-advice wording checks. |
+| DuckDB Diagnostic Boundary | `AGENTS.md`<br>`README.md` | DuckDB diagnostic scope, concurrency ownership, permissions, or runtime integration changes. | Focused DuckDB service tests, generated-artifact scan, generator freshness, and AI asset check. |
+| Provider Provenance Vocabulary | `AGENTS.md`<br>`README.md` | Provider provenance vocabulary, authority semantics, or confidence caps change. | Provider capability/source-confidence tests, generator freshness, and no-advice or leakage checks. |
 | Professional Analytics Roadmap And Readiness | `README.md`<br>`AGENTS.md` | Professional data roadmap, readiness labels, or evidence-harness expectations change. | Docs/generator validation for handbook changes; domain validation for implementation changes. |
 | Production Readiness Documentation Authority | `AGENTS.md`<br>`README.md`<br>`docs/DOCS_INDEX.md` | Production readiness docs authority, public deployment env flag classifications, or launch evidence policy changes. | Production config readiness tests, manual generator freshness, AI asset check, and link/stale-path scans. |
 | Protected Domains And Safety Rules | `AGENTS.md` | Any protected boundary or safety policy changes. | Focused tests for the exact protected semantic plus diff/status/secret/no-advice checks before reporting completion. |

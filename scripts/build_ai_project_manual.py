@@ -477,6 +477,74 @@ SECTIONS = [
         validation="Domain-focused tests plus no-advice and leakage checks; never use unrelated green tests as proof.",
     ),
     ManualSection(
+        key="operator-evidence-boundary",
+        title="Operator Evidence Boundary",
+        body=(
+            "Operator evidence tooling works only with sanitized artifacts and supports manual review; it does not make a "
+            "release, deployment, or launch decision. Use the repository-owned offline helpers for preflight, workflow "
+            "smoke, workflow execution, schema reference rendering, archive packaging, gap analysis, bundle comparison, "
+            "and artifact sanitization. Their script paths are `scripts/operator_evidence_preflight.py`, "
+            "`scripts/operator_evidence_workflow_smoke.py`, `scripts/operator_evidence_workflow_run.py`, "
+            "`scripts/operator_evidence_schema_reference.py`, `scripts/operator_evidence_archive_pack.py`, "
+            "`scripts/operator_evidence_gap_analyzer.py`, `scripts/operator_evidence_bundle_diff.py`, and "
+            "`scripts/evidence_artifact_sanitize.py`.\n\n"
+            "Keep raw credentials, cookies, sessions, private URLs, private local paths, provider payloads, database "
+            "material, request/response bodies, and raw logs out of evidence inputs and reports. The scripts' `--help` "
+            "output is the command interface authority; their validators define the accepted sanitized artifact shapes."
+        ),
+        source_paths=("AGENTS.md", "README.md"),
+        update_trigger="Operator evidence script inventory, sanitization boundary, or review-only semantics change.",
+        validation="Focused operator evidence command-doc tests, safe placeholder scan, generator freshness, and AI asset check.",
+    ),
+    ManualSection(
+        key="data-coverage-consumer-projection",
+        title="Data Coverage Consumer Projection",
+        body=(
+            "Consumer coverage communicates only the visible availability state and its short product message. "
+            "It does not expose internal provider, source, routing, or scoring fields.\n\n"
+            "| Surface | State | Consumer message |\n"
+            "| --- | --- | --- |\n"
+            "| Market Overview | AVAILABLE | No additional headline. |\n"
+            "| Liquidity | PARTIAL | 部分数据暂不可用。 |\n"
+            "| Scanner | INSUFFICIENT | 当前信号置信度较低，仅供观察。 |\n"
+            "| Portfolio | DELAYED | 已使用最近一次可用数据。 |\n"
+            "| Backtest | UNAVAILABLE | 本模块暂不可用，请稍后重试。 |"
+        ),
+        source_paths=("README.md", "AGENTS.md"),
+        update_trigger="Consumer data-coverage states or visible availability copy change.",
+        validation="Data-coverage projection tests, consumer leakage checks, generator freshness, and no-advice wording checks.",
+    ),
+    ManualSection(
+        key="duckdb-diagnostic-boundary",
+        title="DuckDB Diagnostic Boundary",
+        body=(
+            "DuckDB remains an optional diagnostic analytics capability, not a production readiness claim or a replacement "
+            "for protected runtime semantics. Run only one DuckDB init/ingest/build action at a time during local smoke. "
+            "Concurrent production operation requires a separately reviewed single-flight ownership design, explicit "
+            "permissions, bounded inputs, cleanup, and deterministic comparison evidence."
+        ),
+        source_paths=("AGENTS.md", "README.md"),
+        update_trigger="DuckDB diagnostic scope, concurrency ownership, permissions, or runtime integration changes.",
+        validation="Focused DuckDB service tests, generated-artifact scan, generator freshness, and AI asset check.",
+    ),
+    ManualSection(
+        key="provider-provenance-vocabulary",
+        title="Provider Provenance Vocabulary",
+        body=(
+            "### Provenance vocabulary guard\n\n"
+            "The following fields are not interchangeable and must not be used as aliases for one another: "
+            "`diagnosticOnly`, `observationOnly`, `authorityGrant`, `sourceAuthorityAllowed`, "
+            "`scoreContributionAllowed`, `scoreReliabilityAllowed`, `score_grade_allowed`, "
+            "`scoreGradeEvidenceAllowed`, `freshness`, `stale`, `partial`, and `fallback`.\n\n"
+            "A diagnostic or observation field does not grant source authority, score contribution, routing, live-call, "
+            "or decision authority. Freshness describes evidence condition; stale, partial, and fallback evidence remains "
+            "visible but cannot be silently promoted."
+        ),
+        source_paths=("AGENTS.md", "README.md"),
+        update_trigger="Provider provenance vocabulary, authority semantics, or confidence caps change.",
+        validation="Provider capability/source-confidence tests, generator freshness, and no-advice or leakage checks.",
+    ),
+    ManualSection(
         key="professional-roadmap",
         title="Professional Analytics Roadmap And Readiness",
         body=(

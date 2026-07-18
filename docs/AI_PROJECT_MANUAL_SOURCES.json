@@ -59,7 +59,7 @@
     "path": "scripts/build_ai_project_manual.py",
     "readsProductionDataPaths": false,
     "requiresApiKeys": false,
-    "sha256": "22c730b2a9861d8d414615c5a4b6d1eb2394efb0b58d74e20cf850853b40971b",
+    "sha256": "16ef6ef7d4fb654a1d1a1f58660d1188c2b310009b2e4f073785cd1e4d8cf1f3",
     "version": 5
   },
   "includedSources": [
@@ -103,7 +103,7 @@
   "outputs": {
     "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
     "manual": "docs/AI_PROJECT_MANUAL.md",
-    "manualSha256": "881f12f003d1858bee654490d3c2511e91bb766150cd526080684e75b2c2d17a"
+    "manualSha256": "7017e5bd0f8c7e14ed12b736e58e608e527d3fc849d3f80e05ec4cdd559baeec"
   },
   "schemaVersion": 2,
   "sections": [
@@ -176,6 +176,46 @@
       "title": "Market, Options, Macro, Liquidity, Backtest, Scenario, And Portfolio Domains",
       "updateTrigger": "Any domain readiness, public copy, protected math/accounting, options authority, or macro/liquidity source change.",
       "validation": "Domain-focused tests plus no-advice and leakage checks; never use unrelated green tests as proof."
+    },
+    {
+      "key": "operator-evidence-boundary",
+      "sources": [
+        "AGENTS.md",
+        "README.md"
+      ],
+      "title": "Operator Evidence Boundary",
+      "updateTrigger": "Operator evidence script inventory, sanitization boundary, or review-only semantics change.",
+      "validation": "Focused operator evidence command-doc tests, safe placeholder scan, generator freshness, and AI asset check."
+    },
+    {
+      "key": "data-coverage-consumer-projection",
+      "sources": [
+        "README.md",
+        "AGENTS.md"
+      ],
+      "title": "Data Coverage Consumer Projection",
+      "updateTrigger": "Consumer data-coverage states or visible availability copy change.",
+      "validation": "Data-coverage projection tests, consumer leakage checks, generator freshness, and no-advice wording checks."
+    },
+    {
+      "key": "duckdb-diagnostic-boundary",
+      "sources": [
+        "AGENTS.md",
+        "README.md"
+      ],
+      "title": "DuckDB Diagnostic Boundary",
+      "updateTrigger": "DuckDB diagnostic scope, concurrency ownership, permissions, or runtime integration changes.",
+      "validation": "Focused DuckDB service tests, generated-artifact scan, generator freshness, and AI asset check."
+    },
+    {
+      "key": "provider-provenance-vocabulary",
+      "sources": [
+        "AGENTS.md",
+        "README.md"
+      ],
+      "title": "Provider Provenance Vocabulary",
+      "updateTrigger": "Provider provenance vocabulary, authority semantics, or confidence caps change.",
+      "validation": "Provider capability/source-confidence tests, generator freshness, and no-advice or leakage checks."
     },
     {
       "key": "professional-roadmap",

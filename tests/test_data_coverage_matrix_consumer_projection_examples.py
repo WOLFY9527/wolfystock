@@ -11,7 +11,7 @@ import pytest
 from src.services.data_coverage_matrix_contract import project_consumer_data_coverage
 
 
-_DOC_PATH = Path("docs/data-reliability/data-coverage-consumer-projection-examples.md")
+_DOC_PATH = Path("docs/AI_PROJECT_MANUAL.md")
 _FORBIDDEN_CONSUMER_TERMS = (
     "sourceAuthorityAllowed",
     "scoreContributionAllowed",
@@ -177,10 +177,14 @@ def test_consumer_projection_examples_stay_product_safe(
 
 
 def test_consumer_projection_examples_doc_stays_product_language() -> None:
-    content = _DOC_PATH.read_text(encoding="utf-8")
+    manual = _DOC_PATH.read_text(encoding="utf-8")
+    heading = "## Data Coverage Consumer Projection"
+    start = manual.index(heading)
+    end = manual.find("\n## ", start + len(heading))
+    content = manual[start:] if end == -1 else manual[start:end]
 
     for required in (
-        "# Data Coverage Consumer Projection Examples",
+        "## Data Coverage Consumer Projection",
         "Market Overview",
         "Liquidity",
         "Scanner",

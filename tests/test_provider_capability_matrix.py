@@ -40,7 +40,7 @@ from src.services.provider_capability_matrix import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_CONFIG_TEXT = (REPO_ROOT / "src/config.py").read_text(encoding="utf-8")
 PROVIDER_CAPABILITY_METADATA_DOC = (
-    REPO_ROOT / "docs" / "operations" / "provider-capability-metadata.md"
+    REPO_ROOT / "docs" / "AI_PROJECT_MANUAL.md"
 )
 
 EXPECTED_PROVIDER_IDS = {
@@ -465,7 +465,7 @@ def test_provider_capability_support_contracts_use_known_onboarding_vocabulary()
 def test_provider_capability_metadata_documents_provenance_vocabulary_parity_guard() -> None:
     text = PROVIDER_CAPABILITY_METADATA_DOC.read_text(encoding="utf-8")
 
-    assert "## Provenance vocabulary parity guard" in text
+    assert "### Provenance vocabulary guard" in text
     assert "not interchangeable" in text
     assert "must not be used as aliases" in text
     assert all(term in text for term in PROVENANCE_VOCABULARY_GUARD_TERMS)

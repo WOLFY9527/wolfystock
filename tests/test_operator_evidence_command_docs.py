@@ -8,12 +8,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-DOC_PATHS = (
-    REPO_ROOT / "docs" / "audits" / "operator-evidence-dry-run-handoff.md",
-    REPO_ROOT / "docs" / "audits" / "operator-evidence-real-runbook.md",
-    REPO_ROOT / "docs" / "audits" / "operator-evidence-redaction-checklist.md",
-    REPO_ROOT / "scripts" / "README.md",
-)
+DOC_PATHS = (REPO_ROOT / "docs" / "AI_PROJECT_MANUAL.md",)
 
 EXPECTED_OFFLINE_CLI_SCRIPTS = (
     "scripts/operator_evidence_preflight.py",

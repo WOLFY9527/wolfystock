@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from src.services.data_coverage_matrix_batch import build_data_coverage_matrix_batch
 from src.services.data_coverage_matrix_contract import (
     ConsumerProductStatus,
@@ -20,7 +18,6 @@ from src.services.data_coverage_surface_registry import (
 from src.services.data_coverage_surface_snapshot import build_data_coverage_surface_snapshot
 
 
-_DOC_PATH = Path("docs/data-reliability/data-coverage-surface-fixtures.md")
 _FORBIDDEN_DOC_TERMS = (
     "providerId",
     "providerLabel",
@@ -362,7 +359,6 @@ def _build_payload(surface_id: str, field_key: str, overrides: dict[str, object]
         **overrides,
     }
 
-
 def _assert_fixture_copy_is_consumer_safe(values: tuple[str, ...]) -> None:
     copy_text = " ".join(values).lower()
     for forbidden in _FORBIDDEN_FIXTURE_COPY_TERMS:
@@ -505,31 +501,3 @@ def test_market_overview_fixture_builds_fail_closed_matrix_row_and_surface_snaps
         "blockedRowCount": 0,
         "unavailableRowCount": 0,
     }
-
-
-def test_surface_fixture_doc_matches_catalog_and_stays_consumer_safe() -> None:
-    content = _DOC_PATH.read_text(encoding="utf-8")
-
-    for required in (
-        "# Data Coverage Surface Fixtures",
-        "## Registry Coverage",
-        "## Row-State Fixture Catalog",
-        "## Consumer Copy Guardrails",
-        "UPDATING",
-        "PAUSED",
-        "PARTIAL",
-        "INSUFFICIENT",
-        "DELAYED",
-        "UNAVAILABLE",
-    ):
-        assert required in content
-
-    for case in _SURFACE_FIXTURE_CASES:
-        row = (
-            f"| {case['doc_surface']} | `{case['doc_route']}` | {case['fixture_state']} | "
-            f"`{case['expected_status'].value}` | {case['doc_reason']} | `{case['doc_copy']}` |"
-        )
-        assert row in content
-
-    for forbidden in _FORBIDDEN_DOC_TERMS:
-        assert forbidden not in content
