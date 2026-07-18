@@ -36,6 +36,7 @@ class ScannerStrategySimulationTestCase(unittest.TestCase):
     def setUp(self) -> None:
         DatabaseManager.reset_instance()
         self.db = DatabaseManager(db_url="sqlite:///:memory:")
+        self.db.ensure_bootstrap_admin_user()
         self.repo = ScannerRepository(self.db)
         self.stock_repo = StockRepository(self.db)
         self.service = MarketScannerService(self.db, owner_id=BOOTSTRAP_ADMIN_USER_ID)

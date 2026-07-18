@@ -28,7 +28,7 @@ from api.deps import CurrentUser
 from api.v1.endpoints.analysis import get_task_list
 from src.admin_rbac import OPS_ADMIN_ROLE
 from src.config import Config
-from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
+from src.runtime.composition import RuntimeContainer
 from src.services.market_scanner_service import MarketScannerService
 from src.services.portfolio_service import PortfolioService
 from src.services.task_queue import AnalysisTaskQueue, TaskStatus
@@ -83,13 +83,18 @@ class MultiUserAuthorizationApiTestCase(unittest.TestCase):
         Config.reset_instance()
         DatabaseManager.reset_instance()
 
-        self.app = create_app(static_dir=self.data_dir / "empty-static")
-        self.admin_client = TestClient(self.app)
+        self.runtime_container = RuntimeContainer()
+        self.app = create_app(self.runtime_container, static_dir=self.data_dir / "empty-static")
+        self.admin_client_context = TestClient(self.app)
+        self.assertFalse(self.runtime_container.is_started)
+        self.admin_client = self.admin_client_context.__enter__()
+        self.assertTrue(self.runtime_container.is_started)
         self.user_a_client = TestClient(self.app)
         self.user_b_client = TestClient(self.app)
         self.db = DatabaseManager.get_instance()
+        bootstrap_admin = self.db.ensure_bootstrap_admin_user()
         with self.db.get_session() as session:
-            session.add(AdminUserRole(user_id=BOOTSTRAP_ADMIN_USER_ID, role_key=OPS_ADMIN_ROLE))
+            session.add(AdminUserRole(user_id=str(bootstrap_admin.id), role_key=OPS_ADMIN_ROLE))
             session.commit()
 
         self._login_admin()
@@ -98,9 +103,10 @@ class MultiUserAuthorizationApiTestCase(unittest.TestCase):
         self.user_b_id = self._login_user(self.user_b_client, "bob", "Bob")
 
     def tearDown(self) -> None:
-        self.admin_client.close()
         self.user_a_client.close()
         self.user_b_client.close()
+        self.admin_client_context.__exit__(None, None, None)
+        self.assertFalse(self.runtime_container.is_started)
         DatabaseManager.reset_instance()
         Config.reset_instance()
         os.environ.pop("ENV_FILE", None)
@@ -215,6 +221,8 @@ class MultiUserAuthorizationApiTestCase(unittest.TestCase):
         return run_a, system_run, run_b
 
     def test_admin_only_surfaces_are_backend_protected(self) -> None:
+        self.assertTrue(self.runtime_container.is_started)
+
         user_resp = self.user_a_client.get("/api/v1/system/config")
         self.assertEqual(user_resp.status_code, 403)
         self.assertEqual(self._error_code(user_resp), "admin_required")
@@ -404,6 +412,7 @@ class MultiUserAuthorizationApiTestCase(unittest.TestCase):
         self.assertEqual(own_history_resp.status_code, 200)
 
     def test_portfolio_events_and_broker_connections_stay_owner_scoped(self) -> None:
+        raw_broker_account_ref = "U7654321"
         service_a = PortfolioService(owner_id=self.user_a_id)
         account_a = service_a.create_account(
             name="Alice Global",
@@ -443,7 +452,7 @@ class MultiUserAuthorizationApiTestCase(unittest.TestCase):
             broker_type="ibkr",
             broker_name="Interactive Brokers",
             connection_name="Alice IBKR",
-            broker_account_ref="U7654321",
+            broker_account_ref=raw_broker_account_ref,
             sync_metadata={"source": "flex"},
         )
 
@@ -463,11 +472,22 @@ class MultiUserAuthorizationApiTestCase(unittest.TestCase):
             json={"connection_name": "Bob Hack"},
         )
         self.assertEqual(update_b_resp.status_code, 404)
+        self.assertNotIn(raw_broker_account_ref, json.dumps(update_b_resp.json(), sort_keys=True))
 
         list_a_resp = self.user_a_client.get("/api/v1/portfolio/broker-connections")
         self.assertEqual(list_a_resp.status_code, 200)
         self.assertEqual(len(list_a_resp.json()["connections"]), 1)
-        self.assertEqual(list_a_resp.json()["connections"][0]["broker_account_ref"], "U7654321")
+        redacted_account_ref = list_a_resp.json()["connections"][0]["broker_account_ref"]
+        self.assertRegex(redacted_account_ref, r"^acct_[a-f0-9]{12}$")
+        self.assertNotEqual(redacted_account_ref, raw_broker_account_ref)
+        self.assertNotIn(raw_broker_account_ref, json.dumps(list_a_resp.json(), sort_keys=True))
+
+        repeated_list_a_resp = self.user_a_client.get("/api/v1/portfolio/broker-connections")
+        self.assertEqual(repeated_list_a_resp.status_code, 200)
+        self.assertEqual(
+            repeated_list_a_resp.json()["connections"][0]["broker_account_ref"],
+            redacted_account_ref,
+        )
 
     def test_broker_import_commit_is_owner_scoped(self) -> None:
         account_a = PortfolioService(owner_id=self.user_a_id).create_account(

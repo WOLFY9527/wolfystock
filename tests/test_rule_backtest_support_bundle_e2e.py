@@ -199,6 +199,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         self.app = create_app(static_dir=self.data_dir / "empty-static")
         self.client = TestClient(self.app)
         self.db = DatabaseManager.get_instance()
+        self.db.ensure_bootstrap_admin_user()
 
         with self.db.get_session() as session:
             closes = [
