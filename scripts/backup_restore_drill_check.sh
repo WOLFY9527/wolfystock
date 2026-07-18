@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SMOKE_TEST_PATH="${ROOT_DIR}/tests/test_backup_restore_drill_smoke.py"
+SAFE_ROOT_HELPER="${SCRIPT_DIR}/backup_restore_drill_safe_root.py"
 METADATA_PATH=""
 RESTORE_TARGET_PATH="${DATABASE_PATH:-}"
 RESTORE_DSN=""
@@ -24,6 +25,10 @@ simulated metadata. The checker validates artifact presence, timestamp
 freshness, schema compatibility, PITR/WAL evidence, and restore target
 isolation without restoring databases or touching production systems.
 
+--restore-target is accepted only when it resolves inside the exact temporary
+root established for the current ./wolfy test run. Repository, home, cache,
+other-run, parent, and symlink-escaped paths are refused.
+
 --restore-dsn is validation-only. Any DSN is refused unless
 WOLFYSTOCK_RESTORE_PREFLIGHT_SAFE_TEST_DSN=1 is set, and even then only local
 synthetic/test restore targets are accepted.
@@ -34,17 +39,6 @@ restore itself; without this artifact, real restore execution remains pending.
 USAGE
 }
 
-is_temp_like_path() {
-  case "$1" in
-    /tmp/*|/private/tmp/*|/var/folders/*|/private/var/folders/*)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
 refuse_unsafe_restore_target() {
   local path="$1"
 
@@ -53,21 +47,20 @@ refuse_unsafe_restore_target() {
     exit 1
   fi
 
-  if is_temp_like_path "${path}"; then
-    return 0
+  if [[ ! -f "${SAFE_ROOT_HELPER}" ]]; then
+    echo "[FAIL] Restore target validator unavailable" >&2
+    exit 1
   fi
 
-  echo "[FAIL] Unsafe restore target refused" >&2
-  echo "Only temp-like paths under /tmp, /private/tmp, /var/folders, or /private/var/folders are accepted." >&2
-  exit 1
+  python3 "${SAFE_ROOT_HELPER}" "${path}" "${ROOT_DIR}"
 }
 
 refuse_existing_restore_target() {
   local path="$1"
 
-  if [[ -e "${path}" ]]; then
+  if [[ -e "${path}" || -L "${path}" ]]; then
     echo "[FAIL] Restore target already exists" >&2
-    echo "Use a fresh temp-only target to avoid accidental overwrite planning." >&2
+    echo "Use a fresh target inside the current managed test run temporary root." >&2
     exit 1
   fi
 }
@@ -624,7 +617,7 @@ echo "Smoke test: tests/test_backup_restore_drill_smoke.py: present"
 validate_restore_dsn "${RESTORE_DSN}"
 validate_backup_metadata
 validate_real_restore_evidence
-echo "Restore target isolation: accepted (temp-only, target does not exist)"
+echo "Restore target isolation: accepted (current managed test run temp root, target does not exist)"
 echo "Restore execution: disabled by default (preflight only; no restore command is invoked)"
 echo "Dry-run evidence: suitable for launch readiness review"
 echo "Focused test command: python3 -m pytest tests/test_backup_restore_drill_smoke.py -q"

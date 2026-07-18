@@ -2,12 +2,16 @@ import shutil
 import subprocess
 import json
 import os
+import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_SOURCE = REPO_ROOT / "scripts" / "backup_restore_drill_check.sh"
+SAFE_ROOT_HELPER_SOURCE = REPO_ROOT / "scripts" / "backup_restore_drill_safe_root.py"
 
 
 def _run(cmd, cwd: Path, **kwargs):
@@ -21,6 +25,7 @@ def _init_repo(tmp_path: Path) -> Path:
     (repo / "tests").mkdir()
     (repo / "tests" / "fixtures" / "ops").mkdir(parents=True, exist_ok=True)
     shutil.copy2(SCRIPT_SOURCE, repo / "scripts" / "backup_restore_drill_check.sh")
+    shutil.copy2(SAFE_ROOT_HELPER_SOURCE, repo / "scripts" / "backup_restore_drill_safe_root.py")
     (repo / "tests" / "test_backup_restore_drill_smoke.py").write_text(
         "# disposable restore smoke placeholder\n",
         encoding="utf-8",
@@ -65,8 +70,29 @@ def _init_repo(tmp_path: Path) -> Path:
     return repo
 
 
-def _drill_check(repo: Path, *args: str, **kwargs):
-    return _run(["bash", "scripts/backup_restore_drill_check.sh", *args], repo, **kwargs)
+def _drill_check(repo: Path, *args: str, safe_test_dsn: bool = False, **kwargs):
+    command = ["bash", "scripts/backup_restore_drill_check.sh", *args]
+    if safe_test_dsn:
+        command = ["env", "WOLFYSTOCK_RESTORE_PREFLIGHT_SAFE_TEST_DSN=1", *command]
+    return _run(command, repo, **kwargs)
+
+
+def _managed_cache_root() -> Path:
+    return Path(os.environ["WOLFYSTOCK_ENV_CACHE"])
+
+
+def _managed_run_root() -> Path:
+    run_id = os.environ["WOLFYSTOCK_TEST_RUN_ID"]
+    return _managed_cache_root() / "runs" / "active" / run_id
+
+
+def _managed_temp_root() -> Path:
+    return _managed_run_root() / "tmp"
+
+
+def _sibling_run_id() -> str:
+    run_id = os.environ["WOLFYSTOCK_TEST_RUN_ID"]
+    return run_id[:-1] + ("0" if run_id[-1] != "0" else "1")
 
 
 def _write_metadata(
@@ -181,12 +207,15 @@ def test_backup_restore_drill_check_prints_production_like_preflight_evidence(tm
     artifact_path.write_text("synthetic backup placeholder\n", encoding="utf-8")
     metadata_path = _write_metadata(repo, artifact_path)
 
+    restore_target = tmp_path / "restore-target" / "restored.sqlite"
+    assert restore_target.resolve().is_relative_to(_managed_temp_root().resolve())
+
     result = _drill_check(
         repo,
         "--metadata",
         str(metadata_path),
         "--restore-target",
-        str(tmp_path / "restore-target" / "restored.sqlite"),
+        str(restore_target),
     )
 
     assert result.returncode == 0
@@ -451,9 +480,136 @@ def test_backup_restore_drill_check_rejects_unsafe_db_path(tmp_path):
     assert "/var/lib/postgresql/prod/wolfystock.sqlite" not in result.stderr
 
 
+@pytest.mark.parametrize(
+    "target_factory",
+    [
+        lambda repo: _managed_run_root().parent / _sibling_run_id() / "tmp" / "restore.pg",
+        lambda repo: _managed_run_root() / "restore.pg",
+        lambda repo: Path(os.environ["HOME"]) / "restore.pg",
+        lambda repo: repo / "restore.pg",
+        lambda repo: (
+            _managed_cache_root().parent
+            / "unknown-environment-cache"
+            / "runs"
+            / "active"
+            / os.environ["WOLFYSTOCK_TEST_RUN_ID"]
+            / "tmp"
+            / "restore.pg"
+        ),
+    ],
+    ids=[
+        "sibling-managed-run",
+        "managed-run-parent",
+        "managed-user-home",
+        "repository-tree",
+        "unknown-cache-root",
+    ],
+)
+def test_backup_restore_drill_check_rejects_path_outside_current_managed_temp_root(
+    tmp_path, target_factory
+):
+    repo = _init_repo(tmp_path)
+    metadata_path = repo / "tests" / "fixtures" / "ops" / "backup_restore_preflight_metadata.json"
+    restore_target = target_factory(repo)
+
+    result = _drill_check(
+        repo,
+        "--metadata",
+        str(metadata_path),
+        "--restore-target",
+        str(restore_target),
+    )
+
+    assert result.returncode == 1
+    assert "[FAIL] Unsafe restore target refused" in result.stderr
+    assert str(restore_target) not in result.stdout + result.stderr
+
+
+def test_backup_restore_drill_check_rejects_arbitrary_system_tmp_path(tmp_path):
+    repo = _init_repo(tmp_path)
+    metadata_path = repo / "tests" / "fixtures" / "ops" / "backup_restore_preflight_metadata.json"
+    restore_target = Path("/tmp") / f"wolfystock-t532-{uuid.uuid4().hex}.sqlite"
+
+    result = _drill_check(
+        repo,
+        "--metadata",
+        str(metadata_path),
+        "--restore-target",
+        str(restore_target),
+    )
+
+    assert result.returncode == 1
+    assert "[FAIL] Unsafe restore target refused" in result.stderr
+    assert str(restore_target) not in result.stdout + result.stderr
+
+
+def test_backup_restore_drill_check_rejects_missing_managed_run_identity(tmp_path):
+    repo = _init_repo(tmp_path)
+    metadata_path = repo / "tests" / "fixtures" / "ops" / "backup_restore_preflight_metadata.json"
+    restore_target = tmp_path / "scratch" / "restore.pg"
+    environment = os.environ.copy()
+    environment.pop("WOLFYSTOCK_TEST_RUN_ID")
+
+    result = _drill_check(
+        repo,
+        "--metadata",
+        str(metadata_path),
+        "--restore-target",
+        str(restore_target),
+        env=environment,
+    )
+
+    assert result.returncode == 1
+    assert "[FAIL] Unsafe restore target refused" in result.stderr
+    assert str(restore_target) not in result.stdout + result.stderr
+
+
+def test_backup_restore_drill_check_rejects_symlink_escape(tmp_path):
+    repo = _init_repo(tmp_path)
+    metadata_path = repo / "tests" / "fixtures" / "ops" / "backup_restore_preflight_metadata.json"
+    escape = tmp_path / "escape"
+    escape.symlink_to(Path(os.environ["HOME"]), target_is_directory=True)
+    restore_target = escape / "restore.pg"
+
+    result = _drill_check(
+        repo,
+        "--metadata",
+        str(metadata_path),
+        "--restore-target",
+        str(restore_target),
+    )
+
+    assert result.returncode == 1
+    assert "[FAIL] Unsafe restore target refused" in result.stderr
+    assert str(restore_target) not in result.stdout + result.stderr
+
+
+def test_backup_restore_drill_check_rejects_symlink_loop_without_leaking_path(tmp_path):
+    repo = _init_repo(tmp_path)
+    metadata_path = repo / "tests" / "fixtures" / "ops" / "backup_restore_preflight_metadata.json"
+    loop = tmp_path / "loop"
+    loop.symlink_to(loop.name, target_is_directory=True)
+    restore_target = loop / "restore.pg"
+
+    result = _drill_check(
+        repo,
+        "--metadata",
+        str(metadata_path),
+        "--restore-target",
+        str(restore_target),
+    )
+
+    combined_output = result.stdout + result.stderr
+    assert result.returncode == 1
+    assert "[FAIL] Unsafe restore target refused" in result.stderr
+    assert "Traceback" not in combined_output
+    assert str(restore_target) not in combined_output
+
+
 def test_backup_restore_drill_check_does_not_mutate_files(tmp_path):
     repo = _init_repo(tmp_path)
     metadata_path = repo / "tests" / "fixtures" / "ops" / "backup_restore_preflight_metadata.json"
+    restore_target = tmp_path / "scratch" / "restore.sqlite"
 
     before = _run(["git", "status", "--short"], repo, check=True).stdout
     result = _drill_check(
@@ -461,13 +617,14 @@ def test_backup_restore_drill_check_does_not_mutate_files(tmp_path):
         "--metadata",
         str(metadata_path),
         "--restore-target",
-        str(tmp_path / "scratch" / "restore.sqlite"),
+        str(restore_target),
     )
     after = _run(["git", "status", "--short"], repo, check=True).stdout
 
     assert result.returncode == 0
     assert before == ""
     assert after == ""
+    assert not restore_target.exists()
 
 
 def test_backup_restore_drill_check_fails_without_metadata(tmp_path):
@@ -620,6 +777,47 @@ def test_backup_restore_drill_check_rejects_production_dsn_without_leaking_value
     assert "prod.db.example.com" not in combined_output
 
 
+@pytest.mark.parametrize(
+    ("unsafe_dsn", "expected_error"),
+    [
+        (
+            "postgresql://test_user:remote-secret@db.example.invalid:5432/test_restore",
+            "[FAIL] Restore DSN refused: host is not local",
+        ),
+        (
+            "postgresql://test_user:prod-secret@localhost:5432/wolfystock_restore_production",
+            "[FAIL] Restore DSN refused: production-like DSN marker",
+        ),
+    ],
+    ids=["remote-test-dsn", "local-production-dsn"],
+)
+def test_backup_restore_drill_check_rejects_remote_or_production_dsn_in_safe_test_mode(
+    tmp_path, unsafe_dsn, expected_error
+):
+    repo = _init_repo(tmp_path)
+    artifact_path = tmp_path / "backup-artifacts" / "synthetic-backup.dump"
+    artifact_path.parent.mkdir()
+    artifact_path.write_text("synthetic backup placeholder\n", encoding="utf-8")
+    metadata_path = _write_metadata(repo, artifact_path)
+
+    result = _drill_check(
+        repo,
+        "--metadata",
+        str(metadata_path),
+        "--restore-target",
+        str(tmp_path / "scratch" / "restore.pg"),
+        "--restore-dsn",
+        unsafe_dsn,
+        safe_test_dsn=True,
+    )
+
+    combined_output = result.stdout + result.stderr
+    assert result.returncode == 1
+    assert expected_error in result.stderr
+    assert unsafe_dsn not in combined_output
+    assert unsafe_dsn.split(":", 2)[2].split("@", 1)[0] not in combined_output
+
+
 def test_backup_restore_drill_check_accepts_explicit_local_safe_test_dsn_without_leaking_value(tmp_path):
     repo = _init_repo(tmp_path)
     artifact_path = tmp_path / "backup-artifacts" / "synthetic-backup.dump"
@@ -636,10 +834,7 @@ def test_backup_restore_drill_check_accepts_explicit_local_safe_test_dsn_without
         str(tmp_path / "scratch" / "restore.pg"),
         "--restore-dsn",
         safe_dsn,
-        env={
-            **os.environ,
-            "WOLFYSTOCK_RESTORE_PREFLIGHT_SAFE_TEST_DSN": "1",
-        },
+        safe_test_dsn=True,
     )
 
     combined_output = result.stdout + result.stderr
@@ -670,3 +865,4 @@ def test_backup_restore_drill_check_fails_when_restore_target_exists(tmp_path):
 
     assert result.returncode == 1
     assert "[FAIL] Restore target already exists" in result.stderr
+    assert restore_target.read_text(encoding="utf-8") == "existing restore target\n"
