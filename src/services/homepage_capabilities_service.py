@@ -7,12 +7,22 @@ from api.v1.schemas.homepage_capabilities import (
     HOMEPAGE_CAPABILITIES_CONTRACT_VERSION,
     HomepageCapabilitiesDataQuality,
     HomepageCapabilitiesSnapshot,
-    HomepageCapabilityFlags,
     HomepageCapabilitySection,
 )
 
 
 HOMEPAGE_CAPABILITIES_NO_ADVICE_DISCLOSURE = "首页能力信息仅供研究观察，不构成个性化建议。"
+HOMEPAGE_EXISTING_CAPABILITY_FLAGS: tuple[str, ...] = (
+    "marketPulse",
+    "moneyFlowProxy",
+    "eventRadar",
+    "personalSummary",
+    "researchQueue",
+    "publicDataQuality",
+    "sessionStatus",
+    "eventWindows",
+    "noAdviceBoundary",
+)
 HOMEPAGE_COCKPIT_MODULES: tuple[dict[str, str], ...] = (
     {
         "key": "dailyMarketBrief",
@@ -183,7 +193,7 @@ _CAPABILITY_STATUS_BY_AVAILABILITY = {
 _DEFAULT_DATA_QUALITY = HomepageCapabilitiesDataQuality(
     status="partial",
     label="部分缺失",
-    available=True,
+    available=False,
     description="首页能力信息已整理，样本、代理观察与暂无证据边界已标记。",
 )
 
@@ -213,13 +223,17 @@ class HomepageCapabilitiesService:
             for item in HOMEPAGE_COCKPIT_MODULES
         ]
 
-    def _build_capability_flags(self) -> HomepageCapabilityFlags:
-        return HomepageCapabilityFlags(**{item["key"]: True for item in HOMEPAGE_COCKPIT_MODULES})
+    def _build_capability_flags(self) -> dict[str, bool]:
+        return {
+            **{item["key"]: True for item in HOMEPAGE_COCKPIT_MODULES},
+            **{key: True for key in HOMEPAGE_EXISTING_CAPABILITY_FLAGS},
+        }
 
 
 __all__ = [
     "HOMEPAGE_CAPABILITIES_CONTRACT_VERSION",
     "HOMEPAGE_CAPABILITIES_NO_ADVICE_DISCLOSURE",
     "HOMEPAGE_COCKPIT_MODULES",
+    "HOMEPAGE_EXISTING_CAPABILITY_FLAGS",
     "HomepageCapabilitiesService",
 ]

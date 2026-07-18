@@ -6,11 +6,10 @@ from __future__ import annotations
 import re
 
 HOMEPAGE_PUBLIC_STATUS_LABELS: tuple[str, ...] = (
-    "正常",
+    "已核验",
     "暂无证据",
     "部分缺失",
     "数据延迟",
-    "使用缓存",
     "暂不可用",
     "适合研究观察",
     "需要复核",
@@ -23,12 +22,16 @@ FORBIDDEN_PUBLIC_COPY_MARKERS: tuple[str, ...] = (
     "trustLevel",
     "sourceType",
     "reasonCode",
+    "reason-code",
+    "reason_code",
     "raw",
     "provider",
     "traceback",
     "scaffold",
     "happy-path",
     "UAT",
+    "cache",
+    "schema",
 )
 
 _FORBIDDEN_PUBLIC_COPY_PATTERN = re.compile(

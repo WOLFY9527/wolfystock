@@ -25,6 +25,8 @@ ALLOWED_PUBLIC_DISCLOSURE = "本页仅用于市场观察、证据整理与研究
 CASE_SENSITIVE_FORBIDDEN_MARKERS = (
     "Static metadata only",
     "UAT",
+    "Cache",
+    "Schema",
     "AI推荐",
 )
 CASE_INSENSITIVE_FORBIDDEN_PATTERNS = (

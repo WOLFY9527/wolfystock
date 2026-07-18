@@ -47,6 +47,7 @@ from src.services.homepage_policy_regulation_watch_service import HomepagePolicy
 from src.services.homepage_pre_session_research_checklist_service import (
     HomepagePreSessionResearchChecklistService,
 )
+from src.services.homepage_public_copy import sanitize_public_copy
 from src.services.homepage_rates_pricing_service import HomepageRatesPricingService
 from src.services.homepage_research_priorities_service import HomepageResearchPrioritiesService
 from src.services.homepage_risk_regime_service import HomepageRiskRegimeService
@@ -437,53 +438,32 @@ class HomepageIntelligenceService:
 
     def _project_capabilities(self, snapshot: Any) -> dict[str, Any]:
         payload = snapshot.model_dump(mode="json") if hasattr(snapshot, "model_dump") else dict(snapshot)
+        data_quality = dict(payload["dataQuality"])
         return {
-            "schemaVersion": payload.get("schemaVersion", "homepage_capabilities_v1"),
-            "status": self._bounded_status(payload.get("status")),
+            "schemaVersion": str(payload["schemaVersion"]),
+            "status": self._bounded_status(payload["status"]),
             "sections": [
                 {
                     "key": str(section.get("key", ""))[:40],
-                    "label": str(section.get("label", ""))[:80],
+                    "label": sanitize_public_copy(section["label"])[:80],
                     "supported": bool(section.get("supported", False)),
-                    "status": section.get("status", "no_evidence"),
-                    "description": self._metadata_text(
-                        section.get("description"),
-                        fallback="提供首页能力状态观察。",
-                        max_length=120,
-                    ),
+                    "status": self._bounded_status(section["status"]),
+                    "description": sanitize_public_copy(section["description"])[:120],
                 }
-                for section in payload.get("sections", [])
+                for section in payload["sections"]
                 if isinstance(section, dict)
             ],
             "capabilities": {
                 key: bool(value)
-                for key, value in dict(payload.get("capabilities", {})).items()
-                if key
-                in {
-                    "marketPulse",
-                    "moneyFlowProxy",
-                    "eventRadar",
-                    "personalSummary",
-                    "researchQueue",
-                    "publicDataQuality",
-                    "sessionStatus",
-                    "eventWindows",
-                    "noAdviceBoundary",
-                }
+                for key, value in dict(payload["capabilities"]).items()
             },
             "dataQuality": {
-                "status": self._bounded_status(dict(payload.get("dataQuality", {})).get("status")),
-                "label": str(
-                    dict(payload.get("dataQuality", {})).get("label") or "暂无证据"
-                )[:40],
-                "available": False,
-                "description": self._metadata_text(
-                    dict(payload.get("dataQuality", {})).get("description"),
-                    fallback="首页能力状态已整理为公开元数据。",
-                    max_length=120,
-                ),
+                "status": self._bounded_status(data_quality["status"]),
+                "label": sanitize_public_copy(data_quality["label"])[:40],
+                "available": bool(data_quality["available"]),
+                "description": sanitize_public_copy(data_quality["description"])[:120],
             },
-            "noAdviceDisclosure": "仅供首页能力状态观察，不构成个性化建议。",
+            "noAdviceDisclosure": sanitize_public_copy(payload["noAdviceDisclosure"])[:120],
         }
 
     def _project_module_manifest(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -560,7 +540,7 @@ class HomepageIntelligenceService:
         return text if text in {"pass", "review", "blocked", "no_evidence"} else "review"
 
     def _metadata_text(self, value: Any, *, fallback: str, max_length: int) -> str:
-        text = str(value or "").strip()
+        text = sanitize_public_copy(value)
         compact = text.lower().replace("_", "").replace(" ", "").replace("-", "")
         if not text or any(
             marker in compact

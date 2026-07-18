@@ -9,12 +9,39 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 HomepageCapabilitiesStatus = Literal["ready", "partial", "no_evidence", "unavailable"]
+HomepageCapabilityId = Literal[
+    "dailyMarketBrief",
+    "riskRegime",
+    "crossAssetIndicators",
+    "eventImpactMap",
+    "driverChain",
+    "themeCapitalFlow",
+    "researchPriorities",
+    "evidenceQuality",
+    "ratesPricing",
+    "volatilityPositioning",
+    "liquidityCredit",
+    "marketBreadth",
+    "afterCloseDevelopments",
+    "scenarioWatchlist",
+    "earningsCatalysts",
+    "geopoliticalCommodityRisk",
+    "aiCapexInfrastructure",
+    "policyRegulationWatch",
+    "styleLeadershipRotation",
+    "preSessionResearchChecklist",
+    "marketPulse",
+    "moneyFlowProxy",
+    "eventRadar",
+    "personalSummary",
+    "researchQueue",
+    "publicDataQuality",
+    "sessionStatus",
+    "eventWindows",
+    "noAdviceBoundary",
+]
 
 HOMEPAGE_CAPABILITIES_CONTRACT_VERSION = "homepage_capabilities_v1"
-HOMEPAGE_CAPABILITIES_NO_ADVICE_DISCLOSURE = (
-    "Homepage metadata only; not personalized financial advice."
-)
-
 _FORBIDDEN_TEXT_MARKERS = (
     "route",
     "router",
@@ -73,40 +100,6 @@ class HomepageCapabilitySection(BaseModel):
     description: str = Field(..., min_length=1, max_length=200)
 
 
-class HomepageCapabilityFlags(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    dailyMarketBrief: bool = True
-    riskRegime: bool = True
-    crossAssetIndicators: bool = True
-    eventImpactMap: bool = True
-    driverChain: bool = True
-    themeCapitalFlow: bool = True
-    researchPriorities: bool = True
-    evidenceQuality: bool = True
-    ratesPricing: bool = True
-    volatilityPositioning: bool = True
-    liquidityCredit: bool = True
-    marketBreadth: bool = True
-    afterCloseDevelopments: bool = True
-    scenarioWatchlist: bool = True
-    earningsCatalysts: bool = True
-    geopoliticalCommodityRisk: bool = True
-    aiCapexInfrastructure: bool = True
-    policyRegulationWatch: bool = True
-    styleLeadershipRotation: bool = True
-    preSessionResearchChecklist: bool = True
-    marketPulse: bool = True
-    moneyFlowProxy: bool = True
-    eventRadar: bool = True
-    personalSummary: bool = True
-    researchQueue: bool = True
-    publicDataQuality: bool = True
-    sessionStatus: bool = True
-    eventWindows: bool = True
-    noAdviceBoundary: bool = True
-
-
 class HomepageCapabilitiesDataQuality(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -122,7 +115,7 @@ class HomepageCapabilitiesSnapshot(BaseModel):
     schemaVersion: str = Field(default=HOMEPAGE_CAPABILITIES_CONTRACT_VERSION)
     status: HomepageCapabilitiesStatus
     sections: list[HomepageCapabilitySection] = Field(default_factory=list)
-    capabilities: HomepageCapabilityFlags
+    capabilities: dict[HomepageCapabilityId, bool]
     dataQuality: HomepageCapabilitiesDataQuality
     noAdviceDisclosure: str = Field(..., min_length=1, max_length=120)
 
@@ -136,10 +129,9 @@ class HomepageCapabilitiesSnapshot(BaseModel):
 
 __all__ = [
     "HOMEPAGE_CAPABILITIES_CONTRACT_VERSION",
-    "HOMEPAGE_CAPABILITIES_NO_ADVICE_DISCLOSURE",
     "HomepageCapabilitiesDataQuality",
     "HomepageCapabilitiesSnapshot",
     "HomepageCapabilitiesStatus",
-    "HomepageCapabilityFlags",
+    "HomepageCapabilityId",
     "HomepageCapabilitySection",
 ]

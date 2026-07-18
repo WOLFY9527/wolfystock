@@ -18,11 +18,10 @@ from src.services.homepage_public_copy import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HELPER_PATH = REPO_ROOT / "src" / "services" / "homepage_public_copy.py"
 EXPECTED_STATUS_LABELS = (
-    "正常",
+    "已核验",
     "暂无证据",
     "部分缺失",
     "数据延迟",
-    "使用缓存",
     "暂不可用",
     "适合研究观察",
     "需要复核",
@@ -32,12 +31,16 @@ EXPECTED_FORBIDDEN_PUBLIC_COPY_MARKERS = (
     "trustLevel",
     "sourceType",
     "reasonCode",
+    "reason-code",
+    "reason_code",
     "raw",
     "provider",
     "traceback",
     "scaffold",
     "happy-path",
     "UAT",
+    "cache",
+    "schema",
 )
 FORBIDDEN_TRADING_ADVICE_TERMS = (
     "建议买入",
@@ -136,7 +139,10 @@ def test_forbidden_public_copy_markers_are_stable_for_tests() -> None:
 
 
 def test_sanitize_public_copy_removes_forbidden_markers() -> None:
-    dirty = "状态 fallback trustLevel sourceType reasonCode raw provider traceback scaffold happy-path UAT 正常"
+    dirty = (
+        "状态 fallback trustLevel sourceType reasonCode reason-code reason_code raw provider traceback "
+        "scaffold happy-path UAT cache schema 正常"
+    )
 
     sanitized = sanitize_public_copy(dirty)
     serialized = _serialized(sanitized)

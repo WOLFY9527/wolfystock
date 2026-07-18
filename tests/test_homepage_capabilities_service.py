@@ -13,7 +13,29 @@ from src.services.homepage_capabilities_service import (
 )
 
 
-EXPECTED_CAPABILITY_KEYS = (
+EXPECTED_SECTION_KEYS = (
+    "dailyMarketBrief",
+    "riskRegime",
+    "crossAssetIndicators",
+    "eventImpactMap",
+    "driverChain",
+    "themeCapitalFlow",
+    "researchPriorities",
+    "evidenceQuality",
+    "ratesPricing",
+    "volatilityPositioning",
+    "liquidityCredit",
+    "marketBreadth",
+    "afterCloseDevelopments",
+    "scenarioWatchlist",
+    "earningsCatalysts",
+    "geopoliticalCommodityRisk",
+    "aiCapexInfrastructure",
+    "policyRegulationWatch",
+    "styleLeadershipRotation",
+    "preSessionResearchChecklist",
+)
+LEGACY_CAPABILITY_KEYS = (
     "marketPulse",
     "moneyFlowProxy",
     "eventRadar",
@@ -24,13 +46,7 @@ EXPECTED_CAPABILITY_KEYS = (
     "eventWindows",
     "noAdviceBoundary",
 )
-EXPECTED_SECTION_KEYS = (
-    "marketPulse",
-    "moneyFlowProxy",
-    "eventRadar",
-    "personalSummary",
-    "researchQueue",
-)
+EXPECTED_CAPABILITY_KEYS = (*EXPECTED_SECTION_KEYS, *LEGACY_CAPABILITY_KEYS)
 FORBIDDEN_MARKERS = (
     "route",
     "router",
@@ -92,9 +108,16 @@ def test_homepage_capabilities_contract_serializes_stable_version_and_capabiliti
         "noAdviceDisclosure",
     ]
     assert payload["schemaVersion"] == HOMEPAGE_CAPABILITIES_CONTRACT_VERSION
-    assert payload["status"] == "ready"
+    assert payload["status"] == "partial"
     assert [section["key"] for section in payload["sections"]] == list(EXPECTED_SECTION_KEYS)
     assert list(payload["capabilities"].keys()) == list(EXPECTED_CAPABILITY_KEYS)
+    assert payload["dataQuality"] == {
+        "status": "partial",
+        "label": "部分缺失",
+        "available": False,
+        "description": "首页能力信息已整理，样本、代理观察与暂无证据边界已标记。",
+    }
+    assert _build_payload() == payload
     assert payload["noAdviceDisclosure"] == HOMEPAGE_CAPABILITIES_NO_ADVICE_DISCLOSURE
     assert HomepageCapabilitiesSnapshot.model_validate(payload).schemaVersion == HOMEPAGE_CAPABILITIES_CONTRACT_VERSION
 
@@ -105,7 +128,16 @@ def test_homepage_capabilities_default_flags_are_bounded() -> None:
     assert set(payload["capabilities"].keys()) == set(EXPECTED_CAPABILITY_KEYS)
     assert all(isinstance(value, bool) for value in payload["capabilities"].values())
     assert all(section["supported"] is True for section in payload["sections"])
-    assert all(section["status"] == "ready" for section in payload["sections"])
+    assert all(section["status"] in {"partial", "no_evidence"} for section in payload["sections"])
+    assert payload["sections"][6]["status"] == "no_evidence"
+    assert all(section["status"] == "partial" for index, section in enumerate(payload["sections"]) if index != 6)
+    assert payload["dataQuality"]["available"] is False
+    assert {payload["status"], payload["dataQuality"]["status"]} <= {
+        "ready",
+        "partial",
+        "no_evidence",
+        "unavailable",
+    }
 
 
 def test_homepage_capabilities_response_has_no_internal_diagnostics_or_secrets() -> None:
