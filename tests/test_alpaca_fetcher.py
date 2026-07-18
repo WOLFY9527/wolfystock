@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import unittest
 from unittest.mock import Mock, patch
 
@@ -31,17 +32,18 @@ class _MockResponse:
 class AlpacaFetcherTestCase(unittest.TestCase):
     def test_uat_no_live_providers_blocks_direct_snapshot_before_http(self) -> None:
         session = Mock()
-        fetcher = AlpacaFetcher(
-            api_key_id="alpaca-id",
-            secret_key="alpaca-secret",
-            session=session,
-        )
+        with patch("data_provider.alpaca_fetcher.requests.Session", return_value=session):
+            fetcher = AlpacaFetcher(
+                api_key_id="alpaca-id",
+                secret_key="alpaca-secret",
+            )
 
         with patch.dict(os.environ, {"WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS": "true"}, clear=False):
             with self.assertRaises(UatProviderIsolationError):
                 fetcher.get_realtime_quote("AAPL")
 
         session.get.assert_not_called()
+        self.assertEqual(fetcher.transport_identity, "default_live_transport")
 
     def test_get_realtime_quote_builds_quote_from_snapshot(self) -> None:
         session = Mock()
@@ -60,7 +62,15 @@ class AlpacaFetcherTestCase(unittest.TestCase):
             session=session,
         )
 
-        quote = fetcher.get_realtime_quote("AAPL")
+        with patch.object(
+            socket.socket,
+            "connect",
+            side_effect=AssertionError("injected session must not open a socket"),
+        ), patch(
+            "data_provider.alpaca_fetcher.requests.Session",
+            side_effect=AssertionError("injected session must not create a default session"),
+        ):
+            quote = fetcher.get_realtime_quote("AAPL")
 
         self.assertIsNotNone(quote)
         assert quote is not None
@@ -69,6 +79,7 @@ class AlpacaFetcherTestCase(unittest.TestCase):
         self.assertAlmostEqual(float(quote.price or 0.0), 214.55, places=2)
         self.assertAlmostEqual(float(quote.pre_close or 0.0), 208.1, places=2)
         self.assertEqual(quote.volume, 123456)
+        self.assertEqual(fetcher.transport_identity, "injected_test_transport")
         session.get.assert_called_once_with(
             "https://data.alpaca.markets/v2/stocks/AAPL/snapshot",
             params={"feed": "sip"},

@@ -29,10 +29,12 @@ class TestSearXNGSearchProvider(unittest.TestCase):
         base_urls=None,
         *,
         use_public_instances: bool = False,
+        transport=None,
     ) -> SearXNGSearchProvider:
         return SearXNGSearchProvider(
             base_urls=base_urls or [],
             use_public_instances=use_public_instances,
+            transport=transport,
         )
 
     @staticmethod
@@ -86,7 +88,7 @@ class TestSearXNGSearchProvider(unittest.TestCase):
             }
         )
 
-        provider = self._create_provider(["https://searx.example.org"])
+        provider = self._create_provider(["https://searx.example.org"], transport=mock_get)
         resp = provider.search("AAPL stock", max_results=5, days=7)
 
         self.assertTrue(resp.success)
@@ -114,7 +116,7 @@ class TestSearXNGSearchProvider(unittest.TestCase):
             }
         )
 
-        provider = self._create_provider(["https://searx.example.org"])
+        provider = self._create_provider(["https://searx.example.org"], transport=mock_get)
         resp = provider.search("query", max_results=5)
 
         self.assertTrue(resp.success)
@@ -128,7 +130,7 @@ class TestSearXNGSearchProvider(unittest.TestCase):
             headers={"content-type": "text/plain"},
         )
 
-        provider = self._create_provider(["https://searx.example.org"])
+        provider = self._create_provider(["https://searx.example.org"], transport=mock_get)
         resp = provider.search("query", max_results=5)
 
         self.assertFalse(resp.success)
@@ -138,7 +140,7 @@ class TestSearXNGSearchProvider(unittest.TestCase):
     def test_self_hosted_empty_results_success(self, mock_get):
         mock_get.return_value = self._response(json_payload={"results": []})
 
-        provider = self._create_provider(["https://searx.example.org"])
+        provider = self._create_provider(["https://searx.example.org"], transport=mock_get)
         resp = provider.search("query", max_results=5)
 
         self.assertTrue(resp.success)
@@ -155,7 +157,7 @@ class TestSearXNGSearchProvider(unittest.TestCase):
             }
         )
 
-        provider = self._create_provider(["https://searx.example.org"])
+        provider = self._create_provider(["https://searx.example.org"], transport=mock_get)
         resp = provider.search("query", max_results=1)
 
         self.assertTrue(resp.success)
@@ -165,7 +167,7 @@ class TestSearXNGSearchProvider(unittest.TestCase):
     @patch("src.search_service._get_with_retry")
     def test_time_range_mapping(self, mock_get):
         mock_get.return_value = self._response(json_payload={"results": []})
-        provider = self._create_provider(["https://searx.example.org"])
+        provider = self._create_provider(["https://searx.example.org"], transport=mock_get)
 
         cases = [
             (1, "day"),
@@ -182,7 +184,7 @@ class TestSearXNGSearchProvider(unittest.TestCase):
     def test_non_json_response_returns_failure(self, mock_get):
         mock_get.return_value = self._response(json_side_effect=ValueError("No JSON"))
 
-        provider = self._create_provider(["https://searx.example.org"])
+        provider = self._create_provider(["https://searx.example.org"], transport=mock_get)
         resp = provider.search("query", max_results=5)
 
         self.assertFalse(resp.success)
@@ -192,7 +194,7 @@ class TestSearXNGSearchProvider(unittest.TestCase):
     def test_json_returns_non_dict_returns_failure(self, mock_get):
         mock_get.return_value = self._response(json_payload=[{"results": []}])
 
-        provider = self._create_provider(["https://searx.example.org"])
+        provider = self._create_provider(["https://searx.example.org"], transport=mock_get)
         resp = provider.search("query", max_results=5)
 
         self.assertFalse(resp.success)
@@ -208,7 +210,8 @@ class TestSearXNGSearchProvider(unittest.TestCase):
         ]
 
         provider = self._create_provider(
-            ["https://searx-a.example.org", "https://searx-b.example.org"]
+            ["https://searx-a.example.org", "https://searx-b.example.org"],
+            transport=mock_get,
         )
         resp = provider.search("query", max_results=5)
 
@@ -225,7 +228,8 @@ class TestSearXNGSearchProvider(unittest.TestCase):
                 "https://searx-a.example.org",
                 "https://searx-b.example.org",
                 "https://searx-c.example.org",
-            ]
+            ],
+            transport=mock_get,
         )
 
         provider.search("first", max_results=5)
@@ -282,7 +286,7 @@ class TestSearXNGSearchProvider(unittest.TestCase):
         search_resp = self._response(json_payload={"results": []})
         mock_get.side_effect = [feed_resp, search_resp, search_resp]
 
-        provider = self._create_provider(use_public_instances=True)
+        provider = self._create_provider(use_public_instances=True, transport=mock_get)
         first = provider.search("first", max_results=5)
         second = provider.search("second", max_results=5)
 
@@ -301,7 +305,7 @@ class TestSearXNGSearchProvider(unittest.TestCase):
             self._response(json_payload={"results": []}),
         ]
 
-        provider = self._create_provider(use_public_instances=True)
+        provider = self._create_provider(use_public_instances=True, transport=mock_get)
         resp = provider.search("query", max_results=5)
 
         self.assertTrue(resp.success)
@@ -322,7 +326,7 @@ class TestSearXNGSearchProvider(unittest.TestCase):
             self._response(status_code=500, text="bad-3", headers={"content-type": "text/plain"}),
         ]
 
-        provider = self._create_provider(use_public_instances=True)
+        provider = self._create_provider(use_public_instances=True, transport=mock_get)
         resp = provider.search("query", max_results=5)
 
         self.assertFalse(resp.success)
@@ -342,7 +346,7 @@ class TestSearXNGSearchProvider(unittest.TestCase):
             self._response(json_payload={"results": []}),
         ]
 
-        provider = self._create_provider(use_public_instances=True)
+        provider = self._create_provider(use_public_instances=True, transport=mock_get)
         provider.search("first", max_results=5)
         provider.search("second", max_results=5)
 
@@ -356,7 +360,7 @@ class TestSearXNGSearchProvider(unittest.TestCase):
 
         mock_get.side_effect = req_module.exceptions.ConnectionError("dns failed")
 
-        provider = self._create_provider(use_public_instances=True)
+        provider = self._create_provider(use_public_instances=True, transport=mock_get)
         resp = provider.search("query", max_results=5)
 
         self.assertFalse(resp.success)
@@ -376,7 +380,7 @@ class TestSearXNGSearchProvider(unittest.TestCase):
             self._response(json_payload={"results": []}),
         ]
 
-        provider = self._create_provider(use_public_instances=True)
+        provider = self._create_provider(use_public_instances=True, transport=mock_get)
         first = provider.search("first", max_results=5)
         current_time[0] = 1001.0
         second = provider.search("second", max_results=5)
@@ -412,9 +416,9 @@ class TestSearXNGSearchProvider(unittest.TestCase):
             req_module.exceptions.ConnectionError("dns failed"),
         ]
 
-        first = SearXNGSearchProvider._get_public_instances()
-        second = SearXNGSearchProvider._get_public_instances()
-        third = SearXNGSearchProvider._get_public_instances()
+        first = SearXNGSearchProvider._get_public_instances(transport=mock_get)
+        second = SearXNGSearchProvider._get_public_instances(transport=mock_get)
+        third = SearXNGSearchProvider._get_public_instances(transport=mock_get)
 
         self.assertEqual(first, ["https://public-1.example"])
         self.assertEqual(second, ["https://public-1.example"])
@@ -426,7 +430,11 @@ class TestSearXNGSearchProvider(unittest.TestCase):
     def test_self_hosted_mode_does_not_fetch_public_instances(self, mock_get, mock_public_instances):
         mock_get.return_value = self._response(json_payload={"results": []})
 
-        provider = self._create_provider(["https://searx.example.org"], use_public_instances=True)
+        provider = self._create_provider(
+            ["https://searx.example.org"],
+            use_public_instances=True,
+            transport=mock_get,
+        )
         resp = provider.search("query", max_results=5)
 
         self.assertTrue(resp.success)

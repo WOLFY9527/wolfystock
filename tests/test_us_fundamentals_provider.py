@@ -2,7 +2,6 @@
 import os
 import sys
 import unittest
-from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pandas as pd
@@ -94,9 +93,8 @@ class TestUsFundamentalsProvider(unittest.TestCase):
         with provider._cache_lock:
             provider._request_cache.clear()
 
-    @patch("yfinance.Ticker", return_value=_FakeTicker())
-    def test_get_yfinance_fundamentals_maps_core_fields(self, _mock_ticker):
-        payload = get_yfinance_fundamentals("ORCL")
+    def test_get_yfinance_fundamentals_maps_core_fields(self):
+        payload = get_yfinance_fundamentals("ORCL", ticker_factory=lambda _symbol: _FakeTicker())
         self.assertEqual(payload["marketCap"], 123)
         self.assertEqual(payload["companyName"], "Oracle Corporation")
         self.assertEqual(payload["sector"], "Technology")
@@ -107,18 +105,18 @@ class TestUsFundamentalsProvider(unittest.TestCase):
         self.assertEqual(payload["sharesOutstanding"], 9000000)
         self.assertEqual(payload["netIncome"], 222)
 
-    @patch("yfinance.Ticker", return_value=_FakeTicker())
-    def test_get_yfinance_quarterly_financials_maps_quarters(self, _mock_ticker):
-        rows = get_yfinance_quarterly_financials("ORCL")
+    def test_get_yfinance_quarterly_financials_maps_quarters(self):
+        rows = get_yfinance_quarterly_financials(
+            "ORCL",
+            ticker_factory=lambda _symbol: _FakeTicker(),
+        )
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0]["revenue"], 120)
         self.assertEqual(rows[0]["operating_cashflow"], 35)
         self.assertIsNone(rows[0]["free_cash_flow"])
 
-    @patch("data_provider.us_fundamentals_provider.get_config")
-    @patch("data_provider.us_fundamentals_provider.requests.get")
-    def test_get_finnhub_quote_maps_core_fields(self, mock_get, mock_config):
-        mock_config.return_value = SimpleNamespace(finnhub_api_keys=["fh-key"])
+    def test_get_finnhub_quote_maps_core_fields(self):
+        mock_get = Mock()
         mock_get.return_value = _FakeResponse(
             {
                 "c": 125.3,
@@ -132,7 +130,15 @@ class TestUsFundamentalsProvider(unittest.TestCase):
             }
         )
 
-        payload = get_finnhub_quote("NVDA")
+        with patch(
+            "data_provider.us_fundamentals_provider.get_config",
+            side_effect=AssertionError("injected transport must not read credentials"),
+        ):
+            payload = get_finnhub_quote(
+                "NVDA",
+                api_key="fixture-finnhub-key",
+                transport=mock_get,
+            )
         self.assertEqual(payload["price"], 125.3)
         self.assertEqual(payload["pre_close"], 123)
         self.assertEqual(payload["change_amount"], 2.3)
@@ -141,10 +147,8 @@ class TestUsFundamentalsProvider(unittest.TestCase):
         self.assertEqual(payload["source"], "finnhub")
         self.assertIn("market_timestamp", payload)
 
-    @patch("data_provider.us_fundamentals_provider.get_config")
-    @patch("data_provider.us_fundamentals_provider.requests.get")
-    def test_get_finnhub_metrics_maps_key_ratios(self, mock_get, mock_config):
-        mock_config.return_value = SimpleNamespace(finnhub_api_keys=["fh-key"])
+    def test_get_finnhub_metrics_maps_key_ratios(self):
+        mock_get = Mock()
         mock_get.return_value = _FakeResponse(
             {
                 "metric": {
@@ -163,7 +167,15 @@ class TestUsFundamentalsProvider(unittest.TestCase):
             }
         )
 
-        payload = get_finnhub_metrics("NVDA")
+        with patch(
+            "data_provider.us_fundamentals_provider.get_config",
+            side_effect=AssertionError("injected transport must not read credentials"),
+        ):
+            payload = get_finnhub_metrics(
+                "NVDA",
+                api_key="fixture-finnhub-key",
+                transport=mock_get,
+            )
         self.assertEqual(payload["beta"], 1.2)
         self.assertEqual(payload["trailingPE"], 32.5)
         self.assertEqual(payload["priceToBook"], 18.6)
@@ -171,10 +183,8 @@ class TestUsFundamentalsProvider(unittest.TestCase):
         self.assertEqual(payload["currentRatio"], 1.4)
         self.assertEqual(payload["grossMargins"], 0.74)
 
-    @patch("data_provider.us_fundamentals_provider.get_config")
-    @patch("data_provider.us_fundamentals_provider.requests.get")
-    def test_get_fmp_quote_derives_amount_from_price_and_volume(self, mock_get, mock_config):
-        mock_config.return_value = SimpleNamespace(fmp_api_keys=["fmp-key"])
+    def test_get_fmp_quote_derives_amount_from_price_and_volume(self):
+        mock_get = Mock()
         mock_get.return_value = _FakeResponse([
             {
                 "price": 130.0,
@@ -191,16 +201,21 @@ class TestUsFundamentalsProvider(unittest.TestCase):
             }
         ])
 
-        payload = get_fmp_quote("ORCL")
+        with patch(
+            "data_provider.us_fundamentals_provider.get_config",
+            side_effect=AssertionError("injected transport must not read credentials"),
+        ):
+            payload = get_fmp_quote(
+                "ORCL",
+                api_key="fixture-fmp-key",
+                transport=mock_get,
+            )
         self.assertEqual(payload["price"], 130.0)
         self.assertEqual(payload["volume"], 1000000)
         self.assertEqual(payload["amount"], 130000000.0)
         self.assertEqual(payload["high_52w"], 145.0)
 
-    @patch("data_provider.us_fundamentals_provider.get_config")
-    @patch("data_provider.us_fundamentals_provider.requests.get")
-    def test_get_fmp_fundamentals_merges_profile_ratios_and_quarterlies(self, mock_get, mock_config):
-        mock_config.return_value = SimpleNamespace(fmp_api_keys=["fmp-key"])
+    def test_get_fmp_fundamentals_merges_profile_ratios_and_quarterlies(self):
 
         def _side_effect(url, params=None, headers=None, timeout=15):
             if url.endswith("/quote/ORCL"):
@@ -294,9 +309,17 @@ class TestUsFundamentalsProvider(unittest.TestCase):
                 ])
             raise AssertionError(f"Unexpected URL: {url}")
 
-        mock_get.side_effect = _side_effect
+        mock_get = Mock(side_effect=_side_effect)
 
-        payload = get_fmp_fundamentals("ORCL")
+        with patch(
+            "data_provider.us_fundamentals_provider.get_config",
+            side_effect=AssertionError("injected transport must not read credentials"),
+        ):
+            payload = get_fmp_fundamentals(
+                "ORCL",
+                api_key="fixture-fmp-key",
+                transport=mock_get,
+            )
         self.assertEqual(payload["marketCap"], 1000000000)
         self.assertEqual(payload["sharesOutstanding"], 2700000000)
         self.assertEqual(payload["floatShares"], 2600000000)
@@ -316,10 +339,7 @@ class TestUsFundamentalsProvider(unittest.TestCase):
         self.assertEqual(payload["_meta"]["field_periods"]["returnOnEquity"], "ttm")
         self.assertEqual(payload["_meta"]["field_sources"]["returnOnEquity"], "fmp_ratios_ttm")
 
-    @patch("data_provider.us_fundamentals_provider.get_config")
-    @patch("data_provider.us_fundamentals_provider.requests.get")
-    def test_get_fmp_fundamentals_preserves_zero_ttm_cashflow_without_falling_back_to_latest_quarter(self, mock_get, mock_config):
-        mock_config.return_value = SimpleNamespace(fmp_api_keys=["fmp-key"])
+    def test_get_fmp_fundamentals_preserves_zero_ttm_cashflow_without_falling_back_to_latest_quarter(self):
 
         def _side_effect(url, params=None, headers=None, timeout=15):
             if url.endswith("/quote/ORCL"):
@@ -344,9 +364,17 @@ class TestUsFundamentalsProvider(unittest.TestCase):
                 ])
             raise AssertionError(f"Unexpected URL: {url}")
 
-        mock_get.side_effect = _side_effect
+        mock_get = Mock(side_effect=_side_effect)
 
-        payload = get_fmp_fundamentals("ORCL")
+        with patch(
+            "data_provider.us_fundamentals_provider.get_config",
+            side_effect=AssertionError("injected transport must not read credentials"),
+        ):
+            payload = get_fmp_fundamentals(
+                "ORCL",
+                api_key="fixture-fmp-key",
+                transport=mock_get,
+            )
         self.assertEqual(payload["freeCashflow"], 0.0)
         self.assertEqual(payload["operatingCashflow"], 0.0)
         self.assertEqual(payload["returnOnEquity"], 0.78)
@@ -354,10 +382,7 @@ class TestUsFundamentalsProvider(unittest.TestCase):
         self.assertEqual(payload["_meta"]["field_periods"]["freeCashflow"], "ttm")
         self.assertEqual(payload["_meta"]["field_sources"]["freeCashflow"], "fmp_quarterly")
 
-    @patch("data_provider.us_fundamentals_provider.get_config")
-    @patch("data_provider.us_fundamentals_provider.requests.get")
-    def test_get_fmp_quarterly_financials_and_history_normalize_rows(self, mock_get, mock_config):
-        mock_config.return_value = SimpleNamespace(fmp_api_keys=["fmp-key"])
+    def test_get_fmp_quarterly_financials_and_history_normalize_rows(self):
 
         def _side_effect(url, params=None, headers=None, timeout=15):
             if url.endswith("/income-statement/TEM"):
@@ -381,10 +406,24 @@ class TestUsFundamentalsProvider(unittest.TestCase):
                 )
             raise AssertionError(f"Unexpected URL: {url}")
 
-        mock_get.side_effect = _side_effect
+        mock_get = Mock(side_effect=_side_effect)
 
-        quarters = get_fmp_quarterly_financials("TEM", max_quarters=2)
-        history = get_fmp_historical_prices("TEM", days=2)
+        with patch(
+            "data_provider.us_fundamentals_provider.get_config",
+            side_effect=AssertionError("injected transport must not read credentials"),
+        ):
+            quarters = get_fmp_quarterly_financials(
+                "TEM",
+                max_quarters=2,
+                api_key="fixture-fmp-key",
+                transport=mock_get,
+            )
+            history = get_fmp_historical_prices(
+                "TEM",
+                days=2,
+                api_key="fixture-fmp-key",
+                transport=mock_get,
+            )
         self.assertEqual(len(quarters), 2)
         self.assertEqual(quarters[0]["operating_cashflow"], 80)
         self.assertEqual(quarters[0]["free_cash_flow"], 60)
@@ -392,10 +431,7 @@ class TestUsFundamentalsProvider(unittest.TestCase):
         self.assertEqual(history[0]["date"], "2025-12-30")
         self.assertEqual(history[1]["vwap"], 50.5)
 
-    @patch("data_provider.us_fundamentals_provider.get_config")
-    @patch("data_provider.us_fundamentals_provider.requests.get")
-    def test_get_fmp_technical_indicators_prefers_latest_non_empty_values(self, mock_get, mock_config):
-        mock_config.return_value = SimpleNamespace(fmp_api_keys=["fmp-key"])
+    def test_get_fmp_technical_indicators_prefers_latest_non_empty_values(self):
 
         def _side_effect(url, params=None, headers=None, timeout=15):
             if url.endswith("/stable/technical-indicators/sma"):
@@ -415,10 +451,24 @@ class TestUsFundamentalsProvider(unittest.TestCase):
                 )
             raise AssertionError(f"Unexpected URL: {url}")
 
-        mock_get.side_effect = _side_effect
+        mock_get = Mock(side_effect=_side_effect)
 
-        sma_rows = get_fmp_technical_indicator("NVDA", "sma", period_length=20)
-        summary = get_fmp_technical_indicators("NVDA")
+        with patch(
+            "data_provider.us_fundamentals_provider.get_config",
+            side_effect=AssertionError("injected transport must not read credentials"),
+        ):
+            sma_rows = get_fmp_technical_indicator(
+                "NVDA",
+                "sma",
+                period_length=20,
+                api_key="fixture-fmp-key",
+                transport=mock_get,
+            )
+            summary = get_fmp_technical_indicators(
+                "NVDA",
+                api_key="fixture-fmp-key",
+                transport=mock_get,
+            )
 
         self.assertEqual(sma_rows[-1]["value"], 121)
         self.assertEqual(summary["ma5"]["value"], 106)

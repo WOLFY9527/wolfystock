@@ -47,8 +47,8 @@ class SearchProviderFallbacksTestCase(unittest.TestCase):
         mock_article.return_value = article
 
         url = "https://example.com/news/1"
-        first = fetch_url_content(url)
-        second = fetch_url_content(url)
+        first = fetch_url_content(url, article_factory=mock_article)
+        second = fetch_url_content(url, article_factory=mock_article)
 
         self.assertEqual(first, second)
         self.assertTrue(first)
@@ -63,8 +63,8 @@ class SearchProviderFallbacksTestCase(unittest.TestCase):
         mock_article.return_value = article
 
         url = "https://example.com/news/fail"
-        first = fetch_url_content(url)
-        second = fetch_url_content(url)
+        first = fetch_url_content(url, article_factory=mock_article)
+        second = fetch_url_content(url, article_factory=mock_article)
 
         self.assertEqual(first, "")
         self.assertEqual(second, "")
@@ -91,6 +91,7 @@ class SearchProviderFallbacksTestCase(unittest.TestCase):
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
+            http_transport=mock_get,
         )
 
         resp = service.search_stock_news("NVDA", "NVIDIA", max_results=2)
@@ -159,6 +160,7 @@ class SearchProviderFallbacksTestCase(unittest.TestCase):
             searxng_public_instances_enabled=False,
             news_max_age_days=3,
             news_strategy_profile="short",
+            http_transport=mock_get,
         )
 
         resp = service.search_stock_news("ORCL", "Oracle", max_results=2)

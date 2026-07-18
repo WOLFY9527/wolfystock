@@ -28,7 +28,7 @@ import numpy as np
 from src.data.stock_mapping import STOCK_NAME_MAP, is_meaningful_stock_name
 from src.utils.symbol_classification import is_bse_code, is_kc_cy_stock, is_st_stock
 from src.utils.symbol_normalization import canonical_stock_code, normalize_stock_code
-from src.services.uat_provider_isolation import check_uat_provider_dispatch
+from src.services.uat_provider_isolation import check_uat_provider_transport
 from .fundamental_adapter import AkshareFundamentalAdapter
 from .provider_credentials import get_provider_credentials
 
@@ -545,10 +545,11 @@ class BaseFetcher(ABC):
         Returns:
             标准化的 DataFrame，包含技术指标
         """
-        dispatch = check_uat_provider_dispatch(
+        dispatch = check_uat_provider_transport(
             provider=str(getattr(self, "name", "unknown")),
             capability="daily_history",
             route=f"{self.__class__.__name__}.get_daily_data",
+            injected_transport=getattr(self, "_injected_transport", None),
         )
         if not dispatch.allowed:
             raise DataFetchError(dispatch.reason_code)
@@ -686,7 +687,12 @@ class DataFetcherManager:
     - 所有数据源都失败时抛出异常
     """
     
-    def __init__(self, fetchers: Optional[List[BaseFetcher]] = None):
+    def __init__(
+        self,
+        fetchers: Optional[List[BaseFetcher]] = None,
+        *,
+        injected_provider_fetchers: Optional[Dict[str, Any]] = None,
+    ):
         """
         初始化管理器
         
@@ -694,6 +700,15 @@ class DataFetcherManager:
             fetchers: 数据源列表（可选，默认按优先级自动创建）
         """
         self._fetchers: List[BaseFetcher] = []
+        self._injected_fetcher_ids = {id(fetcher) for fetcher in fetchers or []}
+        self._injected_provider_fetchers = {
+            str(provider).strip().lower(): fetcher
+            for provider, fetcher in (injected_provider_fetchers or {}).items()
+            if fetcher is not None
+        }
+        self._injected_fetcher_ids.update(
+            id(fetcher) for fetcher in self._injected_provider_fetchers.values()
+        )
         
         if fetchers:
             # 按优先级排序
@@ -723,6 +738,23 @@ class DataFetcherManager:
         self._cn_realtime_snapshot_cache: Dict[Tuple[str, ...], Dict[str, Any]] = {}
         self._cn_realtime_snapshot_cache_lock = RLock()
         self._cn_realtime_snapshot_cache_ttl_seconds = 15.0
+
+    def _check_fetcher_transport(
+        self,
+        fetcher: Any,
+        *,
+        provider: str,
+        capability: str,
+        route: str,
+    ):
+        return check_uat_provider_transport(
+            provider=provider,
+            capability=capability,
+            route=route,
+            injected_transport=(
+                fetcher if fetcher is not None and id(fetcher) in self._injected_fetcher_ids else None
+            ),
+        )
 
     def _get_tickflow_fetcher(self):
         """Lazily create a TickFlow fetcher for market-review-only calls."""
@@ -772,6 +804,9 @@ class DataFetcherManager:
 
     def _get_alpaca_fetcher(self):
         """Lazily create an Alpaca fetcher for US market-data enrichment."""
+        injected_fetcher = self._injected_provider_fetchers.get("alpaca")
+        if injected_fetcher is not None:
+            return injected_fetcher
         credentials = get_provider_credentials("alpaca")
         if not credentials.is_configured:
             with self._alpaca_lock:
@@ -808,6 +843,9 @@ class DataFetcherManager:
 
     def _get_twelve_data_fetcher(self):
         """Lazily create a Twelve Data fetcher for HK/US scanner enrichment."""
+        injected_fetcher = self._injected_provider_fetchers.get("twelve_data")
+        if injected_fetcher is not None:
+            return injected_fetcher
         credentials = get_provider_credentials("twelve_data")
         api_key = str(credentials.primary_api_key or "").strip()
         if not api_key:
@@ -888,17 +926,20 @@ class DataFetcherManager:
             action = str(item.get("action") or "").strip().lower() or "attempting"
             outcome = str(item.get("outcome") or "").strip().lower() or "unknown"
             status = str(item.get("status") or "").strip().lower()
-            normalized.append(
-                {
-                    "sequence": idx + 1,
-                    "provider": provider or f"source_{idx + 1}",
-                    "action": action,
-                    "outcome": outcome,
-                    "status": status or outcome,
-                    "reason": str(item.get("reason") or "").strip() or None,
-                    "message": str(item.get("message") or "").strip() or None,
-                }
-            )
+            entry = {
+                "sequence": idx + 1,
+                "provider": provider or f"source_{idx + 1}",
+                "action": action,
+                "outcome": outcome,
+                "status": status or outcome,
+                "reason": str(item.get("reason") or "").strip() or None,
+                "message": str(item.get("message") or "").strip() or None,
+            }
+            if item.get("transport_identity") is not None:
+                entry["transport_identity"] = str(item["transport_identity"])
+            if item.get("evidence_kind") is not None:
+                entry["evidence_kind"] = str(item["evidence_kind"])
+            normalized.append(entry)
         self._last_realtime_quote_trace = normalized
 
     def get_last_realtime_quote_trace(self) -> List[Dict[str, Any]]:
@@ -913,17 +954,20 @@ class DataFetcherManager:
             action = str(item.get("action") or "").strip().lower() or "attempting"
             outcome = str(item.get("outcome") or "").strip().lower() or "unknown"
             status = str(item.get("status") or "").strip().lower()
-            normalized.append(
-                {
-                    "sequence": idx + 1,
-                    "provider": provider or f"source_{idx + 1}",
-                    "action": action,
-                    "outcome": outcome,
-                    "status": status or outcome,
-                    "reason": str(item.get("reason") or "").strip() or None,
-                    "message": str(item.get("message") or "").strip() or None,
-                }
-            )
+            entry = {
+                "sequence": idx + 1,
+                "provider": provider or f"source_{idx + 1}",
+                "action": action,
+                "outcome": outcome,
+                "status": status or outcome,
+                "reason": str(item.get("reason") or "").strip() or None,
+                "message": str(item.get("message") or "").strip() or None,
+            }
+            if item.get("transport_identity") is not None:
+                entry["transport_identity"] = str(item["transport_identity"])
+            if item.get("evidence_kind") is not None:
+                entry["evidence_kind"] = str(item["evidence_kind"])
+            normalized.append(entry)
         self._last_daily_history_trace = normalized
 
     def get_last_daily_history_trace(self) -> List[Dict[str, Any]]:
@@ -1349,53 +1393,42 @@ class DataFetcherManager:
             status: Optional[str] = None,
             capability: Optional[str] = None,
             route: Optional[str] = None,
+            transport_identity: Optional[str] = None,
+            evidence_kind: Optional[str] = None,
         ) -> None:
-            daily_trace_entries.append(
-                {
-                    "provider": provider,
-                    "action": action,
-                    "outcome": outcome,
-                    "status": status or outcome,
-                    "reason": reason,
-                    "message": message,
-                    "capability": capability,
-                    "route": route,
-                }
-            )
+            entry = {
+                "provider": provider,
+                "action": action,
+                "outcome": outcome,
+                "status": status or outcome,
+                "reason": reason,
+                "message": message,
+                "capability": capability,
+                "route": route,
+            }
+            if transport_identity is not None:
+                entry["transport_identity"] = transport_identity
+            if evidence_kind is not None:
+                entry["evidence_kind"] = evidence_kind
+            daily_trace_entries.append(entry)
 
         # 快速路径：美股指数/美股股票走受控 provider 链路
         if is_us_index_code(stock_code) or is_us_stock_code(stock_code):
-            route_guard = check_uat_provider_dispatch(
-                provider="DataFetcherManager",
-                capability="daily_history",
-                route="DataFetcherManager.get_daily_data.us_direct_route",
-            )
-            if not route_guard.allowed:
-                append_daily_trace(**route_guard.to_trace())
-                append_daily_trace(
-                    provider="market_history",
-                    action="completed",
-                    outcome="blocked",
-                    status="blocked",
-                    reason=route_guard.reason_code,
-                    message="UAT isolation blocked US daily history provider dispatch.",
-                    capability="daily_history",
-                    route="DataFetcherManager.get_daily_data.us_direct_route",
-                )
-                self._set_last_daily_history_trace(daily_trace_entries)
-                raise DataFetchError(route_guard.reason_code)
-
             us_candidates: List[Tuple[str, Any]] = []
             if is_us_stock_code(stock_code):
-                alpaca_credentials = get_provider_credentials("alpaca")
-                if alpaca_credentials.is_partial:
-                    errors.append("[AlpacaFetcher] (ConfigError) incomplete_credentials")
-                elif alpaca_credentials.is_configured:
-                    alpaca_fetcher = self._get_alpaca_fetcher()
-                    if alpaca_fetcher is None:
-                        errors.append("[AlpacaFetcher] (InitializationError) initialization_failed")
-                    else:
-                        us_candidates.append(("AlpacaFetcher", alpaca_fetcher))
+                injected_alpaca = self._injected_provider_fetchers.get("alpaca")
+                if injected_alpaca is not None:
+                    us_candidates.append(("AlpacaFetcher", injected_alpaca))
+                else:
+                    alpaca_credentials = get_provider_credentials("alpaca")
+                    if alpaca_credentials.is_partial:
+                        errors.append("[AlpacaFetcher] (ConfigError) incomplete_credentials")
+                    elif alpaca_credentials.is_configured:
+                        alpaca_fetcher = self._get_alpaca_fetcher()
+                        if alpaca_fetcher is None:
+                            errors.append("[AlpacaFetcher] (InitializationError) initialization_failed")
+                        else:
+                            us_candidates.append(("AlpacaFetcher", alpaca_fetcher))
 
             yfinance_fetcher = next((fetcher for fetcher in self._fetchers if fetcher.name == "YfinanceFetcher"), None)
             if yfinance_fetcher is not None:
@@ -1420,6 +1453,16 @@ class DataFetcherManager:
                 )
 
             for attempt, (fetcher_name, fetcher) in enumerate(us_candidates, start=1):
+                route_guard = self._check_fetcher_transport(
+                    fetcher,
+                    provider=fetcher_name,
+                    capability="daily_history",
+                    route="DataFetcherManager.get_daily_data.us_candidate",
+                )
+                if not route_guard.allowed:
+                    append_daily_trace(**route_guard.to_trace())
+                    errors.append(f"[{fetcher_name}] (IsolationError) {route_guard.reason_code}")
+                    continue
                 try:
                     append_daily_trace(
                         provider=fetcher_name,
@@ -1497,17 +1540,17 @@ class DataFetcherManager:
 
         # 港股优先尝试 Twelve Data，再回退到现有 fetcher 链
         if _is_hk_market(stock_code):
-            route_guard = check_uat_provider_dispatch(
-                provider="DataFetcherManager",
-                capability="daily_history",
-                route="DataFetcherManager.get_daily_data.hk_route",
-            )
-            if not route_guard.allowed:
-                append_daily_trace(**route_guard.to_trace())
-                self._set_last_daily_history_trace(daily_trace_entries)
-                raise DataFetchError(route_guard.reason_code)
-
             twelve_data_fetcher = self._get_twelve_data_fetcher()
+            if twelve_data_fetcher is not None:
+                route_guard = self._check_fetcher_transport(
+                    twelve_data_fetcher,
+                    provider="TwelveDataFetcher",
+                    capability="daily_history",
+                    route="DataFetcherManager.get_daily_data.hk_twelve_data",
+                )
+                if not route_guard.allowed:
+                    append_daily_trace(**route_guard.to_trace())
+                    twelve_data_fetcher = None
             if twelve_data_fetcher is not None:
                 try:
                     logger.info(
@@ -1541,7 +1584,8 @@ class DataFetcherManager:
                     errors.append(error_msg)
 
         for attempt, fetcher in enumerate(self._fetchers, start=1):
-            route_guard = check_uat_provider_dispatch(
+            route_guard = self._check_fetcher_transport(
+                fetcher,
                 provider=str(getattr(fetcher, "name", "unknown")),
                 capability="daily_history",
                 route="DataFetcherManager.get_daily_data.default_fallback",
@@ -1706,19 +1750,24 @@ class DataFetcherManager:
             status: Optional[str] = None,
             capability: Optional[str] = None,
             route: Optional[str] = None,
+            transport_identity: Optional[str] = None,
+            evidence_kind: Optional[str] = None,
         ) -> None:
-            trace_entries.append(
-                {
-                    "provider": provider,
-                    "action": action,
-                    "outcome": outcome,
-                    "status": status or outcome,
-                    "reason": reason,
-                    "message": message,
-                    "capability": capability,
-                    "route": route,
-                }
-            )
+            entry = {
+                "provider": provider,
+                "action": action,
+                "outcome": outcome,
+                "status": status or outcome,
+                "reason": reason,
+                "message": message,
+                "capability": capability,
+                "route": route,
+            }
+            if transport_identity is not None:
+                entry["transport_identity"] = transport_identity
+            if evidence_kind is not None:
+                entry["evidence_kind"] = evidence_kind
+            trace_entries.append(entry)
 
         from .akshare_fetcher import _is_us_code
         from .us_index_mapping import is_us_index_code
@@ -1741,16 +1790,6 @@ class DataFetcherManager:
 
         # 美股指数由 YfinanceFetcher 处理（在美股股票检查之前）
         if is_us_index_code(stock_code):
-            route_guard = check_uat_provider_dispatch(
-                provider="yfinance",
-                capability="realtime_quote",
-                route="DataFetcherManager.get_realtime_quote.us_index",
-            )
-            if not route_guard.allowed:
-                append_trace(**route_guard.to_trace())
-                self._set_last_realtime_quote_trace(trace_entries)
-                return None
-
             append_trace(
                 provider="market_route",
                 action="selected",
@@ -1760,6 +1799,15 @@ class DataFetcherManager:
             for fetcher in self._fetchers:
                 if fetcher.name == "YfinanceFetcher":
                     if hasattr(fetcher, 'get_realtime_quote'):
+                        route_guard = self._check_fetcher_transport(
+                            fetcher,
+                            provider="yfinance",
+                            capability="realtime_quote",
+                            route="DataFetcherManager.get_realtime_quote.us_index",
+                        )
+                        if not route_guard.allowed:
+                            append_trace(**route_guard.to_trace())
+                            break
                         append_trace(
                             provider="yfinance",
                             action="attempting",
@@ -1810,19 +1858,10 @@ class DataFetcherManager:
 
         # 美股单独处理，使用 YfinanceFetcher
         if _is_us_code(stock_code):
-            route_guard = check_uat_provider_dispatch(
-                provider="DataFetcherManager",
-                capability="realtime_quote",
-                route="DataFetcherManager.get_realtime_quote.us_direct_route",
-            )
-            if not route_guard.allowed:
-                append_trace(**route_guard.to_trace())
-                self._set_last_realtime_quote_trace(trace_entries)
-                return None
-
-            alpaca_credentials = get_provider_credentials("alpaca")
+            injected_alpaca = self._injected_provider_fetchers.get("alpaca")
+            alpaca_credentials = None if injected_alpaca is not None else get_provider_credentials("alpaca")
             route_steps: List[str] = []
-            if alpaca_credentials.is_configured:
+            if injected_alpaca is not None or alpaca_credentials.is_configured:
                 route_steps.append("alpaca")
             elif alpaca_credentials.is_partial:
                 route_steps.append("alpaca(incomplete)")
@@ -1833,7 +1872,9 @@ class DataFetcherManager:
                 outcome="ok",
                 message=f"US stock route selected: {' -> '.join(route_steps)}.",
             )
-            if alpaca_credentials.is_partial:
+            if injected_alpaca is not None:
+                alpaca_fetcher = injected_alpaca
+            elif alpaca_credentials.is_partial:
                 append_trace(
                     provider="alpaca",
                     action="skipped",
@@ -1841,6 +1882,7 @@ class DataFetcherManager:
                     reason="incomplete_credentials",
                     message="Skipped Alpaca because both key ID and secret key are required.",
                 )
+                alpaca_fetcher = None
             elif not alpaca_credentials.is_configured:
                 append_trace(
                     provider="alpaca",
@@ -1849,16 +1891,26 @@ class DataFetcherManager:
                     reason="provider_not_configured",
                     message="Skipped Alpaca because it is not configured.",
                 )
+                alpaca_fetcher = None
             else:
                 alpaca_fetcher = self._get_alpaca_fetcher()
-                if alpaca_fetcher is None:
-                    append_trace(
-                        provider="alpaca",
-                        action="failed",
-                        outcome="failed",
-                        reason="initialization_failed",
-                        message="Alpaca credentials were present but the fetcher failed to initialize.",
-                    )
+            if alpaca_fetcher is None and alpaca_credentials is not None and alpaca_credentials.is_configured:
+                append_trace(
+                    provider="alpaca",
+                    action="failed",
+                    outcome="failed",
+                    reason="initialization_failed",
+                    message="Alpaca credentials were present but the fetcher failed to initialize.",
+                )
+            elif alpaca_fetcher is not None:
+                route_guard = self._check_fetcher_transport(
+                    alpaca_fetcher,
+                    provider="alpaca",
+                    capability="realtime_quote",
+                    route="DataFetcherManager.get_realtime_quote.us_alpaca",
+                )
+                if not route_guard.allowed:
+                    append_trace(**route_guard.to_trace())
                 else:
                     append_trace(
                         provider="alpaca",
@@ -1908,6 +1960,15 @@ class DataFetcherManager:
             for fetcher in self._fetchers:
                 if fetcher.name == "YfinanceFetcher":
                     if hasattr(fetcher, 'get_realtime_quote'):
+                        route_guard = self._check_fetcher_transport(
+                            fetcher,
+                            provider="yfinance",
+                            capability="realtime_quote",
+                            route="DataFetcherManager.get_realtime_quote.us_yfinance",
+                        )
+                        if not route_guard.allowed:
+                            append_trace(**route_guard.to_trace())
+                            break
                         append_trace(
                             provider="yfinance",
                             action="attempting",
@@ -1958,16 +2019,6 @@ class DataFetcherManager:
 
         # 港股实时行情走专用入口：优先 Twelve Data，再回退 akshare_hk。
         if _is_hk_market(stock_code):
-            route_guard = check_uat_provider_dispatch(
-                provider="DataFetcherManager",
-                capability="realtime_quote",
-                route="DataFetcherManager.get_realtime_quote.hk_route",
-            )
-            if not route_guard.allowed:
-                append_trace(**route_guard.to_trace())
-                self._set_last_realtime_quote_trace(trace_entries)
-                return None
-
             route_steps: List[str] = []
             if self._get_twelve_data_fetcher() is not None:
                 route_steps.append("twelve_data")
@@ -1979,6 +2030,16 @@ class DataFetcherManager:
                 message=f"HK route selected: {' -> '.join(route_steps)}.",
             )
             twelve_data_fetcher = self._get_twelve_data_fetcher()
+            if twelve_data_fetcher is not None:
+                route_guard = self._check_fetcher_transport(
+                    twelve_data_fetcher,
+                    provider="twelve_data",
+                    capability="realtime_quote",
+                    route="DataFetcherManager.get_realtime_quote.hk_twelve_data",
+                )
+                if not route_guard.allowed:
+                    append_trace(**route_guard.to_trace())
+                    twelve_data_fetcher = None
             if twelve_data_fetcher is not None:
                 append_trace(
                     provider="twelve_data",
@@ -2029,6 +2090,15 @@ class DataFetcherManager:
                 if fetcher.name != "AkshareFetcher":
                     continue
                 if not hasattr(fetcher, 'get_realtime_quote'):
+                    break
+                route_guard = self._check_fetcher_transport(
+                    fetcher,
+                    provider="akshare_hk",
+                    capability="realtime_quote",
+                    route="DataFetcherManager.get_realtime_quote.hk_akshare",
+                )
+                if not route_guard.allowed:
+                    append_trace(**route_guard.to_trace())
                     break
                 append_trace(
                     provider="akshare_hk",
@@ -2108,7 +2178,20 @@ class DataFetcherManager:
             if not source:
                 continue
 
-            route_guard = check_uat_provider_dispatch(
+            expected_fetcher_name = {
+                "efinance": "EfinanceFetcher",
+                "akshare_em": "AkshareFetcher",
+                "akshare_sina": "AkshareFetcher",
+                "tencent": "AkshareFetcher",
+                "akshare_qq": "AkshareFetcher",
+                "tushare": "TushareFetcher",
+            }.get(source)
+            source_fetcher = next(
+                (fetcher for fetcher in self._fetchers if fetcher.name == expected_fetcher_name),
+                None,
+            )
+            route_guard = self._check_fetcher_transport(
+                source_fetcher,
                 provider=source,
                 capability="realtime_quote",
                 route="DataFetcherManager.get_realtime_quote.cn_source_priority",

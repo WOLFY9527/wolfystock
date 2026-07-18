@@ -32,9 +32,12 @@ class _SlowTicker:
 
 
 def test_yfinance_history_transport_enforces_explicit_deadline() -> None:
-    with patch("src.services.market_overview_yfinance_transport.yf.Ticker", return_value=_SlowTicker()):
-        with pytest.raises(TimeoutError, match="yfinance history timeout"):
-            fetch_yfinance_quote_history_frame("SPY", timeout=0.001)
+    with pytest.raises(TimeoutError, match="yfinance history timeout"):
+        fetch_yfinance_quote_history_frame(
+            "SPY",
+            timeout=0.001,
+            history_transport=lambda: _SlowTicker().history(),
+        )
 
 
 def test_official_macro_points_stop_when_aggregate_deadline_is_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:

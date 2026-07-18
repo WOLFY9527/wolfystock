@@ -101,11 +101,12 @@ def test_stock_service_intraday_uses_pure_symbol_utility_without_changing_downlo
         converted_symbols.append(stock_code)
         return "0700.HK"
 
-    monkeypatch.setitem(sys.modules, "yfinance", dummy_yf)
-    monkeypatch.setattr("data_provider.base.DataFetcherManager", _DummyManager)
     monkeypatch.setattr("src.services.stock_service.to_yfinance_symbol", fake_to_yfinance_symbol)
 
-    payload = StockService().get_intraday_data("hk00700", interval="5m", range_period="1d")
+    payload = StockService(
+        provider_manager=_DummyManager(),
+        intraday_transport=dummy_yf.download,
+    ).get_intraday_data("hk00700", interval="5m", range_period="1d")
 
     assert converted_symbols == ["hk00700"]
     assert payload["stock_name"] == "NAME-hk00700"

@@ -29,11 +29,11 @@ class TestTushareFetcherFollowUps(unittest.TestCase):
 
     @staticmethod
     def _make_fetcher() -> TushareFetcher:
-        with patch.object(TushareFetcher, "_init_api", return_value=None):
-            fetcher = TushareFetcher()
-        fetcher._api = MagicMock()
-        fetcher.priority = 2
-        return fetcher
+        with patch(
+            "data_provider.tushare_fetcher.get_config",
+            side_effect=AssertionError("injected API must not read credentials"),
+        ):
+            return TushareFetcher(api=MagicMock())
 
     def test_get_trade_time_refreshes_trade_calendar_when_day_changes(self) -> None:
         fetcher = self._make_fetcher()

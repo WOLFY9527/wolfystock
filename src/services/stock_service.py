@@ -10,8 +10,8 @@
 """
 
 import logging
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
+from datetime import datetime
+from typing import Optional, Callable, Dict, Any, List
 
 import pandas as pd
 
@@ -37,8 +37,8 @@ from src.services.stock_service_provider_adapter import StockServiceProviderAdap
 from src.services.akshare_cn_ohlcv_cache import AkshareCnOhlcvRuntime, is_cn_a_share_symbol
 from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE, fetch_daily_history_with_local_us_fallback
 from src.services.uat_provider_isolation import (
-    UAT_NO_LIVE_PROVIDERS_ENV,
-    check_uat_provider_dispatch,
+    UatProviderIsolationError,
+    check_uat_provider_transport,
     uat_no_live_providers_enabled,
 )
 from src.utils.symbol_classification import is_us_stock_code
@@ -94,9 +94,39 @@ class StockService:
     封装股票数据获取的业务逻辑
     """
     
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        repo: Any | None = None,
+        provider_adapter: StockServiceProviderAdapter | None = None,
+        provider_manager: Any | None = None,
+        history_transport: Optional[Callable[..., Any]] = None,
+        intraday_transport: Optional[Callable[..., Any]] = None,
+    ):
         """初始化股票数据服务"""
-        self.repo = StockRepository()
+        self.repo = repo if repo is not None else StockRepository()
+        self._provider_manager = provider_manager
+        self._history_transport = history_transport
+        self._intraday_transport = intraday_transport
+        if provider_adapter is not None:
+            self._provider_adapter = provider_adapter
+        elif provider_manager is not None:
+            self._provider_adapter = StockServiceProviderAdapter(
+                manager_factory=lambda: provider_manager
+            )
+        else:
+            self._provider_adapter = None
+
+    def _provider_adapter_dispatch(self, *, capability: str, route: str):
+        return check_uat_provider_transport(
+            provider="stock_service_provider_adapter",
+            capability=capability,
+            route=route,
+            injected_transport=self._provider_adapter,
+        )
+
+    def _get_provider_adapter(self) -> StockServiceProviderAdapter:
+        return self._provider_adapter or StockServiceProviderAdapter()
 
     def validate_ticker_exists(self, stock_code: str) -> Dict[str, Any]:
         """Check whether the ticker resolves to a meaningful market entity."""
@@ -104,11 +134,15 @@ class StockService:
         if not normalized_code:
             return {"stock_code": normalized_code, "exists": False, "stock_name": None}
 
-        if uat_no_live_providers_enabled():
+        dispatch = self._provider_adapter_dispatch(
+            capability="ticker_validation",
+            route="StockService.validate_ticker_exists",
+        )
+        if not dispatch.allowed:
             return {"stock_code": normalized_code, "exists": False, "stock_name": None}
 
         try:
-            adapter = StockServiceProviderAdapter()
+            adapter = self._get_provider_adapter()
             stock_name = adapter.get_stock_name(normalized_code, allow_realtime=False)
             if _is_meaningful_stock_name(stock_name, normalized_code):
                 return {
@@ -127,6 +161,8 @@ class StockService:
                 }
         except ImportError:
             logger.warning("DataFetcherManager 未找到，无法执行股票代码真实性校验")
+        except UatProviderIsolationError:
+            raise
         except Exception as e:
             logger.warning("股票代码真实性校验失败 %s: %s", normalized_code, e)
 
@@ -143,11 +179,15 @@ class StockService:
             实时行情数据字典
         """
         observed_at = datetime.now().isoformat()
-        if uat_no_live_providers_enabled():
+        dispatch = self._provider_adapter_dispatch(
+            capability="realtime_quote",
+            route="StockService.get_realtime_quote",
+        )
+        if not dispatch.allowed:
             return self._get_consumer_safe_quote_recovery(stock_code, observed_at=observed_at)
 
         try:
-            adapter = StockServiceProviderAdapter()
+            adapter = self._get_provider_adapter()
             quote = adapter.get_quote_snapshot(stock_code)
             
             if quote is None:
@@ -188,6 +228,8 @@ class StockService:
         except ImportError:
             logger.warning("DataFetcherManager 未找到，返回结构化行情不可用状态")
             return self._get_consumer_safe_quote_recovery(stock_code, observed_at=observed_at)
+        except UatProviderIsolationError:
+            raise
         except Exception as e:
             logger.error(f"获取实时行情失败: {e}", exc_info=True)
             return self._get_consumer_safe_quote_recovery(stock_code, observed_at=observed_at)
@@ -383,8 +425,8 @@ class StockService:
                 )
 
             # 调用数据获取器获取历史数据；UAT validation mode only reads local caches.
-            manager = None
-            if not uat_no_live_providers_enabled():
+            manager = self._provider_manager
+            if manager is None and not uat_no_live_providers_enabled():
                 from data_provider.base import DataFetcherManager
 
                 manager = DataFetcherManager()
@@ -394,7 +436,20 @@ class StockService:
             fetch_error = None
             provider_trace: List[Dict[str, Any]] = []
             try:
-                df, source = fetch_daily_history_with_local_us_fallback(
+                history_transport = self._history_transport or fetch_daily_history_with_local_us_fallback
+                if self._history_transport is not None:
+                    dispatch = check_uat_provider_transport(
+                        provider="stock_history",
+                        capability="daily_history",
+                        route="StockService.get_history_data",
+                        injected_transport=self._history_transport,
+                    )
+                    logger.debug(
+                        "Stock history transport selected: transport_identity=%s evidence_kind=%s",
+                        dispatch.transport_identity,
+                        dispatch.evidence_kind,
+                    )
+                df, source = history_transport(
                     stock_code,
                     days=fetch_days,
                     manager=manager,
@@ -402,6 +457,8 @@ class StockService:
                     allow_provider_fallback=not uat_no_live_providers_enabled(),
                 )
                 provider_trace = self._get_manager_daily_trace(manager)
+            except UatProviderIsolationError:
+                raise
             except Exception as exc:
                 fetch_error = exc
                 provider_trace = self._get_manager_daily_trace(manager)
@@ -583,6 +640,8 @@ class StockService:
                 ),
             }
 
+        except UatProviderIsolationError:
+            raise
         except Exception as e:
             logger.error(f"获取历史数据失败: {e}", exc_info=True)
             diagnostics = self._build_history_diagnostics(
@@ -724,10 +783,11 @@ class StockService:
         """
         获取分钟级 / 日内行情，优先用于报告图表展示。
         """
-        dispatch = check_uat_provider_dispatch(
+        dispatch = check_uat_provider_transport(
             provider="yfinance",
             capability="intraday_history",
             route="StockService.get_intraday_data",
+            injected_transport=self._intraday_transport,
         )
         if not dispatch.allowed:
             metadata = self._build_intraday_metadata(
@@ -753,16 +813,25 @@ class StockService:
                 "reasonCode": dispatch.reason_code,
             }
         try:
-            import yfinance as yf
-            from data_provider.base import DataFetcherManager
-
-            manager = DataFetcherManager()
             symbol, download_kwargs = _prepare_intraday_yfinance_request(
                 stock_code,
                 interval,
                 range_period,
             )
-            df = yf.download(**download_kwargs)
+            manager = self._provider_manager
+            if self._intraday_transport is not None:
+                logger.debug(
+                    "Intraday transport selected: transport_identity=%s evidence_kind=%s",
+                    dispatch.transport_identity,
+                    dispatch.evidence_kind,
+                )
+                df = self._intraday_transport(**download_kwargs)
+            else:
+                import yfinance as yf
+                from data_provider.base import DataFetcherManager
+
+                manager = DataFetcherManager()
+                df = yf.download(**download_kwargs)
             if isinstance(df.columns, pd.MultiIndex):
                 ticker_level = df.columns.get_level_values(-1)
                 if (ticker_level == symbol).any():
@@ -778,7 +847,7 @@ class StockService:
                 )
                 return {
                     "stock_code": stock_code,
-                    "stock_name": manager.get_stock_name(stock_code),
+                    "stock_name": self._safe_get_stock_name(manager, stock_code),
                     "interval": interval,
                     "range": range_period,
                     "data": [],
@@ -822,7 +891,7 @@ class StockService:
 
             return {
                 "stock_code": stock_code,
-                "stock_name": manager.get_stock_name(stock_code),
+                "stock_name": self._safe_get_stock_name(manager, stock_code),
                 "interval": interval,
                 "range": range_period,
                 "data": data,

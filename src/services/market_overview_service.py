@@ -52,6 +52,10 @@ from src.services.official_macro_transport import (
     fetch_treasury_daily_rate_observation_points,
     fred_runtime_config_probe,
 )
+from src.services.uat_provider_isolation import (
+    UatProviderIsolationError,
+    check_uat_provider_transport,
+)
 from src.services.official_macro_liquidity_cache_contracts import (
     build_official_cn_money_market_cache_bundle,
     build_official_fed_liquidity_cache_bundle,
@@ -1104,11 +1108,14 @@ class MarketOverviewService:
         self,
         *,
         cn_hk_connect_flow_provider: Optional[Callable[[], Any]] = None,
+        official_macro_points_transport: Optional[Callable[..., Dict[str, List[MacroObservation]]]] = None,
     ) -> None:
         self._official_macro_micro_cache: Dict[str, tuple[float, List[MacroObservation]]] = {}
         self._official_macro_overlay_diagnostics: Dict[str, str] = {}
         self._official_macro_overlay_diagnostic_details: Dict[str, Dict[str, Any]] = {}
         self._quote_request_memo: Optional[Dict[str, tuple[bool, Any]]] = None
+        self._official_macro_points_transport = official_macro_points_transport
+        self._official_macro_transport_dispatch = None
         self._cn_hk_connect_flow_provider = (
             cn_hk_connect_flow_provider
             if cn_hk_connect_flow_provider is not None
@@ -7997,6 +8004,22 @@ class MarketOverviewService:
         include_usd_pressure: bool = False,
         budget_seconds: Optional[float] = None,
     ) -> Dict[str, List[MacroObservation]]:
+        if self._official_macro_points_transport is not None:
+            dispatch = check_uat_provider_transport(
+                provider="official_macro",
+                capability="macro_observations",
+                route="MarketOverviewService._official_macro_points",
+                injected_transport=self._official_macro_points_transport,
+            )
+            self._official_macro_transport_dispatch = dispatch
+            return self._official_macro_points_transport(
+                include_policy_and_inflation=include_policy_and_inflation,
+                include_credit_stress=include_credit_stress,
+                include_fed_liquidity=include_fed_liquidity,
+                include_usd_pressure=include_usd_pressure,
+                budget_seconds=budget_seconds,
+            )
+
         points: Dict[str, List[MacroObservation]] = {}
         diagnostics: Dict[str, str] = {}
         diagnostic_details: Dict[str, Dict[str, Any]] = {}
@@ -8140,6 +8163,8 @@ class MarketOverviewService:
                     limit=self._official_macro_history_limit(series_id),
                     timeout=timeout,
                 )
+            except UatProviderIsolationError:
+                raise
             except Exception as exc:
                 series_points = []
                 fred_error_reason = self._official_macro_exception_reason(exc)
@@ -8278,6 +8303,8 @@ class MarketOverviewService:
             treasury_error_details: Dict[str, Any] | None = None
             try:
                 treasury_points = fetch_treasury_daily_rate_observation_points(limit=2, timeout=timeout)
+            except UatProviderIsolationError:
+                raise
             except Exception as exc:
                 treasury_points = {}
                 treasury_error_reason = self._official_macro_exception_reason(exc)

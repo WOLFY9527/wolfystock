@@ -54,7 +54,7 @@ class TestTavilySearchProvider(unittest.TestCase):
 
     def test_provider_uses_news_topic_when_explicitly_requested(self) -> None:
         published_text = "2026-03-20T09:30:00Z"
-        provider = TavilySearchProvider(["dummy_key"])
+        provider = TavilySearchProvider(["dummy_key"], client_factory=_FakeTavilyClient)
 
         with self._patch_tavily(
             {
@@ -82,7 +82,7 @@ class TestTavilySearchProvider(unittest.TestCase):
         self.assertEqual(resp.results[0].url, "https://example.com/alibaba-earnings")
 
     def test_provider_supports_publishedDate_variant(self) -> None:
-        provider = TavilySearchProvider(["dummy_key"])
+        provider = TavilySearchProvider(["dummy_key"], client_factory=_FakeTavilyClient)
 
         with self._patch_tavily(
             {
@@ -103,7 +103,7 @@ class TestTavilySearchProvider(unittest.TestCase):
         self.assertEqual(resp.results[0].published_date, "2026-03-20T11:00:00Z")
 
     def test_non_news_search_paths_do_not_force_news_topic(self) -> None:
-        provider = TavilySearchProvider(["dummy_key"])
+        provider = TavilySearchProvider(["dummy_key"], client_factory=_FakeTavilyClient)
 
         with self._patch_tavily(
             {
@@ -146,6 +146,7 @@ class TestTavilySearchProvider(unittest.TestCase):
                         searxng_public_instances_enabled=False,
                         news_max_age_days=3,
                         news_strategy_profile="short",
+                        tavily_client_factory=_FakeTavilyClient,
                     )
                     resp = service.search_stock_news("BABA", "阿里巴巴", max_results=3)
 
@@ -169,6 +170,7 @@ class TestTavilySearchProvider(unittest.TestCase):
             service = SearchService(
                 tavily_keys=["dummy_key"],
                 searxng_public_instances_enabled=False,
+                tavily_client_factory=_FakeTavilyClient,
             )
             resp = service.search_stock_events("BABA", "阿里巴巴")
 
@@ -197,6 +199,7 @@ class TestTavilySearchProvider(unittest.TestCase):
                 searxng_public_instances_enabled=False,
                 news_max_age_days=3,
                 news_strategy_profile="short",
+                tavily_client_factory=_FakeTavilyClient,
             )
             intel = service.search_comprehensive_intel("BABA", "阿里巴巴", max_searches=2)
 
@@ -227,6 +230,7 @@ class TestTavilySearchProvider(unittest.TestCase):
                 searxng_public_instances_enabled=False,
                 news_max_age_days=3,
                 news_strategy_profile="short",
+                tavily_client_factory=_FakeTavilyClient,
             )
             intel = service.search_comprehensive_intel("510300", "沪深300ETF", max_searches=3)
 
@@ -259,6 +263,7 @@ class TestTavilySearchProvider(unittest.TestCase):
                 searxng_public_instances_enabled=False,
                 news_max_age_days=3,
                 news_strategy_profile="short",
+                tavily_client_factory=_FakeTavilyClient,
             )
             intel = service.search_comprehensive_intel("600519", "贵州茅台", max_searches=3)
 
@@ -291,6 +296,7 @@ class TestTavilySearchProvider(unittest.TestCase):
                 searxng_public_instances_enabled=False,
                 news_max_age_days=3,
                 news_strategy_profile="short",
+                tavily_client_factory=_FakeTavilyClient,
             )
             service.search_comprehensive_intel("ORCL", "Oracle", max_searches=1)
 

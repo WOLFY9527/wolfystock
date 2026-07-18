@@ -18,7 +18,7 @@ import csv
 import logging
 from datetime import datetime
 from io import StringIO
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -33,7 +33,7 @@ from tenacity import (
 
 from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS
 from .realtime_types import UnifiedRealtimeQuote, RealtimeSource
-from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
+from src.services.uat_provider_isolation import require_uat_provider_transport_allowed
 from src.utils.symbol_classification import is_us_stock_code
 from src.utils.yfinance_symbol import get_us_index_yf_symbol, to_yfinance_symbol
 
@@ -76,9 +76,16 @@ class YfinanceFetcher(BaseFetcher):
     name = "YfinanceFetcher"
     priority = int(os.getenv("YFINANCE_PRIORITY", "4"))
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        yf_transport: Any = None,
+        stooq_transport: Optional[Callable[..., Any]] = None,
+    ):
         """初始化 YfinanceFetcher"""
-        pass
+        self._yf_transport = yf_transport
+        self._stooq_transport = stooq_transport
+        self._injected_transport = yf_transport
 
     def _convert_stock_code(self, stock_code: str) -> str:
         """
@@ -133,12 +140,16 @@ class YfinanceFetcher(BaseFetcher):
         2. 调用 yfinance API
         3. 处理返回数据
         """
-        require_uat_provider_dispatch_allowed(
+        require_uat_provider_transport_allowed(
             provider="yfinance",
             capability="daily_history",
             route="YfinanceFetcher._fetch_raw_data",
+            injected_transport=self._yf_transport,
         )
-        import yfinance as yf
+        if self._yf_transport is None:
+            import yfinance as yf
+        else:
+            yf = self._yf_transport
 
         # 转换代码格式
         yf_code = self._convert_stock_code(stock_code)
@@ -233,12 +244,11 @@ class YfinanceFetcher(BaseFetcher):
 
         return df
 
-    def _fetch_yf_ticker_data(self, yf, yf_code: str, name: str, return_code: str) -> Optional[Dict[str, Any]]:
+    def _fetch_yf_ticker_data(self, yf_code: str, name: str, return_code: str) -> Optional[Dict[str, Any]]:
         """
         通过 yfinance 拉取单个指数/股票的行情数据。
 
         Args:
-            yf: yfinance 模块引用
             yf_code: yfinance 使用的代码（如 '000001.SS'、'^GSPC'）
             name: 指数显示名称
             return_code: 写入结果 dict 的 code 字段（如 'sh000001'、'SPX'）
@@ -246,11 +256,16 @@ class YfinanceFetcher(BaseFetcher):
         Returns:
             行情字典，失败时返回 None
         """
-        require_uat_provider_dispatch_allowed(
+        require_uat_provider_transport_allowed(
             provider="yfinance",
             capability="realtime_quote",
             route="YfinanceFetcher._fetch_yf_ticker_data",
+            injected_transport=self._yf_transport,
         )
+        if self._yf_transport is None:
+            import yfinance as yf
+        else:
+            yf = self._yf_transport
         ticker = yf.Ticker(yf_code)
         # 取近两日数据以计算涨跌幅
         hist = ticker.history(period='2d')
@@ -286,10 +301,8 @@ class YfinanceFetcher(BaseFetcher):
         获取主要指数行情 (Yahoo Finance)，支持 A 股与美股。
         region=us 时委托给 _get_us_main_indices。
         """
-        import yfinance as yf
-
         if region == "us":
-            return self._get_us_main_indices(yf)
+            return self._get_us_main_indices()
 
         # A 股指数：akshare 代码 -> (yfinance 代码, 显示名称)
         yf_mapping = {
@@ -305,7 +318,7 @@ class YfinanceFetcher(BaseFetcher):
         try:
             for ak_code, (yf_code, name) in yf_mapping.items():
                 try:
-                    item = self._fetch_yf_ticker_data(yf, yf_code, name, ak_code)
+                    item = self._fetch_yf_ticker_data(yf_code, name, ak_code)
                     if item:
                         results.append(item)
                         logger.debug(f"[Yfinance] 获取指数 {name} 成功")
@@ -321,7 +334,7 @@ class YfinanceFetcher(BaseFetcher):
 
         return None
 
-    def _get_us_main_indices(self, yf) -> Optional[List[Dict[str, Any]]]:
+    def _get_us_main_indices(self) -> Optional[List[Dict[str, Any]]]:
         """获取美股主要指数行情（SPX、IXIC、DJI、VIX），复用 _fetch_yf_ticker_data"""
         # 大盘复盘所需核心美股指数
         us_indices = ['SPX', 'IXIC', 'DJI', 'VIX']
@@ -332,7 +345,7 @@ class YfinanceFetcher(BaseFetcher):
                 if not yf_symbol:
                     continue
                 try:
-                    item = self._fetch_yf_ticker_data(yf, yf_symbol, name, code)
+                    item = self._fetch_yf_ticker_data(yf_symbol, name, code)
                     if item:
                         results.append(item)
                         logger.debug(f"[Yfinance] 获取美股指数 {name} 成功")
@@ -363,10 +376,11 @@ class YfinanceFetcher(BaseFetcher):
         Stooq 提供的是最新交易日行情，精度不如分时实时接口，但在 Yahoo / yfinance
         被限流时，至少能为 Web UI 提供可用价格；若可获取到昨收价，则同时提供涨跌幅等衍生指标。
         """
-        require_uat_provider_dispatch_allowed(
+        require_uat_provider_transport_allowed(
             provider="stooq",
             capability="realtime_quote",
             route="YfinanceFetcher._get_us_stock_quote_from_stooq",
+            injected_transport=self._stooq_transport,
         )
         symbol = stock_code.strip().upper()
         stooq_symbol = f"{symbol.lower()}.us"
@@ -379,8 +393,9 @@ class YfinanceFetcher(BaseFetcher):
             },
         )
 
+        transport = self._stooq_transport or urlopen
         try:
-            with urlopen(request, timeout=15) as response:
+            with transport(request, timeout=15) as response:
                 payload = response.read().decode("utf-8", "ignore").strip()
         except (HTTPError, URLError, TimeoutError) as exc:
             logger.warning(f"[Stooq] 获取美股 {symbol} 实时行情失败: {exc}")
@@ -400,7 +415,7 @@ class YfinanceFetcher(BaseFetcher):
                 },
             )
             try:
-                with urlopen(history_request, timeout=15) as response:
+                with transport(history_request, timeout=15) as response:
                     history_payload = response.read().decode("utf-8", "ignore").strip()
             except (HTTPError, URLError, TimeoutError) as exc:
                 logger.debug(f"[Stooq] 获取美股 {symbol} 日线历史失败: {exc}")
@@ -529,12 +544,16 @@ class YfinanceFetcher(BaseFetcher):
         Returns:
             UnifiedRealtimeQuote or None
         """
-        require_uat_provider_dispatch_allowed(
+        require_uat_provider_transport_allowed(
             provider="yfinance",
             capability="realtime_quote",
             route="YfinanceFetcher._get_us_index_realtime_quote",
+            injected_transport=self._yf_transport,
         )
-        import yfinance as yf
+        if self._yf_transport is None:
+            import yfinance as yf
+        else:
+            yf = self._yf_transport
 
         try:
             logger.debug(f"[Yfinance] 获取美股指数 {user_code} ({yf_symbol}) 实时行情")
@@ -615,12 +634,16 @@ class YfinanceFetcher(BaseFetcher):
         Returns:
             UnifiedRealtimeQuote 对象，获取失败返回 None
         """
-        require_uat_provider_dispatch_allowed(
+        require_uat_provider_transport_allowed(
             provider="yfinance",
             capability="realtime_quote",
             route="YfinanceFetcher.get_realtime_quote",
+            injected_transport=self._yf_transport,
         )
-        import yfinance as yf
+        if self._yf_transport is None:
+            import yfinance as yf
+        else:
+            yf = self._yf_transport
 
         # 美股指数：使用映射（SPX -> ^GSPC）
         yf_symbol, index_name = get_us_index_yf_symbol(stock_code)

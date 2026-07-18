@@ -19,7 +19,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Callable, Optional, Tuple
 from itertools import cycle
 from urllib.parse import urlsplit, urlunsplit
 import requests
@@ -39,8 +39,8 @@ from src.config import (
     resolve_news_window_days,
 )
 from src.services.uat_provider_isolation import (
-    check_uat_provider_dispatch,
-    require_uat_provider_dispatch_allowed,
+    check_uat_provider_transport,
+    require_uat_provider_transport_allowed,
 )
 from src.services.news_catalyst_producer_lineage import (
     build_news_catalyst_producer_lineage_bundle_v1,
@@ -66,10 +66,11 @@ _SEARCH_TRANSIENT_EXCEPTIONS = (
 def _post_with_retry(url: str, *, headers: Dict[str, str], json: Dict[str, Any], timeout: int) -> requests.Response:
     """POST with retry on transient SSL/network errors."""
     provider = _provider_from_url(url)
-    require_uat_provider_dispatch_allowed(
+    require_uat_provider_transport_allowed(
         provider=provider,
         capability="search",
         route="search_service._post_with_retry",
+        injected_transport=None,
     )
     return requests.post(url, headers=headers, json=json, timeout=timeout)
 
@@ -86,10 +87,11 @@ def _get_with_retry(
 ) -> requests.Response:
     """GET with retry on transient SSL/network errors."""
     provider = _provider_from_url(url)
-    require_uat_provider_dispatch_allowed(
+    require_uat_provider_transport_allowed(
         provider=provider,
         capability="search",
         route="search_service._get_with_retry",
+        injected_transport=None,
     )
     return requests.get(url, headers=headers, params=params, timeout=timeout)
 
@@ -193,7 +195,12 @@ def reset_url_content_cache() -> None:
         _url_content_cache.clear()
 
 
-def fetch_url_content(url: str, timeout: int = 5) -> str:
+def fetch_url_content(
+    url: str,
+    timeout: int = 5,
+    *,
+    article_factory: Callable[..., Any] | None = None,
+) -> str:
     """
     获取 URL 网页正文内容 (使用 newspaper3k)
     """
@@ -201,19 +208,21 @@ def fetch_url_content(url: str, timeout: int = 5) -> str:
     if not normalized_url:
         return ""
 
-    dispatch = check_uat_provider_dispatch(
-        provider="url_content",
-        capability="search_content_fetch",
-        route="search_service.fetch_url_content",
-    )
-    if not dispatch.allowed:
-        return ""
-
-    cache_key = _normalize_url_content_cache_key(normalized_url)
+    cache_namespace = "fixture" if article_factory is not None else "provider"
+    cache_key = f"{cache_namespace}:{_normalize_url_content_cache_key(normalized_url)}"
     cached_content = _get_cached_url_content(cache_key)
     if cached_content is not None:
         logger.debug("URL content cache hit: %s", normalized_url)
         return cached_content
+
+    dispatch = check_uat_provider_transport(
+        provider="url_content",
+        capability="search_content_fetch",
+        route="search_service.fetch_url_content",
+        injected_transport=article_factory,
+    )
+    if not dispatch.allowed:
+        return ""
 
     try:
         # 配置 newspaper3k
@@ -223,7 +232,8 @@ def fetch_url_content(url: str, timeout: int = 5) -> str:
         config.fetch_images = False  # 不下载图片
         config.memoize_articles = False # 不缓存
 
-        article = Article(normalized_url, config=config, language='zh') # 默认中文，但也支持其他
+        selected_article_factory = article_factory if article_factory is not None else Article
+        article = selected_article_factory(normalized_url, config=config, language='zh')
         article.download()
         article.parse()
 
@@ -305,7 +315,13 @@ class SearchResponse:
 class BaseSearchProvider(ABC):
     """搜索引擎基类"""
     
-    def __init__(self, api_keys: List[str], name: str):
+    def __init__(
+        self,
+        api_keys: List[str],
+        name: str,
+        *,
+        transport: Callable[..., Any] | None = None,
+    ):
         """
         初始化搜索引擎
         
@@ -315,6 +331,7 @@ class BaseSearchProvider(ABC):
         """
         self._api_keys = api_keys
         self._name = name
+        self._transport = transport
         self._key_cycle = cycle(api_keys) if api_keys else None
         self._key_usage: Dict[str, int] = {key: 0 for key in api_keys}
         self._key_errors: Dict[str, int] = {key: 0 for key in api_keys}
@@ -378,10 +395,11 @@ class BaseSearchProvider(ABC):
         Returns:
             SearchResponse 对象
         """
-        dispatch = check_uat_provider_dispatch(
+        dispatch = check_uat_provider_transport(
             provider=self._name,
             capability="search",
             route=f"{self.__class__.__name__}.search",
+            injected_transport=self._transport,
         )
         if not dispatch.allowed:
             return SearchResponse(
@@ -408,6 +426,8 @@ class BaseSearchProvider(ABC):
         try:
             response = self._do_search(query, api_key, max_results, days=days)
             response.search_time = time.time() - start_time
+            if not response.attempts:
+                response.attempts = [dispatch.to_trace()]
             
             if response.success:
                 self._record_success(api_key)
@@ -457,8 +477,13 @@ class TavilySearchProvider(BaseSearchProvider):
     文档：https://docs.tavily.com/
     """
     
-    def __init__(self, api_keys: List[str]):
-        super().__init__(api_keys, "Tavily")
+    def __init__(
+        self,
+        api_keys: List[str],
+        *,
+        client_factory: Callable[..., Any] | None = None,
+    ):
+        super().__init__(api_keys, "Tavily", transport=client_factory)
     
     def _do_search(
         self,
@@ -469,19 +494,29 @@ class TavilySearchProvider(BaseSearchProvider):
         topic: Optional[str] = None,
     ) -> SearchResponse:
         """执行 Tavily 搜索"""
-        try:
-            from tavily import TavilyClient
-        except ImportError:
-            return SearchResponse(
-                query=query,
-                results=[],
-                provider=self.name,
-                success=False,
-                error_message="tavily-python 未安装，请运行: pip install tavily-python"
-            )
+        if self._transport is None:
+            try:
+                from tavily import TavilyClient
+            except ImportError:
+                return SearchResponse(
+                    query=query,
+                    results=[],
+                    provider=self.name,
+                    success=False,
+                    error_message="tavily-python 未安装，请运行: pip install tavily-python"
+                )
+            client_factory = TavilyClient
+        else:
+            client_factory = self._transport
         
         try:
-            client = TavilyClient(api_key=api_key)
+            require_uat_provider_transport_allowed(
+                provider="tavily",
+                capability="search",
+                route="TavilySearchProvider._do_search",
+                injected_transport=self._transport,
+            )
+            client = client_factory(api_key=api_key)
             
             # 执行搜索（优化：使用advanced深度、限制最近几天）
             search_kwargs: Dict[str, Any] = {
@@ -546,10 +581,11 @@ class TavilySearchProvider(BaseSearchProvider):
         if topic is None:
             return super().search(query, max_results=max_results, days=days)
 
-        dispatch = check_uat_provider_dispatch(
+        dispatch = check_uat_provider_transport(
             provider=self._name,
             capability="search",
             route=f"{self.__class__.__name__}.search",
+            injected_transport=self._transport,
         )
         if not dispatch.allowed:
             return SearchResponse(
@@ -576,6 +612,8 @@ class TavilySearchProvider(BaseSearchProvider):
         try:
             response = self._do_search(query, api_key, max_results, days=days, topic=topic)
             response.search_time = time.time() - start_time
+            if not response.attempts:
+                response.attempts = [dispatch.to_trace()]
 
             if response.success:
                 self._record_success(api_key)
@@ -615,8 +653,13 @@ class FinnhubNewsProvider(BaseSearchProvider):
 
     _US_TICKER_RE = re.compile(r"^[A-Z]{1,5}(?:\.[A-Z])?$")
 
-    def __init__(self, api_keys: List[str]):
-        super().__init__(api_keys, "Finnhub")
+    def __init__(
+        self,
+        api_keys: List[str],
+        *,
+        transport: Callable[..., Any] | None = None,
+    ):
+        super().__init__(api_keys, "Finnhub", transport=transport)
 
     def _do_search(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
         return SearchResponse(
@@ -679,7 +722,14 @@ class FinnhubNewsProvider(BaseSearchProvider):
             today = datetime.now(timezone.utc).date()
             from_date = (today - timedelta(days=max(1, int(days)))).isoformat()
             to_date = today.isoformat()
-            response = _get_with_retry(
+            require_uat_provider_transport_allowed(
+                provider="finnhub",
+                capability="search",
+                route="FinnhubNewsProvider.search_news",
+                injected_transport=self._transport,
+            )
+            request_get = self._transport if self._transport is not None else _get_with_retry
+            response = request_get(
                 "https://finnhub.io/api/v1/company-news",
                 headers={},
                 params={"symbol": symbol, "from": from_date, "to": to_date, "token": api_key},
@@ -743,13 +793,25 @@ class FinnhubNewsProvider(BaseSearchProvider):
 class GNewsSearchProvider(BaseSearchProvider):
     """GNews provider for generic recent-news fallback."""
 
-    def __init__(self, api_keys: List[str]):
-        super().__init__(api_keys, "GNews")
+    def __init__(
+        self,
+        api_keys: List[str],
+        *,
+        transport: Callable[..., Any] | None = None,
+    ):
+        super().__init__(api_keys, "GNews", transport=transport)
 
     def _do_search(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
         to_date = datetime.now(timezone.utc)
         from_date = to_date - timedelta(days=max(1, int(days)))
-        response = _get_with_retry(
+        require_uat_provider_transport_allowed(
+            provider="gnews",
+            capability="search",
+            route="GNewsSearchProvider._do_search",
+            injected_transport=self._transport,
+        )
+        request_get = self._transport if self._transport is not None else _get_with_retry
+        response = request_get(
             "https://gnews.io/api/v4/search",
             headers={},
             params={
@@ -1626,9 +1688,15 @@ class SearXNGSearchProvider(BaseSearchProvider):
     _public_instances_stale_retry_after: float = 0.0
     _public_instances_lock = threading.Lock()
 
-    def __init__(self, base_urls: Optional[List[str]] = None, *, use_public_instances: bool = False):
+    def __init__(
+        self,
+        base_urls: Optional[List[str]] = None,
+        *,
+        use_public_instances: bool = False,
+        transport: Callable[..., Any] | None = None,
+    ):
         normalized_base_urls = [url.rstrip("/") for url in (base_urls or []) if url.strip()]
-        super().__init__(normalized_base_urls, "SearXNG")
+        super().__init__(normalized_base_urls, "SearXNG", transport=transport)
         self._base_urls = normalized_base_urls
         self._use_public_instances = bool(use_public_instances and not self._base_urls)
         self._cursor = 0
@@ -1722,7 +1790,11 @@ class SearXNGSearchProvider(BaseSearchProvider):
         return [url for _, _, url in ranked[: cls.PUBLIC_INSTANCES_POOL_LIMIT]]
 
     @classmethod
-    def _get_public_instances(cls) -> List[str]:
+    def _get_public_instances(
+        cls,
+        *,
+        transport: Callable[..., Any] | None = None,
+    ) -> List[str]:
         now = time.time()
         with cls._public_instances_lock:
             stale_urls: List[str] = []
@@ -1745,12 +1817,14 @@ class SearXNGSearchProvider(BaseSearchProvider):
                     return stale_urls
 
             try:
-                require_uat_provider_dispatch_allowed(
+                require_uat_provider_transport_allowed(
                     provider="searxng",
                     capability="search_public_instance_discovery",
                     route="SearXNGSearchProvider._get_public_instances",
+                    injected_transport=transport,
                 )
-                response = requests.get(
+                request_get = transport if transport is not None else requests.get
+                response = request_get(
                     cls.PUBLIC_INSTANCES_URL,
                     timeout=cls.PUBLIC_INSTANCES_TIMEOUT_SECONDS,
                 )
@@ -1825,12 +1899,16 @@ class SearXNGSearchProvider(BaseSearchProvider):
                 "pageno": 1,
             }
 
-            require_uat_provider_dispatch_allowed(
+            require_uat_provider_transport_allowed(
                 provider="searxng",
                 capability="search",
                 route="SearXNGSearchProvider._do_search",
+                injected_transport=self._transport,
             )
-            request_get = _get_with_retry if retry_enabled else requests.get
+            if self._transport is not None:
+                request_get = self._transport
+            else:
+                request_get = _get_with_retry if retry_enabled else requests.get
             response = request_get(search_url, headers=headers, params=params, timeout=timeout)
 
             if response.status_code != 200:
@@ -1944,10 +2022,11 @@ class SearXNGSearchProvider(BaseSearchProvider):
     def search(self, query: str, max_results: int = 5, days: int = 7) -> SearchResponse:
         """Execute SearXNG search with instance rotation and per-request failover."""
         start_time = time.time()
-        dispatch = check_uat_provider_dispatch(
+        dispatch = check_uat_provider_transport(
             provider=self.name,
             capability="search",
             route="SearXNGSearchProvider.search",
+            injected_transport=self._transport,
         )
         if not dispatch.allowed:
             return SearchResponse(
@@ -1970,7 +2049,7 @@ class SearXNGSearchProvider(BaseSearchProvider):
             timeout = self.SELF_HOSTED_TIMEOUT_SECONDS
             empty_error = "SearXNG 未配置可用实例"
         elif self._use_public_instances:
-            public_instances = self._get_public_instances()
+            public_instances = self._get_public_instances(transport=self._transport)
             candidates = self._rotate_candidates(
                 public_instances,
                 max_attempts=min(len(public_instances), self.PUBLIC_INSTANCES_MAX_ATTEMPTS),
@@ -1992,6 +2071,7 @@ class SearXNGSearchProvider(BaseSearchProvider):
                 success=False,
                 error_message=empty_error,
                 search_time=time.time() - start_time,
+                attempts=[dispatch.to_trace()],
             )
 
         errors: List[str] = []
@@ -2005,6 +2085,8 @@ class SearXNGSearchProvider(BaseSearchProvider):
                 retry_enabled=retry_enabled,
             )
             response.search_time = time.time() - start_time
+            if not response.attempts:
+                response.attempts = [dispatch.to_trace()]
             if response.success:
                 logger.info(
                     "[%s] 搜索 '%s' 成功，实例=%s，返回 %s 条结果，耗时 %.2fs",
@@ -2027,6 +2109,7 @@ class SearXNGSearchProvider(BaseSearchProvider):
             success=False,
             error_message="；".join(errors[:3]) if errors else empty_error,
             search_time=elapsed,
+            attempts=[dispatch.to_trace()],
         )
 
 
@@ -2076,6 +2159,8 @@ class SearchService:
         searxng_public_instances_enabled: bool = True,
         news_max_age_days: int = 3,
         news_strategy_profile: str = "short",
+        http_transport: Callable[..., Any] | None = None,
+        tavily_client_factory: Callable[..., Any] | None = None,
     ):
         """
         初始化搜索服务
@@ -2119,12 +2204,14 @@ class SearchService:
 
         # 2. Tavily（免费额度更多，每月 1000 次）
         if tavily_keys:
-            self._providers.append(TavilySearchProvider(tavily_keys))
+            self._providers.append(
+                TavilySearchProvider(tavily_keys, client_factory=tavily_client_factory)
+            )
             logger.info(f"已配置 Tavily 搜索，共 {len(tavily_keys)} 个 API Key")
 
         # 3. Finnhub（美股公司新闻 / 时间戳更稳定）
         if finnhub_keys:
-            self._providers.append(FinnhubNewsProvider(finnhub_keys))
+            self._providers.append(FinnhubNewsProvider(finnhub_keys, transport=http_transport))
             logger.info(f"已配置 Finnhub 新闻，共 {len(finnhub_keys)} 个 API Key")
 
         # 4. Brave Search（隐私优先，全球覆盖）
@@ -2139,7 +2226,7 @@ class SearchService:
 
         # 6. GNews（通用新闻兜底）
         if gnews_keys:
-            self._providers.append(GNewsSearchProvider(gnews_keys))
+            self._providers.append(GNewsSearchProvider(gnews_keys, transport=http_transport))
             logger.info(f"已配置 GNews 搜索，共 {len(gnews_keys)} 个 API Key")
 
         # 7. MiniMax（Coding Plan Web Search，结构化结果）
@@ -2151,6 +2238,7 @@ class SearchService:
         searxng_provider = SearXNGSearchProvider(
             searxng_base_urls,
             use_public_instances=bool(searxng_public_instances_enabled and not searxng_base_urls),
+            transport=http_transport,
         )
         if searxng_provider.is_available:
             self._providers.append(searxng_provider)

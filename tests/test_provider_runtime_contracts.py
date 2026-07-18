@@ -517,21 +517,17 @@ def test_us_realtime_trace_records_alpaca_fallback_to_yfinance_without_cn_or_hk_
         quote=UnifiedRealtimeQuote(code="AAPL", source=RealtimeSource.TUSHARE, price=1.0),
     )
     alpaca = _RealtimeFetcher(name="AlpacaFetcher", priority=0, quote=None)
-    manager = DataFetcherManager(fetchers=[efinance, akshare, tushare, yfinance])
+    manager = DataFetcherManager(
+        fetchers=[efinance, akshare, tushare, yfinance],
+        injected_provider_fetchers={"alpaca": alpaca},
+    )
 
     with (
         patch("src.config.get_config", return_value=_realtime_config(enabled=True)),
         patch(
             "data_provider.base.get_provider_credentials",
-            return_value=ProviderCredentialBundle(
-                provider="alpaca",
-                auth_mode="key_secret",
-                key_id="configured_id",
-                secret_key="configured_pair",
-                extras={"data_feed": "iex"},
-            ),
+            side_effect=AssertionError("injected Alpaca transport must not read credentials"),
         ),
-        patch.object(manager, "_get_alpaca_fetcher", return_value=alpaca),
         patch.object(
             manager,
             "_get_twelve_data_fetcher",
@@ -639,7 +635,10 @@ def test_hk_realtime_trace_records_twelve_data_fallback_to_akshare_hk_without_cn
         priority=3,
         quote=UnifiedRealtimeQuote(code="HK01810", source=RealtimeSource.TUSHARE, price=1.0),
     )
-    manager = DataFetcherManager(fetchers=[efinance, akshare, tushare])
+    manager = DataFetcherManager(
+        fetchers=[efinance, akshare, tushare],
+        injected_provider_fetchers={"twelve_data": twelve_data},
+    )
 
     with (
         patch("src.config.get_config", return_value=_realtime_config(enabled=True)),
@@ -647,7 +646,6 @@ def test_hk_realtime_trace_records_twelve_data_fallback_to_akshare_hk_without_cn
             "data_provider.base.get_provider_credentials",
             side_effect=AssertionError("HK realtime must not inspect US Alpaca credentials"),
         ),
-        patch.object(manager, "_get_twelve_data_fetcher", return_value=twelve_data),
         patch.object(
             manager,
             "_get_alpaca_fetcher",
@@ -837,20 +835,16 @@ def test_us_daily_history_trace_records_alpaca_failure_then_yfinance_fallback_wi
         priority=0,
         error=TimeoutError("alpaca timeout"),
     )
-    manager = DataFetcherManager(fetchers=[efinance, akshare, yfinance])
+    manager = DataFetcherManager(
+        fetchers=[efinance, akshare, yfinance],
+        injected_provider_fetchers={"alpaca": alpaca},
+    )
 
     with (
         patch(
             "data_provider.base.get_provider_credentials",
-            return_value=ProviderCredentialBundle(
-                provider="alpaca",
-                auth_mode="key_secret",
-                key_id="configured_id",
-                secret_key="configured_pair",
-                extras={"data_feed": "iex"},
-            ),
+            side_effect=AssertionError("injected Alpaca transport must not read credentials"),
         ),
-        patch.object(manager, "_get_alpaca_fetcher", return_value=alpaca),
         patch.object(
             manager,
             "_get_twelve_data_fetcher",
@@ -964,14 +958,11 @@ def test_stock_service_history_payload_preserves_aggregation_shape() -> None:
     )
     manager = SimpleNamespace(get_stock_name=lambda stock_code: "Apple")
 
-    with (
-        patch("data_provider.base.DataFetcherManager", return_value=manager),
-        patch(
-            "src.services.stock_service.fetch_daily_history_with_local_us_fallback",
-            return_value=(daily_df, LOCAL_US_PARQUET_SOURCE),
-        ),
-    ):
-        payload = StockService().get_history_data("AAPL", period="daily", days=2)
+    history_transport = MagicMock(return_value=(daily_df, LOCAL_US_PARQUET_SOURCE))
+    payload = StockService(
+        provider_manager=manager,
+        history_transport=history_transport,
+    ).get_history_data("AAPL", period="daily", days=2)
 
     assert payload["stock_code"] == "AAPL"
     assert payload["stock_name"] == "Apple"
@@ -1093,15 +1084,11 @@ def test_stock_service_us_daily_history_uses_persisted_rows_after_provider_failu
             f"[YfinanceFetcher] (DataFetchError) Yahoo Finance 未查询到 {symbol} 的数据"
         )
 
-        with (
-            patch("src.services.stock_service.StockRepository", return_value=repo),
-            patch("data_provider.base.DataFetcherManager", return_value=manager),
-            patch(
-                "src.services.stock_service.fetch_daily_history_with_local_us_fallback",
-                side_effect=provider_error,
-            ),
-        ):
-            payload = StockService().get_history_data(symbol, period="daily", days=365)
+        payload = StockService(
+            repo=repo,
+            provider_manager=manager,
+            history_transport=MagicMock(side_effect=provider_error),
+        ).get_history_data(symbol, period="daily", days=365)
 
         assert payload["stock_code"] == symbol
         assert payload["stock_name"] == f"{symbol} Inc."
@@ -1152,15 +1139,11 @@ def test_stock_service_us_daily_history_reports_unavailable_without_fake_ohlc_wh
         "[YfinanceFetcher] (DataFetchError) Yahoo Finance 未查询到 ORCL 的数据"
     )
 
-    with (
-        patch("src.services.stock_service.StockRepository", return_value=repo),
-        patch("data_provider.base.DataFetcherManager", return_value=manager),
-        patch(
-            "src.services.stock_service.fetch_daily_history_with_local_us_fallback",
-            side_effect=provider_error,
-        ),
-    ):
-        payload = StockService().get_history_data("ORCL", period="daily", days=365)
+    payload = StockService(
+        repo=repo,
+        provider_manager=manager,
+        history_transport=MagicMock(side_effect=provider_error),
+    ).get_history_data("ORCL", period="daily", days=365)
 
     assert payload["stock_code"] == "ORCL"
     assert payload["stock_name"] == "Oracle"
@@ -1238,8 +1221,7 @@ def test_validate_ticker_exists_accepts_meaningful_quote_name_after_placeholder_
         ),
     )
 
-    with patch("data_provider.base.DataFetcherManager", return_value=manager):
-        result = StockService().validate_ticker_exists("NVDA")
+    result = StockService(provider_manager=manager).validate_ticker_exists("NVDA")
 
     assert result == {
         "stock_code": "NVDA",

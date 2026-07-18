@@ -177,7 +177,12 @@ class TestCallLitellmVision:
              patch("src.services.image_stock_extractor.litellm.completion",
                    return_value=self._good_response()) as mock_comp, \
              patch("src.services.image_stock_extractor.emit_llm_event") as mock_event:
-            result = _call_litellm_vision("base64data", "image/jpeg")
+            result = _call_litellm_vision(
+                "base64data",
+                "image/jpeg",
+                completion_transport=mock_comp,
+                config=cfg,
+            )
             assert result == '["600519"]'
             mock_comp.assert_called_once()
             kwargs = mock_comp.call_args[1]
@@ -196,7 +201,12 @@ class TestCallLitellmVision:
         with patch("src.services.image_stock_extractor.get_config", return_value=cfg), \
              patch("src.services.image_stock_extractor.litellm.completion",
                    return_value=self._good_response()) as mock_comp:
-            _call_litellm_vision("b64", "image/jpeg")
+            _call_litellm_vision(
+                "b64",
+                "image/jpeg",
+                completion_transport=mock_comp,
+                config=cfg,
+            )
             kwargs = mock_comp.call_args[1]
             assert kwargs["api_base"] == "https://aihubmix.com/v1"
             assert kwargs["extra_headers"]["APP-Code"] == "GPIJ3886"
@@ -205,13 +215,13 @@ class TestCallLitellmVision:
         cfg = _cfg(openai_vision_model=None, litellm_model="", gemini_api_keys=[], anthropic_api_keys=[], openai_api_keys=[])
         with patch("src.services.image_stock_extractor.get_config", return_value=cfg):
             with pytest.raises(ValueError, match="未配置 Vision API"):
-                _call_litellm_vision("b64", "image/jpeg")
+                _call_litellm_vision("b64", "image/jpeg", config=cfg)
 
     def test_raises_when_no_key_for_model(self):
         cfg = _cfg(openai_vision_model="openai/gpt-4o-mini", openai_api_keys=[])
         with patch("src.services.image_stock_extractor.get_config", return_value=cfg):
             with pytest.raises(ValueError, match="No API key found"):
-                _call_litellm_vision("b64", "image/jpeg")
+                _call_litellm_vision("b64", "image/jpeg", config=cfg)
 
     def test_raises_when_completion_returns_empty(self):
         cfg = _cfg(gemini_api_keys=[_GEMINI_KEY])
@@ -219,9 +229,14 @@ class TestCallLitellmVision:
         empty_resp.choices = []
         with patch("src.services.image_stock_extractor.get_config", return_value=cfg), \
              patch("src.services.image_stock_extractor.litellm.completion",
-                   return_value=empty_resp):
+                   return_value=empty_resp) as completion:
             with pytest.raises(ValueError, match="returned empty response"):
-                _call_litellm_vision("b64", "image/jpeg")
+                _call_litellm_vision(
+                    "b64",
+                    "image/jpeg",
+                    completion_transport=completion,
+                    config=cfg,
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -316,8 +331,13 @@ class TestExtractStockCodesFromImage:
         jpeg = _make_jpeg_bytes()
         with patch("src.services.image_stock_extractor.get_config", return_value=cfg), \
              patch("src.services.image_stock_extractor.litellm.completion",
-                   return_value=self._good_vision_response()):
-            items, raw = extract_stock_codes_from_image(jpeg, "image/jpeg")
+                   return_value=self._good_vision_response()) as completion:
+            items, raw = extract_stock_codes_from_image(
+                jpeg,
+                "image/jpeg",
+                completion_transport=completion,
+                config=cfg,
+            )
             codes = [i[0] for i in items]
             assert "600519" in codes
             assert "300750" in codes
@@ -342,9 +362,14 @@ class TestExtractStockCodesFromImage:
         jpeg = _make_jpeg_bytes()
         with patch("src.services.image_stock_extractor.get_config", return_value=cfg), \
              patch("src.services.image_stock_extractor.litellm.completion",
-                   side_effect=RuntimeError("network down")):
+                   side_effect=RuntimeError("network down")) as completion:
             with pytest.raises(ValueError, match="Vision API 调用失败"):
-                extract_stock_codes_from_image(jpeg, "image/jpeg")
+                extract_stock_codes_from_image(
+                    jpeg,
+                    "image/jpeg",
+                    completion_transport=completion,
+                    config=cfg,
+                )
 
 
 def test_vision_auth_failure_stops_after_one_attempt_without_sleep() -> None:
@@ -354,7 +379,12 @@ def test_vision_auth_failure_stops_after_one_attempt_without_sleep() -> None:
         "src.services.image_stock_extractor.litellm.completion", side_effect=failure
     ) as completion, patch("src.services.image_stock_extractor.time.sleep") as sleep:
         with pytest.raises(ValueError, match="Vision API 调用失败"):
-            extract_stock_codes_from_image(_make_jpeg_bytes(), "image/jpeg")
+            extract_stock_codes_from_image(
+                _make_jpeg_bytes(),
+                "image/jpeg",
+                completion_transport=completion,
+                config=cfg,
+            )
 
     assert completion.call_count == 1
     sleep.assert_not_called()
@@ -367,7 +397,12 @@ def test_vision_quota_failure_stops_after_one_attempt_without_sleep() -> None:
         "src.services.image_stock_extractor.litellm.completion", side_effect=failure
     ) as completion, patch("src.services.image_stock_extractor.time.sleep") as sleep:
         with pytest.raises(ValueError, match="Vision API 调用失败"):
-            extract_stock_codes_from_image(_make_jpeg_bytes(), "image/jpeg")
+            extract_stock_codes_from_image(
+                _make_jpeg_bytes(),
+                "image/jpeg",
+                completion_transport=completion,
+                config=cfg,
+            )
 
     assert completion.call_count == 1
     sleep.assert_not_called()
@@ -381,7 +416,12 @@ def test_vision_bad_request_or_unsupported_payload_stops_after_one_attempt() -> 
             side_effect=_VisionHTTPError(status_code, message),
         ) as completion, patch("src.services.image_stock_extractor.time.sleep") as sleep:
             with pytest.raises(ValueError, match="Vision API 调用失败"):
-                extract_stock_codes_from_image(_make_jpeg_bytes(), "image/jpeg")
+                extract_stock_codes_from_image(
+                    _make_jpeg_bytes(),
+                    "image/jpeg",
+                    completion_transport=completion,
+                    config=cfg,
+                )
 
         assert completion.call_count == 1
         sleep.assert_not_called()
@@ -393,7 +433,12 @@ def test_vision_timeout_retries_three_times_with_existing_1_and_2_second_delays(
         "src.services.image_stock_extractor.litellm.completion", side_effect=TimeoutError("timed out")
     ) as completion, patch("src.services.image_stock_extractor.time.sleep") as sleep:
         with pytest.raises(ValueError, match="Vision API 调用失败"):
-            extract_stock_codes_from_image(_make_jpeg_bytes(), "image/jpeg")
+            extract_stock_codes_from_image(
+                _make_jpeg_bytes(),
+                "image/jpeg",
+                completion_transport=completion,
+                config=cfg,
+            )
 
     assert completion.call_count == 3
     assert [call.args[0] for call in sleep.call_args_list] == [1, 2]
@@ -412,7 +457,12 @@ def test_vision_connection_failure_can_rotate_existing_keys_without_changing_mod
         "src.services.image_stock_extractor.litellm.completion",
         side_effect=[ConnectionError("connection reset"), response],
     ) as completion, patch("src.services.image_stock_extractor.time.sleep") as sleep:
-        items, _raw = extract_stock_codes_from_image(_make_jpeg_bytes(), "image/jpeg")
+        items, _raw = extract_stock_codes_from_image(
+            _make_jpeg_bytes(),
+            "image/jpeg",
+            completion_transport=completion,
+            config=cfg,
+        )
 
     assert [item[0] for item in items] == ["600519", "300750"]
     assert [call.kwargs["api_key"] for call in completion.call_args_list] == [_GEMINI_KEY, second_key]
@@ -428,8 +478,13 @@ def test_vision_terminal_failure_preserves_existing_public_exception_contract() 
     failure = _VisionHTTPError(403, "forbidden")
     with patch("src.services.image_stock_extractor.get_config", return_value=cfg), patch(
         "src.services.image_stock_extractor.litellm.completion", side_effect=failure
-    ):
+    ) as completion:
         with pytest.raises(ValueError, match="Vision API 调用失败，请检查 API Key 与网络") as exc_info:
-            extract_stock_codes_from_image(_make_jpeg_bytes(), "image/jpeg")
+            extract_stock_codes_from_image(
+                _make_jpeg_bytes(),
+                "image/jpeg",
+                completion_transport=completion,
+                config=cfg,
+            )
 
     assert exc_info.value.__cause__ is failure

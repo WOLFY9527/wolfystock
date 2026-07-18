@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import stocks
+from src.services.stock_service import StockService
 from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE
 
 
@@ -68,14 +69,13 @@ def test_stock_history_endpoint_reads_cached_us_bars_without_provider_network() 
     )
     manager = SimpleNamespace(get_stock_name=lambda stock_code: f"{stock_code} Inc.")
 
-    with (
-        patch("data_provider.base.DataFetcherManager", return_value=manager),
-        patch(
-            "src.services.stock_service.fetch_daily_history_with_local_us_fallback",
-            return_value=(cached_frame, LOCAL_US_PARQUET_SOURCE),
-        ) as fetch_history,
-    ):
-        response = client.get("/api/v1/stocks/ORCL/history", params={"period": "daily", "days": 2})
+    with patch(
+        "src.services.stock_service.fetch_daily_history_with_local_us_fallback",
+        return_value=(cached_frame, LOCAL_US_PARQUET_SOURCE),
+    ) as fetch_history:
+        service = StockService(provider_manager=manager, history_transport=fetch_history)
+        with patch("api.v1.endpoints.stocks.StockService", return_value=service):
+            response = client.get("/api/v1/stocks/ORCL/history", params={"period": "daily", "days": 2})
 
     assert response.status_code == 200
     payload = response.json()
@@ -111,7 +111,7 @@ def test_stock_history_endpoint_reads_cached_us_bars_without_provider_network() 
         days=2,
         manager=manager,
         log_context="[stock history]",
-        allow_provider_fallback=True,
+        allow_provider_fallback=False,
     )
 
 
@@ -134,13 +134,11 @@ def test_stock_history_endpoint_exposes_90_bar_ohlcv_readiness_when_cache_suffic
     )
     manager = SimpleNamespace(get_stock_name=lambda stock_code: f"{stock_code} Inc.")
 
-    with (
-        patch("data_provider.base.DataFetcherManager", return_value=manager),
-        patch(
-            "src.services.stock_service.fetch_daily_history_with_local_us_fallback",
-            return_value=(cached_frame, LOCAL_US_PARQUET_SOURCE),
-        ),
-    ):
+    def history_transport(*args, **kwargs):
+        return cached_frame, LOCAL_US_PARQUET_SOURCE
+
+    service = StockService(provider_manager=manager, history_transport=history_transport)
+    with patch("api.v1.endpoints.stocks.StockService", return_value=service):
         response = client.get("/api/v1/stocks/AAPL/history", params={"period": "daily", "days": 90})
 
     assert response.status_code == 200
@@ -174,13 +172,11 @@ def test_stock_history_endpoint_reports_insufficient_coverage_without_provider_m
     )
     manager = SimpleNamespace(get_stock_name=lambda stock_code: f"{stock_code} Inc.")
 
-    with (
-        patch("data_provider.base.DataFetcherManager", return_value=manager),
-        patch(
-            "src.services.stock_service.fetch_daily_history_with_local_us_fallback",
-            return_value=(cached_frame, LOCAL_US_PARQUET_SOURCE),
-        ),
-    ):
+    def history_transport(*args, **kwargs):
+        return cached_frame, LOCAL_US_PARQUET_SOURCE
+
+    service = StockService(provider_manager=manager, history_transport=history_transport)
+    with patch("api.v1.endpoints.stocks.StockService", return_value=service):
         response = client.get("/api/v1/stocks/TSLA/history", params={"period": "daily", "days": 90})
 
     assert response.status_code == 200

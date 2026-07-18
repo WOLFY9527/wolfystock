@@ -20,7 +20,12 @@ from src.services.historical_ohlcv_readiness import (
 )
 from src.services.historical_ohlcv_runtime_adapter import HistoricalOhlcvRuntimeAdapter
 from src.services.product_read_model import build_structure_decision_product_read_model
-from src.services.stock_service import StockService, uat_no_live_providers_enabled
+from src.services.stock_service import StockService
+from src.services.uat_provider_isolation import (
+    UatProviderIsolationError,
+    check_uat_provider_transport,
+    uat_no_live_providers_enabled,
+)
 from src.services.stock_structure_decision_engine import (
     MIN_REQUIRED_BARS,
     NO_ADVICE_DISCLOSURE,
@@ -147,12 +152,24 @@ class StockStructureDecisionService:
         historical_ohlcv_provider: HistoricalOhlcvProvider | None = None,
         require_adjusted_ohlcv: bool = False,
     ) -> None:
-        self.history_service = history_service or StockService()
+        self._injected_history_service = history_service
+        self._injected_historical_ohlcv_provider = historical_ohlcv_provider
+        self._injected_readiness_service = ohlcv_readiness_service
+        self.history_service = history_service if history_service is not None else StockService()
         self.stock_repo = stock_repo
         self.timeout_seconds = _normalize_timeout_seconds(timeout_seconds)
-        if historical_ohlcv_provider is None and _yfinance_us_ohlcv_cache_enabled():
+        if (
+            historical_ohlcv_provider is None
+            and _yfinance_us_ohlcv_cache_enabled()
+        ):
             historical_ohlcv_provider = YfinanceUsOhlcvCacheProvider.from_env()
-        elif historical_ohlcv_provider is None and _historical_ohlcv_runtime_enabled():
+            if uat_no_live_providers_enabled():
+                historical_ohlcv_provider.provider_fetch_enabled = False
+        elif (
+            historical_ohlcv_provider is None
+            and history_service is None
+            and _historical_ohlcv_runtime_enabled()
+        ):
             historical_ohlcv_provider = HistoricalOhlcvRuntimeAdapter(history_runtime=self.history_service)
         self.ohlcv_readiness_service = ohlcv_readiness_service or HistoricalOhlcvReadinessService(
             provider=historical_ohlcv_provider
@@ -341,28 +358,30 @@ class StockStructureDecisionService:
         )
 
     def _load_structure_ohlcv_evidence(self, ticker: str) -> dict[str, Any]:
-        if uat_no_live_providers_enabled():
-            readiness = _fallback_historical_ohlcv_readiness(
-                symbol=ticker,
-                data_quality={
-                    "status": "unavailable",
-                    "source": "unavailable",
-                    "reason": "provider_missing",
-                },
+        injected_transport = next(
+            (
+                candidate
+                for candidate in (
+                    self._injected_historical_ohlcv_provider,
+                    self._injected_readiness_service,
+                    self._injected_history_service,
+                )
+                if candidate is not None
+            ),
+            None,
+        )
+        if injected_transport is not None:
+            dispatch = check_uat_provider_transport(
+                provider="stock_structure_history",
+                capability="daily_history",
+                route="StockStructureDecisionService._load_structure_ohlcv_evidence",
+                injected_transport=injected_transport,
             )
-            return {
-                "bars": [],
-                "data_quality": {
-                    "status": "unavailable",
-                    "source": "unavailable",
-                    "period": "daily",
-                    "requestedDays": DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS,
-                    "observedBars": 0,
-                    "usableBars": 0,
-                    "reason": "uat_no_live_providers",
-                },
-                "historical_ohlcv_readiness": readiness,
-            }
+            logger.debug(
+                "Stock structure history transport selected: transport_identity=%s evidence_kind=%s",
+                dispatch.transport_identity,
+                dispatch.evidence_kind,
+            )
 
         runtime_result = self._load_runtime_ohlcv(ticker)
         if runtime_result is not None:
@@ -476,6 +495,8 @@ class StockStructureDecisionService:
                 period="daily",
                 days=DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS,
             )
+        except UatProviderIsolationError:
+            raise
         except Exception as exc:
             logger.warning("Stock structure decision history lookup failed for %s: %s", ticker, exc)
             return {

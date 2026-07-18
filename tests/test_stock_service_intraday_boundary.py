@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import sys
-
 import pandas as pd
 import pytest
 
@@ -87,11 +85,12 @@ def test_get_intraday_data_uses_prepared_download_kwargs_without_mutation(
             },
         )
 
-    monkeypatch.setitem(sys.modules, "yfinance", dummy_yf)
-    monkeypatch.setattr("data_provider.base.DataFetcherManager", _DummyManager)
     monkeypatch.setattr("src.services.stock_service._prepare_intraday_yfinance_request", fake_prepare)
 
-    payload = StockService().get_intraday_data("hk00700", interval="5m", range_period="1d")
+    payload = StockService(
+        provider_manager=_DummyManager(),
+        intraday_transport=dummy_yf.download,
+    ).get_intraday_data("hk00700", interval="5m", range_period="1d")
 
     assert prepared_calls == [("hk00700", "5m", "1d")]
     assert payload["stock_name"] == "NAME-hk00700"

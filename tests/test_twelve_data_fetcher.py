@@ -28,13 +28,15 @@ class _MockResponse:
 class TwelveDataFetcherTestCase(unittest.TestCase):
     def test_uat_no_live_providers_blocks_direct_quote_before_http(self) -> None:
         session = Mock()
-        fetcher = TwelveDataFetcher(api_key="td-key", session=session)
+        with patch("data_provider.twelve_data_fetcher.requests.Session", return_value=session):
+            fetcher = TwelveDataFetcher(api_key="td-key")
 
         with patch.dict(os.environ, {"WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS": "true"}, clear=False):
             with self.assertRaises(UatProviderIsolationError):
                 fetcher.get_realtime_quote("HK00700")
 
         session.get.assert_not_called()
+        self.assertEqual(fetcher.transport_identity, "default_live_transport")
 
     def test_get_realtime_quote_builds_hk_quote(self) -> None:
         session = Mock()
@@ -69,6 +71,7 @@ class TwelveDataFetcherTestCase(unittest.TestCase):
         self.assertAlmostEqual(float(quote.price or 0.0), 503.5, places=2)
         self.assertAlmostEqual(float(quote.pre_close or 0.0), 496.0, places=2)
         self.assertEqual(quote.volume, 12_345_000)
+        self.assertEqual(fetcher.transport_identity, "injected_test_transport")
         session.get.assert_called_once_with(
             "https://api.twelvedata.com/quote",
             params={

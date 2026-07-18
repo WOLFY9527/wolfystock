@@ -17,12 +17,12 @@ import random
 import re
 import sys
 import time
-from typing import List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 from src.config import Config, get_config
 from src.providers import classify_provider_retry_disposition
 from src.services.llm_instrumentation import emit_llm_event, provider_from_model
-from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
+from src.services.uat_provider_isolation import require_uat_provider_transport_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -210,9 +210,9 @@ def _parse_items_from_text(text: str) -> List[Tuple[str, Optional[str], str]]:
     return [(c, None, "medium") for c in codes]
 
 
-def _resolve_vision_model() -> str:
+def _resolve_vision_model(config: Config | None = None) -> str:
     """Determine the litellm model to use for vision, with gemini-3 downgrade."""
-    cfg = get_config()
+    cfg = config if config is not None else get_config()
     # Prefer explicit vision model, then OPENAI_VISION_MODEL alias, then primary litellm model
     model = (cfg.vision_model or cfg.openai_vision_model or cfg.litellm_model or "").strip()
     if not model:
@@ -240,20 +240,23 @@ def _get_api_keys_for_model(model: str, cfg: Config) -> List[str]:
     return [k for k in cfg.openai_api_keys if k and len(k) >= 8]
 
 
-def _call_litellm_vision(image_b64: str, mime_type: str, api_key: Optional[str] = None) -> str:
+def _call_litellm_vision(
+    image_b64: str,
+    mime_type: str,
+    api_key: Optional[str] = None,
+    *,
+    completion_transport: Callable[..., Any] | None = None,
+    config: Config | None = None,
+) -> str:
     """Extract stock codes from an image using litellm (all providers via OpenAI vision format)."""
     global litellm
     started_at = time.perf_counter()
-    cfg = get_config()
-    model = _resolve_vision_model()
+    if completion_transport is not None and config is None:
+        raise ValueError("Injected vision transport requires explicit fixture config")
+    cfg = config if config is not None else get_config()
+    model = _resolve_vision_model(cfg)
     if not model:
         raise ValueError("未配置 Vision API。请设置 LITELLM_MODEL 或相关 API Key。")
-    require_uat_provider_dispatch_allowed(
-        provider=provider_from_model(model),
-        capability="llm_vision",
-        route="image_stock_extractor._call_litellm_vision",
-    )
-
     keys = _get_api_keys_for_model(model, cfg)
     if not keys:
         raise ValueError(f"No API key found for vision model {model}")
@@ -282,12 +285,21 @@ def _call_litellm_vision(image_b64: str, mime_type: str, api_key: Optional[str] 
         if cfg.openai_base_url and "aihubmix.com" in cfg.openai_base_url:
             call_kwargs["extra_headers"] = {"APP-Code": "GPIJ3886"}
 
-    if getattr(litellm, "completion", None) is None:
+    if completion_transport is None and getattr(litellm, "completion", None) is None:
         from src.services.litellm_runtime import configure_litellm_cost_map_for_runtime
 
         configure_litellm_cost_map_for_runtime()
         import litellm as litellm_module
         litellm = litellm_module
+    dispatch = require_uat_provider_transport_allowed(
+        provider=provider_from_model(model),
+        capability="llm_vision",
+        route="image_stock_extractor._call_litellm_vision",
+        injected_transport=completion_transport,
+    )
+    selected_completion = (
+        completion_transport if completion_transport is not None else litellm.completion
+    )
     event_labels = {
         "call_type": "vision",
         "route": "image_stock_extractor",
@@ -295,10 +307,12 @@ def _call_litellm_vision(image_b64: str, mime_type: str, api_key: Optional[str] 
         "model_family": model,
         "attempt_index": 1,
         "fallback_depth": 0,
+        "transport_identity": dispatch.transport_identity,
+        "evidence_kind": dispatch.evidence_kind,
     }
     emit_llm_event("llm_call_started", **event_labels)
     try:
-        response = litellm.completion(**call_kwargs)
+        response = selected_completion(**call_kwargs)
         if response and response.choices and response.choices[0].message.content:
             emit_llm_event(
                 "llm_call_completed",
@@ -322,6 +336,9 @@ def _call_litellm_vision(image_b64: str, mime_type: str, api_key: Optional[str] 
 def extract_stock_codes_from_image(
     image_bytes: bytes,
     mime_type: str,
+    *,
+    completion_transport: Callable[..., Any] | None = None,
+    config: Config | None = None,
 ) -> Tuple[List[Tuple[str, Optional[str], str]], str]:
     """
     从图片中提取股票代码及名称（使用 Vision LLM）。
@@ -352,14 +369,23 @@ def extract_stock_codes_from_image(
     _verify_image_magic_bytes(image_bytes, mime_type)
 
     image_b64 = base64.b64encode(image_bytes).decode("ascii")
-    model = _resolve_vision_model()
-    keys = _get_api_keys_for_model(model, get_config())
+    if completion_transport is not None and config is None:
+        raise ValueError("Injected vision transport requires explicit fixture config")
+    cfg = config if config is not None else get_config()
+    model = _resolve_vision_model(cfg)
+    keys = _get_api_keys_for_model(model, cfg)
 
     last_error: Optional[Exception] = None
     for attempt in range(3):
         try:
             key = random.choice(keys) if keys else None
-            raw = _call_litellm_vision(image_b64, mime_type, api_key=key)
+            raw = _call_litellm_vision(
+                image_b64,
+                mime_type,
+                api_key=key,
+                completion_transport=completion_transport,
+                config=cfg,
+            )
             logger.debug("[ImageExtractor] raw LLM response:\n%s", raw)
             items = _parse_items_from_text(raw)
             logger.info(

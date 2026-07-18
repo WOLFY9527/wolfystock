@@ -99,13 +99,15 @@ def test_market_overview_macro_endpoint_returns_fallback_quickly_when_official_m
     client = _client()
     monkeypatch.setattr(MarketOverviewService, "MARKET_COLD_START_TIMEOUT_SECONDS", 0.05, raising=False)
 
-    def slow_macro(*, limit: int = 2, timeout: float | None = None) -> dict:
+    def slow_macro(**_: object) -> dict:
         time.sleep(0.6)
-        raise TimeoutError(f"macro timeout {timeout}")
+        raise TimeoutError("macro timeout")
 
+    service = MarketOverviewService(official_macro_points_transport=slow_macro)
     monkeypatch.setattr(
-        "src.services.market_overview_service.fetch_treasury_daily_rate_observation_points",
-        slow_macro,
+        market_overview,
+        "MarketOverviewService",
+        lambda: service,
     )
 
     started = time.monotonic()

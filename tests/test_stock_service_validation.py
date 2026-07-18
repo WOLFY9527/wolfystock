@@ -1,7 +1,5 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
-
 from src.services.stock_service import StockService
 from src.services.stock_service_provider_adapter import StockServiceQuoteSnapshot
 
@@ -13,8 +11,7 @@ class StockServiceValidationTestCase(unittest.TestCase):
             get_quote_snapshot=lambda stock_code: None,
         )
 
-        with patch("src.services.stock_service.StockServiceProviderAdapter", return_value=adapter):
-            result = StockService().validate_ticker_exists("NVDA")
+        result = StockService(provider_adapter=adapter).validate_ticker_exists("NVDA")
 
         self.assertTrue(result["exists"])
         self.assertEqual(result["stock_code"], "NVDA")
@@ -26,8 +23,7 @@ class StockServiceValidationTestCase(unittest.TestCase):
             get_quote_snapshot=lambda stock_code: None,
         )
 
-        with patch("src.services.stock_service.StockServiceProviderAdapter", return_value=adapter):
-            result = StockService().validate_ticker_exists("ZZZZZ")
+        result = StockService(provider_adapter=adapter).validate_ticker_exists("ZZZZZ")
 
         self.assertFalse(result["exists"])
         self.assertEqual(result["stock_code"], "ZZZZZ")
@@ -52,8 +48,7 @@ class StockServiceValidationTestCase(unittest.TestCase):
             )
         )
 
-        with patch("src.services.stock_service.StockServiceProviderAdapter", return_value=adapter):
-            result = StockService().get_realtime_quote("AAPL")
+        result = StockService(provider_adapter=adapter).get_realtime_quote("AAPL")
 
         self.assertEqual(result["stock_code"], "AAPL")
         self.assertEqual(result["stock_name"], "Apple")
@@ -99,8 +94,7 @@ class StockServiceValidationTestCase(unittest.TestCase):
             )
         )
 
-        with patch("src.services.stock_service.StockServiceProviderAdapter", return_value=adapter):
-            result = StockService().get_realtime_quote("AAPL")
+        result = StockService(provider_adapter=adapter).get_realtime_quote("AAPL")
 
         self.assertEqual(result["source"], "fallback")
         self.assertEqual(result["freshness"], "fallback")
@@ -113,20 +107,19 @@ class StockServiceValidationTestCase(unittest.TestCase):
         self.assertNotEqual(result["update_time"], result["market_timestamp"])
 
     def test_get_realtime_quote_placeholder_does_not_claim_live_freshness(self) -> None:
-        with patch("src.services.stock_service.StockServiceProviderAdapter", side_effect=ImportError):
-            result = StockService().get_realtime_quote("AAPL")
+        result = StockService().get_realtime_quote("AAPL")
 
         self.assertEqual(result["stock_code"], "AAPL")
-        self.assertEqual(result["stock_name"], "股票AAPL")
-        self.assertEqual(result["source"], "placeholder")
-        self.assertEqual(result["source_type"], "synthetic_placeholder")
+        self.assertIsNone(result["stock_name"])
+        self.assertEqual(result["source"], "unavailable")
+        self.assertEqual(result["source_type"], "unavailable")
         self.assertIsNone(result["market_timestamp"])
-        self.assertEqual(result["freshness"], "synthetic")
+        self.assertEqual(result["freshness"], "unavailable")
         self.assertFalse(result["is_fallback"])
         self.assertTrue(result["is_partial"])
-        self.assertTrue(result["is_synthetic"])
-        self.assertEqual(result["sourceConfidence"]["freshness"], "synthetic")
-        self.assertTrue(result["sourceConfidence"]["isSynthetic"])
+        self.assertFalse(result["is_synthetic"])
+        self.assertEqual(result["sourceConfidence"]["freshness"], "unavailable")
+        self.assertTrue(result["sourceConfidence"]["isUnavailable"])
         self.assertEqual(result["observed_at"], result["update_time"])
 
 

@@ -50,6 +50,7 @@ class TestStooqFallback(unittest.TestCase):
         mock_history_response.__enter__.return_value = mock_history_response
 
         mock_urlopen.side_effect = [mock_realtime_response, mock_history_response]
+        self.fetcher = YfinanceFetcher(stooq_transport=mock_urlopen)
 
         quote = self.fetcher._get_us_stock_quote_from_stooq("AAPL")
 
@@ -66,9 +67,7 @@ class TestStooqFallback(unittest.TestCase):
         self.assertAlmostEqual(quote.change_pct, 3.04, places=2)
         self.assertAlmostEqual(quote.amplitude, 3.02, places=2)
 
-    @unittest.skipUnless(HAS_YFINANCE, "yfinance is required for this test")
-    @patch('yfinance.Ticker')
-    def test_fetcher_integration_with_fallback(self, mock_ticker_class):
+    def test_fetcher_integration_with_fallback(self):
         """测试 yfinance 失败后自动触发 Stooq 逻辑"""
         # 1. 模拟 yfinance 完全失效
         mock_ticker = MagicMock()
@@ -76,7 +75,9 @@ class TestStooqFallback(unittest.TestCase):
         type(mock_ticker).fast_info = PropertyMock(side_effect=Exception("API Error"))
         # 模拟 history 返回空
         mock_ticker.history.return_value = MagicMock(empty=True)
-        mock_ticker_class.return_value = mock_ticker
+        mock_yf = MagicMock()
+        mock_yf.Ticker.return_value = mock_ticker
+        self.fetcher = YfinanceFetcher(yf_transport=mock_yf)
 
         # 2. 模拟 Stooq 成功返回
         with patch.object(self.fetcher, '_get_us_stock_quote_from_stooq') as mock_stooq:
@@ -88,9 +89,7 @@ class TestStooqFallback(unittest.TestCase):
             self.assertEqual(quote.price, 900.0)
             mock_stooq.assert_called_once_with("NVDA")
 
-    @unittest.skipUnless(HAS_YFINANCE, "yfinance is required for this test")
-    @patch('yfinance.Ticker')
-    def test_yfinance_quote_marks_yfinance_source(self, mock_ticker_class):
+    def test_yfinance_quote_marks_yfinance_source(self):
         mock_ticker = MagicMock()
         type(mock_ticker).fast_info = PropertyMock(
             return_value=MagicMock(
@@ -104,7 +103,9 @@ class TestStooqFallback(unittest.TestCase):
             )
         )
         mock_ticker.info = {"shortName": "Apple Inc."}
-        mock_ticker_class.return_value = mock_ticker
+        mock_yf = MagicMock()
+        mock_yf.Ticker.return_value = mock_ticker
+        self.fetcher = YfinanceFetcher(yf_transport=mock_yf)
 
         quote = self.fetcher.get_realtime_quote("AAPL")
 

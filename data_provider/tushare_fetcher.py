@@ -35,7 +35,7 @@ from .base import BaseFetcher, DataFetchError, RateLimitError, STANDARD_COLUMNS,
 from .market_stats import calculate_market_stats
 from .realtime_types import UnifiedRealtimeQuote, ChipDistribution
 from src.config import get_config
-from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
+from src.services.uat_provider_isolation import require_uat_provider_transport_allowed
 import os
 from zoneinfo import ZoneInfo
 
@@ -94,7 +94,7 @@ class TushareFetcher(BaseFetcher):
     name = "TushareFetcher"
     priority = int(os.getenv("TUSHARE_PRIORITY", "2"))  # 默认优先级，会在 __init__ 中根据配置动态调整
 
-    def __init__(self, rate_limit_per_minute: int = 80):
+    def __init__(self, rate_limit_per_minute: int = 80, *, api: Optional[object] = None):
         """
         初始化 TushareFetcher
 
@@ -104,15 +104,16 @@ class TushareFetcher(BaseFetcher):
         self.rate_limit_per_minute = rate_limit_per_minute
         self._call_count = 0  # 当前分钟内的调用次数
         self._minute_start: Optional[float] = None  # 当前计数周期开始时间
-        self._api: Optional[object] = None  # Tushare API 实例
+        self._api: Optional[object] = api  # Tushare API 实例
+        self._injected_transport = api
         self.date_list: Optional[List[str]] = None  # 交易日列表缓存（倒序，最新日期在前）
         self._date_list_end: Optional[str] = None  # 缓存对应的截止日期，用于跨日刷新
 
-        # 尝试初始化 API
-        self._init_api()
-
-        # 根据 API 初始化结果动态调整优先级
-        self.priority = self._determine_priority()
+        if api is None:
+            self._init_api()
+            self.priority = self._determine_priority()
+        else:
+            self.priority = 2
     
     def _init_api(self) -> None:
         """
@@ -162,10 +163,11 @@ class TushareFetcher(BaseFetcher):
         _timeout = getattr(self._api, '_DataApi__timeout', 30)
 
         def patched_query(self_api, api_name, fields='', **kwargs):
-            require_uat_provider_dispatch_allowed(
+            require_uat_provider_transport_allowed(
                 provider="tushare",
                 capability=str(api_name or "query"),
                 route="TushareFetcher.patched_query",
+                injected_transport=None,
             )
             req_params = {
                 'api_name': api_name,
@@ -276,6 +278,13 @@ class TushareFetcher(BaseFetcher):
         """按自然日刷新交易日历缓存，避免服务跨日后继续复用旧日历。"""
         if self._api is None:
             return []
+
+        require_uat_provider_transport_allowed(
+            provider="tushare",
+            capability="trade_calendar",
+            route="TushareFetcher._get_trade_dates",
+            injected_transport=self._injected_transport,
+        )
 
         china_now = self._get_china_now()
         requested_end_date = end_date or china_now.strftime("%Y%m%d")
@@ -392,6 +401,13 @@ class TushareFetcher(BaseFetcher):
         # HK stocks not supported
         if _is_hk_market(stock_code):
             raise DataFetchError(f"TushareFetcher 不支持港股 {stock_code}，请使用 AkshareFetcher")
+
+        require_uat_provider_transport_allowed(
+            provider="tushare",
+            capability="daily_history",
+            route="TushareFetcher._fetch_raw_data",
+            injected_transport=self._injected_transport,
+        )
         
         # Rate-limit check
         self._check_rate_limit()
@@ -498,10 +514,11 @@ class TushareFetcher(BaseFetcher):
         if _is_hk_market(stock_code):
             return None
 
-        require_uat_provider_dispatch_allowed(
+        require_uat_provider_transport_allowed(
             provider="tushare",
             capability="stock_name",
             route="TushareFetcher.get_stock_name",
+            injected_transport=self._injected_transport,
         )
 
         # 检查缓存
@@ -555,10 +572,11 @@ class TushareFetcher(BaseFetcher):
             logger.warning("Tushare API 未初始化，无法获取股票列表")
             raise DataFetchError("Tushare API 未初始化，无法获取股票列表")
 
-        require_uat_provider_dispatch_allowed(
+        require_uat_provider_transport_allowed(
             provider="tushare",
             capability="stock_list",
             route="TushareFetcher.get_stock_list",
+            injected_transport=self._injected_transport,
         )
         
         try:
@@ -613,10 +631,11 @@ class TushareFetcher(BaseFetcher):
             logger.debug(f"TushareFetcher 跳过港股实时行情 {stock_code}")
             return None
 
-        require_uat_provider_dispatch_allowed(
+        require_uat_provider_transport_allowed(
             provider="tushare",
             capability="realtime_quote",
             route="TushareFetcher.get_realtime_quote",
+            injected_transport=self._injected_transport,
         )
 
         from .realtime_types import (
@@ -658,6 +677,9 @@ class TushareFetcher(BaseFetcher):
         except Exception as e:
             # 仅记录调试日志，不报错，继续尝试降级
             logger.debug(f"Tushare Pro 实时行情不可用 (可能是积分不足): {e}")
+
+        if self._injected_transport is not None:
+            return None
 
         # 降级：尝试旧版接口
         try:
@@ -728,10 +750,11 @@ class TushareFetcher(BaseFetcher):
         if self._api is None:
             return None
 
-        require_uat_provider_dispatch_allowed(
+        require_uat_provider_transport_allowed(
             provider="tushare",
             capability="realtime_quote",
             route="TushareFetcher.get_main_indices",
+            injected_transport=self._injected_transport,
         )
 
         from .realtime_types import safe_float
@@ -805,10 +828,11 @@ class TushareFetcher(BaseFetcher):
         if self._api is None:
             return None
 
-        require_uat_provider_dispatch_allowed(
+        require_uat_provider_transport_allowed(
             provider="tushare",
             capability="market_stats",
             route="TushareFetcher.get_market_stats",
+            injected_transport=self._injected_transport,
         )
 
         try:
@@ -928,6 +952,13 @@ class TushareFetcher(BaseFetcher):
         2. 东财接口 (ts.pro_api().moneyflow_ind_dc)
         注意：每个接口的行业分类和板块定义不同，会导致结果两者不一致
         """
+        require_uat_provider_transport_allowed(
+            provider="tushare",
+            capability="sector_rankings",
+            route="TushareFetcher.get_sector_rankings",
+            injected_transport=self._injected_transport,
+        )
+
         def _get_rank_top_n(df: pd.DataFrame, change_col: str, industry_name: str, n: int) -> Tuple[list, list]:
             df[change_col] = pd.to_numeric(df[change_col], errors='coerce')
             df = df.dropna(subset=[change_col])
@@ -1008,10 +1039,11 @@ class TushareFetcher(BaseFetcher):
             logger.warning(f"[Tushare] TushareFetcher 不支持 ETF {stock_code} 的筹码分布")
             return None
 
-        require_uat_provider_dispatch_allowed(
+        require_uat_provider_transport_allowed(
             provider="tushare",
             capability="chip_distribution",
             route="TushareFetcher.get_chip_distribution",
+            injected_transport=self._injected_transport,
         )
         
         try:

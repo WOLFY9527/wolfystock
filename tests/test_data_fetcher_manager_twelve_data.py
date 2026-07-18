@@ -43,12 +43,18 @@ class DataFetcherManagerTwelveDataTestCase(unittest.TestCase):
         akshare = _AkshareHkStub(
             UnifiedRealtimeQuote(code="HK00700", source=RealtimeSource.AKSHARE_EM, price=500.0)
         )
-        manager = DataFetcherManager(fetchers=[akshare])
         twelve_data = _TwelveDataStub(
             UnifiedRealtimeQuote(code="HK00700", source=RealtimeSource.TWELVE_DATA, price=503.5)
         )
+        manager = DataFetcherManager(
+            fetchers=[akshare],
+            injected_provider_fetchers={"twelve_data": twelve_data},
+        )
 
-        with patch.object(manager, "_get_twelve_data_fetcher", return_value=twelve_data):
+        with patch(
+            "data_provider.base.get_provider_credentials",
+            side_effect=AssertionError("injected Twelve Data transport must not read credentials"),
+        ):
             quote = manager.get_realtime_quote("HK00700")
 
         self.assertIsNotNone(quote)
@@ -69,10 +75,16 @@ class DataFetcherManagerTwelveDataTestCase(unittest.TestCase):
         akshare = _AkshareHkStub(
             UnifiedRealtimeQuote(code="HK00700", source=RealtimeSource.AKSHARE_EM, price=500.0)
         )
-        manager = DataFetcherManager(fetchers=[akshare])
         twelve_data = _TwelveDataStub(None)
+        manager = DataFetcherManager(
+            fetchers=[akshare],
+            injected_provider_fetchers={"twelve_data": twelve_data},
+        )
 
-        with patch.object(manager, "_get_twelve_data_fetcher", return_value=twelve_data):
+        with patch(
+            "data_provider.base.get_provider_credentials",
+            side_effect=AssertionError("injected Twelve Data transport must not read credentials"),
+        ):
             quote = manager.get_realtime_quote("HK00700")
 
         self.assertIsNotNone(quote)

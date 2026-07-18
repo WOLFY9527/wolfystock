@@ -7,13 +7,13 @@ import logging
 import time
 from datetime import date, datetime, timedelta, timezone
 from threading import Lock
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 import requests
 
 from src.config import get_config
-from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
+from src.services.uat_provider_isolation import require_uat_provider_transport_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -88,19 +88,34 @@ def _first_key(*config_attrs: str) -> Optional[str]:
     return None
 
 
-def _request_json(url: str, *, params: Dict[str, Any], headers: Optional[Dict[str, str]] = None, timeout: int = 15) -> Any:
+def _request_json(
+    url: str,
+    *,
+    params: Dict[str, Any],
+    headers: Optional[Dict[str, str]] = None,
+    timeout: int = 15,
+    transport: Optional[Callable[..., Any]] = None,
+) -> Any:
     provider = "external_fundamentals"
     lowered = str(url or "").lower()
     if "finnhub.io" in lowered:
         provider = "finnhub"
     elif "financialmodelingprep.com" in lowered:
         provider = "fmp"
-    require_uat_provider_dispatch_allowed(
+    dispatch = require_uat_provider_transport_allowed(
         provider=provider,
         capability="fundamentals_or_quote",
         route="us_fundamentals_provider._request_json",
+        injected_transport=transport,
     )
-    response = requests.get(url, params=params, headers=headers or {}, timeout=timeout)
+    logger.debug(
+        "US fundamentals transport selected: provider=%s transport_identity=%s evidence_kind=%s",
+        provider,
+        dispatch.transport_identity,
+        dispatch.evidence_kind,
+    )
+    request_transport = transport or requests.get
+    response = request_transport(url, params=params, headers=headers or {}, timeout=timeout)
     response.raise_for_status()
     payload = response.json()
     if isinstance(payload, dict):
@@ -196,14 +211,19 @@ def _latest_indicator_row(rows: List[Dict[str, Any]]) -> Optional[Dict[str, Any]
     return max(valid_rows, key=lambda row: str(row.get("date") or ""))
 
 
-def get_yfinance_fundamentals(symbol: str) -> Dict[str, Any]:
+def get_yfinance_fundamentals(
+    symbol: str,
+    *,
+    ticker_factory: Optional[Callable[[str], Any]] = None,
+) -> Dict[str, Any]:
     symbol = (symbol or "").strip().upper()
     if not symbol:
         return {}
-    require_uat_provider_dispatch_allowed(
+    require_uat_provider_transport_allowed(
         provider="yfinance",
         capability="fundamentals",
         route="us_fundamentals_provider.get_yfinance_fundamentals",
+        injected_transport=ticker_factory,
     )
 
     cache_key = f"yf:fundamentals:{symbol}"
@@ -211,9 +231,11 @@ def get_yfinance_fundamentals(symbol: str) -> Dict[str, Any]:
     if cached is not None:
         return cached
 
-    import yfinance as yf
+    if ticker_factory is None:
+        import yfinance as yf
 
-    ticker = yf.Ticker(symbol)
+        ticker_factory = yf.Ticker
+    ticker = ticker_factory(symbol)
     info = ticker.info or {}
 
     payload = {
@@ -296,11 +318,17 @@ def get_yfinance_fundamentals(symbol: str) -> Dict[str, Any]:
     return _cache_set(cache_key, payload)
 
 
-def get_yfinance_quarterly_financials(symbol: str, max_quarters: int = 6) -> List[Dict[str, Any]]:
-    require_uat_provider_dispatch_allowed(
+def get_yfinance_quarterly_financials(
+    symbol: str,
+    max_quarters: int = 6,
+    *,
+    ticker_factory: Optional[Callable[[str], Any]] = None,
+) -> List[Dict[str, Any]]:
+    require_uat_provider_transport_allowed(
         provider="yfinance",
         capability="fundamentals",
         route="us_fundamentals_provider.get_yfinance_quarterly_financials",
+        injected_transport=ticker_factory,
     )
     symbol = (symbol or "").strip().upper()
     if not symbol:
@@ -311,9 +339,11 @@ def get_yfinance_quarterly_financials(symbol: str, max_quarters: int = 6) -> Lis
     if cached is not None:
         return cached
 
-    import yfinance as yf
+    if ticker_factory is None:
+        import yfinance as yf
 
-    ticker = yf.Ticker(symbol)
+        ticker_factory = yf.Ticker
+    ticker = ticker_factory(symbol)
     income_df = ticker.quarterly_income_stmt
     cashflow_df = ticker.quarterly_cashflow
 
@@ -345,10 +375,27 @@ def get_yfinance_quarterly_financials(symbol: str, max_quarters: int = 6) -> Lis
     return _cache_set(cache_key, rows)
 
 
-def get_finnhub_quote(symbol: str) -> Dict[str, Any]:
+def _resolve_api_key(
+    explicit_api_key: Optional[str],
+    transport: Optional[Callable[..., Any]],
+    *config_attrs: str,
+) -> Optional[str]:
+    if explicit_api_key is not None:
+        return str(explicit_api_key).strip() or None
+    if transport is not None:
+        raise ValueError("Explicit injected transport requires an explicit fixture API key")
+    return _first_key(*config_attrs)
+
+
+def get_finnhub_quote(
+    symbol: str,
+    *,
+    api_key: Optional[str] = None,
+    transport: Optional[Callable[..., Any]] = None,
+) -> Dict[str, Any]:
     symbol = (symbol or "").strip().upper()
-    api_key = _first_key("finnhub_api_keys", "finnhub_api_key")
-    if not symbol or not api_key:
+    resolved_api_key = _resolve_api_key(api_key, transport, "finnhub_api_keys", "finnhub_api_key")
+    if not symbol or not resolved_api_key:
         return {}
 
     cache_key = f"finnhub:quote:{symbol}"
@@ -358,7 +405,8 @@ def get_finnhub_quote(symbol: str) -> Dict[str, Any]:
 
     data = _request_json(
         f"{_FINNHUB_BASE_URL}/quote",
-        params={"symbol": symbol, "token": api_key},
+        params={"symbol": symbol, "token": resolved_api_key},
+        transport=transport,
     )
     prev_close = _num(data.get("pc"))
     payload = {
@@ -376,10 +424,15 @@ def get_finnhub_quote(symbol: str) -> Dict[str, Any]:
     return _cache_set(cache_key, {k: v for k, v in payload.items() if v is not None})
 
 
-def get_finnhub_metrics(symbol: str) -> Dict[str, Any]:
+def get_finnhub_metrics(
+    symbol: str,
+    *,
+    api_key: Optional[str] = None,
+    transport: Optional[Callable[..., Any]] = None,
+) -> Dict[str, Any]:
     symbol = (symbol or "").strip().upper()
-    api_key = _first_key("finnhub_api_keys", "finnhub_api_key")
-    if not symbol or not api_key:
+    resolved_api_key = _resolve_api_key(api_key, transport, "finnhub_api_keys", "finnhub_api_key")
+    if not symbol or not resolved_api_key:
         return {}
 
     cache_key = f"finnhub:metrics:{symbol}"
@@ -389,7 +442,8 @@ def get_finnhub_metrics(symbol: str) -> Dict[str, Any]:
 
     payload = _request_json(
         f"{_FINNHUB_BASE_URL}/stock/metric",
-        params={"symbol": symbol, "metric": "all", "token": api_key},
+        params={"symbol": symbol, "metric": "all", "token": resolved_api_key},
+        transport=transport,
     )
     metrics = payload.get("metric", {}) if isinstance(payload, dict) else {}
     if not isinstance(metrics, dict):
@@ -411,25 +465,50 @@ def get_finnhub_metrics(symbol: str) -> Dict[str, Any]:
     return _cache_set(cache_key, {k: v for k, v in normalized.items() if v is not None})
 
 
-def _fmp_get(path: str, symbol: str, *, params: Optional[Dict[str, Any]] = None) -> Any:
-    api_key = _first_key("fmp_api_keys", "fmp_api_key")
+def _fmp_get(
+    path: str,
+    symbol: str,
+    *,
+    api_key: Optional[str],
+    transport: Optional[Callable[..., Any]],
+    params: Optional[Dict[str, Any]] = None,
+) -> Any:
     if not api_key:
         return []
     final_params = {"apikey": api_key, **(params or {})}
-    return _request_json(f"{_FMP_BASE_URL}/{path}/{symbol}", params=final_params)
+    return _request_json(
+        f"{_FMP_BASE_URL}/{path}/{symbol}",
+        params=final_params,
+        transport=transport,
+    )
 
 
-def _fmp_stable_get(path: str, *, params: Optional[Dict[str, Any]] = None) -> Any:
-    api_key = _first_key("fmp_api_keys", "fmp_api_key")
+def _fmp_stable_get(
+    path: str,
+    *,
+    api_key: Optional[str],
+    transport: Optional[Callable[..., Any]],
+    params: Optional[Dict[str, Any]] = None,
+) -> Any:
     if not api_key:
         return []
     final_params = {"apikey": api_key, **(params or {})}
-    return _request_json(f"{_FMP_STABLE_BASE_URL}/{path}", params=final_params)
+    return _request_json(
+        f"{_FMP_STABLE_BASE_URL}/{path}",
+        params=final_params,
+        transport=transport,
+    )
 
 
-def get_fmp_quote(symbol: str) -> Dict[str, Any]:
+def get_fmp_quote(
+    symbol: str,
+    *,
+    api_key: Optional[str] = None,
+    transport: Optional[Callable[..., Any]] = None,
+) -> Dict[str, Any]:
     symbol = (symbol or "").strip().upper()
-    if not symbol or not _first_key("fmp_api_keys", "fmp_api_key"):
+    resolved_api_key = _resolve_api_key(api_key, transport, "fmp_api_keys", "fmp_api_key")
+    if not symbol or not resolved_api_key:
         return {}
 
     cache_key = f"fmp:quote:{symbol}"
@@ -437,7 +516,7 @@ def get_fmp_quote(symbol: str) -> Dict[str, Any]:
     if cached is not None:
         return cached
 
-    rows = _fmp_get("quote", symbol)
+    rows = _fmp_get("quote", symbol, api_key=resolved_api_key, transport=transport)
     row = rows[0] if isinstance(rows, list) and rows else {}
     if not isinstance(row, dict):
         row = {}
@@ -467,9 +546,15 @@ def get_fmp_quote(symbol: str) -> Dict[str, Any]:
     return _cache_set(cache_key, {k: v for k, v in payload.items() if v is not None})
 
 
-def get_fmp_profile(symbol: str) -> Dict[str, Any]:
+def get_fmp_profile(
+    symbol: str,
+    *,
+    api_key: Optional[str] = None,
+    transport: Optional[Callable[..., Any]] = None,
+) -> Dict[str, Any]:
     symbol = (symbol or "").strip().upper()
-    if not symbol or not _first_key("fmp_api_keys", "fmp_api_key"):
+    resolved_api_key = _resolve_api_key(api_key, transport, "fmp_api_keys", "fmp_api_key")
+    if not symbol or not resolved_api_key:
         return {}
 
     cache_key = f"fmp:profile:{symbol}"
@@ -477,7 +562,7 @@ def get_fmp_profile(symbol: str) -> Dict[str, Any]:
     if cached is not None:
         return cached
 
-    rows = _fmp_get("profile", symbol)
+    rows = _fmp_get("profile", symbol, api_key=resolved_api_key, transport=transport)
     row = rows[0] if isinstance(rows, list) and rows else {}
     if not isinstance(row, dict):
         row = {}
@@ -494,9 +579,15 @@ def get_fmp_profile(symbol: str) -> Dict[str, Any]:
     return _cache_set(cache_key, {k: v for k, v in payload.items() if v not in (None, "")})
 
 
-def get_fmp_ratios_ttm(symbol: str) -> Dict[str, Any]:
+def get_fmp_ratios_ttm(
+    symbol: str,
+    *,
+    api_key: Optional[str] = None,
+    transport: Optional[Callable[..., Any]] = None,
+) -> Dict[str, Any]:
     symbol = (symbol or "").strip().upper()
-    if not symbol or not _first_key("fmp_api_keys", "fmp_api_key"):
+    resolved_api_key = _resolve_api_key(api_key, transport, "fmp_api_keys", "fmp_api_key")
+    if not symbol or not resolved_api_key:
         return {}
 
     cache_key = f"fmp:ratios-ttm:{symbol}"
@@ -504,7 +595,7 @@ def get_fmp_ratios_ttm(symbol: str) -> Dict[str, Any]:
     if cached is not None:
         return cached
 
-    rows = _fmp_get("ratios-ttm", symbol)
+    rows = _fmp_get("ratios-ttm", symbol, api_key=resolved_api_key, transport=transport)
     row = rows[0] if isinstance(rows, list) and rows else {}
     if not isinstance(row, dict):
         row = {}
@@ -535,9 +626,16 @@ def _merge_cashflow_by_date(rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, A
     return merged
 
 
-def get_fmp_quarterly_financials(symbol: str, max_quarters: int = 6) -> List[Dict[str, Any]]:
+def get_fmp_quarterly_financials(
+    symbol: str,
+    max_quarters: int = 6,
+    *,
+    api_key: Optional[str] = None,
+    transport: Optional[Callable[..., Any]] = None,
+) -> List[Dict[str, Any]]:
     symbol = (symbol or "").strip().upper()
-    if not symbol or not _first_key("fmp_api_keys", "fmp_api_key"):
+    resolved_api_key = _resolve_api_key(api_key, transport, "fmp_api_keys", "fmp_api_key")
+    if not symbol or not resolved_api_key:
         return []
 
     cache_key = f"fmp:quarterly:{symbol}:{max_quarters}"
@@ -545,8 +643,20 @@ def get_fmp_quarterly_financials(symbol: str, max_quarters: int = 6) -> List[Dic
     if cached is not None:
         return cached
 
-    income_rows = _fmp_get("income-statement", symbol, params={"period": "quarter", "limit": max_quarters})
-    cashflow_rows = _fmp_get("cash-flow-statement", symbol, params={"period": "quarter", "limit": max_quarters})
+    income_rows = _fmp_get(
+        "income-statement",
+        symbol,
+        api_key=resolved_api_key,
+        transport=transport,
+        params={"period": "quarter", "limit": max_quarters},
+    )
+    cashflow_rows = _fmp_get(
+        "cash-flow-statement",
+        symbol,
+        api_key=resolved_api_key,
+        transport=transport,
+        params={"period": "quarter", "limit": max_quarters},
+    )
     if not isinstance(income_rows, list):
         income_rows = []
     if not isinstance(cashflow_rows, list):
@@ -575,9 +685,15 @@ def get_fmp_quarterly_financials(symbol: str, max_quarters: int = 6) -> List[Dic
     return _cache_set(cache_key, merged)
 
 
-def get_fmp_fundamentals(symbol: str) -> Dict[str, Any]:
+def get_fmp_fundamentals(
+    symbol: str,
+    *,
+    api_key: Optional[str] = None,
+    transport: Optional[Callable[..., Any]] = None,
+) -> Dict[str, Any]:
     symbol = (symbol or "").strip().upper()
-    if not symbol or not _first_key("fmp_api_keys", "fmp_api_key"):
+    resolved_api_key = _resolve_api_key(api_key, transport, "fmp_api_keys", "fmp_api_key")
+    if not symbol or not resolved_api_key:
         return {}
 
     cache_key = f"fmp:fundamentals:{symbol}"
@@ -585,10 +701,15 @@ def get_fmp_fundamentals(symbol: str) -> Dict[str, Any]:
     if cached is not None:
         return cached
 
-    quote = get_fmp_quote(symbol)
-    profile = get_fmp_profile(symbol)
-    ratios_ttm = get_fmp_ratios_ttm(symbol)
-    quarterly = get_fmp_quarterly_financials(symbol, max_quarters=8)
+    quote = get_fmp_quote(symbol, api_key=resolved_api_key, transport=transport)
+    profile = get_fmp_profile(symbol, api_key=resolved_api_key, transport=transport)
+    ratios_ttm = get_fmp_ratios_ttm(symbol, api_key=resolved_api_key, transport=transport)
+    quarterly = get_fmp_quarterly_financials(
+        symbol,
+        max_quarters=8,
+        api_key=resolved_api_key,
+        transport=transport,
+    )
 
     latest = quarterly[0] if quarterly else {}
     revenue_ttm = _sum_recent_quarters(quarterly, "revenue", quarters=4)
@@ -673,9 +794,16 @@ def get_fmp_fundamentals(symbol: str) -> Dict[str, Any]:
     return _cache_set(cache_key, {k: v for k, v in payload.items() if v is not None})
 
 
-def get_fmp_historical_prices(symbol: str, days: int = 180) -> List[Dict[str, Any]]:
+def get_fmp_historical_prices(
+    symbol: str,
+    days: int = 180,
+    *,
+    api_key: Optional[str] = None,
+    transport: Optional[Callable[..., Any]] = None,
+) -> List[Dict[str, Any]]:
     symbol = (symbol or "").strip().upper()
-    if not symbol or not _first_key("fmp_api_keys", "fmp_api_key"):
+    resolved_api_key = _resolve_api_key(api_key, transport, "fmp_api_keys", "fmp_api_key")
+    if not symbol or not resolved_api_key:
         return []
 
     cache_key = f"fmp:history:{symbol}:{days}"
@@ -683,7 +811,13 @@ def get_fmp_historical_prices(symbol: str, days: int = 180) -> List[Dict[str, An
     if cached is not None:
         return cached
 
-    payload = _fmp_get("historical-price-full", symbol, params={"timeseries": max(5, int(days))})
+    payload = _fmp_get(
+        "historical-price-full",
+        symbol,
+        api_key=resolved_api_key,
+        transport=transport,
+        params={"timeseries": max(5, int(days))},
+    )
     rows = payload.get("historical", []) if isinstance(payload, dict) else []
     normalized: List[Dict[str, Any]] = []
     for row in reversed(rows if isinstance(rows, list) else []):
@@ -709,10 +843,13 @@ def get_fmp_technical_indicator(
     *,
     period_length: int,
     timeframe: str = "1day",
+    api_key: Optional[str] = None,
+    transport: Optional[Callable[..., Any]] = None,
 ) -> List[Dict[str, Any]]:
     symbol = (symbol or "").strip().upper()
     indicator_name = (indicator or "").strip().lower()
-    if not symbol or not indicator_name or not _first_key("fmp_api_keys", "fmp_api_key"):
+    resolved_api_key = _resolve_api_key(api_key, transport, "fmp_api_keys", "fmp_api_key")
+    if not symbol or not indicator_name or not resolved_api_key:
         return []
 
     cache_key = f"fmp:technical:{indicator_name}:{symbol}:{period_length}:{timeframe}"
@@ -722,6 +859,8 @@ def get_fmp_technical_indicator(
 
     payload = _fmp_stable_get(
         f"technical-indicators/{indicator_name}",
+        api_key=resolved_api_key,
+        transport=transport,
         params={
             "symbol": symbol,
             "periodLength": int(period_length),
@@ -747,6 +886,8 @@ def get_fmp_technical_indicators(
     symbol: str,
     *,
     timeframe: str = "1day",
+    api_key: Optional[str] = None,
+    transport: Optional[Callable[..., Any]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     symbol = (symbol or "").strip().upper()
     if not symbol:
@@ -764,6 +905,8 @@ def get_fmp_technical_indicators(
             "sma",
             period_length=period,
             timeframe=timeframe,
+            api_key=api_key,
+            transport=transport,
         )
         latest = _latest_indicator_row(rows)
         if latest is not None:
@@ -779,6 +922,8 @@ def get_fmp_technical_indicators(
         "rsi",
         period_length=14,
         timeframe=timeframe,
+        api_key=api_key,
+        transport=transport,
     )
     latest_rsi = _latest_indicator_row(rsi_rows)
     if latest_rsi is not None:

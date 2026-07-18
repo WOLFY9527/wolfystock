@@ -24,6 +24,8 @@ class UatProviderDispatch:
     route: str
     allowed: bool
     reason_code: str
+    transport_identity: str
+    evidence_kind: str
 
     def to_trace(self) -> dict[str, Any]:
         return {
@@ -34,10 +36,16 @@ class UatProviderDispatch:
             "outcome": "ok" if self.allowed else "blocked",
             "status": "ok" if self.allowed else "blocked",
             "reason": self.reason_code,
+            "transport_identity": self.transport_identity,
+            "evidence_kind": self.evidence_kind,
             "message": (
-                "UAT contract explicitly allowed provider dispatch."
-                if self.allowed
-                else "UAT no-live-provider mode blocked external provider dispatch."
+                "Explicit injected fixture transport selected."
+                if self.reason_code == "injected_test_transport"
+                else (
+                    "UAT contract explicitly allowed provider dispatch."
+                    if self.allowed
+                    else "UAT no-live-provider mode blocked external provider dispatch."
+                )
             ),
         }
 
@@ -84,6 +92,8 @@ def check_uat_provider_dispatch(
             route=normalized_route,
             allowed=True,
             reason_code="uat_no_live_providers_disabled",
+            transport_identity="default_live_transport",
+            evidence_kind="provider_response",
         )
 
     allowlist = uat_live_provider_allowlist(env)
@@ -99,6 +109,8 @@ def check_uat_provider_dispatch(
             route=normalized_route,
             allowed=True,
             reason_code="uat_contract_allowlisted",
+            transport_identity="default_live_transport",
+            evidence_kind="provider_response",
         )
 
     return UatProviderDispatch(
@@ -107,6 +119,36 @@ def check_uat_provider_dispatch(
         route=normalized_route,
         allowed=False,
         reason_code="uat_no_live_providers",
+        transport_identity="default_live_transport",
+        evidence_kind="provider_response",
+    )
+
+
+def check_uat_provider_transport(
+    *,
+    provider: str,
+    capability: str,
+    route: str,
+    injected_transport: Any | None,
+    env: dict[str, str] | None = None,
+) -> UatProviderDispatch:
+    """Select an explicit injected seam or enforce the default live boundary."""
+
+    if injected_transport is not None:
+        return UatProviderDispatch(
+            provider=_safe_token(provider),
+            capability=_safe_token(capability),
+            route=_safe_token(route),
+            allowed=True,
+            reason_code="injected_test_transport",
+            transport_identity="injected_test_transport",
+            evidence_kind="fixture_mock",
+        )
+    return check_uat_provider_dispatch(
+        provider=provider,
+        capability=capability,
+        route=route,
+        env=env,
     )
 
 
@@ -121,6 +163,26 @@ def require_uat_provider_dispatch_allowed(
         provider=provider,
         capability=capability,
         route=route,
+        env=env,
+    )
+    if not dispatch.allowed:
+        raise UatProviderIsolationError(dispatch)
+    return dispatch
+
+
+def require_uat_provider_transport_allowed(
+    *,
+    provider: str,
+    capability: str,
+    route: str,
+    injected_transport: Any | None,
+    env: dict[str, str] | None = None,
+) -> UatProviderDispatch:
+    dispatch = check_uat_provider_transport(
+        provider=provider,
+        capability=capability,
+        route=route,
+        injected_transport=injected_transport,
         env=env,
     )
     if not dispatch.allowed:

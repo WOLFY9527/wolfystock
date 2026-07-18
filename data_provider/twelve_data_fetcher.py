@@ -13,7 +13,7 @@ import requests
 from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS, normalize_stock_code
 from .realtime_types import RealtimeSource, UnifiedRealtimeQuote, safe_float, safe_int
 from .us_index_mapping import is_us_stock_code
-from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
+from src.services.uat_provider_isolation import require_uat_provider_transport_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +73,22 @@ class TwelveDataFetcher(BaseFetcher):
         self.api_key = str(api_key or "").strip()
         self.base_url = str(base_url or "https://api.twelvedata.com").rstrip("/")
         self.timeout = max(5, int(timeout))
-        self.session = session or requests.Session()
+        self._injected_session = session
+        self._injected_transport = session
+        self.session = session if session is not None else requests.Session()
+        self._last_transport_dispatch = None
         if not self.api_key:
             raise ValueError("Twelve Data requires a non-empty API key")
+
+    @property
+    def transport_identity(self) -> str:
+        if self._last_transport_dispatch is not None:
+            return self._last_transport_dispatch.transport_identity
+        return (
+            "injected_test_transport"
+            if self._injected_session is not None
+            else "default_live_transport"
+        )
 
     def close(self) -> None:
         try:
@@ -84,10 +97,11 @@ class TwelveDataFetcher(BaseFetcher):
             pass
 
     def _request_json(self, path: str, *, params: Optional[Dict[str, Any]] = None) -> Any:
-        require_uat_provider_dispatch_allowed(
+        self._last_transport_dispatch = require_uat_provider_transport_allowed(
             provider="twelve_data",
             capability="market_data",
             route="TwelveDataFetcher._request_json",
+            injected_transport=self._injected_session,
         )
         request_params = dict(params or {})
         request_params["apikey"] = self.api_key

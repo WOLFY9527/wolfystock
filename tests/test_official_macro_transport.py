@@ -12,7 +12,7 @@ import sys
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError, URLError
 
 import pytest
@@ -183,32 +183,55 @@ def test_build_fred_observations_request_includes_explicit_dummy_api_key() -> No
     assert request.params["api_key"] == "fred-explicit-test-key"
 
 
-def test_fetch_fred_observation_points_uses_runtime_configured_fred_api_key_without_exposing_it(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_fred_observation_points_uses_runtime_configured_fred_api_key_without_exposing_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured_requests = []
 
-    def _fake_fetch_transport_bytes(request, *, timeout):
+    class Response:
+        status = 200
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "observations": [
+                        {"date": "2026-05-13", "value": "4.45"},
+                        {"date": "2026-05-12", "value": "4.41"},
+                    ]
+                }
+            ).encode("utf-8")
+
+    def fixture_transport(request, *, timeout, context):
         captured_requests.append(request)
-        return json.dumps(
-            {
-                "observations": [
-                    {"date": "2026-05-13", "value": "4.45"},
-                    {"date": "2026-05-12", "value": "4.41"},
-                ]
-            }
-        ).encode("utf-8")
+        return Response()
 
     monkeypatch.setenv("FRED_API_KEY", "fred-secret-test-key")
     Config.reset_instance()
     try:
-        with patch("src.services.official_macro_transport._fetch_transport_bytes", side_effect=_fake_fetch_transport_bytes):
-            points = fetch_fred_observation_points("DGS10", limit=2)
+        with patch(
+            "src.config.Config.get_instance",
+            side_effect=AssertionError("injected transport must not read runtime config"),
+        ):
+            points = fetch_fred_observation_points(
+                "DGS10",
+                api_key="fred-explicit-fixture-key",
+                limit=2,
+                transport=fixture_transport,
+            )
     finally:
         Config.reset_instance()
 
     assert len(captured_requests) == 1
-    assert captured_requests[0].params["api_key"] == "fred-secret-test-key"
-    assert captured_requests[0].params["series_id"] == "DGS10"
+    assert "api_key=fred-explicit-fixture-key" in captured_requests[0].full_url
+    assert "fred-secret-test-key" not in captured_requests[0].full_url
     assert "fred-secret-test-key" not in json.dumps([point.to_dict() for point in points])
+    assert "fred-explicit-fixture-key" not in json.dumps([point.to_dict() for point in points])
 
 
 def test_fetch_fred_observation_points_reports_missing_api_key_without_network_call() -> None:
@@ -236,18 +259,26 @@ def test_fetch_fred_observation_points_reports_non_2xx_http_response() -> None:
         fp=None,
     )
 
-    with patch("src.services.official_macro_transport.urlopen", side_effect=http_error):
-        with pytest.raises(OfficialMacroTransportError) as exc_info:
-            fetch_fred_observation_points("DGS10", api_key="fred-test-key", limit=1)
+    with pytest.raises(OfficialMacroTransportError) as exc_info:
+        fetch_fred_observation_points(
+            "DGS10",
+            api_key="fred-test-key",
+            limit=1,
+            transport=Mock(side_effect=http_error),
+        )
 
     assert exc_info.value.reason == "http_error"
     assert exc_info.value.status_code == 403
 
 
 def test_fetch_fred_observation_points_reports_timeout() -> None:
-    with patch("src.services.official_macro_transport.urlopen", side_effect=TimeoutError("timed out")):
-        with pytest.raises(OfficialMacroTransportError) as exc_info:
-            fetch_fred_observation_points("DGS30", api_key="fred-test-key", limit=1)
+    with pytest.raises(OfficialMacroTransportError) as exc_info:
+        fetch_fred_observation_points(
+            "DGS30",
+            api_key="fred-test-key",
+            limit=1,
+            transport=Mock(side_effect=TimeoutError("timed out")),
+        )
 
     assert exc_info.value.reason == "timeout"
 
@@ -285,9 +316,13 @@ def test_fetch_fred_observation_points_uses_certifi_ca_bundle_when_available(
     monkeypatch.delenv("SSL_CERT_FILE", raising=False)
     monkeypatch.delenv("REQUESTS_CA_BUNDLE", raising=False)
     monkeypatch.setattr(ssl, "create_default_context", fake_create_default_context)
-    monkeypatch.setattr(official_macro_transport, "urlopen", fake_urlopen)
     with patch.dict(sys.modules, {"certifi": SimpleNamespace(where=lambda: str(certifi_cafile))}):
-        points = fetch_fred_observation_points("DGS10", api_key="fred-test-key", limit=1)
+        points = fetch_fred_observation_points(
+            "DGS10",
+            api_key="fred-test-key",
+            limit=1,
+            transport=fake_urlopen,
+        )
 
     assert [point.value for point in points] == [4.45]
     assert created_contexts == [str(certifi_cafile)]
@@ -323,9 +358,13 @@ def test_fetch_fred_observation_points_falls_back_to_system_ca_when_certifi_miss
     monkeypatch.delenv("SSL_CERT_FILE", raising=False)
     monkeypatch.delenv("REQUESTS_CA_BUNDLE", raising=False)
     monkeypatch.setattr(ssl, "create_default_context", fake_create_default_context)
-    monkeypatch.setattr(official_macro_transport, "urlopen", fake_urlopen)
     with patch.dict(sys.modules, {"certifi": None}):
-        points = fetch_fred_observation_points("DGS10", api_key="fred-test-key", limit=1)
+        points = fetch_fred_observation_points(
+            "DGS10",
+            api_key="fred-test-key",
+            limit=1,
+            transport=fake_urlopen,
+        )
 
     assert [point.value for point in points] == [4.45]
     assert created_contexts == [None]
@@ -341,17 +380,19 @@ def test_fetch_fred_observation_points_reports_ssl_failure_ca_diagnostics(
     monkeypatch.delenv("SSL_CERT_FILE", raising=False)
     monkeypatch.delenv("REQUESTS_CA_BUNDLE", raising=False)
     monkeypatch.setattr(ssl, "create_default_context", lambda *, cafile=None: object())
-    monkeypatch.setattr(
-        official_macro_transport,
-        "urlopen",
-        lambda *_, **__: (_ for _ in ()).throw(
-            URLError(ssl.SSLCertVerificationError("certificate verify failed token=SECRET"))
-        ),
+    failing_transport = Mock(
+        side_effect=URLError(ssl.SSLCertVerificationError("certificate verify failed token=SECRET"))
     )
 
     with patch.dict(sys.modules, {"certifi": SimpleNamespace(where=lambda: str(certifi_cafile))}):
         with pytest.raises(OfficialMacroTransportError) as exc_info:
-            fetch_fred_observation_points("DGS10", api_key="fred-test-key", limit=1, timeout=1.25)
+            fetch_fred_observation_points(
+                "DGS10",
+                api_key="fred-test-key",
+                limit=1,
+                timeout=1.25,
+                transport=failing_transport,
+            )
 
     assert exc_info.value.reason == "transport_error"
     diagnostics = exc_info.value.diagnostics
@@ -366,12 +407,14 @@ def test_fetch_fred_observation_points_reports_ssl_failure_ca_diagnostics(
 
 
 def test_fetch_fred_observation_points_reports_urlerror_timeout_with_safe_diagnostics() -> None:
-    with patch(
-        "src.services.official_macro_transport.urlopen",
-        side_effect=URLError(socket.timeout("timed out token=SECRET")),
-    ):
-        with pytest.raises(OfficialMacroTransportError) as exc_info:
-            fetch_fred_observation_points("DGS10", api_key="fred-test-key", limit=1, timeout=1.25)
+    with pytest.raises(OfficialMacroTransportError) as exc_info:
+        fetch_fred_observation_points(
+            "DGS10",
+            api_key="fred-test-key",
+            limit=1,
+            timeout=1.25,
+            transport=Mock(side_effect=URLError(socket.timeout("timed out token=SECRET"))),
+        )
 
     assert exc_info.value.reason == "timeout"
     diagnostics = exc_info.value.diagnostics
@@ -398,9 +441,13 @@ def test_fetch_fred_observation_points_reports_empty_transport_body() -> None:
         def read(self) -> bytes:
             return b""
 
-    with patch("src.services.official_macro_transport.urlopen", return_value=EmptyResponse()):
-        with pytest.raises(OfficialMacroTransportError) as exc_info:
-            fetch_fred_observation_points("DGS10", api_key="fred-test-key", limit=1)
+    with pytest.raises(OfficialMacroTransportError) as exc_info:
+        fetch_fred_observation_points(
+            "DGS10",
+            api_key="fred-test-key",
+            limit=1,
+            transport=Mock(return_value=EmptyResponse()),
+        )
 
     assert exc_info.value.reason == "empty_response"
 
@@ -1570,18 +1617,29 @@ def test_fetch_treasury_daily_rate_observation_points_retries_once_within_bounde
     attempts: list[float] = []
     csv_bytes = _load_text_fixture("treasury_daily_rates.csv").encode("utf-8")
 
-    def _fake_fetch_transport_bytes(request, *, timeout):
+    class Response:
+        status = 200
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return csv_bytes
+
+    def fixture_transport(request, *, timeout, context):
         attempts.append(timeout)
         if len(attempts) == 1:
-            raise OfficialMacroTransportError(
-                "timeout",
-                "treasury timed out",
-                diagnostics={"providerName": "treasury", "endpointHost": "home.treasury.gov"},
-            )
-        return csv_bytes
+            raise TimeoutError("treasury fixture timeout")
+        return Response()
 
-    with patch("src.services.official_macro_transport._fetch_transport_bytes", side_effect=_fake_fetch_transport_bytes):
-        points = fetch_treasury_daily_rate_observation_points(limit=2, timeout=0.8)
+    points = fetch_treasury_daily_rate_observation_points(
+        limit=2,
+        timeout=0.8,
+        transport=fixture_transport,
+    )
 
     assert attempts == [pytest.approx(0.4, abs=0.01), pytest.approx(0.4, abs=0.01)]
     assert [item.value for item in points["DGS10"]] == [4.41, 4.45]

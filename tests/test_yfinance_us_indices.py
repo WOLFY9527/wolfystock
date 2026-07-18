@@ -19,6 +19,8 @@ if 'fake_useragent' not in sys.modules:
 # 确保能导入项目模块
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from data_provider.yfinance_fetcher import YfinanceFetcher
+
 
 def _make_mock_hist(close: float, prev_close: float, high: float = None, low: float = None) -> pd.DataFrame:
     """构造模拟的 history DataFrame，包含计算涨跌幅所需字段"""
@@ -47,14 +49,15 @@ class TestFetchYfTickerData(unittest.TestCase):
 
     def setUp(self):
         from data_provider.yfinance_fetcher import YfinanceFetcher
-        self.fetcher = YfinanceFetcher()
+        self.fetcher = None
 
     def test_returns_dict_with_correct_fields(self):
         """正常数据应返回包含 code/name/current/change_pct 等字段的字典"""
         mock_hist = _make_mock_hist(close=5100.0, prev_close=5000.0)
         mock_yf = _make_mock_yf(mock_hist)
+        self.fetcher = YfinanceFetcher(yf_transport=mock_yf)
 
-        result = self.fetcher._fetch_yf_ticker_data(mock_yf, '^GSPC', '标普500指数', 'SPX')
+        result = self.fetcher._fetch_yf_ticker_data('^GSPC', '标普500指数', 'SPX')
 
         self.assertIsNotNone(result)
         self.assertEqual(result['code'], 'SPX')
@@ -73,8 +76,9 @@ class TestFetchYfTickerData(unittest.TestCase):
     def test_returns_none_when_history_empty(self):
         """history 为空时应返回 None"""
         mock_yf = _make_mock_yf(pd.DataFrame())
+        self.fetcher = YfinanceFetcher(yf_transport=mock_yf)
 
-        result = self.fetcher._fetch_yf_ticker_data(mock_yf, '^GSPC', '标普500指数', 'SPX')
+        result = self.fetcher._fetch_yf_ticker_data('^GSPC', '标普500指数', 'SPX')
 
         self.assertIsNone(result)
 
@@ -83,8 +87,9 @@ class TestFetchYfTickerData(unittest.TestCase):
         mock_hist = _make_mock_hist(close=5000.0, prev_close=5000.0)
         mock_hist = mock_hist.iloc[[-1]]
         mock_yf = _make_mock_yf(mock_hist)
+        self.fetcher = YfinanceFetcher(yf_transport=mock_yf)
 
-        result = self.fetcher._fetch_yf_ticker_data(mock_yf, '^GSPC', '标普500指数', 'SPX')
+        result = self.fetcher._fetch_yf_ticker_data('^GSPC', '标普500指数', 'SPX')
 
         self.assertIsNotNone(result)
         self.assertEqual(result['change_pct'], 0.0)
@@ -95,7 +100,7 @@ class TestGetUsMainIndices(unittest.TestCase):
 
     def setUp(self):
         from data_provider.yfinance_fetcher import YfinanceFetcher
-        self.fetcher = YfinanceFetcher()
+        self.fetcher = None
 
     @patch('data_provider.yfinance_fetcher.get_us_index_yf_symbol')
     def test_returns_list_when_mock_succeeds(self, mock_get_symbol):
@@ -112,8 +117,9 @@ class TestGetUsMainIndices(unittest.TestCase):
         mock_get_symbol.side_effect = get_symbol
         mock_hist = _make_mock_hist(close=5100.0, prev_close=5000.0)
         mock_yf = _make_mock_yf(mock_hist)
+        self.fetcher = YfinanceFetcher(yf_transport=mock_yf)
 
-        result = self.fetcher._get_us_main_indices(mock_yf)
+        result = self.fetcher._get_us_main_indices()
 
         self.assertIsNotNone(result)
         self.assertIsInstance(result, list)
@@ -145,8 +151,9 @@ class TestGetUsMainIndices(unittest.TestCase):
         mock_ticker.history.side_effect = history_side_effect
         mock_yf = MagicMock()
         mock_yf.Ticker.return_value = mock_ticker
+        self.fetcher = YfinanceFetcher(yf_transport=mock_yf)
 
-        result = self.fetcher._get_us_main_indices(mock_yf)
+        result = self.fetcher._get_us_main_indices()
 
         self.assertIsNotNone(result)
         self.assertIsInstance(result, list)
@@ -156,8 +163,9 @@ class TestGetUsMainIndices(unittest.TestCase):
         """全部取数失败时返回 None"""
         mock_get_symbol.return_value = (None, None)
         mock_yf = _make_mock_yf(pd.DataFrame())
+        self.fetcher = YfinanceFetcher(yf_transport=mock_yf)
 
-        result = self.fetcher._get_us_main_indices(mock_yf)
+        result = self.fetcher._get_us_main_indices()
 
         self.assertIsNone(result)
 
@@ -169,8 +177,9 @@ class TestGetUsMainIndices(unittest.TestCase):
         mock_ticker.history.side_effect = Exception("Network error")
         mock_yf = MagicMock()
         mock_yf.Ticker.return_value = mock_ticker
+        self.fetcher = YfinanceFetcher(yf_transport=mock_yf)
 
-        result = self.fetcher._get_us_main_indices(mock_yf)
+        result = self.fetcher._get_us_main_indices()
 
         self.assertIsNone(result)
 
@@ -185,8 +194,9 @@ class TestGetUsMainIndices(unittest.TestCase):
         mock_get_symbol.side_effect = get_symbol
         mock_hist = _make_mock_hist(close=5100.0, prev_close=5000.0)
         mock_yf = _make_mock_yf(mock_hist)
+        self.fetcher = YfinanceFetcher(yf_transport=mock_yf)
 
-        result = self.fetcher._get_us_main_indices(mock_yf)
+        result = self.fetcher._get_us_main_indices()
 
         self.assertIsNotNone(result)
         self.assertEqual(len(result), 1)

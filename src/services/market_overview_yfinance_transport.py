@@ -7,9 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from threading import BoundedSemaphore
 from typing import Any, Callable
 
-import yfinance as yf
-
-from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
+from src.services.uat_provider_isolation import require_uat_provider_transport_allowed
 
 
 YFINANCE_HISTORY_TIMEOUT_SECONDS = 1.5
@@ -22,27 +20,52 @@ _YFINANCE_HISTORY_EXECUTOR = ThreadPoolExecutor(
 _YFINANCE_HISTORY_SLOTS = BoundedSemaphore(YFINANCE_HISTORY_TIMEOUT_WORKERS)
 
 
-def fetch_yfinance_quote_history_frame(ticker: str, *, timeout: float = YFINANCE_HISTORY_TIMEOUT_SECONDS) -> Any:
-    require_uat_provider_dispatch_allowed(
+def _fetch_default_quote_history(ticker: str) -> Any:
+    import yfinance as yf
+
+    return yf.Ticker(ticker).history(period="5d", interval="1d", auto_adjust=False)
+
+
+def _fetch_default_spy_atr_history() -> Any:
+    import yfinance as yf
+
+    return yf.Ticker("SPY").history(period="1mo", interval="1d", auto_adjust=False)
+
+
+def fetch_yfinance_quote_history_frame(
+    ticker: str,
+    *,
+    timeout: float = YFINANCE_HISTORY_TIMEOUT_SECONDS,
+    history_transport: Callable[[], Any] | None = None,
+) -> Any:
+    require_uat_provider_transport_allowed(
         provider="yfinance",
         capability="market_overview_history",
         route="market_overview_yfinance_transport.fetch_yfinance_quote_history_frame",
+        injected_transport=history_transport,
     )
     return _run_yfinance_history_with_timeout(
-        lambda: yf.Ticker(ticker).history(period="5d", interval="1d", auto_adjust=False),
+        history_transport
+        or (lambda: _fetch_default_quote_history(ticker)),
         timeout=timeout,
         task_name="yfinance history",
     )
 
 
-def fetch_yfinance_spy_atr_history_frame(*, timeout: float = YFINANCE_HISTORY_TIMEOUT_SECONDS) -> Any:
-    require_uat_provider_dispatch_allowed(
+def fetch_yfinance_spy_atr_history_frame(
+    *,
+    timeout: float = YFINANCE_HISTORY_TIMEOUT_SECONDS,
+    history_transport: Callable[[], Any] | None = None,
+) -> Any:
+    require_uat_provider_transport_allowed(
         provider="yfinance",
         capability="market_overview_history",
         route="market_overview_yfinance_transport.fetch_yfinance_spy_atr_history_frame",
+        injected_transport=history_transport,
     )
     return _run_yfinance_history_with_timeout(
-        lambda: yf.Ticker("SPY").history(period="1mo", interval="1d", auto_adjust=False),
+        history_transport
+        or _fetch_default_spy_atr_history,
         timeout=timeout,
         task_name="yfinance history",
     )

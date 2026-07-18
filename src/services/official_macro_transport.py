@@ -13,14 +13,14 @@ import json
 import socket
 import ssl
 import time
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.parse import urlencode, urlparse
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 from src.providers import classify_provider_retry_disposition
-from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
+from src.services.uat_provider_isolation import require_uat_provider_transport_allowed
 
 
 FRED_OBSERVATIONS_URL = "https://api.stlouisfed.org/fred/series/observations"
@@ -199,7 +199,25 @@ def build_fred_observations_request(
     observation_end: str | None = None,
 ) -> MacroTransportRequest:
     normalized_series = _validate_fred_series_id(series_id)
-    resolved_api_key = _resolve_fred_api_key(api_key)
+    return _build_fred_observations_request(
+        normalized_series,
+        api_key=_resolve_fred_api_key(api_key),
+        limit=limit,
+        sort_order=sort_order,
+        observation_start=observation_start,
+        observation_end=observation_end,
+    )
+
+
+def _build_fred_observations_request(
+    normalized_series: str,
+    *,
+    api_key: str | None,
+    limit: int,
+    sort_order: str,
+    observation_start: str | None,
+    observation_end: str | None,
+) -> MacroTransportRequest:
     params = {
         "series_id": normalized_series,
         "file_type": "json",
@@ -210,8 +228,8 @@ def build_fred_observations_request(
         params["observation_start"] = observation_start
     if observation_end:
         params["observation_end"] = observation_end
-    if resolved_api_key:
-        params["api_key"] = resolved_api_key
+    if api_key:
+        params["api_key"] = api_key
     return MacroTransportRequest(
         method="GET",
         url=FRED_OBSERVATIONS_URL,
@@ -407,17 +425,35 @@ def fetch_fred_observation_points(
     api_key: str | None = None,
     limit: int = 2,
     timeout: float = DEFAULT_TRANSPORT_TIMEOUT_SECONDS,
+    transport: Callable[..., Any] | None = None,
 ) -> list[MacroObservation]:
-    request = build_fred_observations_request(series_id, api_key=api_key, limit=limit)
+    if transport is None:
+        request = build_fred_observations_request(series_id, api_key=api_key, limit=limit)
+    else:
+        request = _build_fred_observations_request(
+            _validate_fred_series_id(series_id),
+            api_key=_text(api_key) or None,
+            limit=limit,
+            sort_order="desc",
+            observation_start=None,
+            observation_end=None,
+        )
     try:
-        payload = json.loads(_fetch_transport_bytes(request, timeout=timeout).decode("utf-8"))
+        payload = json.loads(
+            _fetch_transport_bytes(request, timeout=timeout, transport=transport).decode("utf-8")
+        )
     except OfficialMacroTransportError:
         raise
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise OfficialMacroTransportError(
             "parse_error",
             f"{request.source_id or 'official macro'} response could not be parsed",
-            diagnostics=_transport_diagnostics(request, timeout=timeout, exception=exc),
+            diagnostics=_transport_diagnostics(
+                request,
+                timeout=timeout,
+                exception=exc,
+                injected_transport=transport,
+            ),
         ) from exc
     return parse_fred_observation_points_payload(series_id, payload, limit=limit)
 
@@ -426,6 +462,7 @@ def fetch_treasury_daily_rate_observation_points(
     *,
     limit: int = 2,
     timeout: float = DEFAULT_TRANSPORT_TIMEOUT_SECONDS,
+    transport: Callable[..., Any] | None = None,
 ) -> dict[str, list[MacroObservation]]:
     request = build_treasury_daily_rates_request()
     attempts = max(1, int(TREASURY_FETCH_MAX_ATTEMPTS))
@@ -433,7 +470,11 @@ def fetch_treasury_daily_rate_observation_points(
     last_transport_error: OfficialMacroTransportError | None = None
     for attempt_index in range(attempts):
         try:
-            text = _fetch_transport_bytes(request, timeout=per_attempt_timeout).decode("utf-8-sig")
+            text = _fetch_transport_bytes(
+                request,
+                timeout=per_attempt_timeout,
+                transport=transport,
+            ).decode("utf-8-sig")
             return parse_treasury_daily_rate_observation_points_csv(text, limit=limit)
         except OfficialMacroTransportError as exc:
             last_transport_error = exc
@@ -443,14 +484,23 @@ def fetch_treasury_daily_rate_observation_points(
             raise OfficialMacroTransportError(
                 "parse_error",
                 f"{request.source_id or 'official macro'} response could not be parsed",
-                diagnostics=_transport_diagnostics(request, timeout=per_attempt_timeout, exception=exc),
+                diagnostics=_transport_diagnostics(
+                    request,
+                    timeout=per_attempt_timeout,
+                    exception=exc,
+                    injected_transport=transport,
+                ),
             ) from exc
     if last_transport_error is not None:
         raise last_transport_error
     raise OfficialMacroTransportError(
         "transport_error",
         f"{request.source_id or 'official macro'} transport failed",
-        diagnostics=_transport_diagnostics(request, timeout=per_attempt_timeout),
+        diagnostics=_transport_diagnostics(
+            request,
+            timeout=per_attempt_timeout,
+            injected_transport=transport,
+        ),
     )
 
 
@@ -889,9 +939,19 @@ def run_usd_pressure_live_smoke(
     return summary
 
 
-def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) -> bytes:
+def _fetch_transport_bytes(
+    request: MacroTransportRequest,
+    *,
+    timeout: float,
+    transport: Callable[..., Any] | None = None,
+) -> bytes:
     ca_bundle_source = _selected_https_ca_bundle_source()
-    base_diagnostics = _transport_diagnostics(request, timeout=timeout, ca_bundle_source=ca_bundle_source)
+    base_diagnostics = _transport_diagnostics(
+        request,
+        timeout=timeout,
+        ca_bundle_source=ca_bundle_source,
+        injected_transport=transport,
+    )
     if request.requires_api_key and not _text(request.params.get("api_key")):
         raise OfficialMacroTransportError(
             "missing_api_key",
@@ -902,13 +962,15 @@ def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) ->
     url = f"{request.url}?{query}" if query else request.url
     http_request = Request(url=url, headers=request.headers, method=request.method)
     try:
-        require_uat_provider_dispatch_allowed(
+        require_uat_provider_transport_allowed(
             provider=str(request.source_id or "official_macro"),
             capability="official_macro",
             route="official_macro_transport._fetch_transport_bytes",
+            injected_transport=transport,
         )
         https_context, ca_bundle_source = _build_https_context()
-        with urlopen(http_request, timeout=timeout, context=https_context) as response:
+        transport_call = transport if transport is not None else urlopen
+        with transport_call(http_request, timeout=timeout, context=https_context) as response:
             status_code = _response_status_code(response)
             if status_code >= 400:
                 raise OfficialMacroTransportError(
@@ -920,6 +982,7 @@ def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) ->
                         timeout=timeout,
                         status_code=status_code,
                         ca_bundle_source=ca_bundle_source,
+                        injected_transport=transport,
                     ),
                 )
             body = response.read()
@@ -936,6 +999,7 @@ def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) ->
                 exception=exc,
                 status_code=exc.code,
                 ca_bundle_source=ca_bundle_source,
+                injected_transport=transport,
             ),
         ) from exc
     except (TimeoutError, socket.timeout) as exc:
@@ -947,6 +1011,7 @@ def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) ->
                 timeout=timeout,
                 exception=exc,
                 ca_bundle_source=ca_bundle_source,
+                injected_transport=transport,
             ),
         ) from exc
     except URLError as exc:
@@ -959,6 +1024,7 @@ def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) ->
                 timeout=timeout,
                 exception=exc,
                 ca_bundle_source=ca_bundle_source,
+                injected_transport=transport,
             ),
         ) from exc
     if not body:
@@ -1015,12 +1081,17 @@ def _transport_diagnostics(
     exception: Exception | None = None,
     status_code: int | None = None,
     ca_bundle_source: str | None = None,
+    injected_transport: Any | None = None,
 ) -> dict[str, Any]:
     diagnostics: dict[str, Any] = {
         "providerName": _provider_name(request.source_id),
         "endpointHost": urlparse(request.url).netloc,
         "requestedSeries": _requested_series(request),
         "attemptedAt": _utc_now_iso(),
+        "transportIdentity": (
+            "injected_test_transport" if injected_transport is not None else "default_live_transport"
+        ),
+        "evidenceKind": "fixture_mock" if injected_transport is not None else "provider_response",
     }
     if ca_bundle_source:
         diagnostics["caBundleSource"] = ca_bundle_source
@@ -1029,9 +1100,14 @@ def _transport_diagnostics(
     except (TypeError, ValueError):
         pass
     if request.requires_api_key or diagnostics["providerName"] == "fred":
-        config_probe = fred_runtime_config_probe()
-        diagnostics["configPresent"] = bool(config_probe["configPresent"])
-        diagnostics["apiKeyPresent"] = bool(_text(request.params.get("api_key")) or config_probe["apiKeyPresent"])
+        explicit_api_key_present = bool(_text(request.params.get("api_key")))
+        if injected_transport is not None:
+            diagnostics["configPresent"] = False
+            diagnostics["apiKeyPresent"] = explicit_api_key_present
+        else:
+            config_probe = fred_runtime_config_probe()
+            diagnostics["configPresent"] = bool(config_probe["configPresent"])
+            diagnostics["apiKeyPresent"] = bool(explicit_api_key_present or config_probe["apiKeyPresent"])
     if status_code is not None:
         diagnostics["httpStatus"] = int(status_code)
     if exception is not None:

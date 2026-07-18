@@ -128,6 +128,8 @@ class TestAnalyzerGenerateText:
             text, model, usage, attempt_trace = analyzer._call_litellm(
                 "Say hello",
                 generation_config={"max_tokens": 64, "temperature": 0},
+                completion_transport=mock_completion,
+                config=cfg,
             )
 
             assert text == "DeepSeek v4 says hello"
@@ -196,6 +198,8 @@ class TestAnalyzerGenerateText:
             text, model, usage, attempt_trace = analyzer._call_litellm(
                 "Return JSON",
                 generation_config={"max_tokens": 64, "temperature": 0},
+                completion_transport=mock_completion,
+                config=cfg,
             )
 
             assert text == '{"summary":"final json"}'

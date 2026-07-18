@@ -63,6 +63,7 @@ class DataFetcherManagerAlpacaTestCase(unittest.TestCase):
             daily_result=(pd.DataFrame([{"date": "2026-04-14", "close": 410.0}]), "YfinanceFetcher"),
         )
         manager = DataFetcherManager(fetchers=[yfinance])
+        manager._injected_fetcher_ids.clear()
         alpaca = _AlpacaStub(
             UnifiedRealtimeQuote(code="MSFT", source=RealtimeSource.ALPACA, price=411.0),
             daily_result=(pd.DataFrame([{"date": "2026-04-14", "close": 411.0}]), "AlpacaFetcher"),
@@ -85,9 +86,9 @@ class DataFetcherManagerAlpacaTestCase(unittest.TestCase):
         trace = manager.get_last_daily_history_trace()
         self.assertTrue(
             any(
-                item["provider"] == "datafetchermanager"
-                and item["status"] == "blocked"
+                item["status"] == "blocked"
                 and item["reason"] == "uat_no_live_providers"
+                and item.get("transport_identity") == "default_live_transport"
                 for item in trace
             )
         )
@@ -97,6 +98,7 @@ class DataFetcherManagerAlpacaTestCase(unittest.TestCase):
             UnifiedRealtimeQuote(code="MSFT", source=RealtimeSource.YFINANCE, price=410.0)
         )
         manager = DataFetcherManager(fetchers=[yfinance])
+        manager._injected_fetcher_ids.clear()
         alpaca = _AlpacaStub(
             UnifiedRealtimeQuote(code="MSFT", source=RealtimeSource.ALPACA, price=411.0)
         )
@@ -118,9 +120,9 @@ class DataFetcherManagerAlpacaTestCase(unittest.TestCase):
         trace = manager.get_last_realtime_quote_trace()
         self.assertTrue(
             any(
-                item["provider"] == "datafetchermanager"
-                and item["status"] == "blocked"
+                item["status"] == "blocked"
                 and item["reason"] == "uat_no_live_providers"
+                and item.get("transport_identity") == "default_live_transport"
                 for item in trace
             )
         )
@@ -129,21 +131,19 @@ class DataFetcherManagerAlpacaTestCase(unittest.TestCase):
         yfinance = _YfinanceStub(
             UnifiedRealtimeQuote(code="AAPL", source=RealtimeSource.YFINANCE, price=210.0)
         )
-        manager = DataFetcherManager(fetchers=[yfinance])
         alpaca = _AlpacaStub(
             UnifiedRealtimeQuote(code="AAPL", source=RealtimeSource.ALPACA, price=214.0)
         )
+        manager = DataFetcherManager(
+            fetchers=[yfinance],
+            injected_provider_fetchers={"alpaca": alpaca},
+        )
 
-        with patch("data_provider.base.get_provider_credentials") as mock_credentials:
-            mock_credentials.return_value = ProviderCredentialBundle(
-                provider="alpaca",
-                auth_mode="key_secret",
-                key_id="alpaca-id",
-                secret_key="alpaca-secret",
-                extras={"data_feed": "iex"},
-            )
-            with patch.object(manager, "_get_alpaca_fetcher", return_value=alpaca):
-                quote = manager.get_realtime_quote("AAPL")
+        with patch(
+            "data_provider.base.get_provider_credentials",
+            side_effect=AssertionError("injected Alpaca transport must not read credentials"),
+        ):
+            quote = manager.get_realtime_quote("AAPL")
 
         self.assertIsNotNone(quote)
         assert quote is not None
@@ -160,19 +160,17 @@ class DataFetcherManagerAlpacaTestCase(unittest.TestCase):
         yfinance = _YfinanceStub(
             UnifiedRealtimeQuote(code="AAPL", source=RealtimeSource.YFINANCE, price=210.0)
         )
-        manager = DataFetcherManager(fetchers=[yfinance])
         alpaca = _AlpacaStub(None)
+        manager = DataFetcherManager(
+            fetchers=[yfinance],
+            injected_provider_fetchers={"alpaca": alpaca},
+        )
 
-        with patch("data_provider.base.get_provider_credentials") as mock_credentials:
-            mock_credentials.return_value = ProviderCredentialBundle(
-                provider="alpaca",
-                auth_mode="key_secret",
-                key_id="alpaca-id",
-                secret_key="alpaca-secret",
-                extras={"data_feed": "iex"},
-            )
-            with patch.object(manager, "_get_alpaca_fetcher", return_value=alpaca):
-                quote = manager.get_realtime_quote("AAPL")
+        with patch(
+            "data_provider.base.get_provider_credentials",
+            side_effect=AssertionError("injected Alpaca transport must not read credentials"),
+        ):
+            quote = manager.get_realtime_quote("AAPL")
 
         self.assertIsNotNone(quote)
         assert quote is not None
@@ -265,22 +263,20 @@ class DataFetcherManagerAlpacaTestCase(unittest.TestCase):
             UnifiedRealtimeQuote(code="AAPL", source=RealtimeSource.YFINANCE, price=210.0),
             daily_result=(daily_frame, "YfinanceFetcher"),
         )
-        manager = DataFetcherManager(fetchers=[yfinance])
         alpaca = _AlpacaStub(
             UnifiedRealtimeQuote(code="AAPL", source=RealtimeSource.ALPACA, price=214.0),
             daily_result=(daily_frame, "AlpacaFetcher"),
         )
+        manager = DataFetcherManager(
+            fetchers=[yfinance],
+            injected_provider_fetchers={"alpaca": alpaca},
+        )
 
-        with patch("data_provider.base.get_provider_credentials") as mock_credentials:
-            mock_credentials.return_value = ProviderCredentialBundle(
-                provider="alpaca",
-                auth_mode="key_secret",
-                key_id="alpaca-id",
-                secret_key="alpaca-secret",
-                extras={"data_feed": "iex"},
-            )
-            with patch.object(manager, "_get_alpaca_fetcher", return_value=alpaca):
-                frame, source = manager.get_daily_data("AAPL", days=20)
+        with patch(
+            "data_provider.base.get_provider_credentials",
+            side_effect=AssertionError("injected Alpaca transport must not read credentials"),
+        ):
+            frame, source = manager.get_daily_data("AAPL", days=20)
 
         self.assertIs(frame, daily_frame)
         self.assertEqual(source, "AlpacaFetcher")
@@ -299,22 +295,20 @@ class DataFetcherManagerAlpacaTestCase(unittest.TestCase):
             UnifiedRealtimeQuote(code="AAPL", source=RealtimeSource.YFINANCE, price=210.0),
             daily_result=(daily_frame, "YfinanceFetcher"),
         )
-        manager = DataFetcherManager(fetchers=[yfinance])
         alpaca = _AlpacaStub(
             UnifiedRealtimeQuote(code="AAPL", source=RealtimeSource.ALPACA, price=214.0),
             daily_error=RuntimeError("alpaca timeout"),
         )
+        manager = DataFetcherManager(
+            fetchers=[yfinance],
+            injected_provider_fetchers={"alpaca": alpaca},
+        )
 
-        with patch("data_provider.base.get_provider_credentials") as mock_credentials:
-            mock_credentials.return_value = ProviderCredentialBundle(
-                provider="alpaca",
-                auth_mode="key_secret",
-                key_id="alpaca-id",
-                secret_key="alpaca-secret",
-                extras={"data_feed": "iex"},
-            )
-            with patch.object(manager, "_get_alpaca_fetcher", return_value=alpaca):
-                frame, source = manager.get_daily_data("AAPL", days=20)
+        with patch(
+            "data_provider.base.get_provider_credentials",
+            side_effect=AssertionError("injected Alpaca transport must not read credentials"),
+        ):
+            frame, source = manager.get_daily_data("AAPL", days=20)
 
         self.assertIs(frame, daily_frame)
         self.assertEqual(source, "YfinanceFetcher")
@@ -326,23 +320,21 @@ class DataFetcherManagerAlpacaTestCase(unittest.TestCase):
             UnifiedRealtimeQuote(code="ORCL", source=RealtimeSource.YFINANCE, price=130.0),
             daily_result=(pd.DataFrame(), "YfinanceFetcher"),
         )
-        manager = DataFetcherManager(fetchers=[yfinance])
         alpaca = _AlpacaStub(
             UnifiedRealtimeQuote(code="ORCL", source=RealtimeSource.ALPACA, price=131.0),
             daily_error=SSLEOFError("EOF occurred in violation of protocol"),
         )
+        manager = DataFetcherManager(
+            fetchers=[yfinance],
+            injected_provider_fetchers={"alpaca": alpaca},
+        )
 
-        with patch("data_provider.base.get_provider_credentials") as mock_credentials:
-            mock_credentials.return_value = ProviderCredentialBundle(
-                provider="alpaca",
-                auth_mode="key_secret",
-                key_id="alpaca-id",
-                secret_key="alpaca-secret",
-                extras={"data_feed": "iex"},
-            )
-            with patch.object(manager, "_get_alpaca_fetcher", return_value=alpaca):
-                with self.assertRaises(DataFetchError) as raised:
-                    manager.get_daily_data("ORCL", days=365)
+        with patch(
+            "data_provider.base.get_provider_credentials",
+            side_effect=AssertionError("injected Alpaca transport must not read credentials"),
+        ):
+            with self.assertRaises(DataFetchError) as raised:
+                manager.get_daily_data("ORCL", days=365)
 
         message = str(raised.exception)
         self.assertIn("SSLEOFError", message)

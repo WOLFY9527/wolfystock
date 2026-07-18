@@ -57,7 +57,7 @@ from src.services.llm_instrumentation import (
     emit_llm_event,
     provider_from_model,
 )
-from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
+from src.services.uat_provider_isolation import require_uat_provider_transport_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -850,6 +850,8 @@ class GeminiAnalyzer:
         *,
         system_prompt: Optional[str] = None,
         call_type: str = "analysis",
+        completion_transport: Optional[Callable[..., Any]] = None,
+        config: Any = None,
     ) -> Tuple[str, str, Dict[str, Any], List[Dict[str, Any]]]:
         """Call LLM via litellm with fallback across configured models.
 
@@ -866,7 +868,9 @@ class GeminiAnalyzer:
             Tuple of (response text, model_used, usage, attempt_trace). On success model_used is the full model
             name and usage is a dict with prompt_tokens, completion_tokens, total_tokens.
         """
-        config = get_config()
+        if completion_transport is not None and config is None:
+            raise ValueError("Injected LLM transport requires explicit fixture config")
+        config = config if config is not None else get_config()
         max_tokens = (
             generation_config.get('max_output_tokens')
             or generation_config.get('max_tokens')
@@ -887,10 +891,11 @@ class GeminiAnalyzer:
         attempt_trace: List[Dict[str, Any]] = []
         effective_system_prompt = system_prompt or self.SYSTEM_PROMPT
         for index, model in enumerate(models_to_try):
-            require_uat_provider_dispatch_allowed(
+            dispatch = require_uat_provider_transport_allowed(
                 provider=provider_from_model(model),
                 capability="llm",
                 route="GeminiAnalyzer._call_litellm",
+                injected_transport=completion_transport,
             )
             attempt_started = time.perf_counter()
             event_labels = {
@@ -900,6 +905,8 @@ class GeminiAnalyzer:
                 "model_family": model,
                 "attempt_index": index + 1,
                 "fallback_depth": index,
+                "transport_identity": dispatch.transport_identity,
+                "evidence_kind": dispatch.evidence_kind,
             }
             try:
                 model_short = model.split("/")[-1] if "/" in model else model
@@ -927,7 +934,9 @@ class GeminiAnalyzer:
                     call_kwargs["extra_body"] = extra
 
                 _router_model_names = set(get_configured_llm_models(config.llm_model_list))
-                if use_channel_router and self._router and model in _router_model_names:
+                if completion_transport is not None:
+                    response = completion_transport(**call_kwargs)
+                elif use_channel_router and self._router and model in _router_model_names:
                     # Channel / YAML path: Router manages key + base_url per model
                     response = self._router.completion(**call_kwargs)
                 elif self._router and model == config.litellm_model and not use_channel_router:

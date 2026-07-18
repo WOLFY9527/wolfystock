@@ -14,7 +14,7 @@ import requests
 from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS
 from .realtime_types import RealtimeSource, UnifiedRealtimeQuote, safe_float, safe_int
 from .us_index_mapping import is_us_stock_code
-from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
+from src.services.uat_provider_isolation import require_uat_provider_transport_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -121,9 +121,30 @@ class AlpacaFetcher(BaseFetcher):
         self.base_url = str(base_url or "https://data.alpaca.markets").rstrip("/")
         self.data_feed = str(data_feed or "iex").strip().lower() or "iex"
         self.timeout = max(1.0, float(timeout))
-        self.session = session or requests.Session()
+        self._injected_session = session
+        self._injected_transport = session
+        self.session = session if session is not None else requests.Session()
+        self._last_transport_dispatch = None
         if not self.api_key_id or not self.secret_key:
             raise ValueError("Alpaca requires both api_key_id and secret_key")
+
+    @property
+    def transport_identity(self) -> str:
+        if self._last_transport_dispatch is not None:
+            return self._last_transport_dispatch.transport_identity
+        return (
+            "injected_test_transport"
+            if self._injected_session is not None
+            else "default_live_transport"
+        )
+
+    def _require_transport(self, *, capability: str, route: str) -> None:
+        self._last_transport_dispatch = require_uat_provider_transport_allowed(
+            provider="alpaca",
+            capability=capability,
+            route=route,
+            injected_transport=self._injected_session,
+        )
 
     def _headers(self) -> Dict[str, str]:
         return {
@@ -140,8 +161,7 @@ class AlpacaFetcher(BaseFetcher):
     def endpoint_reachability(self, *, timeout: Optional[float] = None) -> Dict[str, Any]:
         """Run a payload-free HEAD probe and return only sanitized reachability data."""
 
-        require_uat_provider_dispatch_allowed(
-            provider="alpaca",
+        self._require_transport(
             capability="endpoint_reachability",
             route="AlpacaFetcher.endpoint_reachability",
         )
@@ -172,8 +192,7 @@ class AlpacaFetcher(BaseFetcher):
         }
 
     def _request_json(self, path: str, *, params: Optional[Dict[str, Any]] = None) -> Any:
-        require_uat_provider_dispatch_allowed(
-            provider="alpaca",
+        self._require_transport(
             capability="market_data",
             route="AlpacaFetcher._request_json",
         )
