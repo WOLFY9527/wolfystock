@@ -6,6 +6,7 @@ import type React from 'react';
 import { useEffect, useEffectEvent, useId, useReducer, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from './Button';
+import { Drawer } from './Drawer';
 import { useI18n } from '../../contexts/UiLanguageContext';
 
 interface ConfirmDialogProps {
@@ -22,26 +23,6 @@ interface ConfirmDialogProps {
   onConfirmationValueChange?: (value: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
-}
-
-const FOCUSABLE_SELECTOR = [
-  'a[href]',
-  'button:not([disabled])',
-  'input:not([disabled]):not([type="hidden"])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
-  '[tabindex]:not([tabindex="-1"])',
-].join(',');
-
-function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
-  if (!container) {
-    return [];
-  }
-  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((element) => (
-    element.tabIndex >= 0
-    && element.getAttribute('aria-disabled') !== 'true'
-    && !element.closest('[aria-hidden="true"]')
-  ));
 }
 
 type DialogUiState = 'open' | 'closed';
@@ -113,6 +94,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   const handleCancel = useEffectEvent(onCancel);
   const titleId = useId();
   const messageId = useId();
+  const overlayRootRef = useRef<HTMLDivElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
   const confirmationInputRef = useRef<HTMLInputElement | null>(null);
@@ -158,114 +140,65 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   }, [isOpen, isMounted]);
 
   useEffect(() => {
+    if (!isOpen || hasCapturedFocusRef.current) {
+      return;
+    }
+    previousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    hasCapturedFocusRef.current = true;
+  }, [isOpen]);
+
+  useEffect(() => {
     if (!isMounted) {
       return;
     }
+    const root = overlayRootRef.current;
+    const surface = surfaceRef.current;
+    if (!root || !surface) {
+      throw new Error('Mounted ConfirmDialog is missing its overlay root or dialog container.');
+    }
+    const unregister = Drawer.overlayStack.register({
+      root,
+      container: surface,
+      dismiss: handleCancel,
+      returnFocus: previousFocusRef.current,
+      getLayer: () => 50,
+    });
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        handleCancel();
-        return;
-      }
-
-      if (event.key !== 'Tab') {
-        return;
-      }
-
-      const surface = surfaceRef.current;
-      const focusableElements = getFocusableElements(surface);
-      const fallbackFocusTarget = cancelButtonRef.current ?? surface;
-      if (!surface || !fallbackFocusTarget) {
-        return;
-      }
-
-      if (focusableElements.length === 0) {
-        event.preventDefault();
-        fallbackFocusTarget.focus({ preventScroll: true });
-        return;
-      }
-
-      const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      if (activeElement && !surface.contains(activeElement)) {
-        const activeModal = activeElement.closest<HTMLElement>('[aria-modal="true"]');
-        if (activeModal && activeModal !== surface) {
-          return;
-        }
-        event.preventDefault();
-        focusableElements[0]?.focus({ preventScroll: true });
-        return;
-      }
-
-      const activeIndex = activeElement ? focusableElements.findIndex((element) => element === activeElement) : -1;
-      if (event.shiftKey) {
-        if (activeIndex <= 0) {
-          event.preventDefault();
-          focusableElements[focusableElements.length - 1]?.focus({ preventScroll: true });
-        }
-        return;
-      }
-
-      if (activeIndex === -1 || activeIndex >= focusableElements.length - 1) {
-        event.preventDefault();
-        focusableElements[0]?.focus({ preventScroll: true });
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown, true);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown, true);
+      unregister();
+      previousFocusRef.current = null;
+      hasCapturedFocusRef.current = false;
+      hasAppliedInitialFocusRef.current = false;
     };
   }, [isMounted]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      hasAppliedInitialFocusRef.current = false;
-      return;
-    }
-
-    if (!hasCapturedFocusRef.current) {
-      previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      hasCapturedFocusRef.current = true;
-    }
-  }, [isOpen]);
 
   const normalizedTypedValue = String(confirmationValue || '');
   const requiresTypedConfirmation = Boolean(confirmationPhrase);
   const typedConfirmationMatched = !requiresTypedConfirmation || normalizedTypedValue === confirmationPhrase;
 
   useEffect(() => {
-    if (!isOpen || !isMounted || hasAppliedInitialFocusRef.current) {
+    if (!isOpen) {
+      hasAppliedInitialFocusRef.current = false;
+      return;
+    }
+    if (!isMounted || hasAppliedInitialFocusRef.current) {
       return;
     }
 
     hasAppliedInitialFocusRef.current = true;
-    const focusTarget = confirmationInputRef.current
-      ?? cancelButtonRef.current
-      ?? getFocusableElements(surfaceRef.current)[0]
-      ?? surfaceRef.current;
-    focusTarget?.focus({ preventScroll: true });
+    Drawer.overlayStack.focusInitial(surfaceRef.current, [
+      confirmationInputRef.current,
+      cancelButtonRef.current,
+    ]);
   }, [isOpen, isMounted]);
-
-  useEffect(() => {
-    if (isOpen || !hasCapturedFocusRef.current) {
-      return;
-    }
-
-    const previousFocus = previousFocusRef.current;
-    previousFocusRef.current = null;
-    hasCapturedFocusRef.current = false;
-    hasAppliedInitialFocusRef.current = false;
-    if (previousFocus && document.contains(previousFocus)) {
-      previousFocus.focus({ preventScroll: true });
-    }
-  }, [isOpen]);
 
   if (!isMounted) return null;
 
   const dialog = (
     <div
+      ref={overlayRootRef}
       className={`confirm-dialog fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-200 ease-out ${
         uiState === 'open' ? 'opacity-100' : 'opacity-0'
       }`}

@@ -8,7 +8,6 @@ import { cn } from '../../utils/cn';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { shouldApplySafariA11yGuard } from '../../hooks/useSafariInteractionReady';
 
-let activeDrawerCount = 0;
 const BACKDROP_INTERACTION_GUARD_MS = 420;
 const DRAWER_READY_DELAY_MS = 80;
 const DRAWER_WARMUP_INTERVAL_MS = 100;
@@ -117,23 +116,238 @@ function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
     return [];
   }
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((element) => (
-    element.tabIndex >= 0
-    && element.getAttribute('aria-disabled') !== 'true'
-    && !element.closest('[aria-hidden="true"]')
+    isValidFocusCandidate(element, container)
   ));
 }
 
-function incrementActiveDrawerCount() {
-  activeDrawerCount += 1;
-  return activeDrawerCount;
+function isHiddenOrInert(element: HTMLElement, boundary?: HTMLElement): boolean {
+  let current: HTMLElement | null = element;
+  while (current) {
+    if (
+      current.hidden
+      || current.hasAttribute('inert')
+      || current.getAttribute('aria-hidden') === 'true'
+    ) {
+      return true;
+    }
+
+    const style = window.getComputedStyle(current);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') {
+      return true;
+    }
+
+    if (current === boundary) {
+      return false;
+    }
+    current = current.parentElement;
+  }
+
+  return boundary != null;
 }
 
-function decrementActiveDrawerCount() {
-  activeDrawerCount = Math.max(0, activeDrawerCount - 1);
-  return activeDrawerCount;
+function isValidFocusCandidate(element: HTMLElement | null, boundary?: HTMLElement): element is HTMLElement {
+  return Boolean(
+    element
+    && element.isConnected
+    && element.ownerDocument === document
+    && (!boundary || boundary.contains(element))
+    && element.tabIndex >= 0
+    && !element.matches(':disabled')
+    && element.getAttribute('aria-disabled') !== 'true'
+    && !isHiddenOrInert(element, boundary),
+  );
 }
 
-export const Drawer: React.FC<DrawerProps> = ({
+function focusContainer(container: HTMLElement): void {
+  if (container.isConnected && !isHiddenOrInert(container)) {
+    container.focus({ preventScroll: true });
+  }
+}
+
+interface ModalOverlayEntry {
+  root: HTMLElement;
+  container: HTMLElement;
+  dismiss: () => void;
+  returnFocus: HTMLElement | null;
+  getLayer: () => number;
+}
+
+const modalOverlayStack: ModalOverlayEntry[] = [];
+const managedInertElements = new Set<HTMLElement>();
+let bodyOverflowBeforeModal: string | null = null;
+let topModalOverlay: ModalOverlayEntry | undefined;
+
+function selectTopOverlay(): ModalOverlayEntry | undefined {
+  return modalOverlayStack.reduce<ModalOverlayEntry | undefined>((topOverlay, entry) => {
+    if (!topOverlay || entry.getLayer() > topOverlay.getLayer()) {
+      return entry;
+    }
+    if (entry.getLayer() < topOverlay.getLayer() || entry.root === topOverlay.root) {
+      return topOverlay;
+    }
+    const position = topOverlay.root.compareDocumentPosition(entry.root);
+    return position & Node.DOCUMENT_POSITION_FOLLOWING ? entry : topOverlay;
+  }, undefined);
+}
+
+function getTopOverlay(): ModalOverlayEntry | undefined {
+  return topModalOverlay;
+}
+
+function restoreManagedInertState(): void {
+  managedInertElements.forEach((element) => {
+    element.removeAttribute('inert');
+  });
+  managedInertElements.clear();
+}
+
+function isolateTopOverlay(): void {
+  restoreManagedInertState();
+  const topOverlay = getTopOverlay();
+  if (!topOverlay?.root.isConnected) {
+    return;
+  }
+
+  let activeBranch = topOverlay.root;
+  while (activeBranch.parentElement) {
+    const parent = activeBranch.parentElement;
+    Array.from(parent.children).forEach((sibling) => {
+      if (sibling instanceof HTMLElement && sibling !== activeBranch && !sibling.hasAttribute('inert')) {
+        sibling.setAttribute('inert', '');
+        managedInertElements.add(sibling);
+      }
+    });
+    if (parent === document.body) {
+      break;
+    }
+    activeBranch = parent;
+  }
+}
+
+function refreshModalOverlayOrder(): void {
+  topModalOverlay = selectTopOverlay();
+  isolateTopOverlay();
+}
+
+function focusOverlayBoundary(entry: ModalOverlayEntry, fromEnd = false): void {
+  const focusableElements = getFocusableElements(entry.container);
+  const target = fromEnd ? focusableElements.at(-1) : focusableElements[0];
+  if (target) {
+    target.focus({ preventScroll: true });
+    return;
+  }
+  focusContainer(entry.container);
+}
+
+function handleModalKeyDown(event: KeyboardEvent): void {
+  const topOverlay = getTopOverlay();
+  if (!topOverlay) {
+    return;
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    topOverlay.dismiss();
+    return;
+  }
+
+  if (event.key !== 'Tab') {
+    return;
+  }
+
+  const focusableElements = getFocusableElements(topOverlay.container);
+  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const activeIndex = activeElement
+    ? focusableElements.findIndex((element) => element === activeElement)
+    : -1;
+  const isOutside = !activeElement || !topOverlay.container.contains(activeElement);
+  const isBoundary = event.shiftKey
+    ? activeIndex <= 0
+    : activeIndex === -1 || activeIndex >= focusableElements.length - 1;
+
+  if (focusableElements.length === 0 || isOutside || isBoundary) {
+    event.preventDefault();
+    focusOverlayBoundary(topOverlay, event.shiftKey);
+  }
+}
+
+function registerModalOverlay(entry: ModalOverlayEntry): () => void {
+  if (modalOverlayStack.length === 0) {
+    bodyOverflowBeforeModal = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', handleModalKeyDown, true);
+  }
+  modalOverlayStack.push(entry);
+  refreshModalOverlayOrder();
+
+  return () => {
+    const index = modalOverlayStack.indexOf(entry);
+    if (index === -1) {
+      return;
+    }
+    const wasTopOverlay = topModalOverlay === entry;
+    modalOverlayStack.splice(index, 1);
+    refreshModalOverlayOrder();
+
+    if (modalOverlayStack.length === 0) {
+      document.removeEventListener('keydown', handleModalKeyDown, true);
+      if (bodyOverflowBeforeModal === null) {
+        throw new Error('Modal body overflow snapshot is missing during stack cleanup.');
+      }
+      document.body.style.overflow = bodyOverflowBeforeModal;
+      bodyOverflowBeforeModal = null;
+    }
+
+    if (!wasTopOverlay) {
+      return;
+    }
+
+    restoreInvokingFocus(entry.returnFocus);
+  };
+}
+
+function focusInitialModalTarget(
+  container: HTMLElement | null,
+  explicitTargets: Array<HTMLElement | null>,
+): void {
+  const topOverlay = getTopOverlay();
+  if (!container || topOverlay?.container !== container) {
+    return;
+  }
+  const target = explicitTargets.find((element) => isValidFocusCandidate(element, container))
+    ?? getFocusableElements(container)[0];
+  if (target) {
+    target.focus({ preventScroll: true });
+    return;
+  }
+  focusContainer(container);
+}
+
+function restoreInvokingFocus(target: HTMLElement | null): void {
+  const topOverlay = getTopOverlay();
+  if (
+    isValidFocusCandidate(target)
+    && (!topOverlay || topOverlay.container.contains(target))
+  ) {
+    target.focus({ preventScroll: true });
+    return;
+  }
+  if (topOverlay) {
+    focusOverlayBoundary(topOverlay);
+  }
+}
+
+interface ModalOverlayAuthority {
+  register: typeof registerModalOverlay;
+  focusInitial: typeof focusInitialModalTarget;
+}
+
+type DrawerComponent = React.FC<DrawerProps> & {
+  overlayStack: ModalOverlayAuthority;
+};
+
+export const Drawer = (({
   isOpen,
   onClose,
   title,
@@ -143,7 +357,7 @@ export const Drawer: React.FC<DrawerProps> = ({
   side = 'right',
   closeOnBackdropClick = true,
   bodyClassName,
-}) => {
+}: DrawerProps) => {
   const { t } = useI18n();
   const generatedId = useId();
   const [state, dispatch] = useReducer(drawerReducer, isOpen, createInitialDrawerState);
@@ -154,16 +368,15 @@ export const Drawer: React.FC<DrawerProps> = ({
   const openReadyFrameRef = useRef<number | null>(null);
   const interactionReadyTimerRef = useRef<number | null>(null);
   const closeTimerRef = useRef<number | null>(null);
+  const zIndexRef = useRef(zIndex);
+  const overlayRootRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDialogElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const hasCapturedFocusRef = useRef(false);
   const hasAppliedInitialFocusRef = useRef(false);
-  const handleEscapeKey = useEffectEvent((event: KeyboardEvent) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      onClose();
-    }
-  });
+  const handleClose = useEffectEvent(onClose);
+  zIndexRef.current = zIndex;
 
   useEffect(() => {
     let isCancelled = false;
@@ -256,67 +469,46 @@ export const Drawer: React.FC<DrawerProps> = ({
   }, []);
 
   useEffect(() => {
+    if (!isOpen || hasCapturedFocusRef.current) {
+      return;
+    }
+    previousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    hasCapturedFocusRef.current = true;
+  }, [isOpen]);
+
+  useEffect(() => {
     if (!state.isMounted) {
       return;
     }
 
-    const onKeyDown = (event: KeyboardEvent) => {
-      handleEscapeKey(event);
-      if (event.key !== 'Tab') {
-        return;
-      }
-
-      const panel = panelRef.current;
-      const focusableElements = getFocusableElements(panel);
-      const fallbackFocusTarget = closeButtonRef.current ?? panel;
-      if (!panel || !fallbackFocusTarget) {
-        return;
-      }
-
-      if (focusableElements.length === 0) {
-        event.preventDefault();
-        fallbackFocusTarget.focus({ preventScroll: true });
-        return;
-      }
-
-      const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      if (activeElement && !panel.contains(activeElement)) {
-        const activeModal = activeElement.closest<HTMLElement>('[aria-modal="true"]');
-        if (activeModal && activeModal !== panel) {
-          return;
-        }
-        event.preventDefault();
-        focusableElements[0]?.focus({ preventScroll: true });
-        return;
-      }
-
-      const activeIndex = activeElement ? focusableElements.findIndex((element) => element === activeElement) : -1;
-      if (event.shiftKey) {
-        if (activeIndex <= 0) {
-          event.preventDefault();
-          focusableElements[focusableElements.length - 1]?.focus({ preventScroll: true });
-        }
-        return;
-      }
-
-      if (activeIndex === -1 || activeIndex >= focusableElements.length - 1) {
-        event.preventDefault();
-        focusableElements[0]?.focus({ preventScroll: true });
-      }
-    };
-
-    document.addEventListener('keydown', onKeyDown, true);
-    if (incrementActiveDrawerCount() === 1) {
-      document.body.style.overflow = 'hidden';
+    const root = overlayRootRef.current;
+    const panel = panelRef.current;
+    if (!root || !panel) {
+      throw new Error('Mounted Drawer is missing its overlay root or dialog container.');
     }
+    const unregister = registerModalOverlay({
+      root,
+      container: panel,
+      dismiss: handleClose,
+      returnFocus: previousFocusRef.current,
+      getLayer: () => zIndexRef.current,
+    });
 
     return () => {
-      document.removeEventListener('keydown', onKeyDown, true);
-      if (decrementActiveDrawerCount() === 0) {
-        document.body.style.overflow = '';
-      }
+      unregister();
+      previousFocusRef.current = null;
+      hasCapturedFocusRef.current = false;
+      hasAppliedInitialFocusRef.current = false;
     };
   }, [state.isMounted]);
+
+  useEffect(() => {
+    if (state.isMounted) {
+      refreshModalOverlayOrder();
+    }
+  }, [state.isMounted, zIndex]);
 
   useEffect(() => {
     if (!isOpen || !state.isInteractionReady || hasAppliedInitialFocusRef.current) {
@@ -326,12 +518,11 @@ export const Drawer: React.FC<DrawerProps> = ({
     hasAppliedInitialFocusRef.current = true;
     const panel = panelRef.current;
     const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    if (panel && activeElement && panel.contains(activeElement)) {
+    if (panel && isValidFocusCandidate(activeElement, panel)) {
       return;
     }
 
-    const focusTarget = closeButtonRef.current ?? getFocusableElements(panel)[0] ?? panel;
-    focusTarget?.focus({ preventScroll: true });
+    focusInitialModalTarget(panel, [closeButtonRef.current]);
   }, [isOpen, state.isInteractionReady]);
 
   useEffect(() => {
@@ -383,7 +574,7 @@ export const Drawer: React.FC<DrawerProps> = ({
       : 'translate-x-full opacity-0';
 
   return (
-    <div className="fixed inset-0 overflow-hidden overscroll-contain" style={{ zIndex }} role="presentation">
+    <div ref={overlayRootRef} className="fixed inset-0 overflow-hidden overscroll-contain" style={{ zIndex }} role="presentation">
       {/* Backdrop */}
       <button
         type="button"
@@ -445,4 +636,9 @@ export const Drawer: React.FC<DrawerProps> = ({
       </div>
     </div>
   );
+}) as DrawerComponent;
+
+Drawer.overlayStack = {
+  register: registerModalOverlay,
+  focusInitial: focusInitialModalTarget,
 };

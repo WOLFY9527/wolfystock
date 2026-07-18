@@ -52,6 +52,127 @@ describe('Drawer', () => {
     expect(within(drawer).getByRole('button', { name: 'Last action' })).toHaveFocus();
   });
 
+  it('falls back to the drawer container when explicit and discovered targets are invalid', async () => {
+    const { rerender } = render(
+      <Drawer isOpen={false} onClose={vi.fn()} title="Navigation">
+        <button type="button" disabled>Disabled action</button>
+        <button type="button" hidden>Hidden action</button>
+        <button type="button" inert>Inert action</button>
+        <button type="button" style={{ display: 'none' }}>CSS hidden action</button>
+      </Drawer>,
+    );
+
+    rerender(
+      <Drawer isOpen onClose={vi.fn()} title="Navigation">
+        <button type="button" disabled>Disabled action</button>
+        <button type="button" hidden>Hidden action</button>
+        <button type="button" inert>Inert action</button>
+        <button type="button" style={{ display: 'none' }}>CSS hidden action</button>
+      </Drawer>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const drawer = screen.getByRole('dialog', { name: 'Navigation' });
+    drawer.querySelector('.drawer__close')?.remove();
+
+    await settleDrawerInteractionReady();
+
+    expect(drawer).toHaveFocus();
+  });
+
+  it('excludes disabled, hidden and inert elements from Tab boundaries', async () => {
+    render(
+      <Drawer isOpen onClose={vi.fn()} title="Navigation">
+        <button type="button">Only valid action</button>
+        <button type="button" disabled>Disabled action</button>
+        <button type="button" hidden>Hidden action</button>
+        <button type="button" inert>Inert action</button>
+        <button type="button" style={{ visibility: 'hidden' }}>CSS hidden action</button>
+      </Drawer>,
+    );
+
+    await settleDrawerInteractionReady();
+
+    const drawer = screen.getByRole('dialog', { name: 'Navigation' });
+    const closeButton = drawer.querySelector<HTMLButtonElement>('.drawer__close');
+    const validAction = within(drawer).getByRole('button', { name: 'Only valid action' });
+    expect(closeButton).not.toBeNull();
+
+    validAction.focus();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(closeButton).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(validAction).toHaveFocus();
+  });
+
+  it('keeps page content inert until close completes and restores valid invoking focus', async () => {
+    const opener = document.createElement('button');
+    opener.textContent = 'Open drawer';
+    document.body.appendChild(opener);
+    opener.focus();
+    const { rerender } = render(
+      <Drawer isOpen onClose={vi.fn()} title="Navigation">
+        <button type="button">Drawer action</button>
+      </Drawer>,
+    );
+
+    await settleDrawerInteractionReady();
+
+    expect(opener.closest('[inert]')).not.toBeNull();
+
+    rerender(
+      <Drawer isOpen={false} onClose={vi.fn()} title="Navigation">
+        <button type="button">Drawer action</button>
+      </Drawer>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(189);
+    });
+
+    expect(opener).not.toHaveFocus();
+    expect(opener.closest('[inert]')).not.toBeNull();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+
+    expect(opener.closest('[inert]')).toBeNull();
+    expect(opener).toHaveFocus();
+    opener.remove();
+  });
+
+  it('does not restore focus to an invoking element that becomes disabled', async () => {
+    const opener = document.createElement('button');
+    opener.textContent = 'Open drawer';
+    document.body.appendChild(opener);
+    opener.focus();
+    const { rerender } = render(
+      <Drawer isOpen onClose={vi.fn()} title="Navigation">
+        <button type="button">Drawer action</button>
+      </Drawer>,
+    );
+
+    await settleDrawerInteractionReady();
+    opener.disabled = true;
+
+    rerender(
+      <Drawer isOpen={false} onClose={vi.fn()} title="Navigation">
+        <button type="button">Drawer action</button>
+      </Drawer>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(190);
+    });
+
+    expect(opener).not.toHaveFocus();
+    opener.remove();
+  });
+
   it('ignores the opening gesture on the backdrop before allowing outside-close interactions', async () => {
     const onClose = vi.fn();
     render(
