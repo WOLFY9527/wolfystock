@@ -148,10 +148,11 @@ def _managed_environment_identity(repo_root: Path) -> tuple[dict[str, Any], list
     if not re.fullmatch(r"[0-9a-f]{64}", str(identity["environmentFingerprint"] or "")):
         errors.append("managed_environment_fingerprint_invalid")
     components = identity.get("componentFingerprints")
-    if not isinstance(components, dict) or set(components) != {"python", "web"}:
+    required_components = ("python", "web", "browser", "rg")
+    if not isinstance(components, dict) or set(components) != set(required_components):
         errors.append("managed_environment_components_invalid")
     else:
-        for component in ("python", "web"):
+        for component in required_components:
             values = components.get(component)
             if not isinstance(values, dict) or any(
                 not re.fullmatch(r"[0-9a-f]{64}", str(values.get(field) or ""))

@@ -193,7 +193,6 @@ jobs:
         run: |
           set -euo pipefail
           ./wolfy bootstrap --ensure
-          ./wolfy exec --profile test -- bash -c 'cd apps/dsa-web && export PLAYWRIGHT_BROWSERS_PATH="$PWD/../../output/release/playwright-browsers" && npm exec -- playwright install chromium'
       - name: Capture and match qualification environment
         env:
           CANDIDATE_SHA: ${{ needs.identity.outputs.sha }}
@@ -262,12 +261,10 @@ jobs:
         continue-on-error: true
         env:
           DSA_WEB_PLAYWRIGHT_EXTERNAL_SERVER: '1'
-          PLAYWRIGHT_JSON_OUTPUT_NAME: output/release/raw/playwright.json
-          PLAYWRIGHT_OUTPUT_DIR: output/release/raw/playwright-results
           WOLFYSTOCK_RELEASE_CANDIDATE_SHA: ${{ needs.identity.outputs.sha }}
         run: |
           set -euo pipefail
-          ./wolfy exec --profile test -- bash -c 'cd apps/dsa-web && export PLAYWRIGHT_BROWSERS_PATH="$PWD/../../output/release/playwright-browsers" && npm exec -- playwright test --project=release-real-runtime --reporter=json'
+          ./wolfy exec --profile test -- npm --prefix apps/dsa-web exec -- playwright test --config=apps/dsa-web/playwright.config.ts --project=release-real-runtime --reporter=json > output/release/raw/playwright.json
           ./wolfy exec --profile test -- python scripts/release_gate_summary.py record --candidate output/release/candidate/release-candidate.json --gate-id playwright-real-runtime --source-report output/release/raw/playwright.json --browser-spec apps/dsa-web/e2e/release-real-runtime.release.spec.ts --output output/release/evidence/playwright-real-runtime.json
       - name: Gate - runtime-uat
         continue-on-error: true

@@ -12,13 +12,13 @@
     "excludedByReason": {
       "legacy_external_product_doc": 1,
       "legacy_untracked_agent_mirror": 3,
-      "not_in_hard_collapse_source_set": 3,
+      "not_in_hard_collapse_source_set": 5,
       "required_ai_governance_symlink": 1,
       "required_github_workflow_markdown": 7,
       "required_repository_skill_asset": 4
     },
     "includedSourceCount": 3,
-    "markdownDiscovered": 22,
+    "markdownDiscovered": 24,
     "prunedDirectoryNames": [
       ".cache",
       ".codex",
@@ -59,7 +59,7 @@
     "path": "scripts/build_ai_project_manual.py",
     "readsProductionDataPaths": false,
     "requiresApiKeys": false,
-    "sha256": "16ef6ef7d4fb654a1d1a1f58660d1188c2b310009b2e4f073785cd1e4d8cf1f3",
+    "sha256": "616cbb781eca4586a32c5447400d7f80630c82d9f7cedfd4e3522b9b499922e3",
     "version": 5
   },
   "includedSources": [
@@ -103,7 +103,7 @@
   "outputs": {
     "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
     "manual": "docs/AI_PROJECT_MANUAL.md",
-    "manualSha256": "7017e5bd0f8c7e14ed12b736e58e608e527d3fc849d3f80e05ec4cdd559baeec"
+    "manualSha256": "d96bbd63f0e7e0bb30d229ced8213be33f32469d444202cfc5c1b7ea06ce5935"
   },
   "schemaVersion": 2,
   "sections": [
@@ -134,8 +134,8 @@
         "AGENTS.md"
       ],
       "title": "Dependency Environment Authority",
-      "updateTrigger": "Python requirement intent, lock schema/family, resolver, supported target matrix, or bootstrap install authority changes.",
-      "validation": "Python lock check, focused wolfy lock/component/identity/manager/CLI tests, offline ensure, manual freshness, and AI asset checks."
+      "updateTrigger": "Python requirement intent, lock schema/family, resolver, supported target matrix, managed browser/tool identity, UAT artifact binding, or bootstrap install authority changes.",
+      "validation": "Python lock check, focused wolfy lock/component/identity/manager/CLI/browser tests, authenticated UAT, release-real-runtime Playwright, offline ensure, manual freshness, and AI asset checks."
     },
     {
       "key": "frontend-surfaces",

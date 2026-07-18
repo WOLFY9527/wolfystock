@@ -432,7 +432,15 @@ def test_release_workflows_use_managed_environment_and_digest_only_promotion() -
     assert "bootstrapNetworkUsed" in release_text
     assert "linux/amd64,linux/arm64" in release_text
     assert "inspect-image" in release_text
-    assert "npm exec -- playwright test --project=release-real-runtime" in release_text
+    assert (
+        "npm --prefix apps/dsa-web exec -- playwright test "
+        "--config=apps/dsa-web/playwright.config.ts --project=release-real-runtime "
+        "--reporter=json > output/release/raw/playwright.json"
+    ) in release_text
+    assert "playwright install chromium" not in release_text
+    assert "PLAYWRIGHT_BROWSERS_PATH" not in release_text
+    assert "PLAYWRIGHT_JSON_OUTPUT_NAME" not in release_text
+    assert "PLAYWRIGHT_OUTPUT_DIR" not in release_text
     assert "scripts/release_runtime_fixture.py" in release_text
     assert "runtime_dir=\"$(mktemp -d)\"" in release_text
     assert "trap cleanup EXIT" in release_text

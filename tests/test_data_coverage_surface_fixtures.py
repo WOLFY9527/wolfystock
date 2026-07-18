@@ -359,6 +359,7 @@ def _build_payload(surface_id: str, field_key: str, overrides: dict[str, object]
         **overrides,
     }
 
+
 def _assert_fixture_copy_is_consumer_safe(values: tuple[str, ...]) -> None:
     copy_text = " ".join(values).lower()
     for forbidden in _FORBIDDEN_FIXTURE_COPY_TERMS:

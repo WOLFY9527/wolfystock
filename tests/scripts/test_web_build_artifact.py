@@ -60,6 +60,8 @@ def _patch_current(monkeypatch) -> None:
                     "componentFingerprints": {
                         "python": {"input": "p" * 64, "installed": "q" * 64},
                         "web": {"input": "w" * 64, "installed": "x" * 64},
+                        "browser": {"input": "b" * 64, "installed": "c" * 64},
+                        "rg": {"input": "r" * 64, "installed": "s" * 64},
                     },
                 },
                 "buildVariables": {"NODE_ENV": "env"},
@@ -171,6 +173,12 @@ def test_build_artifact_uses_temporary_output_and_binds_managed_environment(
     assert artifact_path.is_file()
     assert result.payload["candidate"] == {"commit": "candidate", "tree": "tree", "dirty": False}
     assert result.payload["environment"]["managed"]["environmentFingerprint"] == "e" * 64
+    assert set(result.payload["environment"]["managed"]["componentFingerprints"]) == {
+        "python",
+        "web",
+        "browser",
+        "rg",
+    }
     bundle = next(command for command in commands if "build:bundle" in command)
     output_dir = Path(bundle[bundle.index("--outDir") + 1])
     assert output_dir != repo / "static"

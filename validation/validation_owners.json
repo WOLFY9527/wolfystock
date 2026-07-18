@@ -681,6 +681,34 @@
       }
     },
     {
+      "id": "protected-restore-safe-root-helper",
+      "include": ["scripts/backup_restore_drill_safe_root.py"],
+      "protected": true,
+      "reason": "restore_drill_safe_root_authority",
+      "owners": {
+        "complete_domain": ["complete.database.contracts"],
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
+      "id": "protected-managed-environment-authority",
+      "include": [
+        "scripts/environment/browser.py",
+        "scripts/environment/managed_tools.py",
+        "scripts/environment/pytest_projection.py"
+      ],
+      "protected": true,
+      "reason": "dependency_environment_browser_or_managed_tool_authority",
+      "owners": {
+        "complete_domain": ["complete.root_config.review"],
+        "protected_baseline_comparison": ["protected.baseline.compare", "protected.baseline.current_gate"],
+        "milestone": ["milestone.protected.review"],
+        "release": ["release.protected.approval", "release.full.validation"]
+      }
+    },
+    {
       "id": "protected-root-config-lockfile",
       "include": [
         ".env.example",

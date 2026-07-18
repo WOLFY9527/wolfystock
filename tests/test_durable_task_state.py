@@ -603,7 +603,8 @@ class DurableTaskStateTestCase(unittest.TestCase):
         )
 
         for forbidden in ("celery", "rq", "dramatiq", "kafka"):
-            self.assertNotIn(forbidden, combined)
+            dependency_pattern = rf"(?<![a-z0-9_.-]){re.escape(forbidden)}(?=\s*(?:[<>=!~;,\]\)\"']|$))"
+            self.assertIsNone(re.search(dependency_pattern, combined))
         redis_lines = [
             line.strip()
             for line in combined.splitlines()

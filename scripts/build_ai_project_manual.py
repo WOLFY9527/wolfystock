@@ -370,7 +370,8 @@ SECTIONS = [
             "`requirements-lock.json` binds their normalized SHA-256 hashes to a reviewed family of CPython 3.11/3.12 "
             "pip locks and target/profile artifact projections. Each selected distribution is exact-pinned; compatible "
             "artifact filenames carry SHA-256 coverage, and source distributions record their reviewed build backend and "
-            "exact locked build requirements.\n\n"
+            "exact locked build requirements. PyArrow is the single reviewed Parquet read/write authority in every "
+            "supported target projection; no second Parquet engine or fallback authority is accepted.\n\n"
             "Run `./wolfy lock python --check` for a no-install freshness, schema, pin, hash, resolver, target-matrix, and "
             "normalization check. Only an explicit dependency review may run `./wolfy lock python --update`. The update "
             "command uses `uv 0.11.19` only as a universal resolver and reports direct and transitive changes separately; "
@@ -388,8 +389,19 @@ SECTIONS = [
             "use the same graph and artifact projection; offline mode fails on missing artifacts and neither mode rewrites "
             "or resolves the lock. Environment evidence records lock schema/policy, content and input hashes, resolver "
             "identity, normalized target/profile/lock/projection, distribution, artifact, source-build and hash counts, and "
-            "hash-verification status. Static marker, wheel-tag, ABI, and source-build validation is not real-platform "
-            "execution.\n\n"
+            "hash-verification status. The same bootstrap authority provisions reviewed `rg` and the exact "
+            "Playwright-derived Chromium revision 1208 as persistent content-addressed snapshots, verifies the browser "
+            "executable can launch, and supplies that managed executable to every Playwright project. Offline bootstrap "
+            "reuses those verified snapshots or fails closed when material is absent; host `PATH`, global `rg`, and "
+            "system-browser fallback are not authorities. Combined environment evidence binds the Python, Web, browser, "
+            "and managed-tool input and installed fingerprints and records whether bootstrap used the network. Static "
+            "marker, wheel-tag, ABI, and source-build validation is not real-platform execution.\n\n"
+            "Canonical UAT builds the Web artifact at most once, verifies and reuses the immutable artifact, and binds "
+            "source SHA/tree identity, the combined environment fingerprint, dependency identity, and asset hashes. It "
+            "does not write below managed `node_modules`. Authenticated smoke establishes real HttpOnly cookie sessions "
+            "and keeps anonymous, member, limited-admin, logout, and revoked-session behavior explicit; failed session "
+            "establishment blocks qualification. The `release-real-runtime` Playwright project must use the same managed "
+            "Chromium executable, real product routes, and zero retries before browser evidence can qualify.\n\n"
             "`.github/workflows/release.yml` is the sole publication authority. It builds one source/Web/multi-platform "
             "OCI candidate, binds the exact source, nested environment, reviewed lock, Web artifact, OCI index, amd64 and "
             "arm64 identities, and produces twelve fail-closed gate records. The qualified manifest binds every gate "
@@ -398,8 +410,8 @@ SECTIONS = [
             "independent install behavior; they must not be published by a parallel workflow."
         ),
         source_paths=("README.md", "AGENTS.md"),
-        update_trigger="Python requirement intent, lock schema/family, resolver, supported target matrix, or bootstrap install authority changes.",
-        validation="Python lock check, focused wolfy lock/component/identity/manager/CLI tests, offline ensure, manual freshness, and AI asset checks.",
+        update_trigger="Python requirement intent, lock schema/family, resolver, supported target matrix, managed browser/tool identity, UAT artifact binding, or bootstrap install authority changes.",
+        validation="Python lock check, focused wolfy lock/component/identity/manager/CLI/browser tests, authenticated UAT, release-real-runtime Playwright, offline ensure, manual freshness, and AI asset checks.",
     ),
     ManualSection(
         key="frontend-surfaces",
