@@ -292,7 +292,12 @@ def test_market_overview_public_endpoints_project_consumer_safe_diagnostics(monk
             _assert_no_forbidden_consumer_terms(payload)
             serialized = json.dumps(payload, ensure_ascii=False)
             assert "requiredProviderClass" not in serialized
-            assert "sourceAuthorityAllowed" not in serialized
+            if path == "/macro":
+                assert payload["sourceAuthorityAllowed"] is False
+                assert payload["scoreContributionAllowed"] is False
+            else:
+                assert "sourceAuthorityAllowed" not in serialized
+                assert "scoreContributionAllowed" not in serialized
             assert payload["freshness"] == "delayed"
             assert payload["items"][0]["freshness"] == "delayed"
             assert payload["warning"] == "数据不足，暂不形成结论。"

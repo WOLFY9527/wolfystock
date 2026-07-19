@@ -61,7 +61,7 @@ def test_fx_commodities_proxy_snapshot_uses_delayed_yfinance_adapter_without_liv
 
     with patch(
         "src.services.market_overview_service.fetch_yfinance_quote_history_frame",
-        side_effect=lambda ticker: frames[ticker],
+        side_effect=lambda ticker, *, timeout=None: frames[ticker],
     ), patch("src.services.market_overview_service.ExecutionLogService") as mock_log_service:
         mock_log_service.return_value.record_market_overview_fetch.return_value = "log-1"
         payload = service.get_fx_commodities()
@@ -98,7 +98,7 @@ def test_fx_commodities_proxy_snapshot_keeps_item_level_fallback_on_symbol_failu
         "HG=F": _HistoryFrame([4.58, 4.63], as_of=as_of),
     }
 
-    def _fake_history(ticker: str) -> _HistoryFrame:
+    def _fake_history(ticker: str, *, timeout: float | None = None) -> _HistoryFrame:
         if ticker == "CNH=X":
             raise RuntimeError("proxy down")
         return frames[ticker]

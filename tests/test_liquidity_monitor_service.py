@@ -2449,6 +2449,7 @@ def test_liquidity_monitor_observation_evidence_snapshot_preserves_indicator_lev
     assert vix_snapshot["warnings"] == [
         "proxy_only_missing_real_source",
         "requires_official_public.vix_or_volatility",
+        "delayed_source",
         "partial_coverage",
     ]
 
@@ -2515,7 +2516,7 @@ def test_liquidity_monitor_observation_evidence_snapshot_preserves_indicator_lev
             "proxyIdentity": None,
             "coverage": 1.0,
             "confidenceWeight": 0.7,
-            "degradationReason": None,
+            "degradationReason": "delayed_source",
             "unavailableReason": None,
             "capReason": None,
             "observationOnly": True,

@@ -6085,7 +6085,7 @@ class MarketOverviewService:
             )
         if should_write_reason:
             normalized_payload["degradationReason"] = degradation_reason
-        fallback_reason = degradation_reason or _fallback_reason_code(raw_error)
+        fallback_reason = _fallback_reason_code(raw_error) or degradation_reason
         normalized_payload["fallbackReason"] = (
             fallback_reason
             if (
@@ -6446,7 +6446,11 @@ class MarketOverviewService:
             legacy_item_freshness = "unavailable"
             normalized_freshness = "unavailable"
             freshness = {**freshness, "freshness": "unavailable", "isUnavailable": True}
-        elif proxy_source and normalized_freshness in {"live", "delayed", "cached"}:
+        elif (
+            proxy_source
+            and normalized_freshness in {"live", "delayed", "cached"}
+            and preserved_state not in {"delayed", "cached"}
+        ):
             legacy_item_freshness = "proxy"
             normalized_freshness = "proxy"
             freshness = {**freshness, "freshness": "proxy", "isProxy": True}
@@ -6533,8 +6537,12 @@ class MarketOverviewService:
                 **official_freshness_details,
             })
             normalized["sourceFreshnessEvidence"] = source_evidence
-        normalized = normalize_vix_quote_metadata(normalized)
+        activation_meta = self._source_activation_meta(normalized)
+        normalized = {**normalized, **activation_meta}
         volatility_snapshot = normalized.get("volatilityAuthoritySnapshot")
+        if not isinstance(volatility_snapshot, Mapping):
+            normalized = normalize_vix_quote_metadata(normalized)
+            volatility_snapshot = normalized.get("volatilityAuthoritySnapshot")
         final_freshness = normalized_freshness
         final_is_proxy = bool(proxy_source)
         if isinstance(volatility_snapshot, Mapping):
@@ -6547,10 +6555,15 @@ class MarketOverviewService:
                 or normalized.get("sourceAuthorityState") == "proxy"
                 or volatility_snapshot.get("proxyFallback")
             )
-        final_degradation_reason = self._degradation_reason_for_freshness(
-            normalized,
-            final_freshness,
-            is_proxy=final_is_proxy,
+        vix_degradation_reason = str(normalized.get("degradationReason") or "").strip()
+        final_degradation_reason = (
+            vix_degradation_reason
+            if isinstance(volatility_snapshot, Mapping) and vix_degradation_reason
+            else self._degradation_reason_for_freshness(
+                normalized,
+                final_freshness,
+                is_proxy=final_is_proxy,
+            )
         )
         normalized["sourceConfidence"] = self._source_confidence_for_freshness(
             normalized,
@@ -6558,7 +6571,8 @@ class MarketOverviewService:
             is_proxy=final_is_proxy,
         )
         normalized = {**normalized, **self._source_trust_meta(normalized)}
-        normalized = {**normalized, **self._source_activation_meta(normalized)}
+        if not isinstance(volatility_snapshot, Mapping):
+            normalized = {**normalized, **self._source_activation_meta(normalized)}
         if final_degradation_reason:
             normalized["degradationReason"] = final_degradation_reason
         normalized["providerFreshness"] = self._consumer_provider_freshness(
@@ -9388,6 +9402,12 @@ class MarketOverviewService:
                 "asOf": as_of,
                 "isFallback": False,
                 "warning": None,
+                "sourceFreshnessEvidence": {
+                    "freshness": "delayed",
+                    "isFallback": False,
+                    "isStale": False,
+                    "isUnavailable": False,
+                },
             })
             proxy_count += 1
             if as_of:
@@ -9469,6 +9489,12 @@ class MarketOverviewService:
                 "asOf": as_of,
                 "isFallback": False,
                 "warning": None,
+                "sourceFreshnessEvidence": {
+                    "freshness": "delayed",
+                    "isFallback": False,
+                    "isStale": False,
+                    "isUnavailable": False,
+                },
             })
             proxy_count += 1
             if as_of:
@@ -9488,7 +9514,7 @@ class MarketOverviewService:
             "updatedAt": updated_at,
             "asOf": min(proxy_as_of_values) if proxy_as_of_values else None,
             "items": merged_items,
-            "fallbackUsed": False,
+            "fallbackUsed": partial,
             "isFallback": False,
             "warning": warning,
         }
@@ -9531,7 +9557,7 @@ class MarketOverviewService:
             "asOf": None,
             "freshness": "unavailable",
             "fallbackUsed": True,
-            "isFallback": True,
+            "isFallback": False,
             "warning": "CN breadth missing/unavailable: breadth provider is not configured or unavailable.",
             "explanation": "CN breadth is missing/unavailable; no fallback breadth score or market participation metric is fabricated.",
             "items": [
@@ -9541,7 +9567,7 @@ class MarketOverviewService:
                     "sourceLabel": "未接入",
                     "sourceType": "missing",
                     "freshness": "unavailable",
-                    "isFallback": True,
+                    "isFallback": False,
                     "isUnavailable": True,
                 }
                 for item in items

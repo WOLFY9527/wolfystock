@@ -108,7 +108,8 @@ class MarketCnBreadthApiTestCase(unittest.TestCase):
             payload = service.get_cn_breadth()
 
         self.assertTrue(payload["fallbackUsed"])
-        self.assertEqual(payload["freshness"], "fallback")
+        self.assertFalse(payload["isFallback"])
+        self.assertEqual(payload["freshness"], "unavailable")
         self.assertEqual(payload["lastError"], "数据源暂不可用")
         self.assertEqual(payload["fallbackReason"], "tickflow_permission_unavailable")
         serialized = json.dumps(payload, ensure_ascii=False)

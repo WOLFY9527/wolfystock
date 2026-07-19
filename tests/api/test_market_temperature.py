@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.deps import get_optional_current_user
+from api.route_inventory import iter_route_inventory
 from api.v1.endpoints import market
 from api.v1.endpoints import market_overview
 from api.v1.schemas.market_temperature import MarketTemperatureConsumedSubsetResponse
@@ -880,9 +881,9 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         app.dependency_overrides[get_optional_current_user] = lambda: None
 
         route = next(
-            route
-            for route in app.routes
-            if getattr(route, "path", None) == "/api/v1/market/temperature"
+            entry.route
+            for entry in iter_route_inventory(app.routes)
+            if entry.path == "/api/v1/market/temperature"
         )
         self.assertIs(route.response_model, MarketTemperatureConsumedSubsetResponse)
 
@@ -2034,7 +2035,7 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         }
 
         assert macro_items["VIX"]["sourceAuthorityAllowed"] is True
-        assert macro_items["VIX"]["scoreContributionAllowed"] is True
+        assert macro_items["VIX"]["scoreContributionAllowed"] is False
         assert macro_items["SOFR"]["sourceAuthorityAllowed"] is True
         assert macro_items["SOFR"]["scoreContributionAllowed"] is True
         assert macro_items["FEDFUNDS"]["sourceAuthorityAllowed"] is True

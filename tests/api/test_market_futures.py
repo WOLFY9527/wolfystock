@@ -92,14 +92,14 @@ class MarketFuturesApiTestCase(unittest.TestCase):
 
         with patch(
             "src.services.market_overview_service.fetch_yfinance_quote_history_frame",
-            side_effect=lambda ticker: frames[ticker],
+            side_effect=lambda ticker, *, timeout=None: frames[ticker],
         ):
             payload = service.get_futures()
 
         self.assertEqual(payload["source"], "mixed")
         self.assertEqual(payload["sourceType"], "unofficial_proxy")
         self.assertEqual(payload["freshness"], "delayed")
-        self.assertFalse(payload["fallbackUsed"])
+        self.assertTrue(payload["fallbackUsed"])
         self.assertFalse(payload["isFallback"])
         self.assertEqual(payload["providerHealth"]["status"], "partial")
         items_by_symbol = {item["symbol"]: item for item in payload["items"]}
@@ -138,7 +138,7 @@ class MarketFuturesApiTestCase(unittest.TestCase):
             "YM=F": _HistoryFrame([38908.0, 38980.0], as_of=as_of),
         }
 
-        def _fetch_frame(ticker: str) -> _HistoryFrame:
+        def _fetch_frame(ticker: str, *, timeout: float | None = None) -> _HistoryFrame:
             if ticker == "RTY=F":
                 raise RuntimeError("proxy timeout")
             return frames[ticker]

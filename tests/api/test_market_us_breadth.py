@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 from api.v1.endpoints import market
@@ -37,6 +38,7 @@ def test_market_us_breadth_endpoint_delegates_to_market_overview_service() -> No
 
 def test_market_us_breadth_current_proxy_snapshot_stays_proxy_not_exchange_breadth() -> None:
     service = MarketOverviewService()
+    as_of = datetime.now(timezone.utc).isoformat(timespec="seconds")
     quotes = {
         "XLK": {"value": 220.0, "change_pct": 1.8, "trend": [216.0, 220.0], "volume": 10_000_000},
         "XLF": {"value": 44.0, "change_pct": -0.4, "trend": [44.2, 44.0], "volume": 8_000_000},
@@ -46,6 +48,8 @@ def test_market_us_breadth_current_proxy_snapshot_stays_proxy_not_exchange_bread
         "QQQ": {"value": 460.0, "change_pct": 1.1, "trend": [454.0, 460.0], "volume": 45_000_000},
         "IWM": {"value": 210.0, "change_pct": -0.3, "trend": [211.0, 210.0], "volume": 22_000_000},
     }
+    for quote in quotes.values():
+        quote["asOf"] = as_of
 
     with patch.object(service, "_latest_quote", side_effect=lambda ticker: quotes[ticker]):
         payload = service.get_us_breadth()

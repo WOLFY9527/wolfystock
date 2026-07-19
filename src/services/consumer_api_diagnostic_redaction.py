@@ -200,6 +200,17 @@ def _project_node(value: Any, *, surface: str | None = None) -> tuple[Any, dict[
 
 def _is_allowed_surface_value(surface: str | None, key: str, value: Any) -> bool:
     normalized_key = _normalize_key(key)
+    if surface == "market-overview-macro":
+        if normalized_key in {"sourceauthorityallowed", "scorecontributionallowed"}:
+            return isinstance(value, bool)
+        if normalized_key == "sourcetier":
+            return value == "official_public"
+        if normalized_key == "routerejectedreasoncodes":
+            return (
+                isinstance(value, Sequence)
+                and not isinstance(value, (str, bytes, bytearray))
+                and not value
+            )
     if _is_market_data_plane_surface(surface) and normalized_key in _MARKET_DATA_PLANE_METADATA_KEYS:
         if isinstance(value, (str, bool, int, float)) or value is None:
             return True

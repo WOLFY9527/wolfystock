@@ -620,7 +620,8 @@ def test_market_overview_fallback_payload_round_trips_through_json() -> None:
     round_tripped = _json_round_trip(payload)
 
     assert round_tripped["freshness"] == "unavailable"
-    assert round_tripped["isFallback"] is True
+    assert round_tripped["fallbackUsed"] is True
+    assert round_tripped["isFallback"] is False
     assert round_tripped["isStale"] is False
     assert round_tripped["isPartial"] is False
     assert round_tripped["isUnavailable"] is True
@@ -630,7 +631,7 @@ def test_market_overview_fallback_payload_round_trips_through_json() -> None:
     assert round_tripped["sourceLabel"] == "未接入"
     assert round_tripped["providerHealth"]["status"] == "unavailable"
     assert round_tripped["evidenceSnapshot"]["freshness"] == "unavailable"
-    assert round_tripped["evidenceSnapshot"]["isFallback"] is True
+    assert round_tripped["evidenceSnapshot"]["isFallback"] is False
     assert round_tripped["evidenceSnapshot"]["isUnavailable"] is True
     assert round_tripped["evidenceSnapshot"]["scoreReliabilityAllowed"] is False
     assert round_tripped["sourceConfidence"] == "unavailable"

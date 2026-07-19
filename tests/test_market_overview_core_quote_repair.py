@@ -382,7 +382,7 @@ def test_vix_fred_transport_overlay_is_consumed_when_fresh_enough() -> None:
     assert vix["freshness"] == "delayed"
     assert vix["isStale"] is False
     assert vix["sourceAuthorityAllowed"] is True
-    assert vix["scoreContributionAllowed"] is True
+    assert vix["scoreContributionAllowed"] is False
     assert vix["sourceAuthorityReason"] is None
     assert vix["sourceFreshnessEvidence"]["freshness"] == "delayed"
     assert vix["sourceFreshnessEvidence"]["freshnessPolicy"] == "official_daily_us_weekday_t_plus_1"
@@ -923,6 +923,7 @@ def test_us10y_dxy_and_btc_keep_truthful_source_freshness_metadata() -> None:
         return _HistoryFrame([105.0, 105.4], as_of=as_of)
 
     def ticker_snapshot(symbols: list[str]) -> list[dict]:
+        close_time = int(as_of.timestamp() * 1000)
         return [
             {
                 "symbol": "BTCUSDT",
@@ -931,6 +932,7 @@ def test_us10y_dxy_and_btc_keep_truthful_source_freshness_metadata() -> None:
                 "quoteVolume": "1000000000",
                 "highPrice": "67500",
                 "lowPrice": "66000",
+                "closeTime": close_time,
             }
         ] + [
             {
@@ -940,6 +942,7 @@ def test_us10y_dxy_and_btc_keep_truthful_source_freshness_metadata() -> None:
                 "quoteVolume": "1",
                 "highPrice": "1",
                 "lowPrice": "1",
+                "closeTime": close_time,
             }
             for symbol in symbols
             if symbol != "BTCUSDT"

@@ -1597,7 +1597,11 @@ class MarketRotationRadarService:
         provider_state = self._consumer_provider_state(
             source_meta=source_meta,
             raw_snapshot=raw_snapshot,
-            source_type=source_type,
+            source_type=(
+                str(source_meta.get("sourceType") or source_type)
+                if source_meta.get("present")
+                else source_type
+            ),
             source_tier=source_tier,
             provider_tier=provider_tier,
             freshness=freshness,

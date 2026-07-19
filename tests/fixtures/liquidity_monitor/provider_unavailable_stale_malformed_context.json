@@ -568,7 +568,8 @@
             "scoreContributionAllowed": false,
             "scoreAuthorityEligible": false,
             "coverage": 1.0,
-            "confidenceWeight": 0.7
+            "confidenceWeight": 0.7,
+            "degradationReason": "delayed_source"
           }
         ]
       },
@@ -606,6 +607,7 @@
         "capReason": "partial_coverage",
         "degradationReason": "partial_coverage",
         "sourceAuthorityRouteRejected": false,
+        "sourceAuthorityReason": "delayed_source",
         "routeRejectedReasonCodes": [],
         "activationHint": "现有宏观 / 波动率快照可用时激活；yfinance proxy 会被 trust gate 限制为延迟或部分。；requiredProviderClass=official_public.vix_or_volatility；missingProviderReason=requires_official_public.vix_or_volatility；requiredRealSourceForScore=True；scoreExclusionReason=proxy_only_missing_real_source；proxyObservationOnlyReason=proxy_only_missing_real_source；已激活: VIX；proxyOnly=True；scoreContributionAllowed=False；freshness=partial；cap=partial_coverage；score capped；source=yfinance_proxy"
       }

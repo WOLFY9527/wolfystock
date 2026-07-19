@@ -98,11 +98,7 @@ def _payload_provenance(payload: dict[str, Any]) -> dict[str, str]:
         source_type=payload.get("sourceType"),
         source_label=payload.get("sourceLabel"),
         freshness=payload.get("freshness"),
-        is_fallback=bool(
-            payload.get("isFallback")
-            or payload.get("fallbackUsed")
-            or payload.get("fallback_used")
-        ),
+        is_fallback=bool(payload.get("isFallback")),
         is_stale=bool(payload.get("isStale")),
         is_from_snapshot=bool(payload.get("isFromSnapshot")),
         no_external_calls=bool(payload.get("noExternalCalls")),
@@ -711,7 +707,7 @@ def test_market_overview_futures_proxy_payload_preserves_proxy_and_fail_closed_f
     assert payload_provenance["freshnessLabel"] == "延迟"
     assert nq["source"] == "yfinance_proxy"
     assert nq["sourceType"] == "unofficial_proxy"
-    assert nq["freshness"] == "proxy"
+    assert nq["freshness"] == "delayed"
     assert nq["isProxy"] is True
     assert nq["isUnavailable"] is False
     assert nq["value"] == 18420.5
@@ -720,7 +716,7 @@ def test_market_overview_futures_proxy_payload_preserves_proxy_and_fail_closed_f
     assert nq["scoreContributionAllowed"] is False
     assert nq["scoreAuthorityEligible"] is False
     assert nq_provenance["sourceType"] == "unofficial_proxy"
-    assert nq_provenance["freshnessLabel"] == "不可用"
+    assert nq_provenance["freshnessLabel"] == "延迟"
     assert fallback["source"] == "fallback"
     assert fallback["freshness"] == "fallback"
     assert fallback["isFallback"] is True

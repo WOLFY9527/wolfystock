@@ -52,10 +52,9 @@ def normalize_vix_quote_metadata(payload: Mapping[str, Any]) -> Dict[str, Any]:
         normalized["freshness"] = _normalize_official_freshness(freshness)
 
     freshness = str(normalized.get("freshness") or "").strip().lower()
-    if (
-        freshness in {"delayed", "stale", "cached"}
-        and freshness != original_freshness
-        and not normalized.get("degradationReason")
+    if freshness in {"delayed", "stale", "cached"} and (
+        (freshness != original_freshness and not normalized.get("degradationReason"))
+        or normalized.get("degradationReason") == "proxy_source"
     ):
         normalized["degradationReason"] = "delayed_source"
     if freshness == "delayed":
@@ -72,11 +71,31 @@ def normalize_vix_panel_metadata(payload: Mapping[str, Any]) -> Dict[str, Any]:
     if not isinstance(raw_items, list):
         return normalized
 
-    items = [normalize_vix_quote_metadata(item) if isinstance(item, dict) else item for item in raw_items]
-    normalized["items"] = items
-    vix_item = _first_vix_item(items)
-    if not isinstance(vix_item, dict):
+    raw_vix_item = _first_vix_item(raw_items)
+    if not isinstance(raw_vix_item, dict):
         return normalized
+    vix_item = normalize_vix_quote_metadata(raw_vix_item)
+    normalized["items"] = [
+        {
+            **item,
+            "sourceType": vix_item.get("sourceType"),
+            "sourceLabel": vix_item.get("sourceLabel"),
+            "freshness": vix_item.get("freshness"),
+            "isStale": bool(vix_item.get("isStale")),
+            "degradationReason": vix_item.get("degradationReason"),
+            "sourceFreshnessEvidence": {
+                "freshness": vix_item.get("freshness"),
+                "isFallback": bool(vix_item.get("isFallback")),
+                "isStale": bool(vix_item.get("isStale")),
+                "isPartial": bool(vix_item.get("isPartial")),
+                "isUnavailable": bool(vix_item.get("isUnavailable")),
+                "warning": vix_item.get("warning"),
+            },
+        }
+        if item is raw_vix_item
+        else item
+        for item in raw_items
+    ]
 
     panel_source = str(normalized.get("source") or "").strip().lower()
     if vix_item.get("sourceType") and not normalized.get("sourceType") and panel_source != "mixed":
@@ -126,6 +145,8 @@ def _apply_volatility_authority_snapshot(payload: Dict[str, Any]) -> Dict[str, A
     if snapshot["proxyFallback"]:
         result["isProxy"] = True
         result["observationOnly"] = True
+        if snapshot["freshnessState"] in _DELAYED_STATES:
+            result["degradationReason"] = "delayed_source"
     if snapshot["coverageState"] == "rejected":
         result["isUnavailable"] = True
     result["consumerEligibility"] = dict(snapshot["consumerEligibility"])
