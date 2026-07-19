@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8136,
-      "sha256": "cf4cfc89fafd6966786520c4c2c257e3b59027fe50113afab5c4dd74a9e691dc"
+      "count": 8142,
+      "sha256": "383fd5b6f7cab1c9a343fb92a50e887ee512f17edc76b7e758fad6f533247745"
     },
     "tests": [
       {
@@ -10609,6 +10609,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_akshare_cn_ohlcv_cache_runtime.py::test_process_scoped_cn_runtime_activation_is_read_without_cached_settings",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
         "id": "tests/test_akshare_cn_ohlcv_cache_runtime.py::test_provider_exception_is_redacted_and_reported_as_runtime_unavailable",
         "domain": "provider_external_network",
         "baseline": true
@@ -17844,6 +17849,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_historical_ohlcv_cache_preflight.py::test_explicit_empty_environment_remains_disabled_by_config",
+        "domain": "market",
+        "baseline": false
+      },
+      {
         "id": "tests/test_historical_ohlcv_cache_preflight.py::test_explicit_seed_with_fake_us_provider_writes_cache_only_when_flags_allow",
         "domain": "market",
         "baseline": true
@@ -21777,6 +21787,11 @@
         "id": "tests/test_market_cache_fallback_contracts.py::test_market_overview_live_payload_round_trips_through_json",
         "domain": "market",
         "baseline": true
+      },
+      {
+        "id": "tests/test_market_cache_fallback_contracts.py::test_market_overview_remote_projection_preserves_structured_source_confidence_fields",
+        "domain": "market",
+        "baseline": false
       },
       {
         "id": "tests/test_market_cache_fallback_contracts.py::test_market_overview_stale_refreshing_payload_projects_without_remote_refresh_state",
@@ -39482,6 +39497,21 @@
         "id": "tests/test_uat_provider_isolation_boundary.py::test_default_production_dispatch_semantics_are_allowed_without_uat_flag",
         "domain": "provider_external_network",
         "baseline": true
+      },
+      {
+        "id": "tests/test_uat_provider_isolation_boundary.py::test_default_transport_remains_blocked_and_identified_under_uat",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_uat_provider_isolation_boundary.py::test_explicit_injected_transport_is_allowed_and_recorded_under_uat",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_uat_provider_isolation_boundary.py::test_injected_transport_path_does_not_read_uat_allowlist",
+        "domain": "provider_external_network",
+        "baseline": false
       },
       {
         "id": "tests/test_uat_provider_isolation_boundary.py::test_llm_adapter_blocks_litellm_and_router_dispatch_under_uat",
