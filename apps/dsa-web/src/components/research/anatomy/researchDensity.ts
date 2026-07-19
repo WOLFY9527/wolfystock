@@ -13,23 +13,6 @@ export function normalizeResearchDensityMode(
   return isResearchDensityMode(value) ? value : fallback;
 }
 
-/**
- * Page-family defaults for shared density adoption.
- * Pages may override; this is guidance for future migrations, not routing logic.
- */
-export const RESEARCH_DENSITY_PAGE_DEFAULTS: Record<string, ResearchDensityMode> = {
-  home: 'editorial',
-  'decision-cockpit': 'editorial',
-  structure: 'research',
-  'market-overview': 'research',
-  scenario: 'research',
-  backtest: 'research',
-  radar: 'research',
-  watchlist: 'workbench',
-  scanner: 'workbench',
-  portfolio: 'workbench',
-};
-
 export function densityDataAttributes(density: ResearchDensityMode): {
   'data-research-density': ResearchDensityMode;
 } {

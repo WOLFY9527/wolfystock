@@ -23,7 +23,6 @@ export type {
 
 export {
   RESEARCH_DENSITY_MODES,
-  RESEARCH_DENSITY_PAGE_DEFAULTS,
   densityDataAttributes,
   isResearchDensityMode,
   normalizeResearchDensityMode,
@@ -37,7 +36,6 @@ export {
   computeFrameDepth,
   countContributingFrames,
   frameRoleContributesToBudget,
-  isResearchFrameRole,
   isWithinNestingBudget,
   nestingBudgetViolation,
   researchFrameDataAttributes,

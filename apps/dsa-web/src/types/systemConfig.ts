@@ -59,11 +59,6 @@ export interface SystemConfigCategorySchema {
   fields: SystemConfigFieldSchema[];
 }
 
-export interface SystemConfigSchemaResponse {
-  schemaVersion: string;
-  categories: SystemConfigCategorySchema[];
-}
-
 export interface SystemConfigItem {
   key: string;
   value: string;

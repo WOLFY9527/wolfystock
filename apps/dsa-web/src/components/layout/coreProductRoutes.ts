@@ -273,25 +273,6 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
   },
 ];
 
-/** Routes that appear as top-level direct links (not inside a workflow group). */
-export const DIRECT_PRIMARY_CONSUMER_ROUTES = CORE_PRODUCT_ROUTES.filter(
-  (route) => route.primaryNav && route.navGroup === null,
-);
-
-/**
- * All routes discoverable from the consumer shell navigation architecture.
- * Major research tools live under named workflow groups or as first-level workspaces.
- */
-export const PRIMARY_CONSUMER_ROUTES = CORE_PRODUCT_ROUTES.filter((route) => route.primaryNav);
-
-/**
- * Contextual / specialized consumer surfaces kept out of the global shell architecture
- * but still registered for route identity, active-state resolution, and handoffs.
- */
-export const SECONDARY_CONSUMER_ROUTES = CORE_PRODUCT_ROUTES.filter(
-  (route) => !route.primaryNav,
-);
-
 export function getConsumerNavGroup(groupKey: ConsumerNavGroupKey): ConsumerNavGroupDefinition {
   const group = CONSUMER_NAV_GROUPS.find((item) => item.key === groupKey);
   if (!group) {
@@ -303,11 +284,6 @@ export function getConsumerNavGroup(groupKey: ConsumerNavGroupKey): ConsumerNavG
 export function getConsumerNavGroupRoutes(groupKey: ConsumerNavGroupKey): CoreProductRoute[] {
   const group = getConsumerNavGroup(groupKey);
   return group.routeKeys.map((key) => getCoreProductRouteByKey(key));
-}
-
-export function resolveConsumerNavGroupForPath(pathname: string): ConsumerNavGroupKey | null {
-  const route = resolveCurrentConsumerRoute(pathname);
-  return route?.navGroup ?? null;
 }
 
 export function normalizeConsumerRoutePath(pathname: string): string {
@@ -367,10 +343,6 @@ export function consumerRouteMatches(pathname: string, route: CoreProductRoute):
 
 export function resolveCurrentConsumerRoute(pathname: string): CoreProductRoute | null {
   return CORE_PRODUCT_ROUTES.find((route) => consumerRouteMatches(pathname, route)) ?? null;
-}
-
-export function resolveCurrentConsumerRouteKey(pathname: string): CoreProductRouteKey | null {
-  return resolveCurrentConsumerRoute(pathname)?.key ?? null;
 }
 
 export function getCoreProductRouteByKey(key: CoreProductRouteKey): CoreProductRoute {

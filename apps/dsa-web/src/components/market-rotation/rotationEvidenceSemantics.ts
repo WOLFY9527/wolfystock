@@ -4,10 +4,6 @@
  * Geometry fallbacks stay display-only and never rewrite evidence text.
  */
 
-export function isFiniteMetric(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
 export function parseRotationMetric(value?: number | string | null): number | null {
   if (value === null || value === undefined || value === '') {
     return null;
@@ -183,16 +179,4 @@ export function matrixGeometryPosition(params: {
     usesGeometryFallback: true,
     evidenceValue: null,
   };
-}
-
-export function deriveVisualStrengthDomainFromValues(values: number[]): { min: number; max: number } {
-  if (!values.length) {
-    return { min: -1, max: 1 };
-  }
-  const min = Math.min(...values, 0);
-  const max = Math.max(...values, 0);
-  if (min === max) {
-    return { min: min - 1, max: max + 1 };
-  }
-  return { min, max };
 }

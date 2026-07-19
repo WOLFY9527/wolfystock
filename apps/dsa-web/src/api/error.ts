@@ -433,14 +433,6 @@ function extractCommonParsedErrorMetadata(error: unknown): {
   };
 }
 
-export function isApiRequestError(
-  value: unknown,
-): value is Error & ErrorCarrier & { parsedError: ParsedApiError } {
-  return value instanceof Error
-    && isRecord(value)
-    && isParsedApiError((value as ErrorCarrier).parsedError);
-}
-
 function formatParsedApiError(parsed: ParsedApiError): string {
   if (!parsed.title.trim()) {
     return parsed.message;

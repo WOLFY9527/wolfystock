@@ -782,20 +782,6 @@ export interface BatchTaskAcceptedResponse {
 
 export type AnalyzeAsyncResponse = TaskAccepted | BatchTaskAcceptedResponse;
 
-export type AnalyzeResponse = AnalysisResult | AnalyzeAsyncResponse;
-
-/** Task status */
-export interface TaskStatus {
-  taskId: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
-  progress?: number;
-  result?: AnalysisResult;
-  error?: string;
-  stockName?: string;
-  originalQuery?: string;
-  selectionSource?: string;
-}
-
 /** Task details used by task list and SSE events */
 export interface TaskInfo {
   taskId: string;
@@ -824,14 +810,6 @@ export interface TaskListResponse {
   pending: number;
   processing: number;
   tasks: TaskInfo[];
-}
-
-/** Duplicate task error response */
-export interface DuplicateTaskError {
-  error: 'duplicate_task';
-  message: string;
-  stockCode: string;
-  existingTaskId: string;
 }
 
 // ============ History Types ============
@@ -885,48 +863,3 @@ export interface HistoryFilters {
   startDate?: string;
   endDate?: string;
 }
-
-/** History pagination parameters */
-export interface HistoryPagination {
-  page: number;
-  limit: number;
-}
-
-// ============ Error Types ============
-
-export interface ApiError {
-  error: string;
-  message: string;
-  detail?: Record<string, unknown>;
-}
-
-// ============ Helper Functions ============
-
-/** Get sentiment label by score */
-export const getSentimentLabel = (score: number, language: ReportLanguage = 'zh'): SentimentLabel => {
-  if (language === 'en') {
-    if (score <= 20) return 'Very Bearish';
-    if (score <= 40) return 'Bearish';
-    if (score <= 60) return 'Neutral';
-    if (score <= 80) return 'Bullish';
-    return 'Very Bullish';
-  }
-  if (score <= 20) return '极度悲观';
-  if (score <= 40) return '悲观';
-  if (score <= 60) return '中性';
-  if (score <= 80) return '乐观';
-  return '极度乐观';
-};
-
-/** Get sentiment color by score */
-const getSentimentHue = (score: number): string => {
-  if (score <= 20) return 'var(--accent-danger-hsl)';
-  if (score <= 40) return 'var(--accent-warning-hsl)';
-  if (score <= 60) return 'var(--accent-secondary-hsl)';
-  if (score <= 80) return 'var(--accent-primary-hsl)';
-  return 'var(--accent-positive-hsl)';
-};
-
-export const getSentimentColor = (score: number): string => {
-  return `hsl(${getSentimentHue(score)})`;
-};

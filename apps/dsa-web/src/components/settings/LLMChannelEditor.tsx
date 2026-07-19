@@ -1378,7 +1378,6 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
             <Button
               type="button"
               variant="settings-primary"
-              glow
               disabled={busy || !hasChanges}
               onClick={() => void handleSave()}
             >

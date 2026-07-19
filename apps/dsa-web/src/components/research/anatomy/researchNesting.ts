@@ -20,10 +20,6 @@ export const RESEARCH_SURFACE_SCOPE_ATTR = 'data-research-surface-scope';
 
 export type ResearchSurfaceScope = 'consumer' | 'admin';
 
-export function isResearchFrameRole(value: unknown): value is ResearchFrameRole {
-  return value === 'board' || value === 'section' || value === 'content';
-}
-
 export function frameRoleContributesToBudget(role: ResearchFrameRole): boolean {
   // Content layer uses dividers/rows and does not count as a chrome frame.
   return role === 'board' || role === 'section';

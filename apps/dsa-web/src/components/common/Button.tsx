@@ -12,8 +12,6 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   actionIntent?: 'write' | 'navigate' | 'passive';
   isLoading?: boolean;
   loadingText?: string;
-  /** Deprecated compatibility prop; shared glow styling was removed in T189. */
-  glow?: boolean;
   ref?: React.Ref<HTMLButtonElement>;
 }
 
@@ -59,7 +57,6 @@ export const Button = ({
   actionIntent,
   isLoading = false,
   loadingText,
-  glow: _glow,
   className = '',
   disabled,
   type = 'button',
@@ -67,7 +64,6 @@ export const Button = ({
   ...props
 }: ButtonProps) => {
   const { t } = useI18n();
-  void _glow;
   const resolvedLoadingText = loadingText || (isLoading ? t('common.processing') : '');
   const resolvedActionIntent = actionIntent ?? BUTTON_INTENT_BY_VARIANT[variant];
   const isDisabled = disabled || isLoading;

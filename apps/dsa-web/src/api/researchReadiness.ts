@@ -12,8 +12,6 @@ import type {
   SourceProvenanceEntry,
   SourceProvenanceSummary,
 } from '../types/analysis';
-import type { MarketDirectionReadiness, MarketTemperatureResponse } from './market';
-import type { OptionsDecisionResponse } from './optionsLab';
 import type {
   ConsumerReadinessChip,
   ConsumerReadinessTone,
@@ -760,77 +758,6 @@ export function inferAnalysisResearchReadiness(
   };
 }
 
-export function extractMarketResearchReadiness(
-  payload: MarketTemperatureResponse | null | undefined,
-): ResearchReadinessV1 | null {
-  return readNestedResearchReadiness((payload as MarketTemperatureResponse & { researchReadiness?: unknown } | null)?.researchReadiness);
-}
-
-export function inferMarketResearchReadiness(
-  payload: MarketTemperatureResponse | null | undefined,
-): ResearchReadinessV1 {
-  const direction = payload?.marketDecisionSemantics?.directionReadiness;
-  if (direction) {
-    return inferMarketDirectionReadiness(direction, payload);
-  }
-
-  const missingEvidence: string[] = [];
-  if (payload?.temperatureAvailable === false || payload?.conclusionAllowed === false || payload?.isReliable === false) {
-    missingEvidence.push('macro', 'liquidity');
-  }
-  if (payload?.freshness === 'fallback' || payload?.isFallback) {
-    missingEvidence.push('freshness');
-  }
-
-  return {
-    researchReady: false,
-    readinessState: missingEvidence.length ? 'insufficient' : 'observe_only',
-    verdictLabel: missingEvidence.length ? '证据不足' : '仅观察',
-    blockingReasons: missingEvidence.length ? ['missing_required_evidence'] : [],
-    missingEvidence,
-    sourceAuthority: payload?.conclusionAllowed === true ? 'observationOnly' : 'unavailable',
-    freshnessFloor: typeof payload?.freshness === 'string' ? payload.freshness : 'unknown',
-    nextEvidenceNeeded: missingEvidence.length
-      ? ['补齐宏观、流动性与时效证据']
-      : ['等待研究就绪结论后再升级判断'],
-  };
-}
-
-function inferMarketDirectionReadiness(
-  readiness: MarketDirectionReadiness,
-  payload: MarketTemperatureResponse | null | undefined,
-): ResearchReadinessV1 {
-  const missingEvidence: string[] = [];
-  if ((readiness.missingPillars.count || 0) > 0) {
-    missingEvidence.push('macro', 'liquidity');
-  }
-  if (payload?.freshness === 'fallback' || payload?.isFallback) {
-    missingEvidence.push('freshness');
-  }
-  const insufficient = readiness.status === 'data_insufficient';
-  return {
-    researchReady: false,
-    readinessState: insufficient ? 'insufficient' : 'observe_only',
-    verdictLabel: insufficient ? '证据不足' : '仅观察',
-    blockingReasons: readiness.blockingReasons,
-    missingEvidence,
-    evidenceCoverage: {
-      scoreGradeCount: readiness.scoreGradePillars.count,
-      observationOnlyCount: readiness.observationOnlyPillars.count,
-      missingCount: readiness.missingPillars.count,
-      totalCount:
-        readiness.scoreGradePillars.count
-        + readiness.observationOnlyPillars.count
-        + readiness.missingPillars.count,
-    },
-    sourceAuthority: 'observationOnly',
-    freshnessFloor: typeof payload?.freshness === 'string' ? payload.freshness : 'unknown',
-    nextEvidenceNeeded: insufficient
-      ? ['补齐方向缺口后再形成研究判断']
-      : ['等待更高授权来源后再升级判断'],
-  };
-}
-
 function deriveScannerSourceAuthority(frame: ScannerContextSignalFrame | null | undefined): ResearchSourceAuthority {
   if (frame?.sourceAuthorityAllowed === true && frame?.scoreContributionAllowed === true) return 'scoreGradeAllowed';
   if (frame?.observationOnly === true || frame?.scoreContributionAllowed === false) return 'observationOnly';
@@ -938,74 +865,4 @@ export function extractOptionsResearchReadiness(
     if (isRecord(alias)) return alias as OptionsResearchReadiness;
   }
   return null;
-}
-
-export function inferOptionsResearchReadiness(
-  decision: OptionsDecisionResponse | null | undefined,
-): ResearchReadinessV1 {
-  if (!decision) {
-    return {
-      researchReady: false,
-      readinessState: 'waiting',
-      verdictLabel: '等待证据更新',
-      sourceAuthority: 'unavailable',
-      freshnessFloor: 'unknown',
-      nextEvidenceNeeded: ['等待期权链与情景判断返回'],
-    };
-  }
-
-  const blocked = decision.gateDecision === 'blocked' || decision.decisionGrade === false;
-  return {
-    researchReady: false,
-    readinessState: blocked ? 'blocked' : 'observe_only',
-    verdictLabel: blocked ? '研究结论受限' : '仅观察',
-    blockingReasons: uniqueStrings([
-      ...asStringArray(decision.failClosedReasonCodes),
-      ...asStringArray(decision.gateIssues),
-      ...asStringArray(decision.dataQuality?.blockingReasons),
-    ]),
-    missingEvidence: uniqueStrings([
-      decision.ivGreeks?.ivRankStatus === 'unavailable' ? 'technical' : null,
-      decision.dataQuality?.dataQualityTier === 'insufficient' ? 'source_authority' : null,
-    ]),
-    sourceAuthority: blocked ? 'observationOnly' : 'unavailable',
-    freshnessFloor: typeof decision.freshness?.freshness === 'string'
-      ? decision.freshness.freshness
-      : 'unknown',
-    nextEvidenceNeeded: blocked
-      ? ['补齐 provider authority、Greeks 与流动性证据']
-      : ['等待明确研究就绪结论后再升级判断'],
-  };
-}
-
-export function convertOptionsReadiness(
-  readiness: OptionsResearchReadiness | null | undefined,
-): ResearchReadinessV1 | null {
-  if (!readiness?.readinessState) return null;
-  const normalizedState: ResearchReadinessState = readiness.optionsResearchReady === true
-    ? 'ready'
-    : readiness.readinessState === 'blocked'
-      ? 'blocked'
-      : readiness.readinessState === 'insufficient'
-        ? 'insufficient'
-        : readiness.readinessState === 'waiting'
-          ? 'waiting'
-          : 'observe_only';
-  const freshnessFloor: ResearchFreshnessFloor = readiness.dataQualityTier === 'live_usable'
-    ? 'live'
-    : readiness.dataQualityTier === 'delayed_usable'
-      ? 'delayed'
-      : readiness.dataQualityTier === 'synthetic_demo_only'
-        ? 'synthetic'
-        : 'unknown';
-  return {
-    researchReady: readiness.optionsResearchReady === true,
-    readinessState: normalizedState,
-    verdictLabel: readiness.optionsResearchReady === true ? '研究证据可用' : undefined,
-    blockingReasons: asStringArray(readiness.blockingReasons),
-    missingEvidence: [],
-    sourceAuthority: readiness.providerAuthority,
-    freshnessFloor,
-    nextEvidenceNeeded: asStringArray(readiness.nextEvidenceNeeded),
-  };
 }

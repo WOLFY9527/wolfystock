@@ -6,10 +6,6 @@ function isPathMatch(pathname: string, target: string): boolean {
   return pathname === target || pathname.startsWith(`${target}/`);
 }
 
-export function isPreviewRoutePath(pathname: string): boolean {
-  return stripLocalePrefix(pathname).startsWith('/__preview/');
-}
-
 export function isAuthEntryPath(pathname: string): boolean {
   const routePathname = stripLocalePrefix(pathname);
   return routePathname === '/login'
