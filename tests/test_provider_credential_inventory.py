@@ -64,7 +64,8 @@ def test_provider_credential_inventory_freezes_configured_and_wired_sources_with
             "config_markers": ("fred_api_key=os.getenv('FRED_API_KEY') or None",),
             "runtime_markers": (
                 'return _text(getattr(Config.get_instance(), "fred_api_key", None)) or None',
-                'params["api_key"] = resolved_api_key',
+                'api_key=_resolve_fred_api_key(api_key)',
+                'params["api_key"] = api_key',
             ),
         },
         "twelve_data": {
@@ -103,7 +104,7 @@ def test_provider_credential_inventory_freezes_configured_and_wired_sources_with
             ),
             "runtime_markers": (
                 '"fmp": ("FMP_API_KEYS", "FMP_API_KEY")',
-                '_first_key("fmp_api_keys", "fmp_api_key")',
+                '_resolve_api_key(api_key, transport, "fmp_api_keys", "fmp_api_key")',
             ),
         },
         "finnhub": {
@@ -115,7 +116,7 @@ def test_provider_credential_inventory_freezes_configured_and_wired_sources_with
             ),
             "runtime_markers": (
                 '"finnhub": ("FINNHUB_API_KEYS", "FINNHUB_API_KEY")',
-                '_first_key("finnhub_api_keys", "finnhub_api_key")',
+                '_resolve_api_key(api_key, transport, "finnhub_api_keys", "finnhub_api_key")',
             ),
         },
     }

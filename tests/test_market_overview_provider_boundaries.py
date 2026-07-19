@@ -381,8 +381,11 @@ def test_market_overview_transport_modules_stay_runtime_lightweight() -> None:
     }
 
     assert actual_mapping == {
-        path.name: set()
-        for path in MARKET_OVERVIEW_TRANSPORT_FILES
+        "official_macro_transport.py": {"src.providers.errors"},
+        "market_overview_binance_transport.py": set(),
+        "market_overview_sentiment_transport.py": set(),
+        "market_overview_sina_transport.py": set(),
+        "market_overview_yfinance_transport.py": set(),
     }
 
 

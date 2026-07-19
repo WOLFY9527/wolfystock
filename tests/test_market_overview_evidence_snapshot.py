@@ -750,8 +750,9 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
         assert evidence["isPartial"] is True
         assert "authorityGrant" not in evidence
         assert "decisionGrade" not in evidence
-        assert "authorityGrant" not in payload
-        assert "decisionGrade" not in payload
+        assert payload["scoreAuthorityEligible"] is False
+        assert payload["authorityGrant"] is False
+        assert payload["decisionGrade"] is False
 
     def test_evidence_snapshot_normalization_does_not_change_scores_or_regime_payloads(self) -> None:
         service = MarketOverviewService()
