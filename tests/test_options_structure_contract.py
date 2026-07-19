@@ -5,10 +5,13 @@ from __future__ import annotations
 
 import json
 import socket
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import options
 from api.v1.schemas.options import OptionChainSnapshot, OptionContractStructureRow
 from src.services.options_structure_service import (
@@ -45,10 +48,30 @@ FORBIDDEN_PUBLIC_MARKERS = (
 )
 
 
-def _client() -> TestClient:
+def _current_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="options-structure-fixture",
+        username="options-structure-fixture",
+        display_name="Options Structure Fixture",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+        session_id="options-structure-session",
+    )
+
+
+@contextmanager
+def _client() -> Iterator[TestClient]:
     app = FastAPI()
     app.include_router(options.router, prefix="/api/v1/options")
-    return TestClient(app)
+    app.dependency_overrides[get_current_user] = _current_user
+    try:
+        with TestClient(app) as client:
+            yield client
+    finally:
+        app.dependency_overrides.clear()
 
 
 def _json_text(payload: object) -> str:
@@ -383,7 +406,8 @@ def test_gateway_catches_provider_exceptions_without_leaking_exception_details()
 
 
 def test_options_structure_api_returns_not_available_contract_without_leaks() -> None:
-    response = _client().get("/api/v1/options/underlyings/AAPL/structure")
+    with _client() as client:
+        response = client.get("/api/v1/options/underlyings/AAPL/structure")
     assert response.status_code == 200
 
     payload = response.json()
@@ -401,7 +425,8 @@ def test_options_structure_api_routes_through_gateway_with_in_memory_provider(mo
     service = OptionsStructureService(provider=provider)
     monkeypatch.setattr(options, "_structure_service", lambda: service)
 
-    response = _client().get("/api/v1/options/underlyings/AAPL/structure")
+    with _client() as client:
+        response = client.get("/api/v1/options/underlyings/AAPL/structure")
     assert response.status_code == 200
 
     payload = response.json()

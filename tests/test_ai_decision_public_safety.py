@@ -25,6 +25,7 @@ from src.analyzer import AnalysisResult, GeminiAnalyzer
 from src.config import Config
 from src.services.analysis_service import AnalysisService
 from src.storage import AnalysisHistory, DatabaseManager
+from tests.conftest import preserve_runtime_test_state
 
 
 FORBIDDEN_DIRECTIVE_TERMS = (
@@ -909,13 +910,22 @@ def _reset_auth_globals() -> None:
     auth._session_secret = None
     auth._password_hash_salt = None
     auth._password_hash_stored = None
+    auth._password_hash_value = None
     auth._rate_limit = {}
+    auth._admin_reauth_markers = {}
+    auth._rate_limit_lock = None
 
 
 class PublicPreviewSafetyTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        self.runtime_state = preserve_runtime_test_state()
+        self.runtime_state.__enter__()
+        self.addCleanup(self.runtime_state.__exit__, None, None, None)
         _reset_auth_globals()
+        for key in ("STOCK_LIST", "GEMINI_API_KEY", "ADMIN_AUTH_ENABLED"):
+            os.environ.pop(key, None)
         self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
         self.data_dir = Path(self.temp_dir.name)
         self.env_path = self.data_dir / ".env"
         self.db_path = self.data_dir / "ai_public_safety.db"
@@ -935,17 +945,13 @@ class PublicPreviewSafetyTestCase(unittest.TestCase):
         os.environ["DATABASE_PATH"] = str(self.db_path)
         Config.reset_instance()
         DatabaseManager.reset_instance()
+        self.addCleanup(Config.reset_instance)
+        self.addCleanup(DatabaseManager.reset_instance)
         self.app = create_app(static_dir=self.data_dir / "empty-static")
-        self.client = TestClient(self.app)
+        self.client_context = TestClient(self.app)
+        self.client = self.client_context.__enter__()
+        self.addCleanup(self.client_context.__exit__, None, None, None)
         self.db = DatabaseManager.get_instance()
-
-    def tearDown(self) -> None:
-        self.client.close()
-        DatabaseManager.reset_instance()
-        Config.reset_instance()
-        os.environ.pop("ENV_FILE", None)
-        os.environ.pop("DATABASE_PATH", None)
-        self.temp_dir.cleanup()
 
     def test_guest_preview_strips_raw_ai_details_and_uses_mocked_analysis(self) -> None:
         def _mock_analyze_stock(*args: Any, **kwargs: Any) -> dict[str, Any]:

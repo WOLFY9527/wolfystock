@@ -365,7 +365,17 @@ def _family_rollup(payload: dict, family_id: str) -> dict:
     return next(row for row in rows if row["familyId"] == family_id)
 
 
+def _restore_unavailable_symbol_state(previous: dict[str, dict]) -> None:
+    rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE.clear()
+    rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE.update(previous)
+
+
 class MarketRotationRadarServiceTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        previous = dict(rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE)
+        self.addCleanup(_restore_unavailable_symbol_state, previous)
+        rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE.clear()
+
     def test_default_provider_deadline_covers_total_provider_budget(self) -> None:
         original_timeout = market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS
         timeout_env = {

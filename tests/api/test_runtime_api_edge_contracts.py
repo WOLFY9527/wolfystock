@@ -4,14 +4,18 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import pytest
 from fastapi.testclient import TestClient
 
+import src.auth as auth
 from api.app import create_app
 from api.deps import CurrentUser, get_current_user, get_database_manager, get_optional_current_user
+from src.services import rotation_radar_quote_provider
+from tests.conftest import preserve_runtime_test_state
 
 
 FORBIDDEN_CONSUMER_MARKERS = (
@@ -222,8 +226,16 @@ def _assert_json_response(response, *, expected_status: int = 200) -> dict[str, 
     return payload
 
 
+@pytest.fixture(autouse=True)
+def _runtime_edge_auth_disabled() -> Iterator[None]:
+    with preserve_runtime_test_state():
+        os.environ["ADMIN_AUTH_ENABLED"] = "false"
+        auth._auth_enabled = None
+        yield
+
+
 @pytest.fixture()
-def runtime_edge_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def runtime_edge_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     from api.v1.endpoints import backtest, market, market_overview, research, scanner, watchlist
     from tests.api.test_market_decision_cockpit_endpoint import _payload as cockpit_payload
 
@@ -264,11 +276,10 @@ def runtime_edge_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Test
     app.dependency_overrides[get_current_user] = _user
     app.dependency_overrides[get_optional_current_user] = lambda: None
     app.dependency_overrides[get_database_manager] = lambda: object()
-    client = TestClient(app)
     try:
-        yield client
+        with TestClient(app) as client:
+            yield client
     finally:
-        client.close()
         app.dependency_overrides.clear()
 
 
@@ -297,6 +308,31 @@ def test_consumer_runtime_api_routes_return_json_contracts(
 
 
 def test_unknown_api_route_remains_json_not_found(runtime_edge_client: TestClient) -> None:
+    app = runtime_edge_client.app
+    original_environment = dict(os.environ)
+    original_auth_enabled = auth._auth_enabled
+    original_provider_state = dict(rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE)
+    original_overrides = dict(app.dependency_overrides)
+    original_container = app.state.runtime_container
+
+    with pytest.raises(RuntimeError, match="fixture setup aborted"):
+        with preserve_runtime_test_state(apps=(app,)):
+            os.environ["ADMIN_AUTH_ENABLED"] = "true"
+            auth._auth_enabled = True
+            rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE["APP"] = {
+                "reason": "fixture_probe",
+                "retryAfterMonotonic": float("inf"),
+            }
+            app.dependency_overrides[get_current_user] = lambda: None
+            app.state.runtime_container = object()
+            raise RuntimeError("fixture setup aborted")
+
+    assert dict(os.environ) == original_environment
+    assert auth._auth_enabled is original_auth_enabled
+    assert rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE == original_provider_state
+    assert app.dependency_overrides == original_overrides
+    assert app.state.runtime_container is original_container
+
     response = runtime_edge_client.get("/api/v1/runtime-edge/does-not-exist")
 
     payload = _assert_json_response(response, expected_status=404)
