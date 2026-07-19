@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "manifestVersion": "1.0.0",
   "shadowOnly": true,
-  "capturedOn": "2026-07-19",
+  "capturedOn": "2026-07-20",
   "authoritativeGates": [
     "bash scripts/ci_gate.sh",
     "cd apps/dsa-web && npm test",
@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8142,
-      "sha256": "383fd5b6f7cab1c9a343fb92a50e887ee512f17edc76b7e758fad6f533247745"
+      "count": 7920,
+      "sha256": "2982f2e50544246b6126c6cbc6b822d7130f821901f403149d84c7ba1539228d"
     },
     "tests": [
       {
@@ -8204,81 +8204,6 @@
         "baseline": true
       },
       {
-        "id": "tests/services/test_cross_surface_research_synthesis_engine.py::test_complete_packet_with_multiple_evidence_families_becomes_complete_with_safe_labels",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_cross_surface_research_synthesis_engine.py::test_contradictory_evidence_is_preserved_as_contradiction_not_advice",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_cross_surface_research_synthesis_engine.py::test_input_packet_is_not_mutated",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_cross_surface_research_synthesis_engine.py::test_missing_inputs_fail_closed_to_insufficient_evidence",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_cross_surface_research_synthesis_engine.py::test_raw_diagnostics_and_adversarial_provider_data_are_dropped",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_cross_surface_research_synthesis_engine.py::test_service_imports_stay_inert_and_avoid_provider_runtime_boundaries",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_cross_surface_research_synthesis_engine.py::test_stale_inputs_lower_confidence_and_move_to_stale_evidence",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_data_coverage_quality_matrix.py::test_complete_multi_surface_packet_returns_complete_with_safe_labels",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_data_coverage_quality_matrix.py::test_contradictory_inputs_are_represented_without_advice_language",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_data_coverage_quality_matrix.py::test_input_packet_is_not_mutated",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_data_coverage_quality_matrix.py::test_missing_critical_inputs_returns_insufficient_evidence",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_data_coverage_quality_matrix.py::test_raw_diagnostics_and_adversarial_values_are_dropped",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_data_coverage_quality_matrix.py::test_serialized_output_contains_no_advice_vocabulary",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_data_coverage_quality_matrix.py::test_service_imports_stay_inert",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_data_coverage_quality_matrix.py::test_stale_inputs_are_represented_and_cap_confidence",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
         "id": "tests/services/test_earnings_calendar_readiness_contract.py::test_component_states_separate_calendar_eps_guidance_transcript_and_freshness",
         "domain": "api_schema_contracts",
         "baseline": true
@@ -8444,41 +8369,6 @@
         "baseline": true
       },
       {
-        "id": "tests/services/test_market_regime_divergence_detector.py::test_aligned_packet_returns_aligned_contract",
-        "domain": "market",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_market_regime_divergence_detector.py::test_index_strength_with_weak_breadth_returns_diverging_family",
-        "domain": "market",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_market_regime_divergence_detector.py::test_input_packet_is_not_mutated",
-        "domain": "market",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_market_regime_divergence_detector.py::test_missing_or_stale_inputs_return_insufficient_or_capped_confidence",
-        "domain": "market",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_market_regime_divergence_detector.py::test_no_trade_instruction_vocabulary_in_serialized_output",
-        "domain": "market",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_market_regime_divergence_detector.py::test_raw_provider_debug_request_trace_and_source_ref_data_are_dropped",
-        "domain": "market",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_market_regime_divergence_detector.py::test_theme_leadership_with_weak_participation_returns_diverging_family",
-        "domain": "market",
-        "baseline": true
-      },
-      {
         "id": "tests/services/test_market_scanner_source_provenance_sidecar.py::test_blocked_scanner_context_forces_unavailable_top_down_entries",
         "domain": "scanner",
         "baseline": true
@@ -8609,46 +8499,6 @@
         "baseline": true
       },
       {
-        "id": "tests/services/test_research_narrative_composer.py::test_accepts_research_packet_v1_style_projection_without_raw_projection_fields",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_research_narrative_composer.py::test_composer_module_does_not_import_live_ai_or_data_access_modules",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_research_narrative_composer.py::test_composes_required_sections_from_structured_evidence_packet",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_research_narrative_composer.py::test_filters_advice_and_internal_diagnostic_terms_from_output",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_research_narrative_composer.py::test_same_packet_produces_identical_output_and_markdown_contains_no_json_blob",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_research_narrative_scanner_adapter.py::test_scanner_adapter_does_not_import_live_ai_or_data_access_modules",
-        "domain": "scanner",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_research_narrative_scanner_adapter.py::test_scanner_adapter_redacts_raw_diagnostics_and_advice_terms",
-        "domain": "scanner",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_research_narrative_scanner_adapter.py::test_scanner_candidate_packet_fixture_composes_observation_only_narrative",
-        "domain": "scanner",
-        "baseline": true
-      },
-      {
         "id": "tests/services/test_research_packet_v1.py::test_consumer_projection_redacts_raw_internal_and_advice_vocabulary",
         "domain": "provider_external_network",
         "baseline": true
@@ -8755,21 +8605,6 @@
       },
       {
         "id": "tests/services/test_research_packet_v1_fixtures.py::test_unavailable_citations_are_not_projected_to_consumer_citations",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_research_queue_evidence_provenance_adapter.py::test_adapter_fail_closed_against_advice_and_raw_diagnostic_values",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_research_queue_evidence_provenance_adapter.py::test_adapter_imports_stay_inert",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_research_queue_evidence_provenance_adapter.py::test_adapts_research_queue_items_to_t1708_ledger_without_mutating_input",
         "domain": "provider_external_network",
         "baseline": true
       },
@@ -9061,46 +8896,6 @@
       {
         "id": "tests/services/test_source_provenance_contract.py::test_unknown_source_fails_closed",
         "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_stock_evidence_conflict_detector.py::test_aligned_inputs_return_aligned",
-        "domain": "market",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_stock_evidence_conflict_detector.py::test_input_packet_is_not_mutated",
-        "domain": "market",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_stock_evidence_conflict_detector.py::test_missing_peer_and_compare_inputs_return_insufficient_evidence",
-        "domain": "market",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_stock_evidence_conflict_detector.py::test_peer_diverging_while_symbol_evidence_is_strong_returns_peer_conflict",
-        "domain": "market",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_stock_evidence_conflict_detector.py::test_raw_diagnostics_and_adversarial_values_are_dropped",
-        "domain": "market",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_stock_evidence_conflict_detector.py::test_readiness_weak_with_structure_evidence_returns_readiness_conflict",
-        "domain": "market",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_stock_evidence_conflict_detector.py::test_serialized_output_contains_no_advice_vocabulary",
-        "domain": "market",
-        "baseline": true
-      },
-      {
-        "id": "tests/services/test_stock_evidence_conflict_detector.py::test_stale_inputs_are_represented",
-        "domain": "market",
         "baseline": true
       },
       {
@@ -10376,61 +10171,6 @@
       {
         "id": "tests/test_ai_evidence_cross_engine_contracts.py::test_reason_code_and_quality_flag_regressions_stay_stable_for_incomplete_evidence",
         "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_ai_evidence_dry_run_explanation.py::test_backtest_research_prototype_stays_research_grade_only",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_ai_evidence_dry_run_explanation.py::test_composer_module_does_not_import_live_ai_or_provider_runtime_modules",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_ai_evidence_dry_run_explanation.py::test_invalid_packet_returns_invalid_blocked_output",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_ai_evidence_dry_run_explanation.py::test_options_fail_closed_evidence_blocks_judgment_without_recommendation_language",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_ai_evidence_dry_run_explanation.py::test_output_never_exceeds_policy_confidence_cap",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_ai_evidence_dry_run_explanation.py::test_portfolio_stale_fx_only_supports_risk_observation_wording",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_ai_evidence_dry_run_explanation.py::test_rotation_proxy_only_evidence_stays_cautious_and_never_claims_real_fund_flow",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_ai_evidence_dry_run_explanation.py::test_same_packet_with_same_generated_time_produces_identical_output",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_ai_evidence_dry_run_explanation.py::test_unknown_future_packet_version_degrades_safely",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_ai_evidence_dry_run_explanation.py::test_user_facing_text_never_contains_forbidden_internal_terms",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_ai_evidence_dry_run_explanation.py::test_valid_scanner_packet_produces_deterministic_safe_chinese_summary",
-        "domain": "residual_repository_integration",
         "baseline": true
       },
       {
@@ -11985,71 +11725,6 @@
       },
       {
         "id": "tests/test_autocomplete_pr0.py::TestTaskQueue::test_task_queue_duplicate_detection_with_new_fields",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_backend_metrics_snapshot_service.py::test_adapter_methods_degrade_missing_inputs_to_zero_and_unavailable[from_backtest_support_export_index-backtest_diagnostics_readiness_exports]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_backend_metrics_snapshot_service.py::test_adapter_methods_degrade_missing_inputs_to_zero_and_unavailable[from_market_cache_event_summary-market_cache_diagnostics]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_backend_metrics_snapshot_service.py::test_adapter_methods_degrade_missing_inputs_to_zero_and_unavailable[from_provider_operations_payload-provider_diagnostics]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_backend_metrics_snapshot_service.py::test_adapter_methods_degrade_missing_inputs_to_zero_and_unavailable[from_release_gate_summary-release_gate_foundation_evidence_diagnostics]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_backend_metrics_snapshot_service.py::test_build_snapshot_defaults_missing_groups_to_zero_and_unavailable",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_backend_metrics_snapshot_service.py::test_build_snapshot_keeps_production_metrics_stack_deferred_only",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_backend_metrics_snapshot_service.py::test_build_snapshot_matches_t692_group_contract_shape",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_backend_metrics_snapshot_service.py::test_build_snapshot_normalizes_invalid_counts_without_mutating_inputs",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_backend_metrics_snapshot_service.py::test_from_backtest_support_export_index_maps_available_exports_without_mutating_inputs",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_backend_metrics_snapshot_service.py::test_from_market_cache_event_summary_maps_totals_without_mutating_inputs",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_backend_metrics_snapshot_service.py::test_from_provider_operations_payload_maps_provider_and_cache_counts_without_mutating_inputs",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_backend_metrics_snapshot_service.py::test_from_release_gate_summary_maps_foundation_evidence_statuses_without_mutating_inputs",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_backend_metrics_snapshot_service.py::test_service_module_stays_local_only_and_has_no_live_provider_imports",
         "domain": "residual_repository_integration",
         "baseline": true
       },
@@ -14664,121 +14339,6 @@
         "baseline": true
       },
       {
-        "id": "tests/test_custom_strategy_contracts.py::test_contract_modules_are_inert_and_do_not_import_runtime_domains",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_input_contract_accepts_explicit_read_only_payload",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_input_contract_enforces_max_bars",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_input_contract_exposes_no_runtime_or_secret_handle_fields",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_input_contract_rejects_malicious_source_code_markers[import os\\nos.system(\"echo owned\")\\n-source_code_import_blocked]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_input_contract_rejects_malicious_source_code_markers[path = \"../../etc/passwd\"\\n-source_code_path_traversal_blocked]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_input_contract_rejects_malicious_source_code_markers[result = eval(\"1 + 1\")\\n-source_code_exec_blocked]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_input_contract_rejects_nested_parameter_objects",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_input_contract_rejects_resource_abuse_like_parameter_values",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_input_contract_rejects_unknown_nested_context_and_bar_fields",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_input_contract_rejects_unknown_runtime_like_fields",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_output_contract_accepts_bounded_signals_and_audit_fields",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_output_contract_enforces_max_signals",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_output_contract_exposes_typed_error_records",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_output_contract_rejects_confidence_out_of_bounds",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_output_contract_rejects_invalid_signal_side",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_output_contract_rejects_malformed_signal_and_audit_shapes",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_output_contract_rejects_reason_text_that_is_too_long",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_output_digest_is_stable_sha256_hex",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_payload_size_error_serialization_is_structured_and_deterministic",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_payload_size_guard_rejects_oversized_input_and_output",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_schema_models_can_be_constructed_directly",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_custom_strategy_contracts.py::test_validation_error_serialization_does_not_echo_malicious_source",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
         "id": "tests/test_daily_intelligence_service.py::test_build_briefing_does_not_invent_evidence_links_when_owner_context_is_missing",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -14795,346 +14355,6 @@
       },
       {
         "id": "tests/test_daily_intelligence_service.py::test_thin_consumer_briefing_keeps_research_queue_and_adds_first_run_guidance",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_batch.py::test_batch_module_is_pure_and_only_loads_builder_helpers",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_batch.py::test_batch_output_is_deterministic_for_same_input",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_batch.py::test_missing_review_metadata_builds_fail_closed_row_and_reports_validation_error",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_batch.py::test_options_batch_preserves_order_and_fails_closed_for_metadata_authority_claims",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_batch.py::test_partial_failure_preserves_input_order_and_reports_per_row_errors_without_throwing",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_batch.py::test_raise_on_error_raises_after_collecting_batch_errors",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_batch.py::test_rotation_batch_preserves_caller_order_and_fails_closed_for_missing_reviews",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_batch.py::test_successful_batch_returns_valid_rows_counts_and_inert_guard_posture",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_batch.py::test_unknown_field_fails_closed_as_row_error_without_building_runtime_row",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_batch.py::test_unsafe_degraded_metadata_builds_fail_closed_row_and_reports_validation_error",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_backtest_builder_registry_entry_fails_closed_for_fallback_source",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_builder_module_is_pure_and_only_loads_contract_and_registry_helpers",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_liquidity_builder_lookup_preserves_registry_fields_and_fails_closed_without_explicit_reviews",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_liquidity_degraded_or_unknown_states_cannot_grant_score_decision_authority_or_display[metadata0-degraded_fallback_source-limited]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_liquidity_degraded_or_unknown_states_cannot_grant_score_decision_authority_or_display[metadata1-degraded_stale_source-limited]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_liquidity_degraded_or_unknown_states_cannot_grant_score_decision_authority_or_display[metadata2-degraded_partial_source-limited]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_liquidity_degraded_or_unknown_states_cannot_grant_score_decision_authority_or_display[metadata3-degraded_synthetic_source-unavailable]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_liquidity_degraded_or_unknown_states_cannot_grant_score_decision_authority_or_display[metadata4-degraded_unavailable_source-unavailable]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_liquidity_degraded_or_unknown_states_cannot_grant_score_decision_authority_or_display[metadata5-unknown_freshness-limited]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_market_overview_adoption_helpers_do_not_load_runtime_or_product_semantic_modules",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_market_overview_adoption_proof_builds_fail_closed_row_batch_and_snapshot",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_market_overview_builder_accepts_registry_entry_and_returns_valid_row",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_options_adoption_proof_builds_fail_closed_row_batch_and_snapshot",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_rotation_adoption_proof_preserves_registry_fields_and_fails_closed_without_explicit_reviews",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_scanner_builder_lookup_fails_closed_when_score_posture_is_missing",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_single_stock_adoption_proof_fails_closed_through_row_batch_snapshot[metadata_overrides0-expected_issue_codes0-fresh-unavailable-UNAVAILABLE-UNAVAILABLE-expected_counts0]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_single_stock_adoption_proof_fails_closed_through_row_batch_snapshot[metadata_overrides1-expected_issue_codes1-stale-limited-DELAYED-PARTIAL-expected_counts1]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_single_stock_adoption_proof_fails_closed_through_row_batch_snapshot[metadata_overrides2-expected_issue_codes2-partial-limited-PARTIAL-PARTIAL-expected_counts2]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_single_stock_adoption_proof_fails_closed_through_row_batch_snapshot[metadata_overrides3-expected_issue_codes3-fallback-limited-PAUSED-INSUFFICIENT-expected_counts3]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_single_stock_adoption_proof_fails_closed_through_row_batch_snapshot[metadata_overrides4-expected_issue_codes4-unknown-limited-UPDATING-PARTIAL-expected_counts4]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_unknown_surface_lookup_raises",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_builder.py::test_watchlist_adoption_proof_maps_score_status_context_without_source_authority",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_consumer_projection_examples.py::test_consumer_projection_examples_doc_stays_product_language",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_consumer_projection_examples.py::test_consumer_projection_examples_stay_product_safe[backtest-unavailable]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_consumer_projection_examples.py::test_consumer_projection_examples_stay_product_safe[liquidity-partial]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_consumer_projection_examples.py::test_consumer_projection_examples_stay_product_safe[market-overview-available]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_consumer_projection_examples.py::test_consumer_projection_examples_stay_product_safe[portfolio-delayed]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_consumer_projection_examples.py::test_consumer_projection_examples_stay_product_safe[scanner-insufficient]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_contract.py::test_consumer_projection_uses_only_bounded_product_states_and_safe_copy",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_contract.py::test_contract_projects_required_fields_and_fail_closed_defaults",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_contract.py::test_degraded_or_unknown_states_fail_closed_even_when_raw_payload_claims_full_grants[payload0-limited-PAUSED]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_contract.py::test_degraded_or_unknown_states_fail_closed_even_when_raw_payload_claims_full_grants[payload1-limited-DELAYED]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_contract.py::test_degraded_or_unknown_states_fail_closed_even_when_raw_payload_claims_full_grants[payload2-limited-PARTIAL]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_contract.py::test_degraded_or_unknown_states_fail_closed_even_when_raw_payload_claims_full_grants[payload3-unavailable-INSUFFICIENT]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_contract.py::test_degraded_or_unknown_states_fail_closed_even_when_raw_payload_claims_full_grants[payload4-unavailable-UNAVAILABLE]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_contract.py::test_degraded_or_unknown_states_fail_closed_even_when_raw_payload_claims_full_grants[payload5-limited-UPDATING]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_contract.py::test_explicit_fresh_reviewed_grants_can_project_available_without_inference",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_contract.py::test_module_is_pure_and_inert",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_matrix_contract.py::test_validator_flags_separation_violations",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_fixtures.py::test_market_overview_fixture_builds_fail_closed_matrix_row_and_surface_snapshot",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_fixtures.py::test_options_setup_status_surface_fixture_fails_closed_for_missing_or_degraded_reviews",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_fixtures.py::test_surface_fixture_catalog_covers_every_registered_surface_once",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_fixtures.py::test_surface_fixture_catalog_projects_consumer_safe_fail_closed_states",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_registry.py::test_module_is_pure_and_inert",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_registry.py::test_registry_exports_expected_surfaces_and_known_entry_shape",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_registry.py::test_registry_is_stable_unique_and_immutable",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_registry.py::test_unknown_surface_or_field_lookup_fails_closed",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_snapshot.py::test_backtest_unavailable_row_makes_surface_unavailable",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_snapshot.py::test_invalid_or_empty_rows_fail_closed",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_snapshot.py::test_liquidity_fallback_row_pauses_surface_scoring",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_snapshot.py::test_market_overview_rows_project_available_surface_snapshot",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_snapshot.py::test_options_degraded_rows_aggregate_to_safe_surface_snapshot",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_snapshot.py::test_portfolio_delayed_row_limits_snapshot_without_blocking_display",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_snapshot.py::test_rotation_degraded_rows_aggregate_to_safe_surface_snapshot",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_snapshot.py::test_scanner_insufficient_row_fails_closed_for_surface_snapshot",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_snapshot.py::test_snapshot_consumer_summary_uses_only_bounded_product_state_vocabulary",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_snapshot.py::test_snapshot_helper_module_is_pure_and_inert",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_data_coverage_surface_snapshot.py::test_surface_or_audience_disagreement_fails_closed",
         "domain": "residual_repository_integration",
         "baseline": true
       },
@@ -16114,96 +15334,6 @@
         "baseline": true
       },
       {
-        "id": "tests/test_event_intelligence_contracts.py::test_confidence_and_importance_bounds_are_enforced[-0.01-confidence]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_contracts.py::test_confidence_and_importance_bounds_are_enforced[-0.01-importance_score]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_contracts.py::test_confidence_and_importance_bounds_are_enforced[1.01-confidence]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_contracts.py::test_confidence_and_importance_bounds_are_enforced[1.01-importance_score]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_contracts.py::test_event_at_can_be_future_if_published_at_was_visible_by_as_of",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_contracts.py::test_missing_as_of_is_rejected",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_contracts.py::test_provider_contract_signature_is_stable",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_contracts.py::test_published_at_after_as_of_is_rejected_for_lookahead_bias",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_contracts.py::test_source_type_is_required",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_contracts.py::test_unknown_or_fallback_states_cannot_claim_live_or_fresh[fallback_static-fresh]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_contracts.py::test_unknown_or_fallback_states_cannot_claim_live_or_fresh[fallback_static-live]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_contracts.py::test_unknown_or_fallback_states_cannot_claim_live_or_fresh[synthetic_fixture-fresh]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_contracts.py::test_unknown_or_fallback_states_cannot_claim_live_or_fresh[unknown-live]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_timeline.py::test_aggregate_event_timeline_groups_and_deduplicates_while_preserving_sources",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_timeline.py::test_aggregate_event_timeline_rejects_future_publication_even_from_unvalidated_input",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_timeline.py::test_aggregate_event_timeline_returns_empty_status_for_no_items",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_timeline.py::test_aggregate_event_timeline_sorts_groups_and_entries_deterministically",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_intelligence_timeline.py::test_build_insufficient_event_timeline_returns_requested_reason",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
         "id": "tests/test_event_radar_service.py::test_contract_rejects_forbidden_trading_advice_language",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -16250,41 +15380,6 @@
       },
       {
         "id": "tests/test_event_radar_service.py::test_snapshot_payload_does_not_introduce_generic_news_feed_shape",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_window_service.py::test_event_window_default_summary_is_no_evidence_and_safe",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_window_service.py::test_event_window_output_does_not_leak_internal_diagnostics_or_secrets",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_window_service.py::test_event_window_output_does_not_ship_trading_advice_terms",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_window_service.py::test_related_symbols_and_themes_are_bounded",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_window_service.py::test_safe_event_windows_normalize_correctly",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_window_service.py::test_service_has_no_external_or_provider_imports",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_event_window_service.py::test_unsafe_titles_and_reasons_are_sanitized",
         "domain": "residual_repository_integration",
         "baseline": true
       },
@@ -16866,36 +15961,6 @@
       {
         "id": "tests/test_export_filter.py::test_sanitize_markdown_export_removes_legacy_full_report_advice_phrases",
         "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_factor_experiment_manifest_contract.py::test_changed_inputs_change_experiment_identity_and_output_hash",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_factor_experiment_manifest_contract.py::test_factor_experiment_manifest_import_has_no_scanner_backtest_or_provider_side_effects",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_factor_experiment_manifest_contract.py::test_manifest_export_uses_stable_ordering_for_lists_and_nested_sections",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_factor_experiment_manifest_contract.py::test_manifest_handles_missing_optional_sections_without_fabricating_runtime_state",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_factor_experiment_manifest_contract.py::test_manifest_ids_and_hashes_are_deterministic_for_same_normalized_inputs",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_factor_experiment_manifest_contract.py::test_manifest_strips_raw_provider_and_runtime_payload_like_fields",
-        "domain": "api_schema_contracts",
         "baseline": true
       },
       {
@@ -18489,22 +17554,12 @@
         "baseline": true
       },
       {
-        "id": "tests/test_homepage_contract_aggregate_smoke.py::test_homepage_contract_outputs_are_bounded_json_serializable_and_safe[event_window_service]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
         "id": "tests/test_homepage_contract_aggregate_smoke.py::test_homepage_contract_outputs_are_bounded_json_serializable_and_safe[homepage_capabilities_service]",
         "domain": "api_schema_contracts",
         "baseline": true
       },
       {
         "id": "tests/test_homepage_contract_aggregate_smoke.py::test_homepage_contract_outputs_are_bounded_json_serializable_and_safe[homepage_demo_payload_service]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_homepage_contract_aggregate_smoke.py::test_homepage_contract_outputs_are_bounded_json_serializable_and_safe[homepage_explanation_service]",
         "domain": "api_schema_contracts",
         "baseline": true
       },
@@ -18744,26 +17799,6 @@
         "baseline": true
       },
       {
-        "id": "tests/test_homepage_empty_state_service.py::test_build_contract_returns_stable_top_level_shape_and_modules",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_homepage_empty_state_service.py::test_copy_contract_excludes_advice_diagnostics_and_live_claims",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_homepage_empty_state_service.py::test_copy_contract_uses_bounded_public_chinese_copy",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_homepage_empty_state_service.py::test_schema_rejects_unknown_module_or_unsafe_copy",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
         "id": "tests/test_homepage_event_impact_map_service.py::test_event_impact_map_covers_required_event_examples",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -18834,31 +17869,6 @@
         "baseline": true
       },
       {
-        "id": "tests/test_homepage_explanation_service.py::test_contract_excludes_internal_diagnostics_and_secret_markers",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_homepage_explanation_service.py::test_contract_excludes_trading_advice_terms",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_homepage_explanation_service.py::test_defaults_to_no_evidence_contract",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_homepage_explanation_service.py::test_generates_safe_explanation_from_caller_signal",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_homepage_explanation_service.py::test_unsafe_input_is_sanitized",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
         "id": "tests/test_homepage_geopolitical_commodity_risk_service.py::test_geopolitical_commodity_risk_contract_has_stable_top_level_shape",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -18909,22 +17919,12 @@
         "baseline": true
       },
       {
-        "id": "tests/test_homepage_import_boundary.py::test_homepage_standalone_services_avoid_protected_direct_imports[event_window_service]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
         "id": "tests/test_homepage_import_boundary.py::test_homepage_standalone_services_avoid_protected_direct_imports[homepage_capabilities_service]",
         "domain": "residual_repository_integration",
         "baseline": true
       },
       {
         "id": "tests/test_homepage_import_boundary.py::test_homepage_standalone_services_avoid_protected_direct_imports[homepage_demo_payload_service]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_homepage_import_boundary.py::test_homepage_standalone_services_avoid_protected_direct_imports[homepage_explanation_service]",
         "domain": "residual_repository_integration",
         "baseline": true
       },
@@ -19244,11 +18244,6 @@
         "baseline": true
       },
       {
-        "id": "tests/test_homepage_public_copy_consistency.py::test_serialized_public_homepage_outputs_do_not_leak_internal_or_execution_copy[homepage_empty_state_service.build_contract]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
         "id": "tests/test_homepage_public_copy_consistency.py::test_serialized_public_homepage_outputs_do_not_leak_internal_or_execution_copy[homepage_intelligence_service.build_bundle]",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -19445,11 +18440,6 @@
       },
       {
         "id": "tests/test_homepage_schema_serialization_stress.py::test_homepage_public_contracts_serialize_to_json_without_leaking_internal_or_trading_copy[HomepageEarningsCatalystsService.build_snapshot]",
-        "domain": "api_schema_contracts",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_homepage_schema_serialization_stress.py::test_homepage_public_contracts_serialize_to_json_without_leaking_internal_or_trading_copy[HomepageEmptyStateService.build_contract]",
         "domain": "api_schema_contracts",
         "baseline": true
       },
@@ -25494,21 +24484,6 @@
         "baseline": true
       },
       {
-        "id": "tests/test_multi_agent.py::TestPortfolioAgentPostProcess::test_parse_failure_returns_hold",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_multi_agent.py::TestPortfolioAgentPostProcess::test_parse_markdown_json",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_multi_agent.py::TestPortfolioAgentPostProcess::test_parse_plain_json",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
         "id": "tests/test_multi_agent.py::TestRiskOverride::test_risk_override_normalizes_strong_buy_before_veto",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -27820,11 +26795,6 @@
       },
       {
         "id": "tests/test_options_event_calendar_authority.py::test_event_count_type_and_coverage_without_internal_policy_stay_observation_only",
-        "domain": "auth_security",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_options_event_calendar_authority.py::test_event_intelligence_timeline_payload_stays_non_authoritative_observation_only",
         "domain": "auth_security",
         "baseline": true
       },
@@ -32824,11 +31794,6 @@
         "baseline": true
       },
       {
-        "id": "tests/test_pure_helper_import_boundaries.py::test_alert_local_preview_guard_tests_do_not_import_protected_runtime_domains[tests/test_user_alert_dry_run_summary.py]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
         "id": "tests/test_pure_helper_import_boundaries.py::test_alert_local_preview_guard_tests_do_not_import_protected_runtime_domains[tests/test_user_alert_evaluation.py]",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -32840,16 +31805,6 @@
       },
       {
         "id": "tests/test_pure_helper_import_boundaries.py::test_pure_helper_modules_do_not_import_protected_runtime_domains[data_coverage_matrix_batch]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_pure_helper_import_boundaries.py::test_pure_helper_modules_do_not_import_protected_runtime_domains[data_coverage_matrix_builder]",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_pure_helper_import_boundaries.py::test_pure_helper_modules_do_not_import_protected_runtime_domains[data_coverage_matrix_contract]",
         "domain": "residual_repository_integration",
         "baseline": true
       },
@@ -34295,51 +33250,6 @@
       },
       {
         "id": "tests/test_research_budget_profiles.py::test_standard_and_deep_profiles_keep_optional_enrichment_budgeted_but_distinct",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_research_checklist_composer.py::test_composer_accepts_string_gaps_and_deduplicates_stable_ids",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_research_checklist_composer.py::test_composer_does_not_mutate_inputs",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_research_checklist_composer.py::test_composer_excludes_advice_and_raw_diagnostic_terms_from_output",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_research_checklist_composer.py::test_composer_returns_empty_checklist_for_missing_gaps",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_research_checklist_composer.py::test_composes_research_checklist_from_evidence_gaps",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_research_gap_prioritizer.py::test_collects_overlay_and_symbol_packet_gaps_without_mutating_input",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_research_gap_prioritizer.py::test_nested_reason_families_project_to_safe_gap_labels",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_research_gap_prioritizer.py::test_prioritizes_blocking_source_gaps_before_stale_context_gaps",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_research_gap_prioritizer.py::test_unknown_internal_codes_and_advice_like_text_are_redacted_to_safe_copy",
         "domain": "provider_external_network",
         "baseline": true
       },
@@ -39949,26 +38859,6 @@
         "baseline": true
       },
       {
-        "id": "tests/test_user_alert_dry_run_summary.py::test_helper_has_no_protected_runtime_imports",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_user_alert_dry_run_summary.py::test_history_like_local_preview_rollup_stays_no_send_review_only",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_user_alert_dry_run_summary.py::test_live_outbound_flags_fail_closed_without_relabeling_as_observed",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_user_alert_dry_run_summary.py::test_summary_counts_are_deterministic_and_sanitized",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
         "id": "tests/test_user_alert_evaluation.py::UserAlertEvaluationTestCase::test_condition_not_observed_when_threshold_not_met",
         "domain": "runtime_operator_tooling",
         "baseline": true
@@ -40819,12 +39709,230 @@
       "tests/scripts/test_uat_runtime_harness.py::test_frontend_dependency_bootstrap_runs_npm_ci_when_required",
       "tests/scripts/test_uat_runtime_harness.py::test_frontend_dependency_bootstrap_skips_when_toolchain_usable",
       "tests/scripts/test_uat_runtime_harness.py::test_run_harness_fails_when_dependency_bootstrap_fails",
+      "tests/services/test_cross_surface_research_synthesis_engine.py::test_complete_packet_with_multiple_evidence_families_becomes_complete_with_safe_labels",
+      "tests/services/test_cross_surface_research_synthesis_engine.py::test_contradictory_evidence_is_preserved_as_contradiction_not_advice",
+      "tests/services/test_cross_surface_research_synthesis_engine.py::test_input_packet_is_not_mutated",
+      "tests/services/test_cross_surface_research_synthesis_engine.py::test_missing_inputs_fail_closed_to_insufficient_evidence",
+      "tests/services/test_cross_surface_research_synthesis_engine.py::test_raw_diagnostics_and_adversarial_provider_data_are_dropped",
+      "tests/services/test_cross_surface_research_synthesis_engine.py::test_service_imports_stay_inert_and_avoid_provider_runtime_boundaries",
+      "tests/services/test_cross_surface_research_synthesis_engine.py::test_stale_inputs_lower_confidence_and_move_to_stale_evidence",
+      "tests/services/test_data_coverage_quality_matrix.py::test_complete_multi_surface_packet_returns_complete_with_safe_labels",
+      "tests/services/test_data_coverage_quality_matrix.py::test_contradictory_inputs_are_represented_without_advice_language",
+      "tests/services/test_data_coverage_quality_matrix.py::test_input_packet_is_not_mutated",
+      "tests/services/test_data_coverage_quality_matrix.py::test_missing_critical_inputs_returns_insufficient_evidence",
+      "tests/services/test_data_coverage_quality_matrix.py::test_raw_diagnostics_and_adversarial_values_are_dropped",
+      "tests/services/test_data_coverage_quality_matrix.py::test_serialized_output_contains_no_advice_vocabulary",
+      "tests/services/test_data_coverage_quality_matrix.py::test_service_imports_stay_inert",
+      "tests/services/test_data_coverage_quality_matrix.py::test_stale_inputs_are_represented_and_cap_confidence",
+      "tests/services/test_market_regime_divergence_detector.py::test_aligned_packet_returns_aligned_contract",
+      "tests/services/test_market_regime_divergence_detector.py::test_index_strength_with_weak_breadth_returns_diverging_family",
+      "tests/services/test_market_regime_divergence_detector.py::test_input_packet_is_not_mutated",
+      "tests/services/test_market_regime_divergence_detector.py::test_missing_or_stale_inputs_return_insufficient_or_capped_confidence",
+      "tests/services/test_market_regime_divergence_detector.py::test_no_trade_instruction_vocabulary_in_serialized_output",
+      "tests/services/test_market_regime_divergence_detector.py::test_raw_provider_debug_request_trace_and_source_ref_data_are_dropped",
+      "tests/services/test_market_regime_divergence_detector.py::test_theme_leadership_with_weak_participation_returns_diverging_family",
+      "tests/services/test_research_narrative_composer.py::test_accepts_research_packet_v1_style_projection_without_raw_projection_fields",
+      "tests/services/test_research_narrative_composer.py::test_composer_module_does_not_import_live_ai_or_data_access_modules",
+      "tests/services/test_research_narrative_composer.py::test_composes_required_sections_from_structured_evidence_packet",
+      "tests/services/test_research_narrative_composer.py::test_filters_advice_and_internal_diagnostic_terms_from_output",
+      "tests/services/test_research_narrative_composer.py::test_same_packet_produces_identical_output_and_markdown_contains_no_json_blob",
+      "tests/services/test_research_narrative_scanner_adapter.py::test_scanner_adapter_does_not_import_live_ai_or_data_access_modules",
+      "tests/services/test_research_narrative_scanner_adapter.py::test_scanner_adapter_redacts_raw_diagnostics_and_advice_terms",
+      "tests/services/test_research_narrative_scanner_adapter.py::test_scanner_candidate_packet_fixture_composes_observation_only_narrative",
+      "tests/services/test_research_queue_evidence_provenance_adapter.py::test_adapter_fail_closed_against_advice_and_raw_diagnostic_values",
+      "tests/services/test_research_queue_evidence_provenance_adapter.py::test_adapter_imports_stay_inert",
+      "tests/services/test_research_queue_evidence_provenance_adapter.py::test_adapts_research_queue_items_to_t1708_ledger_without_mutating_input",
+      "tests/services/test_stock_evidence_conflict_detector.py::test_aligned_inputs_return_aligned",
+      "tests/services/test_stock_evidence_conflict_detector.py::test_input_packet_is_not_mutated",
+      "tests/services/test_stock_evidence_conflict_detector.py::test_missing_peer_and_compare_inputs_return_insufficient_evidence",
+      "tests/services/test_stock_evidence_conflict_detector.py::test_peer_diverging_while_symbol_evidence_is_strong_returns_peer_conflict",
+      "tests/services/test_stock_evidence_conflict_detector.py::test_raw_diagnostics_and_adversarial_values_are_dropped",
+      "tests/services/test_stock_evidence_conflict_detector.py::test_readiness_weak_with_structure_evidence_returns_readiness_conflict",
+      "tests/services/test_stock_evidence_conflict_detector.py::test_serialized_output_contains_no_advice_vocabulary",
+      "tests/services/test_stock_evidence_conflict_detector.py::test_stale_inputs_are_represented",
       "tests/test_agent_pipeline.py::TestAgentFactorySkillBaseline::test_explicit_empty_request_falls_back_to_primary_default_skill",
+      "tests/test_ai_evidence_dry_run_explanation.py::test_backtest_research_prototype_stays_research_grade_only",
+      "tests/test_ai_evidence_dry_run_explanation.py::test_composer_module_does_not_import_live_ai_or_provider_runtime_modules",
+      "tests/test_ai_evidence_dry_run_explanation.py::test_invalid_packet_returns_invalid_blocked_output",
+      "tests/test_ai_evidence_dry_run_explanation.py::test_options_fail_closed_evidence_blocks_judgment_without_recommendation_language",
+      "tests/test_ai_evidence_dry_run_explanation.py::test_output_never_exceeds_policy_confidence_cap",
+      "tests/test_ai_evidence_dry_run_explanation.py::test_portfolio_stale_fx_only_supports_risk_observation_wording",
+      "tests/test_ai_evidence_dry_run_explanation.py::test_rotation_proxy_only_evidence_stays_cautious_and_never_claims_real_fund_flow",
+      "tests/test_ai_evidence_dry_run_explanation.py::test_same_packet_with_same_generated_time_produces_identical_output",
+      "tests/test_ai_evidence_dry_run_explanation.py::test_unknown_future_packet_version_degrades_safely",
+      "tests/test_ai_evidence_dry_run_explanation.py::test_user_facing_text_never_contains_forbidden_internal_terms",
+      "tests/test_ai_evidence_dry_run_explanation.py::test_valid_scanner_packet_produces_deterministic_safe_chinese_summary",
       "tests/test_auth_api.py::AuthApiTestCase::test_logout_requires_session_when_auth_enabled",
+      "tests/test_backend_metrics_snapshot_service.py::test_adapter_methods_degrade_missing_inputs_to_zero_and_unavailable[from_backtest_support_export_index-backtest_diagnostics_readiness_exports]",
+      "tests/test_backend_metrics_snapshot_service.py::test_adapter_methods_degrade_missing_inputs_to_zero_and_unavailable[from_market_cache_event_summary-market_cache_diagnostics]",
+      "tests/test_backend_metrics_snapshot_service.py::test_adapter_methods_degrade_missing_inputs_to_zero_and_unavailable[from_provider_operations_payload-provider_diagnostics]",
+      "tests/test_backend_metrics_snapshot_service.py::test_adapter_methods_degrade_missing_inputs_to_zero_and_unavailable[from_release_gate_summary-release_gate_foundation_evidence_diagnostics]",
+      "tests/test_backend_metrics_snapshot_service.py::test_build_snapshot_defaults_missing_groups_to_zero_and_unavailable",
+      "tests/test_backend_metrics_snapshot_service.py::test_build_snapshot_keeps_production_metrics_stack_deferred_only",
+      "tests/test_backend_metrics_snapshot_service.py::test_build_snapshot_matches_t692_group_contract_shape",
+      "tests/test_backend_metrics_snapshot_service.py::test_build_snapshot_normalizes_invalid_counts_without_mutating_inputs",
+      "tests/test_backend_metrics_snapshot_service.py::test_from_backtest_support_export_index_maps_available_exports_without_mutating_inputs",
+      "tests/test_backend_metrics_snapshot_service.py::test_from_market_cache_event_summary_maps_totals_without_mutating_inputs",
+      "tests/test_backend_metrics_snapshot_service.py::test_from_provider_operations_payload_maps_provider_and_cache_counts_without_mutating_inputs",
+      "tests/test_backend_metrics_snapshot_service.py::test_from_release_gate_summary_maps_foundation_evidence_statuses_without_mutating_inputs",
+      "tests/test_backend_metrics_snapshot_service.py::test_service_module_stays_local_only_and_has_no_live_provider_imports",
       "tests/test_backtest_execution_model_registry.py::test_registry_exposes_v1_as_current_default_supported_model",
+      "tests/test_custom_strategy_contracts.py::test_contract_modules_are_inert_and_do_not_import_runtime_domains",
+      "tests/test_custom_strategy_contracts.py::test_input_contract_accepts_explicit_read_only_payload",
+      "tests/test_custom_strategy_contracts.py::test_input_contract_enforces_max_bars",
+      "tests/test_custom_strategy_contracts.py::test_input_contract_exposes_no_runtime_or_secret_handle_fields",
+      "tests/test_custom_strategy_contracts.py::test_input_contract_rejects_malicious_source_code_markers[import os\\nos.system(\"echo owned\")\\n-source_code_import_blocked]",
+      "tests/test_custom_strategy_contracts.py::test_input_contract_rejects_malicious_source_code_markers[path = \"../../etc/passwd\"\\n-source_code_path_traversal_blocked]",
+      "tests/test_custom_strategy_contracts.py::test_input_contract_rejects_malicious_source_code_markers[result = eval(\"1 + 1\")\\n-source_code_exec_blocked]",
+      "tests/test_custom_strategy_contracts.py::test_input_contract_rejects_nested_parameter_objects",
+      "tests/test_custom_strategy_contracts.py::test_input_contract_rejects_resource_abuse_like_parameter_values",
+      "tests/test_custom_strategy_contracts.py::test_input_contract_rejects_unknown_nested_context_and_bar_fields",
+      "tests/test_custom_strategy_contracts.py::test_input_contract_rejects_unknown_runtime_like_fields",
+      "tests/test_custom_strategy_contracts.py::test_output_contract_accepts_bounded_signals_and_audit_fields",
+      "tests/test_custom_strategy_contracts.py::test_output_contract_enforces_max_signals",
+      "tests/test_custom_strategy_contracts.py::test_output_contract_exposes_typed_error_records",
+      "tests/test_custom_strategy_contracts.py::test_output_contract_rejects_confidence_out_of_bounds",
+      "tests/test_custom_strategy_contracts.py::test_output_contract_rejects_invalid_signal_side",
+      "tests/test_custom_strategy_contracts.py::test_output_contract_rejects_malformed_signal_and_audit_shapes",
+      "tests/test_custom_strategy_contracts.py::test_output_contract_rejects_reason_text_that_is_too_long",
+      "tests/test_custom_strategy_contracts.py::test_output_digest_is_stable_sha256_hex",
+      "tests/test_custom_strategy_contracts.py::test_payload_size_error_serialization_is_structured_and_deterministic",
+      "tests/test_custom_strategy_contracts.py::test_payload_size_guard_rejects_oversized_input_and_output",
+      "tests/test_custom_strategy_contracts.py::test_schema_models_can_be_constructed_directly",
+      "tests/test_custom_strategy_contracts.py::test_validation_error_serialization_does_not_echo_malicious_source",
+      "tests/test_data_coverage_matrix_batch.py::test_batch_module_is_pure_and_only_loads_builder_helpers",
+      "tests/test_data_coverage_matrix_batch.py::test_batch_output_is_deterministic_for_same_input",
+      "tests/test_data_coverage_matrix_batch.py::test_missing_review_metadata_builds_fail_closed_row_and_reports_validation_error",
+      "tests/test_data_coverage_matrix_batch.py::test_options_batch_preserves_order_and_fails_closed_for_metadata_authority_claims",
+      "tests/test_data_coverage_matrix_batch.py::test_partial_failure_preserves_input_order_and_reports_per_row_errors_without_throwing",
+      "tests/test_data_coverage_matrix_batch.py::test_raise_on_error_raises_after_collecting_batch_errors",
+      "tests/test_data_coverage_matrix_batch.py::test_rotation_batch_preserves_caller_order_and_fails_closed_for_missing_reviews",
+      "tests/test_data_coverage_matrix_batch.py::test_successful_batch_returns_valid_rows_counts_and_inert_guard_posture",
+      "tests/test_data_coverage_matrix_batch.py::test_unknown_field_fails_closed_as_row_error_without_building_runtime_row",
+      "tests/test_data_coverage_matrix_batch.py::test_unsafe_degraded_metadata_builds_fail_closed_row_and_reports_validation_error",
+      "tests/test_data_coverage_matrix_builder.py::test_backtest_builder_registry_entry_fails_closed_for_fallback_source",
+      "tests/test_data_coverage_matrix_builder.py::test_builder_module_is_pure_and_only_loads_contract_and_registry_helpers",
+      "tests/test_data_coverage_matrix_builder.py::test_liquidity_builder_lookup_preserves_registry_fields_and_fails_closed_without_explicit_reviews",
+      "tests/test_data_coverage_matrix_builder.py::test_liquidity_degraded_or_unknown_states_cannot_grant_score_decision_authority_or_display[metadata0-degraded_fallback_source-limited]",
+      "tests/test_data_coverage_matrix_builder.py::test_liquidity_degraded_or_unknown_states_cannot_grant_score_decision_authority_or_display[metadata1-degraded_stale_source-limited]",
+      "tests/test_data_coverage_matrix_builder.py::test_liquidity_degraded_or_unknown_states_cannot_grant_score_decision_authority_or_display[metadata2-degraded_partial_source-limited]",
+      "tests/test_data_coverage_matrix_builder.py::test_liquidity_degraded_or_unknown_states_cannot_grant_score_decision_authority_or_display[metadata3-degraded_synthetic_source-unavailable]",
+      "tests/test_data_coverage_matrix_builder.py::test_liquidity_degraded_or_unknown_states_cannot_grant_score_decision_authority_or_display[metadata4-degraded_unavailable_source-unavailable]",
+      "tests/test_data_coverage_matrix_builder.py::test_liquidity_degraded_or_unknown_states_cannot_grant_score_decision_authority_or_display[metadata5-unknown_freshness-limited]",
+      "tests/test_data_coverage_matrix_builder.py::test_market_overview_adoption_helpers_do_not_load_runtime_or_product_semantic_modules",
+      "tests/test_data_coverage_matrix_builder.py::test_market_overview_adoption_proof_builds_fail_closed_row_batch_and_snapshot",
+      "tests/test_data_coverage_matrix_builder.py::test_market_overview_builder_accepts_registry_entry_and_returns_valid_row",
+      "tests/test_data_coverage_matrix_builder.py::test_options_adoption_proof_builds_fail_closed_row_batch_and_snapshot",
+      "tests/test_data_coverage_matrix_builder.py::test_rotation_adoption_proof_preserves_registry_fields_and_fails_closed_without_explicit_reviews",
+      "tests/test_data_coverage_matrix_builder.py::test_scanner_builder_lookup_fails_closed_when_score_posture_is_missing",
+      "tests/test_data_coverage_matrix_builder.py::test_single_stock_adoption_proof_fails_closed_through_row_batch_snapshot[metadata_overrides0-expected_issue_codes0-fresh-unavailable-UNAVAILABLE-UNAVAILABLE-expected_counts0]",
+      "tests/test_data_coverage_matrix_builder.py::test_single_stock_adoption_proof_fails_closed_through_row_batch_snapshot[metadata_overrides1-expected_issue_codes1-stale-limited-DELAYED-PARTIAL-expected_counts1]",
+      "tests/test_data_coverage_matrix_builder.py::test_single_stock_adoption_proof_fails_closed_through_row_batch_snapshot[metadata_overrides2-expected_issue_codes2-partial-limited-PARTIAL-PARTIAL-expected_counts2]",
+      "tests/test_data_coverage_matrix_builder.py::test_single_stock_adoption_proof_fails_closed_through_row_batch_snapshot[metadata_overrides3-expected_issue_codes3-fallback-limited-PAUSED-INSUFFICIENT-expected_counts3]",
+      "tests/test_data_coverage_matrix_builder.py::test_single_stock_adoption_proof_fails_closed_through_row_batch_snapshot[metadata_overrides4-expected_issue_codes4-unknown-limited-UPDATING-PARTIAL-expected_counts4]",
+      "tests/test_data_coverage_matrix_builder.py::test_unknown_surface_lookup_raises",
+      "tests/test_data_coverage_matrix_builder.py::test_watchlist_adoption_proof_maps_score_status_context_without_source_authority",
+      "tests/test_data_coverage_matrix_consumer_projection_examples.py::test_consumer_projection_examples_doc_stays_product_language",
+      "tests/test_data_coverage_matrix_consumer_projection_examples.py::test_consumer_projection_examples_stay_product_safe[backtest-unavailable]",
+      "tests/test_data_coverage_matrix_consumer_projection_examples.py::test_consumer_projection_examples_stay_product_safe[liquidity-partial]",
+      "tests/test_data_coverage_matrix_consumer_projection_examples.py::test_consumer_projection_examples_stay_product_safe[market-overview-available]",
+      "tests/test_data_coverage_matrix_consumer_projection_examples.py::test_consumer_projection_examples_stay_product_safe[portfolio-delayed]",
+      "tests/test_data_coverage_matrix_consumer_projection_examples.py::test_consumer_projection_examples_stay_product_safe[scanner-insufficient]",
+      "tests/test_data_coverage_matrix_contract.py::test_consumer_projection_uses_only_bounded_product_states_and_safe_copy",
+      "tests/test_data_coverage_matrix_contract.py::test_contract_projects_required_fields_and_fail_closed_defaults",
+      "tests/test_data_coverage_matrix_contract.py::test_degraded_or_unknown_states_fail_closed_even_when_raw_payload_claims_full_grants[payload0-limited-PAUSED]",
+      "tests/test_data_coverage_matrix_contract.py::test_degraded_or_unknown_states_fail_closed_even_when_raw_payload_claims_full_grants[payload1-limited-DELAYED]",
+      "tests/test_data_coverage_matrix_contract.py::test_degraded_or_unknown_states_fail_closed_even_when_raw_payload_claims_full_grants[payload2-limited-PARTIAL]",
+      "tests/test_data_coverage_matrix_contract.py::test_degraded_or_unknown_states_fail_closed_even_when_raw_payload_claims_full_grants[payload3-unavailable-INSUFFICIENT]",
+      "tests/test_data_coverage_matrix_contract.py::test_degraded_or_unknown_states_fail_closed_even_when_raw_payload_claims_full_grants[payload4-unavailable-UNAVAILABLE]",
+      "tests/test_data_coverage_matrix_contract.py::test_degraded_or_unknown_states_fail_closed_even_when_raw_payload_claims_full_grants[payload5-limited-UPDATING]",
+      "tests/test_data_coverage_matrix_contract.py::test_explicit_fresh_reviewed_grants_can_project_available_without_inference",
+      "tests/test_data_coverage_matrix_contract.py::test_module_is_pure_and_inert",
+      "tests/test_data_coverage_matrix_contract.py::test_validator_flags_separation_violations",
+      "tests/test_data_coverage_surface_fixtures.py::test_market_overview_fixture_builds_fail_closed_matrix_row_and_surface_snapshot",
+      "tests/test_data_coverage_surface_fixtures.py::test_options_setup_status_surface_fixture_fails_closed_for_missing_or_degraded_reviews",
+      "tests/test_data_coverage_surface_fixtures.py::test_surface_fixture_catalog_covers_every_registered_surface_once",
+      "tests/test_data_coverage_surface_fixtures.py::test_surface_fixture_catalog_projects_consumer_safe_fail_closed_states",
       "tests/test_data_coverage_surface_fixtures.py::test_surface_fixture_doc_matches_catalog_and_stays_consumer_safe",
+      "tests/test_data_coverage_surface_registry.py::test_module_is_pure_and_inert",
+      "tests/test_data_coverage_surface_registry.py::test_registry_exports_expected_surfaces_and_known_entry_shape",
+      "tests/test_data_coverage_surface_registry.py::test_registry_is_stable_unique_and_immutable",
+      "tests/test_data_coverage_surface_registry.py::test_unknown_surface_or_field_lookup_fails_closed",
+      "tests/test_data_coverage_surface_snapshot.py::test_backtest_unavailable_row_makes_surface_unavailable",
+      "tests/test_data_coverage_surface_snapshot.py::test_invalid_or_empty_rows_fail_closed",
+      "tests/test_data_coverage_surface_snapshot.py::test_liquidity_fallback_row_pauses_surface_scoring",
+      "tests/test_data_coverage_surface_snapshot.py::test_market_overview_rows_project_available_surface_snapshot",
+      "tests/test_data_coverage_surface_snapshot.py::test_options_degraded_rows_aggregate_to_safe_surface_snapshot",
+      "tests/test_data_coverage_surface_snapshot.py::test_portfolio_delayed_row_limits_snapshot_without_blocking_display",
+      "tests/test_data_coverage_surface_snapshot.py::test_rotation_degraded_rows_aggregate_to_safe_surface_snapshot",
+      "tests/test_data_coverage_surface_snapshot.py::test_scanner_insufficient_row_fails_closed_for_surface_snapshot",
+      "tests/test_data_coverage_surface_snapshot.py::test_snapshot_consumer_summary_uses_only_bounded_product_state_vocabulary",
+      "tests/test_data_coverage_surface_snapshot.py::test_snapshot_helper_module_is_pure_and_inert",
+      "tests/test_data_coverage_surface_snapshot.py::test_surface_or_audience_disagreement_fails_closed",
+      "tests/test_event_intelligence_contracts.py::test_confidence_and_importance_bounds_are_enforced[-0.01-confidence]",
+      "tests/test_event_intelligence_contracts.py::test_confidence_and_importance_bounds_are_enforced[-0.01-importance_score]",
+      "tests/test_event_intelligence_contracts.py::test_confidence_and_importance_bounds_are_enforced[1.01-confidence]",
+      "tests/test_event_intelligence_contracts.py::test_confidence_and_importance_bounds_are_enforced[1.01-importance_score]",
+      "tests/test_event_intelligence_contracts.py::test_event_at_can_be_future_if_published_at_was_visible_by_as_of",
+      "tests/test_event_intelligence_contracts.py::test_missing_as_of_is_rejected",
+      "tests/test_event_intelligence_contracts.py::test_provider_contract_signature_is_stable",
+      "tests/test_event_intelligence_contracts.py::test_published_at_after_as_of_is_rejected_for_lookahead_bias",
+      "tests/test_event_intelligence_contracts.py::test_source_type_is_required",
+      "tests/test_event_intelligence_contracts.py::test_unknown_or_fallback_states_cannot_claim_live_or_fresh[fallback_static-fresh]",
+      "tests/test_event_intelligence_contracts.py::test_unknown_or_fallback_states_cannot_claim_live_or_fresh[fallback_static-live]",
+      "tests/test_event_intelligence_contracts.py::test_unknown_or_fallback_states_cannot_claim_live_or_fresh[synthetic_fixture-fresh]",
+      "tests/test_event_intelligence_contracts.py::test_unknown_or_fallback_states_cannot_claim_live_or_fresh[unknown-live]",
+      "tests/test_event_intelligence_timeline.py::test_aggregate_event_timeline_groups_and_deduplicates_while_preserving_sources",
+      "tests/test_event_intelligence_timeline.py::test_aggregate_event_timeline_rejects_future_publication_even_from_unvalidated_input",
+      "tests/test_event_intelligence_timeline.py::test_aggregate_event_timeline_returns_empty_status_for_no_items",
+      "tests/test_event_intelligence_timeline.py::test_aggregate_event_timeline_sorts_groups_and_entries_deterministically",
+      "tests/test_event_intelligence_timeline.py::test_build_insufficient_event_timeline_returns_requested_reason",
+      "tests/test_event_window_service.py::test_event_window_default_summary_is_no_evidence_and_safe",
+      "tests/test_event_window_service.py::test_event_window_output_does_not_leak_internal_diagnostics_or_secrets",
+      "tests/test_event_window_service.py::test_event_window_output_does_not_ship_trading_advice_terms",
+      "tests/test_event_window_service.py::test_related_symbols_and_themes_are_bounded",
+      "tests/test_event_window_service.py::test_safe_event_windows_normalize_correctly",
+      "tests/test_event_window_service.py::test_service_has_no_external_or_provider_imports",
+      "tests/test_event_window_service.py::test_unsafe_titles_and_reasons_are_sanitized",
+      "tests/test_factor_experiment_manifest_contract.py::test_changed_inputs_change_experiment_identity_and_output_hash",
+      "tests/test_factor_experiment_manifest_contract.py::test_factor_experiment_manifest_import_has_no_scanner_backtest_or_provider_side_effects",
+      "tests/test_factor_experiment_manifest_contract.py::test_manifest_export_uses_stable_ordering_for_lists_and_nested_sections",
+      "tests/test_factor_experiment_manifest_contract.py::test_manifest_handles_missing_optional_sections_without_fabricating_runtime_state",
+      "tests/test_factor_experiment_manifest_contract.py::test_manifest_ids_and_hashes_are_deterministic_for_same_normalized_inputs",
+      "tests/test_factor_experiment_manifest_contract.py::test_manifest_strips_raw_provider_and_runtime_payload_like_fields",
+      "tests/test_homepage_contract_aggregate_smoke.py::test_homepage_contract_outputs_are_bounded_json_serializable_and_safe[event_window_service]",
+      "tests/test_homepage_contract_aggregate_smoke.py::test_homepage_contract_outputs_are_bounded_json_serializable_and_safe[homepage_explanation_service]",
+      "tests/test_homepage_empty_state_service.py::test_build_contract_returns_stable_top_level_shape_and_modules",
+      "tests/test_homepage_empty_state_service.py::test_copy_contract_excludes_advice_diagnostics_and_live_claims",
+      "tests/test_homepage_empty_state_service.py::test_copy_contract_uses_bounded_public_chinese_copy",
+      "tests/test_homepage_empty_state_service.py::test_schema_rejects_unknown_module_or_unsafe_copy",
+      "tests/test_homepage_explanation_service.py::test_contract_excludes_internal_diagnostics_and_secret_markers",
+      "tests/test_homepage_explanation_service.py::test_contract_excludes_trading_advice_terms",
+      "tests/test_homepage_explanation_service.py::test_defaults_to_no_evidence_contract",
+      "tests/test_homepage_explanation_service.py::test_generates_safe_explanation_from_caller_signal",
+      "tests/test_homepage_explanation_service.py::test_unsafe_input_is_sanitized",
+      "tests/test_homepage_import_boundary.py::test_homepage_standalone_services_avoid_protected_direct_imports[event_window_service]",
+      "tests/test_homepage_import_boundary.py::test_homepage_standalone_services_avoid_protected_direct_imports[homepage_explanation_service]",
+      "tests/test_homepage_public_copy_consistency.py::test_serialized_public_homepage_outputs_do_not_leak_internal_or_execution_copy[homepage_empty_state_service.build_contract]",
+      "tests/test_homepage_schema_serialization_stress.py::test_homepage_public_contracts_serialize_to_json_without_leaking_internal_or_trading_copy[HomepageEmptyStateService.build_contract]",
       "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_main_returns_zero_when_probe_times_out",
       "tests/test_market_intelligence_smoke_checklist.py::test_market_intelligence_checklist_captures_scope_and_validation_commands",
+      "tests/test_multi_agent.py::TestPortfolioAgentPostProcess::test_parse_failure_returns_hold",
+      "tests/test_multi_agent.py::TestPortfolioAgentPostProcess::test_parse_markdown_json",
+      "tests/test_multi_agent.py::TestPortfolioAgentPostProcess::test_parse_plain_json",
+      "tests/test_options_event_calendar_authority.py::test_event_intelligence_timeline_payload_stays_non_authoritative_observation_only",
+      "tests/test_pure_helper_import_boundaries.py::test_alert_local_preview_guard_tests_do_not_import_protected_runtime_domains[tests/test_user_alert_dry_run_summary.py]",
+      "tests/test_pure_helper_import_boundaries.py::test_pure_helper_modules_do_not_import_protected_runtime_domains[data_coverage_matrix_builder]",
+      "tests/test_pure_helper_import_boundaries.py::test_pure_helper_modules_do_not_import_protected_runtime_domains[data_coverage_matrix_contract]",
+      "tests/test_research_checklist_composer.py::test_composer_accepts_string_gaps_and_deduplicates_stable_ids",
+      "tests/test_research_checklist_composer.py::test_composer_does_not_mutate_inputs",
+      "tests/test_research_checklist_composer.py::test_composer_excludes_advice_and_raw_diagnostic_terms_from_output",
+      "tests/test_research_checklist_composer.py::test_composer_returns_empty_checklist_for_missing_gaps",
+      "tests/test_research_checklist_composer.py::test_composes_research_checklist_from_evidence_gaps",
+      "tests/test_research_gap_prioritizer.py::test_collects_overlay_and_symbol_packet_gaps_without_mutating_input",
+      "tests/test_research_gap_prioritizer.py::test_nested_reason_families_project_to_safe_gap_labels",
+      "tests/test_research_gap_prioritizer.py::test_prioritizes_blocking_source_gaps_before_stale_context_gaps",
+      "tests/test_research_gap_prioritizer.py::test_unknown_internal_codes_and_advice_like_text_are_redacted_to_safe_copy",
       "tests/test_rule_backtest_reopen_acceptance.py::RuleBacktestReopenAcceptanceTestCase::test_reopen_acceptance_legacy_fallback_surfaces_are_explicit_across_status_detail_history",
       "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_derives_execution_model_for_legacy_runs_without_structured_config",
       "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_get_run_marks_execution_model_as_derived_when_snapshot_missing",
@@ -40832,6 +39940,10 @@
       "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_fails_on_secret_or_debug_payload_without_leaking_value",
       "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_live_mode_checks_health_admin_and_redaction",
       "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_timeout_output_is_actionable_and_sanitized",
+      "tests/test_user_alert_dry_run_summary.py::test_helper_has_no_protected_runtime_imports",
+      "tests/test_user_alert_dry_run_summary.py::test_history_like_local_preview_rollup_stays_no_send_review_only",
+      "tests/test_user_alert_dry_run_summary.py::test_live_outbound_flags_fail_closed_without_relabeling_as_observed",
+      "tests/test_user_alert_dry_run_summary.py::test_summary_counts_are_deterministic_and_sanitized",
       "tests/test_watchlist_score_refresh.py::WatchlistScoreRefreshTestCase::test_refresh_missing_diagnostics_preserves_scanner_run_without_provenance",
       "tests/test_ws2_multi_instance_preflight.py::test_staging_target_remains_dry_run_when_network_opt_in_is_set"
     ],

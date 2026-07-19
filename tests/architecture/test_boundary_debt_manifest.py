@@ -25,7 +25,7 @@ def test_boundary_debt_manifest_is_canonical_and_reproduces_current_main() -> No
     } == {
         "directStorageConsumers": 51,
         "providerHeavyConstructionPoints": 21,
-        "serviceToApiSchemaEdges": 53,
+        "serviceToApiSchemaEdges": 46,
     }
     assert boundary_debt.render_manifest(manifest) == boundary_debt.MANIFEST_PATH.read_text(
         encoding="utf-8"

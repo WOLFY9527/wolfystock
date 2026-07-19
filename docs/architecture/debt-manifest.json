@@ -495,32 +495,12 @@
       "auditedBaselineCount": 53,
       "entries": [
         {
-          "source": "src/services/custom_strategy_contracts.py",
-          "target": "api.v1.schemas.custom_strategy"
-        },
-        {
           "source": "src/services/dashboard_overview_service.py",
           "target": "api.v1.schemas.dashboard_overview"
         },
         {
-          "source": "src/services/event_intelligence_provider_contract.py",
-          "target": "api.v1.schemas.event_intelligence"
-        },
-        {
-          "source": "src/services/event_intelligence_timeline.py",
-          "target": "api.v1.schemas.event_intelligence"
-        },
-        {
           "source": "src/services/event_radar_service.py",
           "target": "api.v1.schemas.event_radar"
-        },
-        {
-          "source": "src/services/event_window_service.py",
-          "target": "api.v1.schemas.event_window"
-        },
-        {
-          "source": "src/services/factor_experiment_manifest.py",
-          "target": "api.v1.schemas.factors"
         },
         {
           "source": "src/services/factor_exposure.py",
@@ -583,20 +563,12 @@
           "target": "api.v1.schemas.homepage_earnings_catalysts"
         },
         {
-          "source": "src/services/homepage_empty_state_service.py",
-          "target": "api.v1.schemas.homepage_empty_state"
-        },
-        {
           "source": "src/services/homepage_event_impact_map_service.py",
           "target": "api.v1.schemas.homepage_event_impact_map"
         },
         {
           "source": "src/services/homepage_evidence_quality_service.py",
           "target": "api.v1.schemas.homepage_evidence_quality"
-        },
-        {
-          "source": "src/services/homepage_explanation_service.py",
-          "target": "api.v1.schemas.homepage_explanation"
         },
         {
           "source": "src/services/homepage_geopolitical_commodity_risk_service.py",

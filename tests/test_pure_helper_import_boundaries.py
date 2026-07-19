@@ -11,8 +11,6 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TARGET_MODULES = (
-    pytest.param("src/services/data_coverage_matrix_contract.py", False, id="data_coverage_matrix_contract"),
-    pytest.param("src/services/data_coverage_matrix_builder.py", False, id="data_coverage_matrix_builder"),
     pytest.param("src/services/user_alert_evaluation.py", False, id="user_alert_evaluation"),
     pytest.param("src/services/user_alert_dry_run_pipeline.py", False, id="user_alert_dry_run_pipeline"),
     pytest.param("src/services/data_coverage_surface_registry.py", True, id="data_coverage_surface_registry"),
@@ -27,7 +25,6 @@ ALERT_LOCAL_PREVIEW_GUARD_TESTS = (
     "tests/test_user_alert_evaluation.py",
     "tests/test_user_alert_event_packet.py",
     "tests/test_user_alert_dry_run_pipeline.py",
-    "tests/test_user_alert_dry_run_summary.py",
     "tests/test_user_alert_dry_run_fixtures.py",
     "tests/test_pure_helper_import_boundaries.py",
 )
