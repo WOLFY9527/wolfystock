@@ -73,9 +73,30 @@ def test_official_macro_points_prioritize_vixcls_then_fred_dgs10_dgs30_after_tre
     previous = (datetime.now(timezone.utc).date() - timedelta(days=2)).isoformat()
     calls: list[str] = []
 
-    def empty_treasury_points(*, limit: int = 2, timeout: float | None = None) -> dict:
+    def partial_treasury_points(*, limit: int = 2, timeout: float | None = None) -> dict:
         calls.append("treasury")
-        return {}
+        return {
+            "DGS2": [
+                MacroObservation(
+                    "DGS2",
+                    3.87,
+                    latest,
+                    latest,
+                    "treasury:daily_treasury_yield_curve",
+                    "official_public",
+                    "daily_1530_et",
+                ),
+                MacroObservation(
+                    "DGS2",
+                    3.91,
+                    previous,
+                    previous,
+                    "treasury:daily_treasury_yield_curve",
+                    "official_public",
+                    "daily_1530_et",
+                ),
+            ]
+        }
 
     def fred_points(series_id: str, *, limit: int = 2, timeout: float | None = None) -> list[MacroObservation]:
         calls.append(series_id)
@@ -89,16 +110,37 @@ def test_official_macro_points_prioritize_vixcls_then_fred_dgs10_dgs30_after_tre
         return []
 
     with (
-        patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", side_effect=empty_treasury_points),
+        patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", side_effect=partial_treasury_points),
         patch("src.services.market_overview_service.fetch_fred_observation_points", side_effect=fred_points),
     ):
         points = service._official_macro_points()
 
-    assert calls[:4] == ["VIXCLS", "DGS10", "DGS30", "DGS2"]
-    assert calls.index("treasury") > calls.index("DGS30")
-    assert points["VIXCLS"]
-    assert points["DGS10"]
-    assert points["DGS30"]
+    assert calls == ["VIXCLS", "treasury", "DGS10", "DGS30", "SOFR", "T10Y2Y", "T10Y3M"]
+    assert "DGS2" not in calls
+    assert set(points) == {"VIXCLS", "DGS2", "DGS10", "DGS30"}
+    assert points["DGS2"][0].to_dict() == {
+        "symbol": "DGS2",
+        "value": 3.87,
+        "date": latest,
+        "asOf": latest,
+        "source_id": "treasury:daily_treasury_yield_curve",
+        "source_type": "official_public",
+        "freshness_hint": "daily_1530_et",
+        "unavailable_reason": None,
+    }
+    for series_id in ("DGS10", "DGS30"):
+        assert points[series_id][0].to_dict() == {
+            "symbol": series_id,
+            "value": 4.5,
+            "date": latest,
+            "asOf": latest,
+            "source_id": f"fred:{series_id}",
+            "source_type": "official_public",
+            "freshness_hint": "daily_rate",
+            "unavailable_reason": None,
+        }
+    assert "SOFR" not in points
+    assert service._official_macro_overlay_diagnostics["SOFR"] == "empty_response"
 
 
 def test_official_macro_points_attempt_fred_dgs10_dgs30_after_treasury_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -133,12 +175,23 @@ def test_official_macro_points_attempt_fred_dgs10_dgs30_after_treasury_timeout(m
     ):
         points = service._official_macro_points()
 
-    assert calls[:4] == ["VIXCLS", "DGS10", "DGS30", "DGS2"]
-    assert calls.index("treasury") > calls.index("DGS30")
+    assert calls == ["VIXCLS", "treasury", "DGS10", "DGS30", "DGS2", "SOFR", "T10Y2Y", "T10Y3M"]
     assert treasury_timeouts and treasury_timeouts[0] is not None
     assert treasury_timeouts[0] < 0.18
-    assert points["DGS10"][0].source_id == "fred:DGS10"
-    assert points["DGS30"][0].source_id == "fred:DGS30"
+    assert set(points) == {"DGS10", "DGS30"}
+    for series_id in ("DGS10", "DGS30"):
+        assert points[series_id][0].to_dict() == {
+            "symbol": series_id,
+            "value": 4.5,
+            "date": latest,
+            "asOf": latest,
+            "source_id": f"fred:{series_id}",
+            "source_type": "official_public",
+            "freshness_hint": "daily_rate",
+            "unavailable_reason": None,
+        }
+    assert "DGS2" not in points
+    assert service._official_macro_overlay_diagnostics["DGS2"] == "empty_response"
 
 
 def test_official_macro_points_reserve_usable_fred_rate_timeout_after_treasury_timeout(
@@ -214,14 +267,31 @@ def test_official_macro_points_protect_fred_series_from_slow_treasury_fallback(
     ):
         points = service._official_macro_points(include_usd_pressure=True)
 
+    assert calls == [
+        "VIXCLS",
+        "treasury",
+        "DGS10",
+        "DGS30",
+        "DGS2",
+        "SOFR",
+        "T10Y2Y",
+        "T10Y3M",
+        "DTWEXBGS",
+    ]
+    assert set(points) == {"DGS2", "DGS10", "DGS30", "SOFR", "DTWEXBGS"}
     for series_id in ("DGS2", "DGS10", "DGS30", "SOFR", "DTWEXBGS"):
-        assert series_id in calls
-        assert points[series_id][0].source_id == f"fred:{series_id}"
-
-    assert "treasury" in calls
-    assert max(calls.index(series_id) for series_id in ("DGS2", "DGS10", "DGS30", "SOFR", "DTWEXBGS")) < calls.index("treasury")
+        assert points[series_id][0].to_dict() == {
+            "symbol": series_id,
+            "value": 4.5,
+            "date": latest,
+            "asOf": latest,
+            "source_id": f"fred:{series_id}",
+            "source_type": "official_public",
+            "freshness_hint": "daily_rate",
+            "unavailable_reason": None,
+        }
     assert treasury_timeouts and treasury_timeouts[0] is not None
-    assert treasury_timeouts[0] <= 0.35
+    assert treasury_timeouts[0] <= service.OFFICIAL_MACRO_TREASURY_FALLBACK_TIMEOUT_CAP_SECONDS
     assert service._official_macro_overlay_diagnostics.get("DGS10") != "budget_exhausted"
     assert "SECRET" not in str(service._official_macro_overlay_diagnostic_details)
 
@@ -311,13 +381,10 @@ def test_rates_macro_and_volatility_reuse_official_macro_observations_within_mic
     assert volatility_payload["items"]
     assert calls == [
         "VIXCLS",
-        "DGS10",
-        "DGS30",
-        "DGS2",
+        "treasury",
         "SOFR",
         "T10Y2Y",
         "T10Y3M",
-        "treasury",
         "DFF",
         "CPIAUCSL",
         "PPIACO",
@@ -328,6 +395,44 @@ def test_rates_macro_and_volatility_reuse_official_macro_observations_within_mic
         "WRESBAL",
         "DTWEXBGS",
     ]
+    assert all(series_id not in calls for series_id in ("DGS2", "DGS10", "DGS30"))
+    assert calls.count("VIXCLS") == 1
+    assert calls.count("treasury") == 1
+    for series_id in ("DGS2", "DGS10", "DGS30"):
+        _, cached_observations = service._official_macro_micro_cache[series_id]
+        assert cached_observations == treasury_points[series_id]
+    _, cached_vix_observations = service._official_macro_micro_cache["VIXCLS"]
+    assert cached_vix_observations == fred_points["VIXCLS"]
+
+    rates_items = {str(item.get("symbol")): item for item in rates_payload["items"]}
+    macro_items = {str(item.get("symbol")): item for item in macro_payload["items"]}
+    for symbol, series_id in (("US2Y", "DGS2"), ("US10Y", "DGS10"), ("US30Y", "DGS30")):
+        for item in (rates_items[symbol], macro_items[symbol]):
+            assert item["source"] == "treasury"
+            assert item["sourceId"] == "treasury:daily_treasury_yield_curve"
+            assert item["sourceType"] == "official_public"
+            assert item["officialSeriesId"] == series_id
+            assert item["asOf"] == latest
+            assert item["updatedAt"] == latest
+            assert item["freshness"] == "delayed"
+            assert item["isStale"] is False
+            assert item["isUnavailable"] is False
+            assert item["providerFreshness"]["available"] is True
+            assert item["providerFreshness"]["state"] == "delayed"
+
+    macro_vix = macro_items["VIX"]
+    volatility_vix = next(item for item in volatility_payload["items"] if item.get("symbol") == "VIX")
+    for item in (macro_vix, volatility_vix):
+        assert item["source"] == "fred"
+        assert item["sourceId"] == "fred:VIXCLS"
+        assert item["sourceType"] == "official_public"
+        assert item["asOf"] == latest
+        assert item["updatedAt"] == latest
+        assert item["freshness"] == "delayed"
+        assert item["isStale"] is False
+        assert item["isUnavailable"] is False
+        assert item["providerFreshness"]["available"] is True
+        assert item["providerFreshness"]["state"] == "delayed"
 
 
 def test_sentiment_deadline_skips_secondary_provider_and_fallback_is_not_live(monkeypatch: pytest.MonkeyPatch) -> None:
