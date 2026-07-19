@@ -489,6 +489,52 @@ const AppShellRoute: React.FC = () => {
   );
 };
 
+type AppRoutePlacement = 'root-before-shell' | 'shell' | 'root-after-shell';
+
+type AppRouteDefinition = {
+  path: string;
+  placement: AppRoutePlacement;
+} & (
+  | {
+    element: React.ReactElement;
+  }
+  | {
+    redirectTo: string;
+    localizedRedirectTo: string;
+  }
+);
+
+function renderRouteDefinitions(
+  definitions: AppRouteDefinition[],
+  placement: AppRoutePlacement,
+  localized: boolean,
+): React.ReactElement[] {
+  return definitions
+    .filter((definition) => definition.placement === placement)
+    .map((definition) => {
+      const key = `${localized ? 'localized' : 'canonical'}:${definition.path}`;
+      const element = 'redirectTo' in definition
+        ? <Navigate to={localized ? definition.localizedRedirectTo : definition.redirectTo} replace />
+        : definition.element;
+
+      if (localized && placement === 'shell' && definition.path === '/') {
+        return <Route key={key} index element={element} />;
+      }
+
+      const path = placement === 'shell'
+        ? definition.path === '/*'
+          ? '*'
+          : localized
+            ? definition.path.slice(1)
+            : definition.path
+        : localized
+          ? `/:locale${definition.path}`
+          : definition.path;
+
+      return <Route key={key} path={path} element={element} />;
+    });
+}
+
 export const AppContent: React.FC = () => {
   const location = useLocation();
   const { authEnabled, loggedIn, isLoading, loadError, refreshStatus, setupState } = useAuth();
@@ -503,6 +549,67 @@ export const AppContent: React.FC = () => {
   const localizedHomePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
   const postAuthRedirectPath = getPostAuthRedirectTarget(location.search, localizedHomePath);
   const guestHomeElement = loggedIn ? <Navigate to={localizedHomePath} replace /> : <GuestHomePage />;
+  const routeDefinitions: AppRouteDefinition[] = [
+    { placement: 'root-before-shell', path: '/guest/scanner', redirectTo: '/scanner', localizedRedirectTo: '../scanner' },
+    { placement: 'root-before-shell', path: '/user/scanner', redirectTo: '/scanner', localizedRedirectTo: '../scanner' },
+    { placement: 'root-before-shell', path: '/stock/:stockCode', element: <StockStructureDecisionLegacyRedirect /> },
+    { placement: 'root-before-shell', path: '/stock/:stockCode/structure-decision', element: <StockStructureDecisionLegacyRedirect /> },
+    { placement: 'shell', path: '/market', redirectTo: '/market-overview', localizedRedirectTo: '../market-overview' },
+    // /settings/system is the canonical admin system settings surface; /admin aliases remain intentional deep links.
+    { placement: 'shell', path: '/admin', redirectTo: '/settings/system', localizedRedirectTo: '../settings/system' },
+    { placement: 'shell', path: '/admin/system', redirectTo: '/settings/system', localizedRedirectTo: '../settings/system' },
+    { placement: 'shell', path: '/admin/provider', redirectTo: '/admin/market-providers', localizedRedirectTo: '../admin/market-providers' },
+    { placement: 'shell', path: '/admin/providers', redirectTo: '/admin/market-providers', localizedRedirectTo: '../admin/market-providers' },
+    { placement: 'shell', path: '/admin/provider-operations', redirectTo: '/admin/market-providers', localizedRedirectTo: '../admin/market-providers' },
+    { placement: 'shell', path: '/admin/evidence', redirectTo: '/admin/evidence-workflow', localizedRedirectTo: '../admin/evidence-workflow' },
+    { placement: 'shell', path: '/admin/costs', redirectTo: '/admin/cost-observability', localizedRedirectTo: '../admin/cost-observability' },
+    { placement: 'shell', path: '/admin/ai', redirectTo: '/settings/system', localizedRedirectTo: '../settings/system' },
+    { placement: 'shell', path: '/admin/system-logs', redirectTo: '/admin/logs', localizedRedirectTo: '../admin/logs' },
+    { placement: 'shell', path: '/cockpit', redirectTo: '/market/decision-cockpit', localizedRedirectTo: '../market/decision-cockpit' },
+    { placement: 'shell', path: '/decision-cockpit', redirectTo: '/market/decision-cockpit', localizedRedirectTo: '../market/decision-cockpit' },
+    { placement: 'shell', path: '/radar', redirectTo: '/research/radar', localizedRedirectTo: '../research/radar' },
+    { placement: 'shell', path: '/research', redirectTo: '/research/radar', localizedRedirectTo: '../research/radar' },
+    { placement: 'shell', path: '/research-radar', redirectTo: '/research/radar', localizedRedirectTo: '../research/radar' },
+    { placement: 'shell', path: '/holdings', redirectTo: '/portfolio', localizedRedirectTo: '../portfolio' },
+    { placement: 'shell', path: '/liquidity', redirectTo: '/market/liquidity-monitor', localizedRedirectTo: '../market/liquidity-monitor' },
+    { placement: 'shell', path: '/rotation', redirectTo: '/market/rotation-radar', localizedRedirectTo: '../market/rotation-radar' },
+    { placement: 'shell', path: '/options', redirectTo: '/options-lab', localizedRedirectTo: '../options-lab' },
+    { placement: 'shell', path: '/', element: <HomeSurfacePage /> },
+    { placement: 'shell', path: '/guest', element: guestHomeElement },
+    { placement: 'shell', path: '/scanner', element: <RegisteredSurfaceRoute><ScannerSurfacePage /></RegisteredSurfaceRoute> },
+    { placement: 'shell', path: '/chat', redirectTo: '/market-overview', localizedRedirectTo: '../market-overview' },
+    { placement: 'shell', path: '/portfolio', element: <RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute> },
+    { placement: 'shell', path: '/market-overview', element: <MarketOverviewPage /> },
+    { placement: 'shell', path: '/market/decision-cockpit', element: <MarketDecisionCockpitPage /> },
+    { placement: 'shell', path: '/market/liquidity-monitor', element: <LiquidityMonitorPage /> },
+    { placement: 'shell', path: '/market/rotation-radar', element: <MarketRotationRadarPage /> },
+    { placement: 'shell', path: '/stocks/structure-decision', element: <StockStructureDecisionEntryPage /> },
+    { placement: 'shell', path: '/stocks/:stockCode/structure-decision', element: <RegisteredSurfaceRoute><StockStructureDecisionPage /></RegisteredSurfaceRoute> },
+    { placement: 'shell', path: '/research/radar', element: <RegisteredSurfaceRoute><ResearchRadarPage /></RegisteredSurfaceRoute> },
+    { placement: 'shell', path: '/scenario-lab', element: <RegisteredSurfaceRoute><ScenarioLabPage /></RegisteredSurfaceRoute> },
+    { placement: 'shell', path: '/watchlist', element: <RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute> },
+    { placement: 'shell', path: '/backtest', element: <RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute> },
+    { placement: 'shell', path: '/options-lab', element: <RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute> },
+    { placement: 'shell', path: '/backtest/compare', element: <RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute> },
+    { placement: 'shell', path: '/backtest/results/:runId', element: <RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute> },
+    { placement: 'shell', path: '/settings', element: <RegisteredSurfaceRoute><PersonalSettingsPage /></RegisteredSurfaceRoute> },
+    { placement: 'shell', path: '/settings/system', element: <AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute> },
+    { placement: 'shell', path: '/admin/launch-cockpit', element: <AdminSurfaceRoute><AdminLaunchCockpitPage /></AdminSurfaceRoute> },
+    { placement: 'shell', path: '/admin/mission-control', element: <AdminSurfaceRoute><AdminMissionControlPage /></AdminSurfaceRoute> },
+    { placement: 'shell', path: '/admin/logs', element: <AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute> },
+    { placement: 'shell', path: '/admin/evidence-workflow', element: <AdminSurfaceRoute><AdminEvidenceWorkflowPage /></AdminSurfaceRoute> },
+    { placement: 'shell', path: '/admin/notifications', element: <AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute> },
+    { placement: 'shell', path: '/admin/market-providers', element: <AdminSurfaceRoute><MarketProviderOperationsPage /></AdminSurfaceRoute> },
+    { placement: 'shell', path: '/admin/provider-circuits', element: <AdminSurfaceRoute><AdminProviderCircuitDiagnosticsPage /></AdminSurfaceRoute> },
+    { placement: 'shell', path: '/admin/users', element: <AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute> },
+    { placement: 'shell', path: '/admin/users/:userId', element: <AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute> },
+    { placement: 'shell', path: '/admin/users/:userId/activity', element: <AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute> },
+    { placement: 'shell', path: '/admin/cost-observability', element: <AdminSurfaceRoute><AdminCostObservabilityPage /></AdminSurfaceRoute> },
+    { placement: 'shell', path: '/*', element: <NotFoundPage /> },
+    { placement: 'root-after-shell', path: '/login', element: <LoginPage /> },
+    { placement: 'root-after-shell', path: '/register', element: <LoginPage /> },
+    { placement: 'root-after-shell', path: '/reset-password', element: <ResetPasswordPage /> },
+  ];
 
   useEffect(() => {
     if (bootStartedAt.current === 0) {
@@ -540,128 +647,16 @@ export const AppContent: React.FC = () => {
   const routeTree = (
     <Suspense fallback={<RouteLoadingFallback language={language} />}>
       <Routes>
-        <Route path="/guest/scanner" element={<Navigate to="/scanner" replace />} />
-        <Route path="/user/scanner" element={<Navigate to="/scanner" replace />} />
-        <Route path="/:locale/guest/scanner" element={<Navigate to="../scanner" replace />} />
-        <Route path="/:locale/user/scanner" element={<Navigate to="../scanner" replace />} />
-        <Route path="/stock/:stockCode" element={<StockStructureDecisionLegacyRedirect />} />
-        <Route path="/stock/:stockCode/structure-decision" element={<StockStructureDecisionLegacyRedirect />} />
-        <Route path="/:locale/stock/:stockCode" element={<StockStructureDecisionLegacyRedirect />} />
-        <Route path="/:locale/stock/:stockCode/structure-decision" element={<StockStructureDecisionLegacyRedirect />} />
+        {renderRouteDefinitions(routeDefinitions, 'root-before-shell', false)}
+        {renderRouteDefinitions(routeDefinitions, 'root-before-shell', true)}
         <Route element={<AppShellRoute />}>
-          <Route path="/market" element={<Navigate to="/market-overview" replace />} />
-          {/* /settings/system is the canonical admin system settings surface; /admin aliases remain intentional deep links. */}
-          <Route path="/admin" element={<Navigate to="/settings/system" replace />} />
-          <Route path="/admin/system" element={<Navigate to="/settings/system" replace />} />
-          <Route path="/admin/provider" element={<Navigate to="/admin/market-providers" replace />} />
-          <Route path="/admin/providers" element={<Navigate to="/admin/market-providers" replace />} />
-          <Route path="/admin/provider-operations" element={<Navigate to="/admin/market-providers" replace />} />
-        <Route path="/admin/evidence" element={<Navigate to="/admin/evidence-workflow" replace />} />
-        <Route path="/admin/costs" element={<Navigate to="/admin/cost-observability" replace />} />
-        <Route path="/admin/ai" element={<Navigate to="/settings/system" replace />} />
-        <Route path="/admin/system-logs" element={<Navigate to="/admin/logs" replace />} />
-        <Route path="/cockpit" element={<Navigate to="/market/decision-cockpit" replace />} />
-        <Route path="/decision-cockpit" element={<Navigate to="/market/decision-cockpit" replace />} />
-        <Route path="/radar" element={<Navigate to="/research/radar" replace />} />
-        <Route path="/research" element={<Navigate to="/research/radar" replace />} />
-        <Route path="/research-radar" element={<Navigate to="/research/radar" replace />} />
-        <Route path="/holdings" element={<Navigate to="/portfolio" replace />} />
-        <Route path="/liquidity" element={<Navigate to="/market/liquidity-monitor" replace />} />
-        <Route path="/rotation" element={<Navigate to="/market/rotation-radar" replace />} />
-        <Route path="/options" element={<Navigate to="/options-lab" replace />} />
-          <Route path="/" element={<HomeSurfacePage />} />
-          <Route path="/guest" element={guestHomeElement} />
-          <Route path="/scanner" element={<RegisteredSurfaceRoute><ScannerSurfacePage /></RegisteredSurfaceRoute>} />
-          <Route path="/chat" element={<Navigate to="/market-overview" replace />} />
-          <Route path="/portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
-          <Route path="/market-overview" element={<MarketOverviewPage />} />
-          <Route path="/market/decision-cockpit" element={<MarketDecisionCockpitPage />} />
-          <Route path="/market/liquidity-monitor" element={<LiquidityMonitorPage />} />
-          <Route path="/market/rotation-radar" element={<MarketRotationRadarPage />} />
-          <Route path="/stocks/structure-decision" element={<StockStructureDecisionEntryPage />} />
-          <Route path="/stocks/:stockCode/structure-decision" element={<RegisteredSurfaceRoute><StockStructureDecisionPage /></RegisteredSurfaceRoute>} />
-          <Route path="/research/radar" element={<RegisteredSurfaceRoute><ResearchRadarPage /></RegisteredSurfaceRoute>} />
-          <Route path="/scenario-lab" element={<RegisteredSurfaceRoute><ScenarioLabPage /></RegisteredSurfaceRoute>} />
-          <Route path="/watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
-          <Route path="/backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
-          <Route path="/options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />
-          <Route path="/backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
-          <Route path="/backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
-          <Route path="/settings" element={<RegisteredSurfaceRoute><PersonalSettingsPage /></RegisteredSurfaceRoute>} />
-          <Route path="/settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
-          <Route path="/admin/launch-cockpit" element={<AdminSurfaceRoute><AdminLaunchCockpitPage /></AdminSurfaceRoute>} />
-          <Route path="/admin/mission-control" element={<AdminSurfaceRoute><AdminMissionControlPage /></AdminSurfaceRoute>} />
-          <Route path="/admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
-          <Route path="/admin/evidence-workflow" element={<AdminSurfaceRoute><AdminEvidenceWorkflowPage /></AdminSurfaceRoute>} />
-          <Route path="/admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />
-          <Route path="/admin/market-providers" element={<AdminSurfaceRoute><MarketProviderOperationsPage /></AdminSurfaceRoute>} />
-          <Route path="/admin/provider-circuits" element={<AdminSurfaceRoute><AdminProviderCircuitDiagnosticsPage /></AdminSurfaceRoute>} />
-          <Route path="/admin/users" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
-          <Route path="/admin/users/:userId" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
-          <Route path="/admin/users/:userId/activity" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
-          <Route path="/admin/cost-observability" element={<AdminSurfaceRoute><AdminCostObservabilityPage /></AdminSurfaceRoute>} />
-          <Route path="*" element={<NotFoundPage />} />
+          {renderRouteDefinitions(routeDefinitions, 'shell', false)}
         </Route>
         <Route path="/:locale" element={<LocalizedShellRoute />}>
-          <Route path="market" element={<Navigate to="../market-overview" replace />} />
-          {/* /:locale/settings/system is the canonical localized admin system settings surface. */}
-          <Route path="admin" element={<Navigate to="../settings/system" replace />} />
-          <Route path="admin/system" element={<Navigate to="../settings/system" replace />} />
-          <Route path="admin/provider" element={<Navigate to="../admin/market-providers" replace />} />
-          <Route path="admin/providers" element={<Navigate to="../admin/market-providers" replace />} />
-          <Route path="admin/provider-operations" element={<Navigate to="../admin/market-providers" replace />} />
-          <Route path="admin/evidence" element={<Navigate to="../admin/evidence-workflow" replace />} />
-          <Route path="admin/costs" element={<Navigate to="../admin/cost-observability" replace />} />
-          <Route path="admin/ai" element={<Navigate to="../settings/system" replace />} />
-          <Route path="admin/system-logs" element={<Navigate to="../admin/logs" replace />} />
-          <Route path="cockpit" element={<Navigate to="../market/decision-cockpit" replace />} />
-          <Route path="decision-cockpit" element={<Navigate to="../market/decision-cockpit" replace />} />
-          <Route path="radar" element={<Navigate to="../research/radar" replace />} />
-          <Route path="research" element={<Navigate to="../research/radar" replace />} />
-          <Route path="research-radar" element={<Navigate to="../research/radar" replace />} />
-          <Route path="holdings" element={<Navigate to="../portfolio" replace />} />
-          <Route path="liquidity" element={<Navigate to="../market/liquidity-monitor" replace />} />
-          <Route path="rotation" element={<Navigate to="../market/rotation-radar" replace />} />
-          <Route path="options" element={<Navigate to="../options-lab" replace />} />
-          <Route index element={<HomeSurfacePage />} />
-          <Route path="guest" element={guestHomeElement} />
-          <Route path="scanner" element={<RegisteredSurfaceRoute><ScannerSurfacePage /></RegisteredSurfaceRoute>} />
-          <Route path="chat" element={<Navigate to="../market-overview" replace />} />
-          <Route path="portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
-          <Route path="market-overview" element={<MarketOverviewPage />} />
-          <Route path="market/decision-cockpit" element={<MarketDecisionCockpitPage />} />
-          <Route path="market/liquidity-monitor" element={<LiquidityMonitorPage />} />
-          <Route path="market/rotation-radar" element={<MarketRotationRadarPage />} />
-          <Route path="stocks/structure-decision" element={<StockStructureDecisionEntryPage />} />
-          <Route path="stocks/:stockCode/structure-decision" element={<RegisteredSurfaceRoute><StockStructureDecisionPage /></RegisteredSurfaceRoute>} />
-          <Route path="research/radar" element={<RegisteredSurfaceRoute><ResearchRadarPage /></RegisteredSurfaceRoute>} />
-          <Route path="scenario-lab" element={<RegisteredSurfaceRoute><ScenarioLabPage /></RegisteredSurfaceRoute>} />
-          <Route path="watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
-          <Route path="backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
-          <Route path="options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />
-          <Route path="backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
-          <Route path="backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
-          <Route path="settings" element={<RegisteredSurfaceRoute><PersonalSettingsPage /></RegisteredSurfaceRoute>} />
-          <Route path="settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
-          <Route path="admin/launch-cockpit" element={<AdminSurfaceRoute><AdminLaunchCockpitPage /></AdminSurfaceRoute>} />
-          <Route path="admin/mission-control" element={<AdminSurfaceRoute><AdminMissionControlPage /></AdminSurfaceRoute>} />
-          <Route path="admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
-          <Route path="admin/evidence-workflow" element={<AdminSurfaceRoute><AdminEvidenceWorkflowPage /></AdminSurfaceRoute>} />
-          <Route path="admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />
-          <Route path="admin/market-providers" element={<AdminSurfaceRoute><MarketProviderOperationsPage /></AdminSurfaceRoute>} />
-          <Route path="admin/provider-circuits" element={<AdminSurfaceRoute><AdminProviderCircuitDiagnosticsPage /></AdminSurfaceRoute>} />
-          <Route path="admin/users" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
-          <Route path="admin/users/:userId" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
-          <Route path="admin/users/:userId/activity" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
-          <Route path="admin/cost-observability" element={<AdminSurfaceRoute><AdminCostObservabilityPage /></AdminSurfaceRoute>} />
-          <Route path="*" element={<NotFoundPage />} />
+          {renderRouteDefinitions(routeDefinitions, 'shell', true)}
         </Route>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/:locale/login" element={<LoginPage />} />
-        <Route path="/register" element={<LoginPage />} />
-        <Route path="/:locale/register" element={<LoginPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/:locale/reset-password" element={<ResetPasswordPage />} />
+        {renderRouteDefinitions(routeDefinitions, 'root-after-shell', false)}
+        {renderRouteDefinitions(routeDefinitions, 'root-after-shell', true)}
       </Routes>
     </Suspense>
   );
