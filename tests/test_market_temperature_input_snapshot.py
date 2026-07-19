@@ -340,8 +340,15 @@ def test_temperature_input_builder_uses_internal_snapshots_without_public_wrappe
         assert public_mock.call_count == 0
     assert set(inputs) >= {"indices", "breadth", "flows", "sectors", "rates", "fx", "futures", "sentiment", "crypto"}
     assert inputs["rates"]["freshness"] == "fallback"
-    assert inputs["crypto"]["freshness"] == "fallback"
+    assert inputs["crypto"]["source"] == "unavailable"
+    assert inputs["crypto"]["freshness"] == "unavailable"
     assert inputs["crypto"]["isFallback"] is True
+    assert inputs["crypto"]["isUnavailable"] is True
+    assert {
+        str(item["symbol"]): item["value"]
+        for item in inputs["crypto"]["items"]
+        if isinstance(item, dict) and item.get("symbol") in {"BTC", "ETH", "SOL", "BNB"}
+    } == {"BTC": None, "ETH": None, "SOL": None, "BNB": None}
 
 
 def test_temperature_score_inputs_add_source_authority_diagnostics() -> None:
@@ -473,16 +480,62 @@ def test_temperature_inputs_preserve_official_macro_authority_metadata_after_rat
     }
 
     assert set(rates_by_symbol) == {"VIX", "US2Y", "US10Y", "US30Y", "SOFR", "FED_ASSETS", "FED_RRP", "TGA", "RESERVES"}
+    expected_authority = {
+        "VIX": (True, False, None, []),
+        "US2Y": (
+            False,
+            False,
+            "fallback_or_proxy_source",
+            ["official_us_rates_readiness_contract", "fallback_or_proxy_source"],
+        ),
+        "US10Y": (
+            False,
+            False,
+            "fallback_or_proxy_source",
+            ["official_us_rates_readiness_contract", "fallback_or_proxy_source"],
+        ),
+        "US30Y": (
+            False,
+            False,
+            "fallback_or_proxy_source",
+            ["official_us_rates_readiness_contract", "fallback_or_proxy_source"],
+        ),
+        "SOFR": (
+            False,
+            False,
+            "fallback_or_proxy_source",
+            ["official_us_rates_readiness_contract", "fallback_or_proxy_source"],
+        ),
+        "FED_ASSETS": (True, True, None, []),
+        "FED_RRP": (True, True, None, []),
+        "TGA": (True, True, None, []),
+        "RESERVES": (True, True, None, []),
+    }
+    expected_series = {
+        "VIX": "VIXCLS",
+        "US2Y": "DGS2",
+        "US10Y": "DGS10",
+        "US30Y": "DGS30",
+        "SOFR": "SOFR",
+        "FED_ASSETS": "WALCL",
+        "FED_RRP": "RRPONTSYD",
+        "TGA": "WTREGEN",
+        "RESERVES": "WRESBAL",
+    }
     for symbol, item in rates_by_symbol.items():
+        authority_allowed, score_allowed, authority_reason, rejected_reasons = expected_authority[symbol]
         assert item["sourceType"] == "official_public"
         assert item["sourceTier"] == "official_public"
-        assert item["sourceAuthorityAllowed"] is True, symbol
-        assert item["scoreContributionAllowed"] is True, symbol
-        assert item["sourceAuthorityReason"] is None
-        assert item["routeRejectedReasonCodes"] == []
-        assert item["freshness"] in {"cached", "delayed"}
-        if symbol in {"FED_ASSETS", "FED_RRP", "TGA", "RESERVES"}:
-            assert item["officialSeriesId"] in {"WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"}
+        assert item["sourceAuthorityAllowed"] is authority_allowed, symbol
+        assert item["scoreContributionAllowed"] is score_allowed, symbol
+        assert item["sourceAuthorityReason"] == authority_reason, symbol
+        assert item["routeRejectedReasonCodes"] == rejected_reasons, symbol
+        assert item["freshness"] == "delayed"
+        assert item["asOf"] == today
+        assert item["isFallback"] is False
+        assert item["isUnavailable"] is False
+        assert item["isProxy"] is False
+        assert item["officialSeriesId"] == expected_series[symbol]
 
     fx_by_symbol = {
         str(item["symbol"]): item
@@ -496,6 +549,13 @@ def test_temperature_inputs_preserve_official_macro_authority_metadata_after_rat
     assert usd_item["sourceTier"] == "official_public"
     assert usd_item["sourceAuthorityAllowed"] is True
     assert usd_item["scoreContributionAllowed"] is True
+    assert usd_item["sourceAuthorityReason"] is None
+    assert usd_item["routeRejectedReasonCodes"] == []
+    assert usd_item["freshness"] == "delayed"
+    assert usd_item["asOf"] == today
+    assert usd_item["isFallback"] is False
+    assert usd_item["isUnavailable"] is False
+    assert usd_item["isProxy"] is False
     assert usd_item["officialSeriesId"] == "DTWEXBGS"
     assert "DXY" not in str(usd_item.get("label"))
 

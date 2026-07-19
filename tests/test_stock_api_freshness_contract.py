@@ -93,8 +93,32 @@ def test_quote_endpoint_allows_guest_access_without_auth_dependency() -> None:
         payload = response.json()
         assert payload["stock_code"] == symbol
         assert payload["source"] == "Alpaca"
-        assert "sourceType" not in payload
-        assert "sourceConfidence" not in payload
+        assert payload["sourceType"] == "provider_runtime"
+        assert payload["marketTimestamp"] == "2026-05-28T09:30:00Z"
+        assert payload["observedAt"] == "2026-05-28T09:31:00Z"
+        assert payload["freshness"] == "live"
+        assert payload["isFallback"] is False
+        assert payload["isStale"] is False
+        assert payload["isPartial"] is False
+        assert payload["isSynthetic"] is False
+        assert payload["sourceConfidence"] == {
+            "source": "alpaca",
+            "sourceLabel": "Alpaca",
+            "asOf": "2026-05-28T09:30:00Z",
+            "freshness": "live",
+            "isFallback": False,
+            "isStale": False,
+            "isPartial": False,
+            "isSynthetic": False,
+            "isUnavailable": False,
+            "confidenceWeight": 1.0,
+            "coverage": None,
+            "degradationReason": None,
+            "capReason": None,
+        }
+        serialized = response.text
+        for marker in ("providerName", "providerClass", "providerAttempted", "traceId", "requestId"):
+            assert marker not in serialized
 
 
 def test_quote_endpoint_internal_error_is_consumer_safe_for_guest() -> None:
@@ -171,7 +195,7 @@ def test_quote_endpoint_exposes_safe_source_label_and_market_timestamp_without_r
     assert payload["current_price"] == 214.55
     assert payload["update_time"] == "2026-05-28T09:31:00Z"
     assert payload["source"] == "Alpaca"
-    assert "sourceType" not in payload
+    assert payload["sourceType"] == "provider_runtime"
     assert payload["marketTimestamp"] == "2026-05-28T09:30:00Z"
     assert payload["observedAt"] == "2026-05-28T09:31:00Z"
     assert payload["freshness"] == "live"
@@ -179,9 +203,23 @@ def test_quote_endpoint_exposes_safe_source_label_and_market_timestamp_without_r
     assert payload["isStale"] is False
     assert payload["isPartial"] is False
     assert payload["isSynthetic"] is False
-    assert "sourceConfidence" not in payload
+    assert payload["sourceConfidence"] == {
+        "source": "alpaca",
+        "sourceLabel": "Alpaca",
+        "asOf": "2026-05-28T09:30:00Z",
+        "freshness": "live",
+        "isFallback": False,
+        "isStale": False,
+        "isPartial": False,
+        "isSynthetic": False,
+        "isUnavailable": False,
+        "confidenceWeight": 1.0,
+        "coverage": None,
+        "degradationReason": None,
+        "capReason": None,
+    }
     serialized = response.text
-    for marker in ("provider_runtime", "providerName", "providerClass", "providerAttempted", "traceId", "requestId"):
+    for marker in ("providerName", "providerClass", "providerAttempted", "traceId", "requestId"):
         assert marker not in serialized
     assert payload["update_time"] != payload["marketTimestamp"]
 
@@ -233,12 +271,30 @@ def test_quote_endpoint_can_surface_non_fresh_placeholder_metadata_without_404()
 
     assert response.status_code == 200
     payload = response.json()
+    assert payload["stock_code"] == "AAPL"
+    assert payload["stock_name"] == "股票AAPL"
+    assert payload["current_price"] == 0.0
     assert payload["source"] == "Placeholder"
-    assert "sourceType" not in payload
-    assert "sourceConfidence" not in payload
+    assert payload["sourceType"] == "synthetic_placeholder"
+    assert payload["sourceConfidence"] == {
+        "source": "placeholder",
+        "sourceLabel": "Placeholder",
+        "asOf": None,
+        "freshness": "synthetic",
+        "isFallback": False,
+        "isStale": False,
+        "isPartial": True,
+        "isSynthetic": True,
+        "isUnavailable": False,
+        "confidenceWeight": 0.0,
+        "coverage": None,
+        "degradationReason": "provider_runtime_unavailable_placeholder",
+        "capReason": None,
+    }
     assert "marketTimestamp" not in payload
     assert payload["freshness"] == "synthetic"
     assert payload["isFallback"] is False
+    assert payload["isStale"] is False
     assert payload["isPartial"] is True
     assert payload["isSynthetic"] is True
     assert payload["observedAt"] == payload["update_time"]
