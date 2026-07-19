@@ -1,0 +1,900 @@
+{
+  "schemaVersion": "wolfystock_t563_latest_residual_failure_census_v1",
+  "taskId": "T563",
+  "acceptedBase": {
+    "commit": "19a71d46a15a08c757ea32a243875283fca2a537",
+    "tree": "3db79d919f8dd7c0f0d7f14a3315df97df07e2e9"
+  },
+  "releaseStatus": "NO_GO",
+  "canonicalRun": {
+    "command": "CI=true ./scripts/ci_gate.sh",
+    "startedAt": "2026-07-19T07:10:47Z",
+    "completedAt": "2026-07-19T07:24:28Z",
+    "exitCode": 1,
+    "pytestDurationSeconds": 781.07,
+    "consoleEvidence": {
+      "completeOutputCaptured": true,
+      "lineCount": 9062,
+      "sha256": "256071a5d5a3590bc009ad7244d65141ebfaf06fdaf83ddb1cbcff32f6369760",
+      "serializedLocation": "not serialized to avoid private local-path and fixture-secret leakage"
+    },
+    "arithmetic": {
+      "collected": 8142,
+      "passed": 8077,
+      "failedCollectedNodes": 42,
+      "skipped": 23,
+      "errors": 0,
+      "pytestSummaryFailureLines": 46,
+      "consoleSubtestFailures": 4,
+      "consoleFailureLines": 46,
+      "subtestsPassed": 717,
+      "warnings": 11,
+      "nodeEquation": "8077 + 42 + 23 + 0 = 8142",
+      "consoleEquation": "42 + 4 = 46"
+    },
+    "collectionEvidence": {
+      "machineReadable": true,
+      "collectedNodeCount": 8142,
+      "sorted": true,
+      "sha256": "744f35cac90fe8b83acc8888cb6d67b79615e40c8a3dfa8b6f993549f71d324b"
+    },
+    "failedNodeEvidence": {
+      "nodeCount": 42,
+      "originalOrderSha256": "162979c4a70afdefc6a55e9fb7dcd6b953d93e2227523a9fb25a52bc8e5407b7",
+      "nodeIds": [
+        "tests/api/test_market_cn_breadth.py::MarketCnBreadthApiTestCase::test_cn_breadth_sanitizes_tickflow_failure_reason",
+        "tests/api/test_market_freshness.py::MarketFreshnessCacheTestCase::test_unavailable_breadth_fails_closed_without_live_freshness",
+        "tests/api/test_market_futures.py::MarketFuturesApiTestCase::test_get_futures_keeps_failed_proxy_symbol_on_item_level_fallback",
+        "tests/api/test_market_futures.py::MarketFuturesApiTestCase::test_get_futures_merges_delayed_proxy_items_onto_existing_fallback_card",
+        "tests/api/test_market_fx_commodities.py::test_fx_commodities_proxy_snapshot_uses_delayed_yfinance_adapter_without_live_label",
+        "tests/api/test_market_fx_commodities.py::test_fx_commodities_proxy_snapshot_keeps_item_level_fallback_on_symbol_failure",
+        "tests/api/test_market_rotation_radar.py::test_market_rotation_radar_api_preserves_enabled_etf_leadership_contract_without_broadening_headlines",
+        "tests/api/test_market_temperature.py::MarketTemperatureApiTestCase::test_market_overview_macro_api_preserves_official_authority_projection_fields",
+        "tests/api/test_market_temperature.py::MarketTemperatureApiTestCase::test_market_overview_official_macro_rows_keep_authority_metadata",
+        "tests/api/test_market_temperature.py::MarketTemperatureApiTestCase::test_market_temperature_route_response_model_preserves_consumed_subset_and_historical_extras",
+        "tests/api/test_market_us_breadth.py::test_market_us_breadth_current_proxy_snapshot_stays_proxy_not_exchange_breadth",
+        "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/scanner/status-required_keys3]",
+        "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/scanner/runs-required_keys4]",
+        "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/watchlist/items-required_keys5]",
+        "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/research/radar-required_keys6]",
+        "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/backtest/sample-status-required_keys7]",
+        "tests/api/test_runtime_api_edge_contracts.py::test_unknown_api_route_remains_json_not_found",
+        "tests/api/test_runtime_api_edge_contracts.py::test_backtest_internal_error_suppresses_raw_runtime_detail",
+        "tests/test_ai_decision_public_safety.py::PublicPreviewSafetyTestCase::test_guest_preview_strips_raw_ai_details_and_uses_mocked_analysis",
+        "tests/test_market_overview_core_quote_repair.py::test_vix_fred_transport_overlay_is_consumed_when_fresh_enough",
+        "tests/test_market_overview_core_quote_repair.py::test_us10y_dxy_and_btc_keep_truthful_source_freshness_metadata",
+        "tests/test_market_overview_evidence_snapshot.py::MarketOverviewEvidenceSnapshotTestCase::test_evidence_snapshot_reuses_shared_provider_helper_without_widening_contract",
+        "tests/test_market_overview_provider_boundaries.py::test_market_overview_transport_modules_stay_runtime_lightweight",
+        "tests/test_market_overview_provider_deadlines.py::test_official_macro_points_prioritize_vixcls_then_fred_dgs10_dgs30_after_treasury_miss",
+        "tests/test_market_overview_provider_deadlines.py::test_official_macro_points_attempt_fred_dgs10_dgs30_after_treasury_timeout",
+        "tests/test_market_overview_provider_deadlines.py::test_official_macro_points_protect_fred_series_from_slow_treasury_fallback",
+        "tests/test_market_overview_provider_deadlines.py::test_rates_macro_and_volatility_reuse_official_macro_observations_within_micro_cache_ttl",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_auth_failure_reports_actionable_window_diagnostics_without_secret_leak",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_calendar_and_market_session_empty_bars_are_activation_blockers",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_empty_all_windows_reports_empty_response_and_missing_windows",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_interval_mapping_failure_is_first_class_activation_blocker",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_symbol_failures_reduce_coverage_and_confidence",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_partial_alpaca_credentials_report_missing_field_without_constructing_provider",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_rotation_radar_yfinance_quote_provider_reuses_history_transport",
+        "tests/test_market_temperature_input_snapshot.py::test_temperature_input_builder_uses_internal_snapshots_without_public_wrapper_side_effects",
+        "tests/test_market_temperature_input_snapshot.py::test_temperature_inputs_preserve_official_macro_authority_metadata_after_rates_volatility_merge",
+        "tests/test_options_structure_contract.py::test_options_structure_api_returns_not_available_contract_without_leaks",
+        "tests/test_options_structure_contract.py::test_options_structure_api_routes_through_gateway_with_in_memory_provider",
+        "tests/test_provider_credent\u0069al_inventory.py::test_provider_credent\u0069al_inventory_freezes_configured_and_wired_sources_without_reading_values",
+        "tests/test_stock_api_freshness_contract.py::test_quote_endpoint_allows_guest_access_without_auth_dependency",
+        "tests/test_stock_api_freshness_contract.py::test_quote_endpoint_exposes_safe_source_label_and_market_timestamp_without_runtime_taxonomy",
+        "tests/test_stock_api_freshness_contract.py::test_quote_endpoint_can_surface_non_fresh_placeholder_metadata_without_404"
+      ]
+    },
+    "skippedNodeIds": [
+      "tests/api/test_admin_logs_real_pg.py::AdminLogsRealPgQuotaTestCase::test_storage_quota_warns_criticalizes_and_cleans_up_against_real_postgresql",
+      "tests/scripts/test_uat_runtime_harness.py::test_stop_from_evidence_windows_can_terminate_owned_child_with_recorded_identity",
+      "tests/test_postgres_phase_a_real_pg.py::PostgresPhaseARealPgTestCase::test_real_postgres_auth_disabled_bootstrap_admin_behavior",
+      "tests/test_postgres_phase_a_real_pg.py::PostgresPhaseARealPgTestCase::test_real_postgres_bootstrap_auth_flow_and_docs_ddl_path",
+      "tests/test_postgres_phase_a_real_pg.py::PostgresPhaseARealPgTestCase::test_real_postgres_lazy_backfill_and_factory_reset_mixed_storage",
+      "tests/test_postgres_phase_a_real_pg.py::PostgresPhaseARealPgTestCase::test_real_postgres_notification_preferences_and_guest_preview_non_persistence",
+      "tests/test_postgres_phase_b_real_pg.py::PostgresPhaseBRealPgTestCase::test_real_postgres_phase_b_shadow_writes_and_delete_paths",
+      "tests/test_postgres_phase_b_real_pg.py::PostgresPhaseBRealPgTestCase::test_real_postgres_phase_b_store_exposes_models_to_same_runtime_db",
+      "tests/test_postgres_phase_c_real_pg.py::PostgresPhaseCRealPgTestCase::test_real_postgres_phase_c_metadata_round_trip",
+      "tests/test_postgres_phase_d_real_pg.py::PostgresPhaseDRealPgTestCase::test_real_postgres_phase_d_scanner_and_watchlist_round_trip",
+      "tests/test_postgres_phase_e_real_pg.py::PostgresPhaseERealPgTestCase::test_real_postgres_phase_e_historical_eval_round_trip",
+      "tests/test_postgres_phase_e_real_pg.py::PostgresPhaseERealPgTestCase::test_real_postgres_phase_e_rule_backtest_round_trip_and_factory_reset",
+      "tests/test_postgres_phase_f_real_pg.py::PostgresPhaseFRealPgTestCase::test_real_postgres_phase_f_broker_connection_surface_falls_back_to_legacy_when_pg_tables_are_partial",
+      "tests/test_postgres_phase_f_real_pg.py::PostgresPhaseFRealPgTestCase::test_real_postgres_phase_f_cash_ledger_comparison_collects_bounded_non_empty_evidence",
+      "tests/test_postgres_phase_f_real_pg.py::PostgresPhaseFRealPgTestCase::test_real_postgres_phase_f_cash_ledger_comparison_respects_multi_user_account_scope",
+      "tests/test_postgres_phase_f_real_pg.py::PostgresPhaseFRealPgTestCase::test_real_postgres_phase_f_corporate_actions_comparison_collects_bounded_non_empty_evidence",
+      "tests/test_postgres_phase_f_real_pg.py::PostgresPhaseFRealPgTestCase::test_real_postgres_phase_f_latest_sync_surface_falls_back_to_legacy_when_pg_tables_are_partial",
+      "tests/test_postgres_phase_f_real_pg.py::PostgresPhaseFRealPgTestCase::test_real_postgres_phase_f_portfolio_round_trip",
+      "tests/test_postgres_phase_g_real_pg.py::PostgresPhaseGRealPgTestCase::test_real_postgres_phase_g_control_plane_round_trip",
+      "tests/test_postgres_phase_g_real_pg.py::PostgresPhaseGRealPgTestCase::test_real_postgres_phase_g_execution_log_shadow_observability_round_trip",
+      "tests/test_postgres_phase_g_real_pg.py::PostgresPhaseGRealPgTestCase::test_real_postgres_phase_g_factory_reset_nulls_deleted_user_refs",
+      "tests/test_postgres_runtime_real_pg.py::PostgresRuntimeRealPgAuditTestCase::test_real_postgres_runtime_audit_reports_all_phase_slices_as_applied",
+      "tests/test_postgres_runtime_real_pg.py::PostgresRuntimeRealPgAuditTestCase::test_real_postgres_runtime_audit_reports_skip_mode_without_losing_schema_visibility"
+    ]
+  },
+  "environment": {
+    "environmentFingerprint": "f706a3347b41e5598fad2068950a4fbd6ccd14ac43d0480f22f4df76f8ffa07a",
+    "os": "Darwin",
+    "architecture": "arm64",
+    "pythonVersion": "3.11.15",
+    "selectedLock": "requirements-python311-dev.lock",
+    "selectedProjection": "darwin-arm64-cpython311-development",
+    "lockContentHash": "35f4840f3daba497fabde96c135e3c27e2e17d7fb50adb466a34757d33ac3d36",
+    "bootstrapNetworkUsed": false
+  },
+  "determinism": {
+    "originalOrder": {
+      "failed": 27,
+      "passed": 15,
+      "attemptSha256": "27fb1845bd39804985555d962c8034e17794e3f938fff116e87315d21b726b65"
+    },
+    "reverseOrder": {
+      "failed": 39,
+      "passed": 3,
+      "attemptSha256": "73f5aa80d2f8de70bd67fc1a163f6e1db63b9a5f65b6051e2f25e8a95d8b39a5"
+    },
+    "freshIsolatedFamilies": [
+      {
+        "family": "F04",
+        "failed": 0,
+        "passed": 7,
+        "attemptSha256": "d56235345de2a077bab4cdde2e65b45bbef87f11892968769087ae88828c4d36"
+      },
+      {
+        "family": "F11",
+        "failed": 3,
+        "passed": 0,
+        "attemptSha256": "05efa5b72212aa5b2eec5edb5a6d36ecf2f4435f3036540f99cdccfc7fb19e58"
+      },
+      {
+        "family": "F12",
+        "failed": 17,
+        "passed": 6,
+        "attemptSha256": "1e05d1193a7545b5153bc55c05611a4203f51bc5654bda4f682892c6a7c970e1"
+      },
+      {
+        "family": "F17",
+        "failed": 0,
+        "passed": 1,
+        "attemptSha256": "559dcb3edc9252a4d04d746bdf0fc5cb572159a70226921ef8d40aac65d1a5f7"
+      },
+      {
+        "family": "F19",
+        "failed": 5,
+        "passed": 3,
+        "attemptSha256": "eeb6631ccdfbafefbc3931f697876a3ebde7adeb85be9635c86d33d577aaa0db"
+      }
+    ],
+    "changedNodes": {
+      "count": 17,
+      "threeIndividualFreshProcessRuns": "all passed",
+      "nodeIds": [
+        "tests/api/test_runtime_api_edge_contracts.py::test_backtest_internal_error_suppresses_raw_runtime_detail",
+        "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/backtest/sample-status-required_keys7]",
+        "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/research/radar-required_keys6]",
+        "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/scanner/runs-required_keys4]",
+        "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/scanner/status-required_keys3]",
+        "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/watchlist/items-required_keys5]",
+        "tests/api/test_runtime_api_edge_contracts.py::test_unknown_api_route_remains_json_not_found",
+        "tests/test_ai_decision_public_safety.py::PublicPreviewSafetyTestCase::test_guest_preview_strips_raw_ai_details_and_uses_mocked_analysis",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_auth_failure_reports_actionable_window_diagnostics_without_secret_leak",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_calendar_and_market_session_empty_bars_are_activation_blockers",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_empty_all_windows_reports_empty_response_and_missing_windows",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_interval_mapping_failure_is_first_class_activation_blocker",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_symbol_failures_reduce_coverage_and_confidence",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_partial_alpaca_credentials_report_missing_field_without_constructing_provider",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_rotation_radar_yfinance_quote_provider_reuses_history_transport",
+        "tests/test_options_structure_contract.py::test_options_structure_api_returns_not_available_contract_without_leaks",
+        "tests/test_options_structure_contract.py::test_options_structure_api_routes_through_gateway_with_in_memory_provider"
+      ]
+    },
+    "finding": "TI-01 is process-order/test-isolation leakage. No retry outcome changes the canonical classification or release blocker count."
+  },
+  "families": [
+    {
+      "familyId": "F04",
+      "name": "auth/RBAC edge-contract manifestation",
+      "canonicalFailedNodes": 7,
+      "stableFailures": 0,
+      "orderSensitiveOrNonReproducing": 7,
+      "dispositionTotals": {
+        "test-isolation or order defect": 7
+      }
+    },
+    {
+      "familyId": "F11",
+      "name": "governance and provider-inventory expectation drift",
+      "canonicalFailedNodes": 3,
+      "stableFailures": 3,
+      "orderSensitiveOrNonReproducing": 0,
+      "dispositionTotals": {
+        "stale test expectation": 3
+      }
+    },
+    {
+      "familyId": "F12",
+      "name": "market evidence, authority, and official-macro ordering",
+      "canonicalFailedNodes": 23,
+      "stableFailures": 17,
+      "orderSensitiveOrNonReproducing": 6,
+      "dispositionTotals": {
+        "confirmed product defect": 11,
+        "provider-order decision HOLD": 4,
+        "stale test expectation": 2,
+        "test-isolation or order defect": 6
+      }
+    },
+    {
+      "familyId": "F17",
+      "name": "AI public-preview manifestation",
+      "canonicalFailedNodes": 1,
+      "stableFailures": 0,
+      "orderSensitiveOrNonReproducing": 1,
+      "dispositionTotals": {
+        "test-isolation or order defect": 1
+      }
+    },
+    {
+      "familyId": "F19",
+      "name": "normalized adapter and source metadata contracts",
+      "canonicalFailedNodes": 8,
+      "stableFailures": 5,
+      "orderSensitiveOrNonReproducing": 3,
+      "dispositionTotals": {
+        "confirmed product defect": 2,
+        "stale test expectation": 3,
+        "test-isolation or order defect": 3
+      }
+    }
+  ],
+  "nodeClassifications": [
+    {
+      "nodeId": "tests/api/test_market_cn_breadth.py::MarketCnBreadthApiTestCase::test_cn_breadth_sanitizes_tickflow_failure_reason",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "market evidence projection changes unavailable/fallback/proxy or authority semantics"
+    },
+    {
+      "nodeId": "tests/api/test_market_freshness.py::MarketFreshnessCacheTestCase::test_unavailable_breadth_fails_closed_without_live_freshness",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "market evidence projection changes unavailable/fallback/proxy or authority semantics"
+    },
+    {
+      "nodeId": "tests/api/test_market_futures.py::MarketFuturesApiTestCase::test_get_futures_keeps_failed_proxy_symbol_on_item_level_fallback",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "market evidence projection changes unavailable/fallback/proxy or authority semantics"
+    },
+    {
+      "nodeId": "tests/api/test_market_futures.py::MarketFuturesApiTestCase::test_get_futures_merges_delayed_proxy_items_onto_existing_fallback_card",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "market evidence projection changes unavailable/fallback/proxy or authority semantics"
+    },
+    {
+      "nodeId": "tests/api/test_market_fx_commodities.py::test_fx_commodities_proxy_snapshot_keeps_item_level_fallback_on_symbol_failure",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "market evidence projection changes unavailable/fallback/proxy or authority semantics"
+    },
+    {
+      "nodeId": "tests/api/test_market_fx_commodities.py::test_fx_commodities_proxy_snapshot_uses_delayed_yfinance_adapter_without_live_label",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "market evidence projection changes unavailable/fallback/proxy or authority semantics"
+    },
+    {
+      "nodeId": "tests/api/test_market_rotation_radar.py::test_market_rotation_radar_api_preserves_enabled_etf_leadership_contract_without_broadening_headlines",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "market evidence projection changes unavailable/fallback/proxy or authority semantics"
+    },
+    {
+      "nodeId": "tests/api/test_market_temperature.py::MarketTemperatureApiTestCase::test_market_overview_macro_api_preserves_official_authority_projection_fields",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "market evidence projection changes unavailable/fallback/proxy or authority semantics"
+    },
+    {
+      "nodeId": "tests/api/test_market_temperature.py::MarketTemperatureApiTestCase::test_market_overview_official_macro_rows_keep_authority_metadata",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "market evidence projection changes unavailable/fallback/proxy or authority semantics"
+    },
+    {
+      "nodeId": "tests/api/test_market_temperature.py::MarketTemperatureApiTestCase::test_market_temperature_route_response_model_preserves_consumed_subset_and_historical_extras",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "market evidence projection changes unavailable/fallback/proxy or authority semantics"
+    },
+    {
+      "nodeId": "tests/api/test_market_us_breadth.py::test_market_us_breadth_current_proxy_snapshot_stays_proxy_not_exchange_breadth",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "market evidence projection changes unavailable/fallback/proxy or authority semantics"
+    },
+    {
+      "nodeId": "tests/api/test_runtime_api_edge_contracts.py::test_backtest_internal_error_suppresses_raw_runtime_detail",
+      "primaryFamily": "F04",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical 401/JSON edge failure; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/backtest/sample-status-required_keys7]",
+      "primaryFamily": "F04",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical 401/JSON edge failure; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/research/radar-required_keys6]",
+      "primaryFamily": "F04",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical 401/JSON edge failure; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/scanner/runs-required_keys4]",
+      "primaryFamily": "F04",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical 401/JSON edge failure; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/scanner/status-required_keys3]",
+      "primaryFamily": "F04",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical 401/JSON edge failure; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/watchlist/items-required_keys5]",
+      "primaryFamily": "F04",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical 401/JSON edge failure; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/api/test_runtime_api_edge_contracts.py::test_unknown_api_route_remains_json_not_found",
+      "primaryFamily": "F04",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical 401/JSON edge failure; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/test_ai_decision_public_safety.py::PublicPreviewSafetyTestCase::test_guest_preview_strips_raw_ai_details_and_uses_mocked_analysis",
+      "primaryFamily": "F17",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical guest preview 500; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/test_market_overview_core_quote_repair.py::test_us10y_dxy_and_btc_keep_truthful_source_freshness_metadata",
+      "primaryFamily": "F19",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "core quote freshness/source evidence remains wrong in isolation"
+    },
+    {
+      "nodeId": "tests/test_market_overview_core_quote_repair.py::test_vix_fred_transport_overlay_is_consumed_when_fresh_enough",
+      "primaryFamily": "F19",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "core quote freshness/source evidence remains wrong in isolation"
+    },
+    {
+      "nodeId": "tests/test_market_overview_evidence_snapshot.py::MarketOverviewEvidenceSnapshotTestCase::test_evidence_snapshot_reuses_shared_provider_helper_without_widening_contract",
+      "primaryFamily": "F11",
+      "rootCauseCluster": "ST-01",
+      "remediationDisposition": "stale test expectation",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "governance/inventory expectation remains stale in every retry"
+    },
+    {
+      "nodeId": "tests/test_market_overview_provider_boundaries.py::test_market_overview_transport_modules_stay_runtime_lightweight",
+      "primaryFamily": "F11",
+      "rootCauseCluster": "ST-01",
+      "remediationDisposition": "stale test expectation",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "governance/inventory expectation remains stale in every retry"
+    },
+    {
+      "nodeId": "tests/test_market_overview_provider_deadlines.py::test_official_macro_points_attempt_fred_dgs10_dgs30_after_treasury_timeout",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "PO-01",
+      "remediationDisposition": "provider-order decision HOLD",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "protected official-macro order; no order or expectation change authorized"
+    },
+    {
+      "nodeId": "tests/test_market_overview_provider_deadlines.py::test_official_macro_points_prioritize_vixcls_then_fred_dgs10_dgs30_after_treasury_miss",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "PO-01",
+      "remediationDisposition": "provider-order decision HOLD",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "protected official-macro order; no order or expectation change authorized"
+    },
+    {
+      "nodeId": "tests/test_market_overview_provider_deadlines.py::test_official_macro_points_protect_fred_series_from_slow_treasury_fallback",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "PO-01",
+      "remediationDisposition": "provider-order decision HOLD",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "protected official-macro order; no order or expectation change authorized"
+    },
+    {
+      "nodeId": "tests/test_market_overview_provider_deadlines.py::test_rates_macro_and_volatility_reuse_official_macro_observations_within_micro_cache_ttl",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "PO-01",
+      "remediationDisposition": "provider-order decision HOLD",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "protected official-macro order; no order or expectation change authorized"
+    },
+    {
+      "nodeId": "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_auth_failure_reports_actionable_window_diagnostics_without_secret_leak",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical proxy/diagnostic mismatch; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_calendar_and_market_session_empty_bars_are_activation_blockers",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical proxy/diagnostic mismatch; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_empty_all_windows_reports_empty_response_and_missing_windows",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical proxy/diagnostic mismatch; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_interval_mapping_failure_is_first_class_activation_blocker",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical proxy/diagnostic mismatch; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_symbol_failures_reduce_coverage_and_confidence",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical proxy/diagnostic mismatch; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_partial_alpaca_credentials_report_missing_field_without_constructing_provider",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical proxy/diagnostic mismatch; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_rotation_radar_yfinance_quote_provider_reuses_history_transport",
+      "primaryFamily": "F19",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical auth/provider-state mismatch; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/test_market_temperature_input_snapshot.py::test_temperature_input_builder_uses_internal_snapshots_without_public_wrapper_side_effects",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ST-ME-02",
+      "remediationDisposition": "stale test expectation",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "market-evidence authority expectation diverges from landed projection"
+    },
+    {
+      "nodeId": "tests/test_market_temperature_input_snapshot.py::test_temperature_inputs_preserve_official_macro_authority_metadata_after_rates_volatility_merge",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ST-ME-02",
+      "remediationDisposition": "stale test expectation",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "market-evidence authority expectation diverges from landed projection"
+    },
+    {
+      "nodeId": "tests/test_options_structure_contract.py::test_options_structure_api_returns_not_available_contract_without_leaks",
+      "primaryFamily": "F19",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical auth/provider-state mismatch; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/test_options_structure_contract.py::test_options_structure_api_routes_through_gateway_with_in_memory_provider",
+      "primaryFamily": "F19",
+      "rootCauseCluster": "TI-01",
+      "remediationDisposition": "test-isolation or order defect",
+      "canonicalOutcome": "failed",
+      "reproduction": "PPP",
+      "classificationRationale": "canonical auth/provider-state mismatch; 3 isolated runs passed"
+    },
+    {
+      "nodeId": "tests/test_provider_credent\u0069al_inventory.py::test_provider_credent\u0069al_inventory_freezes_configured_and_wired_sources_without_reading_values",
+      "primaryFamily": "F11",
+      "rootCauseCluster": "ST-01",
+      "remediationDisposition": "stale test expectation",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "governance/inventory expectation remains stale in every retry"
+    },
+    {
+      "nodeId": "tests/test_stock_api_freshness_contract.py::test_quote_endpoint_allows_guest_access_without_auth_dependency",
+      "primaryFamily": "F19",
+      "rootCauseCluster": "ST-NA-01",
+      "remediationDisposition": "stale test expectation",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "normalized adapter expectation rejects currently exposed safe source metadata"
+    },
+    {
+      "nodeId": "tests/test_stock_api_freshness_contract.py::test_quote_endpoint_can_surface_non_fresh_placeholder_metadata_without_404",
+      "primaryFamily": "F19",
+      "rootCauseCluster": "ST-NA-01",
+      "remediationDisposition": "stale test expectation",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "normalized adapter expectation rejects currently exposed safe source metadata"
+    },
+    {
+      "nodeId": "tests/test_stock_api_freshness_contract.py::test_quote_endpoint_exposes_safe_source_label_and_market_timestamp_without_runtime_taxonomy",
+      "primaryFamily": "F19",
+      "rootCauseCluster": "ST-NA-01",
+      "remediationDisposition": "stale test expectation",
+      "canonicalOutcome": "failed",
+      "reproduction": "FFF",
+      "classificationRationale": "normalized adapter expectation rejects currently exposed safe source metadata"
+    }
+  ],
+  "consoleSubtestFailures": [
+    {
+      "displayId": "MarketCnBreadthApiTestCase.test_cn_breadth_falls_back_for_tickflow_guard_reason_codes(reason='tickflow_market_stats_empty')",
+      "parentCollectedNodeId": "tests/api/test_market_cn_breadth.py::MarketCnBreadthApiTestCase::test_cn_breadth_falls_back_for_tickflow_guard_reason_codes",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "console subtest failure"
+    },
+    {
+      "displayId": "MarketCnBreadthApiTestCase.test_cn_breadth_falls_back_for_tickflow_guard_reason_codes(reason='tickflow_market_stats_malformed')",
+      "parentCollectedNodeId": "tests/api/test_market_cn_breadth.py::MarketCnBreadthApiTestCase::test_cn_breadth_falls_back_for_tickflow_guard_reason_codes",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "console subtest failure"
+    },
+    {
+      "displayId": "MarketCnBreadthApiTestCase.test_cn_breadth_falls_back_for_tickflow_guard_reason_codes(reason='tickflow_not_configured')",
+      "parentCollectedNodeId": "tests/api/test_market_cn_breadth.py::MarketCnBreadthApiTestCase::test_cn_breadth_falls_back_for_tickflow_guard_reason_codes",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "console subtest failure"
+    },
+    {
+      "displayId": "MarketCnBreadthApiTestCase.test_cn_breadth_falls_back_for_tickflow_guard_reason_codes(reason='tickflow_permission_unavailable')",
+      "parentCollectedNodeId": "tests/api/test_market_cn_breadth.py::MarketCnBreadthApiTestCase::test_cn_breadth_falls_back_for_tickflow_guard_reason_codes",
+      "primaryFamily": "F12",
+      "rootCauseCluster": "ME-01",
+      "remediationDisposition": "confirmed product defect",
+      "canonicalOutcome": "console subtest failure"
+    }
+  ],
+  "dispositionTotals": {
+    "confirmed product defect": 13,
+    "provider-order decision HOLD": 4,
+    "stale test expectation": 8,
+    "test-isolation or order defect": 17,
+    "unclassified": 0,
+    "duplicateAssignment": 0
+  },
+  "f12AndF19Separation": {
+    "ME-01 market evidence defects": 13,
+    "stale market-evidence expectations": 2,
+    "stale normalized-adapter expectations": 3,
+    "explicit market-source decisions": 0,
+    "explicit provider-order decisions": 4,
+    "new independent defect": 0
+  },
+  "historicalAudits": [
+    {
+      "taskId": "T495",
+      "classification": "fully superseded",
+      "reason": "Financial safety findings were addressed by landed backtest, portfolio, scanner, FX and integration remediation commits.",
+      "worktreeRemovalAfterAcceptance": "safe: clean and its HEAD is an ancestor of accepted base."
+    },
+    {
+      "taskId": "T496",
+      "classification": "fully superseded",
+      "reason": "Auth/RBAC audit themes were landed; the residual F04 cases reproduce as TI-01 test isolation, not a current authorization defect.",
+      "worktreeRemovalAfterAcceptance": "safe: clean and its HEAD is an ancestor of accepted base."
+    },
+    {
+      "taskId": "T497",
+      "classification": "fully superseded",
+      "reason": "Storage, transaction and recovery findings were remediated before the accepted base; no residual canonical node belongs to that audit's storage family.",
+      "worktreeRemovalAfterAcceptance": "safe: clean and its HEAD is an ancestor of accepted base."
+    },
+    {
+      "taskId": "T498",
+      "classification": "partially reusable",
+      "reason": "Its test/release-gate trust concern remains relevant because TI-01 invalidates a green canonical gate; its historic counts are superseded.",
+      "worktreeRemovalAfterAcceptance": "safe: clean and its HEAD is an ancestor of accepted base; retain the external audit report as historical evidence."
+    }
+  ],
+  "nextWave": [
+    {
+      "taskId": "T564",
+      "rootCauseCluster": "TI-01 shared test-state leakage",
+      "nodeCount": 17,
+      "failedNodeIds": [
+        "tests/api/test_runtime_api_edge_contracts.py::test_backtest_internal_error_suppresses_raw_runtime_detail",
+        "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/backtest/sample-status-required_keys7]",
+        "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/research/radar-required_keys6]",
+        "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/scanner/runs-required_keys4]",
+        "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/scanner/status-required_keys3]",
+        "tests/api/test_runtime_api_edge_contracts.py::test_consumer_runtime_api_routes_return_json_contracts[/api/v1/watchlist/items-required_keys5]",
+        "tests/api/test_runtime_api_edge_contracts.py::test_unknown_api_route_remains_json_not_found",
+        "tests/test_ai_decision_public_safety.py::PublicPreviewSafetyTestCase::test_guest_preview_strips_raw_ai_details_and_uses_mocked_analysis",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_auth_failure_reports_actionable_window_diagnostics_without_secret_leak",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_calendar_and_market_session_empty_bars_are_activation_blockers",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_empty_all_windows_reports_empty_response_and_missing_windows",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_interval_mapping_failure_is_first_class_activation_blocker",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_configured_provider_symbol_failures_reduce_coverage_and_confidence",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_partial_alpaca_credentials_report_missing_field_without_constructing_provider",
+        "tests/test_market_rotation_radar_service.py::MarketRotationRadarServiceTestCase::test_rotation_radar_yfinance_quote_provider_reuses_history_transport",
+        "tests/test_options_structure_contract.py::test_options_structure_api_returns_not_available_contract_without_leaks",
+        "tests/test_options_structure_contract.py::test_options_structure_api_routes_through_gateway_with_in_memory_provider"
+      ],
+      "authoritativeOwner": "test runtime lifecycle and fixture isolation",
+      "expectedProductionPaths": [
+        "api/app.py",
+        "api/deps.py",
+        "src/runtime/composition.py"
+      ],
+      "expectedTestPaths": [
+        "tests/conftest.py",
+        "tests/api/test_runtime_api_edge_contracts.py",
+        "tests/test_market_rotation_radar_service.py",
+        "tests/test_options_structure_contract.py"
+      ],
+      "protectedAdjacentOwners": [
+        "auth/RBAC",
+        "provider runtime",
+        "market-source authority"
+      ],
+      "dependencies": [],
+      "productDecisionRequired": false,
+      "recommendedModel": "GPT-5.6-sol",
+      "reasoningEffort": "xhigh",
+      "commitSubject": "fix(test): isolate canonical runtime state",
+      "priority": 1
+    },
+    {
+      "taskId": "T565",
+      "rootCauseCluster": "ST-01 governance expectation drift",
+      "nodeCount": 3,
+      "failedNodeIds": [
+        "tests/test_market_overview_evidence_snapshot.py::MarketOverviewEvidenceSnapshotTestCase::test_evidence_snapshot_reuses_shared_provider_helper_without_widening_contract",
+        "tests/test_market_overview_provider_boundaries.py::test_market_overview_transport_modules_stay_runtime_lightweight",
+        "tests/test_provider_credent\u0069al_inventory.py::test_provider_credent\u0069al_inventory_freezes_configured_and_wired_sources_without_reading_values"
+      ],
+      "authoritativeOwner": "architecture and validation governance",
+      "expectedProductionPaths": [],
+      "expectedTestPaths": [
+        "tests/test_market_overview_evidence_snapshot.py",
+        "tests/test_market_overview_provider_boundaries.py",
+        "tests/test_provider_credential_inventory.py"
+      ],
+      "protectedAdjacentOwners": [
+        "provider credential handling",
+        "source authority"
+      ],
+      "dependencies": [],
+      "productDecisionRequired": false,
+      "recommendedModel": "GPT-5.6-sol",
+      "reasoningEffort": "high",
+      "commitSubject": "test(governance): align provider ownership contracts",
+      "priority": 2
+    },
+    {
+      "taskId": "T566",
+      "rootCauseCluster": "ME-01 market evidence truth",
+      "nodeCount": 13,
+      "failedNodeIds": [
+        "tests/api/test_market_cn_breadth.py::MarketCnBreadthApiTestCase::test_cn_breadth_sanitizes_tickflow_failure_reason",
+        "tests/api/test_market_freshness.py::MarketFreshnessCacheTestCase::test_unavailable_breadth_fails_closed_without_live_freshness",
+        "tests/api/test_market_futures.py::MarketFuturesApiTestCase::test_get_futures_keeps_failed_proxy_symbol_on_item_level_fallback",
+        "tests/api/test_market_futures.py::MarketFuturesApiTestCase::test_get_futures_merges_delayed_proxy_items_onto_existing_fallback_card",
+        "tests/api/test_market_fx_commodities.py::test_fx_commodities_proxy_snapshot_keeps_item_level_fallback_on_symbol_failure",
+        "tests/api/test_market_fx_commodities.py::test_fx_commodities_proxy_snapshot_uses_delayed_yfinance_adapter_without_live_label",
+        "tests/api/test_market_rotation_radar.py::test_market_rotation_radar_api_preserves_enabled_etf_leadership_contract_without_broadening_headlines",
+        "tests/api/test_market_temperature.py::MarketTemperatureApiTestCase::test_market_overview_macro_api_preserves_official_authority_projection_fields",
+        "tests/api/test_market_temperature.py::MarketTemperatureApiTestCase::test_market_overview_official_macro_rows_keep_authority_metadata",
+        "tests/api/test_market_temperature.py::MarketTemperatureApiTestCase::test_market_temperature_route_response_model_preserves_consumed_subset_and_historical_extras",
+        "tests/api/test_market_us_breadth.py::test_market_us_breadth_current_proxy_snapshot_stays_proxy_not_exchange_breadth",
+        "tests/test_market_overview_core_quote_repair.py::test_us10y_dxy_and_btc_keep_truthful_source_freshness_metadata",
+        "tests/test_market_overview_core_quote_repair.py::test_vix_fred_transport_overlay_is_consumed_when_fresh_enough"
+      ],
+      "authoritativeOwner": "market overview evidence service and consumer projections",
+      "expectedProductionPaths": [
+        "src/services/market_overview_service.py",
+        "api/v1/endpoints/market.py",
+        "api/v1/endpoints/market_overview.py"
+      ],
+      "expectedTestPaths": [
+        "tests/api/test_market_cn_breadth.py",
+        "tests/api/test_market_freshness.py",
+        "tests/api/test_market_futures.py",
+        "tests/api/test_market_fx_commodities.py",
+        "tests/api/test_market_temperature.py",
+        "tests/api/test_market_us_breadth.py",
+        "tests/test_market_overview_core_quote_repair.py"
+      ],
+      "protectedAdjacentOwners": [
+        "provider order",
+        "source authority",
+        "cache/freshness"
+      ],
+      "dependencies": [
+        "T564"
+      ],
+      "productDecisionRequired": false,
+      "recommendedModel": "GPT-5.6-sol",
+      "reasoningEffort": "xhigh",
+      "commitSubject": "fix(market): preserve evidence truth semantics",
+      "priority": 3
+    },
+    {
+      "taskId": "T567",
+      "rootCauseCluster": "ST-ME-02 and ST-NA-01 stale consumer expectations",
+      "nodeCount": 5,
+      "failedNodeIds": [
+        "tests/test_market_temperature_input_snapshot.py::test_temperature_input_builder_uses_internal_snapshots_without_public_wrapper_side_effects",
+        "tests/test_market_temperature_input_snapshot.py::test_temperature_inputs_preserve_official_macro_authority_metadata_after_rates_volatility_merge",
+        "tests/test_stock_api_freshness_contract.py::test_quote_endpoint_allows_guest_access_without_auth_dependency",
+        "tests/test_stock_api_freshness_contract.py::test_quote_endpoint_can_surface_non_fresh_placeholder_metadata_without_404",
+        "tests/test_stock_api_freshness_contract.py::test_quote_endpoint_exposes_safe_source_label_and_market_timestamp_without_runtime_taxonomy"
+      ],
+      "authoritativeOwner": "market and stock API contract tests",
+      "expectedProductionPaths": [],
+      "expectedTestPaths": [
+        "tests/test_market_temperature_input_snapshot.py",
+        "tests/test_stock_api_freshness_contract.py"
+      ],
+      "protectedAdjacentOwners": [
+        "market evidence source authority",
+        "normalized provider adapters"
+      ],
+      "dependencies": [
+        "T566"
+      ],
+      "productDecisionRequired": false,
+      "recommendedModel": "GPT-5.6-sol",
+      "reasoningEffort": "high",
+      "commitSubject": "test(market): align evidence contract expectations",
+      "priority": 4
+    },
+    {
+      "taskId": "T568",
+      "rootCauseCluster": "PO-01 official-macro provider order",
+      "nodeCount": 4,
+      "failedNodeIds": [
+        "tests/test_market_overview_provider_deadlines.py::test_official_macro_points_attempt_fred_dgs10_dgs30_after_treasury_timeout",
+        "tests/test_market_overview_provider_deadlines.py::test_official_macro_points_prioritize_vixcls_then_fred_dgs10_dgs30_after_treasury_miss",
+        "tests/test_market_overview_provider_deadlines.py::test_official_macro_points_protect_fred_series_from_slow_treasury_fallback",
+        "tests/test_market_overview_provider_deadlines.py::test_rates_macro_and_volatility_reuse_official_macro_observations_within_micro_cache_ttl"
+      ],
+      "authoritativeOwner": "official macro provider runtime",
+      "expectedProductionPaths": [
+        "src/services/official_macro_transport.py",
+        "src/services/market_overview_service.py"
+      ],
+      "expectedTestPaths": [
+        "tests/test_market_overview_provider_deadlines.py"
+      ],
+      "protectedAdjacentOwners": [
+        "provider order",
+        "fallback",
+        "deadline budget",
+        "source authority"
+      ],
+      "dependencies": [],
+      "productDecisionRequired": true,
+      "recommendedModel": "GPT-5.6-sol",
+      "reasoningEffort": "xhigh",
+      "commitSubject": "fix(market): decide official macro fetch order",
+      "priority": 0
+    }
+  ],
+  "releaseBlockers": [
+    "42 canonical failed collected nodes",
+    "4 additional canonical console subtest failures",
+    "TI-01 prevents treating isolated reruns as a green gate",
+    "PO-01 has no approved official-macro provider-order decision"
+  ],
+  "validationPlan": {
+    "comprehensiveQoderWork": "Run only after T564 through T567 are complete and, if PO-01 changes are desired, after the explicit T568 decision and implementation; then rerun CI=true ./scripts/ci_gate.sh before release qualification."
+  }
+}
