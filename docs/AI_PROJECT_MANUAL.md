@@ -282,6 +282,47 @@ Do not push unless explicitly authorized. Do not commit unless the task asks for
 
 Before final delivery: inspect `git diff`, run `git diff --check`, run required tests/checks, confirm no unexpected files or secrets, and report exact commands and results. Final reports should include status, changed files, validation, risk, final base commit, commit hash when created, final `git status`, and rollback command.
 
+### Completion Evidence By Change Risk
+
+本节只规定完成报告必须保留的证据，不改变风险选择、gate 选择、gate 执行、
+topology、release policy 或其他验收规则。任务和仓库要求运行的验证仍必须运行；
+报告简洁只允许去掉重复叙述，不允许省略必需证据。R0 到 R5 的要求逐级累积，
+失败、跳过、不可用、未执行、静态推断或未评估均不得写成通过。
+
+- **R0**：报告结果、相对 accepted base 的精确 changed files、focused/static
+  validation 的完整命令与结果、commit hash/subject（未创建时明确说明）、可执行
+  rollback、最终 clean/dirty status，以及 upstream 与 push state。
+- **R1**：保留全部 R0 字段；另外说明受影响的 test/mechanical owner、节点或生成
+  产物范围（如适用），不得用“小改动”省略 focused validation 或未验证项。
+- **R2**：保留全部 R0/R1 字段；另外报告 protected owner、adjacent contracts、
+  topology delta（未变化也要给出验证）、targeted integration evidence，以及
+  residual risk。
+- **R3**：保留全部 R2 字段；对 public contract 或 cross-owner integration 给出
+  producer/consumer 和 combined-tree 身份、所有受影响 owner 的 targeted integration
+  结果、精确 topology delta 与仍未验证的集成风险。
+- **R4**：保留全部 R3 字段；另外报告完整 immutable evidence identity，包括
+  accepted base/tree/commit、environment、dependency/config、command/selection、artifact
+  hash 和适用的 candidate identity；列出全部 required protected gates，并分别保留
+  first attempt 与每次 retry 的结果。触发 browser/UAT、release 或 remote 验证时，
+  必须给出真实执行证据和精确身份；未触发、未授权或未执行时明确记录，不能推断通过。
+- **R5**：保留全部 R4 字段；绑定 frozen candidate 的 source/tree/artifact/digest、
+  complete protected gates、browser/UAT/release 与 target-environment 证据、first
+  attempt/retry 历史、promotion/rollback identity，以及精确 remote ref/digest 验证和
+  push state。任何 identity mismatch 都使相关证据失效，必须如实报告并重新资格化。
+
+无论报告层级，任务触发以下边界时都必须保留对应 evidence 与 rollback boundary：
+auth/RBAC/owner isolation、persistence/transaction、provider isolation/source authority、
+truth semantics、secrets/private paths、no-live、release identity、migration、browser、
+target environment。特别保留 `missing != zero`、`not evaluated != passed`、
+`skipped != passed`、`corrupt state != empty state`、`injected transport != live transport`
+和 `task accepted != analysis completed`；不得用概括性“已验证”替代边界、命令、
+结果、artifact identity 或限制条件。
+
+若任务创建或依赖 temporary audit/evidence artifact，完成报告必须记录 artifact
+classification、owner、仍存依赖、最早 retirement 条件和删除动作。只有在 durable
+policy 已迁入 canonical authority、所有引用已移除且资格化前置条件满足后才能删除；
+不得移动到 archive/historical/completed-report 目录，也不得保留 compatibility copy。
+
 Source provenance: [`AGENTS.md`](../AGENTS.md), [`docs/DOCS_INDEX.md`](DOCS_INDEX.md).
 
 ## Current Canonical File Map
@@ -371,7 +412,7 @@ The machine-readable manifest is generated at `docs/AI_PROJECT_MANUAL_SOURCES.js
 
 Current discovery summary:
 
-- Markdown discovered after pruned directory rules, excluding this generated manual: 24
+- Markdown discovered after pruned directory rules, excluding this generated manual: 26
 - Candidate Markdown after hard-collapse policy: 3
 - Curated sources included in this manual: 3
 

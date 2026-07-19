@@ -17,8 +17,11 @@ ROOT = Path(__file__).resolve().parent.parent
 MANUAL_PATH = ROOT / "docs" / "AI_PROJECT_MANUAL.md"
 MANIFEST_PATH = ROOT / "docs" / "AI_PROJECT_MANUAL_SOURCES.json"
 GENERATOR_PATH = "scripts/build_ai_project_manual.py"
-GENERATOR_VERSION = 5
+GENERATOR_VERSION = 6
 SCHEMA_VERSION = 2
+
+COMPLETION_EVIDENCE_START = "<!-- BEGIN COMPLETION_EVIDENCE_TIERS -->"
+COMPLETION_EVIDENCE_END = "<!-- END COMPLETION_EVIDENCE_TIERS -->"
 
 PRUNED_DIR_NAMES = {
     ".cache",
@@ -165,6 +168,26 @@ def first_heading(text: str, fallback: str) -> str:
         if stripped.startswith("# "):
             return stripped[2:].strip()
     return fallback
+
+
+def read_marked_source_section(path: Path, start_marker: str, end_marker: str) -> str:
+    text = path.read_text(encoding="utf-8")
+    if text.count(start_marker) != 1 or text.count(end_marker) != 1:
+        raise ValueError(f"expected exactly one marked source section in {rel_path(path)}")
+    start = text.index(start_marker) + len(start_marker)
+    end = text.index(end_marker, start)
+    body = text[start:end].strip()
+    if not body:
+        raise ValueError(f"marked source section is empty in {rel_path(path)}")
+    return body
+
+
+def completion_evidence_policy() -> str:
+    return read_marked_source_section(
+        ROOT / "AGENTS.md",
+        COMPLETION_EVIDENCE_START,
+        COMPLETION_EVIDENCE_END,
+    )
 
 
 def source_metadata(source: SourceRef) -> dict[str, object]:
@@ -771,7 +794,9 @@ SECTIONS = [
             "rerun focused validation, and only then commit/report.\n\n"
             "Before final delivery: inspect `git diff`, run `git diff --check`, run required tests/checks, confirm no unexpected files "
             "or secrets, and report exact commands and results. Final reports should include status, changed files, validation, "
-            "risk, final base commit, commit hash when created, final `git status`, and rollback command."
+            "risk, final base commit, commit hash when created, final `git status`, and rollback command.\n\n"
+            "### Completion Evidence By Change Risk\n\n"
+            + completion_evidence_policy()
         ),
         source_paths=("AGENTS.md", "docs/DOCS_INDEX.md"),
         update_trigger="Task modes, git policy, final-report requirements, or AI workflow rules change.",
