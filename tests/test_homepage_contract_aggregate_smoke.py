@@ -11,10 +11,8 @@ import pytest
 
 from src.services.dashboard_overview_service import DashboardOverviewService
 from src.services.event_radar_service import build_no_evidence_event_radar_snapshot
-from src.services.event_window_service import EventWindowService
 from src.services.homepage_capabilities_service import HomepageCapabilitiesService
 from src.services.homepage_demo_payload_service import HomepageDemoPayloadService
-from src.services.homepage_explanation_service import HomepageExplanationService
 from src.services.homepage_module_manifest_service import HomepageModuleManifestService
 from src.services.market_pulse_service import MarketPulseService
 from src.services.market_session_status_service import MarketSessionStatusService
@@ -186,20 +184,12 @@ def _build_market_session_status_payload() -> dict[str, object]:
     return MarketSessionStatusService().build_status().model_dump(mode="json")
 
 
-def _build_event_window_payload() -> dict[str, object]:
-    return EventWindowService().build_summary().model_dump(mode="json")
-
-
 def _build_homepage_capabilities_payload() -> dict[str, object]:
     return HomepageCapabilitiesService().build_snapshot().model_dump(mode="json")
 
 
 def _build_homepage_module_manifest_payload() -> dict[str, object]:
     return HomepageModuleManifestService().build_manifest(as_of="2026-06-14T09:30:00Z")
-
-
-def _build_homepage_explanation_payload() -> dict[str, object]:
-    return HomepageExplanationService().build_explanations().model_dump(mode="json")
 
 
 def _build_source_freshness_summary_payload() -> dict[str, object]:
@@ -220,10 +210,8 @@ AGGREGATE_CASES: tuple[tuple[str, Callable[[], object], int], ...] = (
     ("research_queue_service", _build_research_queue_payload, 12000),
     ("public_data_quality_service", _build_public_data_quality_payload, 8000),
     ("market_session_status_service", _build_market_session_status_payload, 8000),
-    ("event_window_service", _build_event_window_payload, 12000),
     ("homepage_capabilities_service", _build_homepage_capabilities_payload, 12000),
     ("homepage_module_manifest_service", _build_homepage_module_manifest_payload, 12000),
-    ("homepage_explanation_service", _build_homepage_explanation_payload, 8000),
     ("source_freshness_summary_service", _build_source_freshness_summary_payload, 8000),
     ("homepage_demo_payload_service", _build_homepage_demo_payloads, 30000),
 )

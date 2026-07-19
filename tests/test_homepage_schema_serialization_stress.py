@@ -21,7 +21,6 @@ from src.services.homepage_capabilities_service import HomepageCapabilitiesServi
 from src.services.homepage_cross_asset_indicators_service import HomepageCrossAssetIndicatorsService
 from src.services.homepage_daily_market_brief_service import HomepageDailyMarketBriefService
 from src.services.homepage_driver_chain_service import HomepageDriverChainService
-from src.services.homepage_empty_state_service import HomepageEmptyStateService
 from src.services.homepage_earnings_catalysts_service import HomepageEarningsCatalystsService
 from src.services.homepage_event_impact_map_service import HomepageEventImpactMapService
 from src.services.homepage_evidence_quality_service import HomepageEvidenceQualityService
@@ -248,10 +247,6 @@ def _build_homepage_public_copy_helper_payload() -> dict[str, object]:
     }
 
 
-def _build_homepage_empty_state_contract() -> object:
-    return HomepageEmptyStateService().build_contract()
-
-
 def _build_homepage_section_layout() -> object:
     return HomepageSectionLayoutService().build_layout(as_of=FIXED_AS_OF)
 
@@ -345,7 +340,6 @@ PUBLIC_HOMEPAGE_OUTPUTS: tuple[tuple[str, Callable[[], object]], ...] = (
     ("HomepageCapabilitiesService.build_snapshot", _build_homepage_capabilities_snapshot),
     ("HomepageModuleManifestService.build_manifest", _build_homepage_module_manifest),
     ("homepage_public_copy_helper_output", _build_homepage_public_copy_helper_payload),
-    ("HomepageEmptyStateService.build_contract", _build_homepage_empty_state_contract),
     ("HomepageSectionLayoutService.build_layout", _build_homepage_section_layout),
     ("HomepageUatReadinessService.build_checklist", _build_homepage_uat_readiness),
     ("HomepageDailyMarketBriefService.build_daily_market_brief", _build_homepage_daily_market_brief),

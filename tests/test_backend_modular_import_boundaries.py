@@ -228,9 +228,6 @@ EXPLICITLY_FORBIDDEN_OPTIONS_LAB_SCHEMA_IMPORT_NAMES = {
     "OptionsStrategyGateSummary",
 }
 EXPECTED_API_SCHEMA_UPWARD_IMPORTS = {
-    "src/services/custom_strategy_contracts.py": {"api.v1.schemas.custom_strategy"},
-    "src/services/event_intelligence_provider_contract.py": {"api.v1.schemas.event_intelligence"},
-    "src/services/event_intelligence_timeline.py": {"api.v1.schemas.event_intelligence"},
     "src/services/factor_experiment_manifest.py": {"api.v1.schemas.factors"},
     "src/services/factor_exposure.py": {"api.v1.schemas.factors"},
     "src/services/factor_metrics.py": {"api.v1.schemas.factors"},
@@ -241,7 +238,6 @@ EXPECTED_API_SCHEMA_UPWARD_IMPORTS = {
     "src/services/options_lab_service.py": {"api.v1.schemas.options"},
     "src/services/dashboard_overview_service.py": {"api.v1.schemas.dashboard_overview"},
     "src/services/event_radar_service.py": {"api.v1.schemas.event_radar"},
-    "src/services/event_window_service.py": {"api.v1.schemas.event_window"},
     "src/services/homepage_after_close_developments_service.py": {"api.v1.schemas.homepage_after_close_developments"},
     "src/services/homepage_ai_capex_infrastructure_service.py": {"api.v1.schemas.homepage_ai_capex_infrastructure"},
     "src/services/homepage_capabilities_service.py": {"api.v1.schemas.homepage_capabilities"},
@@ -250,10 +246,8 @@ EXPECTED_API_SCHEMA_UPWARD_IMPORTS = {
     "src/services/homepage_demo_payload_service.py": {"api.v1.schemas.event_radar", "api.v1.schemas.research_queue"},
     "src/services/homepage_driver_chain_service.py": {"api.v1.schemas.homepage_driver_chain"},
     "src/services/homepage_earnings_catalysts_service.py": {"api.v1.schemas.homepage_earnings_catalysts"},
-    "src/services/homepage_empty_state_service.py": {"api.v1.schemas.homepage_empty_state"},
     "src/services/homepage_event_impact_map_service.py": {"api.v1.schemas.homepage_event_impact_map"},
     "src/services/homepage_evidence_quality_service.py": {"api.v1.schemas.homepage_evidence_quality"},
-    "src/services/homepage_explanation_service.py": {"api.v1.schemas.homepage_explanation"},
     "src/services/homepage_geopolitical_commodity_risk_service.py": {"api.v1.schemas.homepage_geopolitical_commodity_risk"},
     "src/services/homepage_intelligence_service.py": {"api.v1.schemas.homepage_intelligence"},
     "src/services/homepage_liquidity_credit_service.py": {"api.v1.schemas.homepage_liquidity_credit"},

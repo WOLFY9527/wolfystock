@@ -10,7 +10,6 @@ import re
 import pytest
 
 from src.services.homepage_capabilities_service import HomepageCapabilitiesService
-from src.services.homepage_empty_state_service import HomepageEmptyStateService
 from src.services.homepage_intelligence_service import HomepageIntelligenceService
 from src.services.homepage_module_manifest_service import HomepageModuleManifestService
 from src.services.homepage_public_copy import (
@@ -99,10 +98,6 @@ def _build_homepage_module_manifest() -> object:
     return HomepageModuleManifestService().build_manifest(as_of=FIXED_AS_OF)
 
 
-def _build_homepage_empty_state_contract() -> object:
-    return HomepageEmptyStateService().build_contract()
-
-
 def _build_homepage_public_copy_helper_payload() -> dict[str, object]:
     return {
         "allowedDisclosureExample": ALLOWED_PUBLIC_DISCLOSURE,
@@ -118,7 +113,6 @@ PUBLIC_HOMEPAGE_OUTPUTS: tuple[tuple[str, Callable[[], object]], ...] = (
     ("homepage_intelligence_service.build_bundle", _build_homepage_intelligence_bundle),
     ("homepage_capabilities_service.build_snapshot", _build_homepage_capabilities_snapshot),
     ("homepage_module_manifest_service.build_manifest", _build_homepage_module_manifest),
-    ("homepage_empty_state_service.build_contract", _build_homepage_empty_state_contract),
     ("homepage_public_copy_helper_payload", _build_homepage_public_copy_helper_payload),
 )
 
