@@ -17,7 +17,6 @@ FastAPI 应用工厂模块
 """
 
 import mimetypes
-import os
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -38,8 +37,8 @@ from api.middlewares.error_handler import add_error_handlers
 from api.security_headers import apply_security_headers
 from api.v1.schemas.common import HealthResponse
 from src.storage import get_db
-from src.auth import _is_admin_auth_enabled_value, is_auth_enabled, is_production_mode
-from src.config import get_config
+from src.auth import _is_admin_auth_enabled_value, is_auth_enabled
+from src.config import Config
 from src.logging_config import ensure_runtime_file_logging
 from src.runtime.composition import RuntimeContainer
 from src.runtime.settings import RuntimeSettings, SettingSource
@@ -76,16 +75,18 @@ def _resolve_contained_path(root: Path, candidate: Path) -> Path | None:
     return resolved_candidate
 
 
-def _ensure_api_runtime_file_logging_once() -> dict[str, Any]:
+def _ensure_api_runtime_file_logging_once(
+    config: Config,
+    settings: RuntimeSettings,
+) -> dict[str, Any]:
     """Ensure direct ``uvicorn api.app:app`` local runs also write dated API logs."""
     global _RUNTIME_LOGGING_CONFIGURED
     if _RUNTIME_LOGGING_CONFIGURED:
         return {"status": "already_checked"}
     _RUNTIME_LOGGING_CONFIGURED = True
-    if is_production_mode():
+    if settings.profile == "production":
         return {"status": "skipped", "reasonCode": "production_runtime_logging_managed_externally"}
     try:
-        config = get_config()
         level_name = str(getattr(config, "log_level", "INFO") or "INFO").upper()
         level = getattr(logging, level_name, logging.INFO)
         return ensure_runtime_file_logging(
@@ -315,13 +316,14 @@ def create_app(
     Returns:
         配置完成的 FastAPI 应用实例
     """
-    runtime_settings = RuntimeSettings.load()
-    _require_production_auth(runtime_settings)
-
-    from api.v1 import api_v1_router
-
     if container is None:
         container = RuntimeContainer()
+    runtime_settings = container.runtime_settings
+    _require_production_auth(runtime_settings)
+    Config._instance = container.config
+    _ensure_api_runtime_file_logging_once(container.config, runtime_settings)
+
+    from api.v1 import api_v1_router
 
     # 默认静态文件目录
     if static_dir is None:
@@ -363,16 +365,14 @@ def create_app(
     ]
     
     # 从环境变量添加额外的允许来源
-    extra_origins = os.environ.get("CORS_ORIGINS", "")
-    explicit_origins = [o.strip() for o in extra_origins.split(",") if o.strip()]
-    if extra_origins:
-        allowed_origins.extend(explicit_origins)
+    explicit_origins = list(runtime_settings.cors_origins)
+    allowed_origins.extend(explicit_origins)
     
     # 允许所有来源（开发/演示用）
-    allow_all_origins = os.environ.get("CORS_ALLOW_ALL", "").lower() == "true"
-    if is_production_mode() and allow_all_origins:
+    allow_all_origins = runtime_settings.cors_allow_all
+    if runtime_settings.profile == "production" and allow_all_origins:
         raise RuntimeError("CORS_ALLOW_ALL is not allowed in production")
-    if is_production_mode() and not explicit_origins:
+    if runtime_settings.profile == "production" and not explicit_origins:
         raise RuntimeError("CORS_ORIGINS must be explicitly configured in production")
     allow_credentials = not allow_all_origins
     if allow_all_origins:
@@ -552,5 +552,4 @@ def create_app(
 
 
 # 默认应用实例（供 uvicorn 直接使用）
-_ensure_api_runtime_file_logging_once()
 app = create_app(RuntimeContainer())

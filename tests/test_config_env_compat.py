@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.config import Config, setup_env
+from src.runtime.settings import parse_report_language
 
 
 class ConfigEnvCompatibilityTestCase(unittest.TestCase):
@@ -220,7 +221,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
 
     def test_parse_report_language_accepts_known_alias_without_warning(self) -> None:
         with self.assertNoLogs("src.config", level="WARNING"):
-            parsed = Config._parse_report_language("zh-cn")
+            parsed = parse_report_language(Config, "zh-cn")
 
         self.assertEqual(parsed, "zh")
 
@@ -231,20 +232,21 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         _mock_parse_yaml,
         _mock_setup_env,
     ) -> None:
-        env = {
+        invalid_values = {
             "AGENT_ORCHESTRATOR_TIMEOUT_S": "oops",
             "NEWS_MAX_AGE_DAYS": "bad",
             "MAX_WORKERS": "",
             "WEBUI_PORT": "invalid",
         }
 
-        with patch.dict(os.environ, env, clear=True):
-            config = Config._load_from_env()
-
-        self.assertEqual(config.agent_orchestrator_timeout_s, 600)
-        self.assertEqual(config.news_max_age_days, 3)
-        self.assertEqual(config.max_workers, 3)
-        self.assertEqual(config.webui_port, 8000)
+        for name, value in invalid_values.items():
+            with self.subTest(name=name), patch.dict(
+                os.environ,
+                {name: value},
+                clear=True,
+            ):
+                with self.assertRaisesRegex(ValueError, name):
+                    Config._load_from_env()
 
     @patch("src.config.setup_env")
     @patch.object(Config, "_parse_litellm_yaml", return_value=[])
@@ -271,16 +273,19 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         _mock_parse_yaml,
         _mock_setup_env,
     ) -> None:
-        env = {
+        invalid_values = {
             "HOME_QUICK_ANALYSIS_MAX_OUTPUT_TOKENS": "bad",
             "HOME_QUICK_ANALYSIS_TEMPERATURE": "oops",
         }
 
-        with patch.dict(os.environ, env, clear=True):
-            config = Config._load_from_env()
-
-        self.assertEqual(config.home_quick_analysis_max_output_tokens, 4096)
-        self.assertEqual(config.home_quick_analysis_temperature, 0.2)
+        for name, value in invalid_values.items():
+            with self.subTest(name=name), patch.dict(
+                os.environ,
+                {name: value},
+                clear=True,
+            ):
+                with self.assertRaisesRegex(ValueError, name):
+                    Config._load_from_env()
 
     def test_setup_env_maps_legacy_local_proxy_to_standard_proxy_variables(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -307,6 +312,8 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
 
                 self.assertEqual(os.environ.get("HTTP_PROXY"), "http://127.0.0.1:18080")
                 self.assertEqual(os.environ.get("HTTPS_PROXY"), "http://127.0.0.1:18080")
+                self.assertIn("eastmoney.com", os.environ.get("NO_PROXY", ""))
+                self.assertIn("tushare.pro", os.environ.get("NO_PROXY", ""))
 
     def test_setup_env_keeps_explicit_http_proxy_as_authoritative(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

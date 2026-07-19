@@ -5,6 +5,8 @@ from __future__ import annotations
 from contextlib import ExitStack
 from typing import Callable
 
+from src.config import Config
+from src.runtime.settings import RuntimeSettings
 from src.services.crypto_realtime_service import (
     CryptoRealtimeService,
     get_crypto_realtime_service,
@@ -24,7 +26,10 @@ class RuntimeContainer:
         task_queue_factory: Callable[[], AnalysisTaskQueue] = get_task_queue,
         crypto_realtime_service_factory: Callable[..., CryptoRealtimeService] = get_crypto_realtime_service,
         should_start_crypto_realtime: Callable[[], bool] = should_auto_start_crypto_realtime,
+        runtime_settings: RuntimeSettings | None = None,
     ) -> None:
+        self.runtime_settings = runtime_settings or RuntimeSettings.load(config_type=Config)
+        self.config = self.runtime_settings.to_config(Config)
         self._system_config_service_factory = system_config_service_factory
         self._task_queue_factory = task_queue_factory
         self._crypto_realtime_service_factory = crypto_realtime_service_factory

@@ -11,13 +11,10 @@ A股自选股智能分析系统 - 配置管理模块
 """
 
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple
 from urllib.parse import urlparse
 from dataclasses import dataclass, field
-
-from src.utils.dotenv_loader import read_dotenv_values
 
 logger = logging.getLogger(__name__)
 
@@ -543,13 +540,6 @@ def get_effective_litellm_models_to_try(
     return ordered
 
 
-def resolve_unified_llm_temperature(model: str) -> float:
-    """Compatibility adapter for runtime-owned temperature parsing."""
-    from src.runtime.settings import resolve_unified_llm_temperature as resolve
-
-    return resolve(model)
-
-
 def _get_litellm_provider(model: str) -> str:
     """Extract the LiteLLM provider prefix from a model string."""
     if not model:
@@ -759,14 +749,9 @@ class Config:
     agent_orchestrator_mode: str = "standard"  # Orchestrator mode: quick/standard/full/specialist
     agent_orchestrator_timeout_s: int = 600  # Cooperative timeout budget for the whole multi-agent pipeline
     agent_risk_override: bool = True  # Allow risk agent to veto buy signals
-    agent_deep_research_budget: int = 30000  # Max token budget for deep research
-    agent_deep_research_timeout: int = 180  # Max seconds for /research command before returning timeout
     agent_memory_enabled: bool = False  # Enable memory & calibration system
     agent_skill_autoweight: bool = True  # Auto-weight skills by backtest performance
     agent_skill_routing: str = "auto"  # Skill routing: 'auto' (regime-based) or 'manual'
-    agent_event_monitor_enabled: bool = False  # Enable periodic event-driven alert checks in schedule mode
-    agent_event_monitor_interval_minutes: int = 5  # Polling interval for event monitor background checks
-    agent_event_alert_rules_json: str = ""  # JSON array of serialized EventMonitor rules
 
     # === 通知配置（可同时配置多个，全部推送）===
     
@@ -1037,39 +1022,28 @@ class Config:
     _VALID_MARKET_CACHE_REMOTE_BACKENDS = {"disabled", "redis"}
 
     def __post_init__(self) -> None:
-        _log = logging.getLogger(__name__)
         if self.agent_arch not in self._VALID_AGENT_ARCH:
-            _log.warning(
-                "Invalid AGENT_ARCH=%r, falling back to 'single'. Valid: %s",
-                self.agent_arch, self._VALID_AGENT_ARCH,
+            raise ValueError(
+                f"AGENT_ARCH must be one of: {', '.join(sorted(self._VALID_AGENT_ARCH))}"
             )
-            object.__setattr__(self, "agent_arch", "single")
         if self.agent_orchestrator_mode in {"strategy", "skill"}:
-            _log.info(
-                "AGENT_ORCHESTRATOR_MODE=%s is deprecated; normalizing to 'specialist'",
-                self.agent_orchestrator_mode,
-            )
             object.__setattr__(self, "agent_orchestrator_mode", "specialist")
         if self.agent_orchestrator_mode not in self._VALID_ORCHESTRATOR_MODES:
-            _log.warning(
-                "Invalid AGENT_ORCHESTRATOR_MODE=%r, falling back to 'standard'. Valid: %s",
-                self.agent_orchestrator_mode, self._VALID_ORCHESTRATOR_MODES,
+            raise ValueError(
+                "AGENT_ORCHESTRATOR_MODE must be one of: "
+                f"{', '.join(sorted(self._VALID_ORCHESTRATOR_MODES))}"
             )
-            object.__setattr__(self, "agent_orchestrator_mode", "standard")
         if self.agent_skill_routing not in self._VALID_SKILL_ROUTING:
-            _log.warning(
-                "Invalid AGENT_SKILL_ROUTING=%r, falling back to 'auto'. Valid: %s",
-                self.agent_skill_routing, self._VALID_SKILL_ROUTING,
+            raise ValueError(
+                "AGENT_SKILL_ROUTING must be one of: "
+                f"{', '.join(sorted(self._VALID_SKILL_ROUTING))}"
             )
-            object.__setattr__(self, "agent_skill_routing", "auto")
         market_cache_remote_backend = str(self.market_cache_remote_backend or "disabled").strip().lower()
         if market_cache_remote_backend not in self._VALID_MARKET_CACHE_REMOTE_BACKENDS:
-            _log.warning(
-                "Invalid MARKET_CACHE_REMOTE_BACKEND=%r, falling back to 'disabled'. Valid: %s",
-                self.market_cache_remote_backend,
-                self._VALID_MARKET_CACHE_REMOTE_BACKENDS,
+            raise ValueError(
+                "MARKET_CACHE_REMOTE_BACKEND must be one of: "
+                f"{', '.join(sorted(self._VALID_MARKET_CACHE_REMOTE_BACKENDS))}"
             )
-            market_cache_remote_backend = "disabled"
         object.__setattr__(self, "market_cache_remote_backend", market_cache_remote_backend)
 
     # 单例实例存储
@@ -1096,13 +1070,6 @@ class Config:
 
         return RuntimeSettings.load(config_type=cls).to_config(cls)
 
-    @classmethod
-    def _parse_environment(cls) -> 'Config':
-        """Compatibility hook used only by the runtime settings owner."""
-        from src.runtime.settings import parse_runtime_config
-
-        return parse_runtime_config(cls)
-
     @property
     def runtime_settings(self):
         """Return the immutable snapshot that created this compatibility facade."""
@@ -1114,103 +1081,12 @@ class Config:
 
         return parse_litellm_yaml(cls, config_path)
 
-    @classmethod
-    def _parse_llm_channels(cls, channels_str: str) -> List[Dict[str, Any]]:
-        from src.runtime.settings import parse_llm_channels
-
-        return parse_llm_channels(cls, channels_str)
-
-    @classmethod
-    def _channels_to_model_list(cls, channels: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        from src.runtime.settings import channels_to_model_list
-
-        return channels_to_model_list(cls, channels)
-
-    @classmethod
-    def _legacy_keys_to_model_list(
-        cls,
-        gemini_keys: List[str],
-        anthropic_keys: List[str],
-        openai_keys: List[str],
-        openai_base_url: Optional[str],
-        deepseek_keys: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
-        from src.runtime.settings import legacy_keys_to_model_list
-
-        return legacy_keys_to_model_list(
-            cls,
-            gemini_keys,
-            anthropic_keys,
-            openai_keys,
-            openai_base_url,
-            deepseek_keys,
-        )
-
-    @classmethod
-    def _parse_stock_email_groups(cls) -> List[Tuple[List[str], List[str]]]:
-        from src.runtime.settings import parse_stock_email_groups
-
-        return parse_stock_email_groups(cls)
-
-    @classmethod
-    def _parse_report_type(cls, value: str) -> str:
-        from src.runtime.settings import parse_report_type
-
-        return parse_report_type(cls, value)
-
-    @classmethod
-    def _get_env_file_value(cls, key: str) -> Optional[str]:
-        """Compatibility adapter for runtime-owned env-file reads."""
-        from src.runtime.settings import get_env_file_value
-
-        return get_env_file_value(key)
-
-    @classmethod
-    def _resolve_report_language_env_value(
-        cls,
-        preexisting_env_value: Optional[str],
-    ) -> str:
-        """Compatibility adapter for runtime-owned precedence resolution."""
-        from src.runtime.settings import resolve_report_language_env_value
-
-        return resolve_report_language_env_value(preexisting_env_value)
-
-    @classmethod
-    def _parse_report_language(cls, value: Optional[str]) -> str:
-        from src.runtime.settings import parse_report_language
-
-        return parse_report_language(cls, value)
-
-    @classmethod
-    def _parse_news_strategy_profile(cls, value: Optional[str]) -> str:
-        from src.runtime.settings import parse_news_strategy_profile
-
-        return parse_news_strategy_profile(cls, value)
-
     def get_effective_news_window_days(self) -> int:
         """Return effective news window days after profile + max-age merge."""
         return resolve_news_window_days(
             news_max_age_days=self.news_max_age_days,
             news_strategy_profile=self.news_strategy_profile,
         )
-
-    @classmethod
-    def _parse_market_review_region(cls, value: str) -> str:
-        from src.runtime.settings import parse_market_review_region
-
-        return parse_market_review_region(cls, value)
-
-    @classmethod
-    def _parse_md2img_engine(cls, value: str) -> str:
-        from src.runtime.settings import parse_md2img_engine
-
-        return parse_md2img_engine(cls, value)
-
-    @classmethod
-    def _resolve_realtime_source_priority(cls) -> str:
-        from src.runtime.settings import resolve_realtime_source_priority
-
-        return resolve_realtime_source_priority(cls)
 
     @classmethod
     def reset_instance(cls) -> None:
@@ -1279,30 +1155,10 @@ class Config:
         1. .env 文件（本地开发、定时任务模式） - 修改后下次执行自动生效
         2. 系统环境变量（GitHub Actions、Docker） - 启动时固定，运行中不变
         """
-        # 优先从 .env 文件读取最新配置，这样即使在容器环境中修改了 .env 文件，
-        # 也能获取到最新的股票列表配置
-        env_file = os.getenv("ENV_FILE")
-        env_path = Path(env_file) if env_file else (Path(__file__).parent.parent / '.env')
-        stock_list_str = ''
-        if env_path.exists():
-            # 直接从 .env 文件读取最新的配置
-            env_values = read_dotenv_values(env_path)
-            stock_list_str = (env_values.get('STOCK_LIST') or '').strip()
-
-        # 如果 .env 文件不存在或未配置，才尝试从系统环境变量读取
-        if not stock_list_str:
-            stock_list_str = os.getenv('STOCK_LIST', '')
-
-        stock_list = [
-            (c or "").strip().upper()
-            for c in stock_list_str.split(',')
-            if (c or "").strip()
-        ]
-
-        if not stock_list:
-            stock_list = ['000001']
-
-        self.stock_list = stock_list
+        settings = self.runtime_settings
+        if settings is None:
+            raise RuntimeError("STOCK_LIST refresh requires a RuntimeSettings snapshot")
+        self.stock_list = settings.refreshed_stock_list()
     
     def validate_structured(self) -> List[ConfigIssue]:
         """Return structured validation issues with severity levels.
@@ -1528,7 +1384,11 @@ class Config:
             ))
 
         # --- Deprecated field migration hints ---
-        if os.getenv("OPENAI_VISION_MODEL"):
+        settings = self.runtime_settings
+        if (
+            settings is not None
+            and settings._raw_environment.get("OPENAI_VISION_MODEL")
+        ):
             issues.append(ConfigIssue(
                 severity="info",
                 message=(

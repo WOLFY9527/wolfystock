@@ -45,11 +45,6 @@ ADMIN_SESSION_IDLE_TIMEOUT_MINUTES
 ADMIN_SESSION_MAX_AGE_HOURS
 ADMIN_UNLOCK_MAX_AGE_MINUTES
 AGENT_ARCH
-AGENT_DEEP_RESEARCH_BUDGET
-AGENT_DEEP_RESEARCH_TIMEOUT
-AGENT_EVENT_ALERT_RULES_JSON
-AGENT_EVENT_MONITOR_ENABLED
-AGENT_EVENT_MONITOR_INTERVAL_MINUTES
 AGENT_LITELLM_MODEL
 AGENT_MAX_STEPS
 AGENT_MEMORY_ENABLED
@@ -497,6 +492,106 @@ class PortfolioImportLimits:
     parse_concurrency: int = 2
 
 
+_TRUE_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
+_FALSE_ENV_VALUES = frozenset({"0", "false", "no", "off"})
+_DOMESTIC_NO_PROXY_DOMAINS = (
+    "eastmoney.com",
+    "sina.com.cn",
+    "163.com",
+    "tushare.pro",
+    "baostock.com",
+    "sse.com.cn",
+    "szse.cn",
+    "csindex.com.cn",
+    "cninfo.com.cn",
+    "localhost",
+    "127.0.0.1",
+)
+
+
+def parse_env_bool(
+    value: str | None,
+    default: bool = False,
+    *,
+    field_name: str = "boolean setting",
+) -> bool:
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if not normalized:
+        raise ValueError(f"{field_name} must be a boolean")
+    if normalized in _TRUE_ENV_VALUES:
+        return True
+    if normalized in _FALSE_ENV_VALUES:
+        return False
+    raise ValueError(f"{field_name} must be a boolean")
+
+
+def parse_env_int(
+    value: str | None,
+    default: int,
+    *,
+    field_name: str,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
+    if value is None:
+        return default
+    raw = value.strip()
+    if not raw:
+        raise ValueError(f"{field_name} must be an integer")
+    try:
+        parsed = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be an integer") from exc
+    if minimum is not None and parsed < minimum:
+        raise ValueError(f"{field_name} must be at least {minimum}")
+    if maximum is not None and parsed > maximum:
+        raise ValueError(f"{field_name} must be at most {maximum}")
+    return parsed
+
+
+def parse_env_float(
+    value: str | None,
+    default: float,
+    *,
+    field_name: str,
+    minimum: float | None = None,
+    maximum: float | None = None,
+) -> float:
+    if value is None:
+        return default
+    raw = value.strip()
+    if not raw:
+        raise ValueError(f"{field_name} must be numeric")
+    try:
+        parsed = float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be numeric") from exc
+    if not math.isfinite(parsed):
+        raise ValueError(f"{field_name} must be finite")
+    if minimum is not None and parsed < minimum:
+        raise ValueError(f"{field_name} must be at least {minimum}")
+    if maximum is not None and parsed > maximum:
+        raise ValueError(f"{field_name} must be at most {maximum}")
+    return parsed
+
+
+def parse_env_int_list(value: str | None, *, field_name: str) -> list[int]:
+    if value is None or not value.strip():
+        return []
+    parsed: list[int] = []
+    for token in value.split(","):
+        raw = token.strip()
+        if not raw:
+            continue
+        try:
+            parsed.append(int(raw))
+        except ValueError as exc:
+            raise ValueError(f"{field_name} must contain only integers") from exc
+    return parsed
+
+
 @dataclass(frozen=True)
 class RuntimeSettings:
     env_file: Path
@@ -505,6 +600,8 @@ class RuntimeSettings:
     provenance: Mapping[str, SettingProvenance]
     conflicts: tuple[SettingConflict, ...]
     portfolio_import_limits: PortfolioImportLimits
+    cors_origins: tuple[str, ...]
+    cors_allow_all: bool
     _raw_environment: Mapping[str, str] = field(repr=False)
 
     @classmethod
@@ -518,7 +615,7 @@ class RuntimeSettings:
         env_file = _resolve_env_file(process_environment.get("ENV_FILE"))
         file_values = _read_env_file(env_file)
 
-        config = config_type._parse_environment()
+        setup_environment()
         with _PREPARATION_LOCK:
             prepared_sources = dict(_PREPARED_SOURCES.get(env_file, {}))
         effective_environment = {
@@ -526,6 +623,7 @@ class RuntimeSettings:
             for name in RECOGNIZED_SETTING_NAMES
             if (value := os.environ.get(name)) is not None
         }
+        config = _parse_config(config_type)
         provenance = _build_provenance(
             process_environment,
             file_values,
@@ -552,6 +650,16 @@ class RuntimeSettings:
             provenance=MappingProxyType(provenance),
             conflicts=conflicts,
             portfolio_import_limits=portfolio_import_limits,
+            cors_origins=tuple(
+                origin.strip()
+                for origin in effective_environment.get("CORS_ORIGINS", "").split(",")
+                if origin.strip()
+            ),
+            cors_allow_all=parse_env_bool(
+                effective_environment.get("CORS_ALLOW_ALL"),
+                default=False,
+                field_name="CORS_ALLOW_ALL",
+            ),
             _raw_environment=MappingProxyType(effective_environment),
         )
 
@@ -593,45 +701,16 @@ class RuntimeSettings:
             ],
         }
 
-
-def _bounded_int_setting(
-    environment: Mapping[str, str],
-    *,
-    name: str,
-    default: int,
-    minimum: int,
-    maximum: int,
-) -> int:
-    raw = environment.get(name)
-    if raw is None:
-        return default
-    try:
-        value = int(str(raw).strip())
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be an integer") from exc
-    if value < minimum or value > maximum:
-        raise ValueError(f"{name} must be between {minimum} and {maximum}")
-    return value
-
-
-def _bounded_float_setting(
-    environment: Mapping[str, str],
-    *,
-    name: str,
-    default: float,
-    minimum: float,
-    maximum: float,
-) -> float:
-    raw = environment.get(name)
-    if raw is None:
-        return default
-    try:
-        value = float(str(raw).strip())
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be numeric") from exc
-    if not math.isfinite(value) or value < minimum or value > maximum:
-        raise ValueError(f"{name} must be between {minimum} and {maximum}")
-    return value
+    def refreshed_stock_list(self) -> list[str]:
+        """Read the explicitly supported hot-reload input through this owner."""
+        file_value = (_read_env_file(self.env_file).get("STOCK_LIST") or "").strip()
+        raw_value = file_value or self._raw_environment.get("STOCK_LIST", "")
+        stocks = [
+            token.strip().upper()
+            for token in raw_value.split(",")
+            if token.strip()
+        ]
+        return stocks or ["000001"]
 
 
 def _parse_portfolio_import_limits(
@@ -639,59 +718,59 @@ def _parse_portfolio_import_limits(
 ) -> PortfolioImportLimits:
     defaults = PortfolioImportLimits()
     return PortfolioImportLimits(
-        max_upload_bytes=_bounded_int_setting(
-            environment,
-            name="PORTFOLIO_IMPORT_MAX_BYTES",
+        max_upload_bytes=parse_env_int(
+            environment.get("PORTFOLIO_IMPORT_MAX_BYTES"),
             default=defaults.max_upload_bytes,
+            field_name="PORTFOLIO_IMPORT_MAX_BYTES",
             minimum=1024,
             maximum=20 * 1024 * 1024,
         ),
-        max_csv_rows=_bounded_int_setting(
-            environment,
-            name="PORTFOLIO_IMPORT_MAX_CSV_ROWS",
+        max_csv_rows=parse_env_int(
+            environment.get("PORTFOLIO_IMPORT_MAX_CSV_ROWS"),
             default=defaults.max_csv_rows,
+            field_name="PORTFOLIO_IMPORT_MAX_CSV_ROWS",
             minimum=1,
             maximum=100_000,
         ),
-        max_csv_cells=_bounded_int_setting(
-            environment,
-            name="PORTFOLIO_IMPORT_MAX_CSV_CELLS",
+        max_csv_cells=parse_env_int(
+            environment.get("PORTFOLIO_IMPORT_MAX_CSV_CELLS"),
             default=defaults.max_csv_cells,
+            field_name="PORTFOLIO_IMPORT_MAX_CSV_CELLS",
             minimum=1,
             maximum=2_000_000,
         ),
-        max_csv_cell_chars=_bounded_int_setting(
-            environment,
-            name="PORTFOLIO_IMPORT_MAX_CSV_CELL_CHARS",
+        max_csv_cell_chars=parse_env_int(
+            environment.get("PORTFOLIO_IMPORT_MAX_CSV_CELL_CHARS"),
             default=defaults.max_csv_cell_chars,
+            field_name="PORTFOLIO_IMPORT_MAX_CSV_CELL_CHARS",
             minimum=1,
             maximum=1_048_576,
         ),
-        max_xml_nodes=_bounded_int_setting(
-            environment,
-            name="PORTFOLIO_IMPORT_MAX_XML_NODES",
+        max_xml_nodes=parse_env_int(
+            environment.get("PORTFOLIO_IMPORT_MAX_XML_NODES"),
             default=defaults.max_xml_nodes,
+            field_name="PORTFOLIO_IMPORT_MAX_XML_NODES",
             minimum=1,
             maximum=500_000,
         ),
-        max_xml_depth=_bounded_int_setting(
-            environment,
-            name="PORTFOLIO_IMPORT_MAX_XML_DEPTH",
+        max_xml_depth=parse_env_int(
+            environment.get("PORTFOLIO_IMPORT_MAX_XML_DEPTH"),
             default=defaults.max_xml_depth,
+            field_name="PORTFOLIO_IMPORT_MAX_XML_DEPTH",
             minimum=1,
             maximum=128,
         ),
-        parse_timeout_seconds=_bounded_float_setting(
-            environment,
-            name="PORTFOLIO_IMPORT_PARSE_TIMEOUT_SECONDS",
+        parse_timeout_seconds=parse_env_float(
+            environment.get("PORTFOLIO_IMPORT_PARSE_TIMEOUT_SECONDS"),
             default=defaults.parse_timeout_seconds,
+            field_name="PORTFOLIO_IMPORT_PARSE_TIMEOUT_SECONDS",
             minimum=0.01,
             maximum=30.0,
         ),
-        parse_concurrency=_bounded_int_setting(
-            environment,
-            name="PORTFOLIO_IMPORT_PARSE_CONCURRENCY",
+        parse_concurrency=parse_env_int(
+            environment.get("PORTFOLIO_IMPORT_PARSE_CONCURRENCY"),
             default=defaults.parse_concurrency,
+            field_name="PORTFOLIO_IMPORT_PARSE_CONCURRENCY",
             minimum=1,
             maximum=8,
         ),
@@ -731,14 +810,16 @@ def setup_environment(*, override: bool = False) -> Path:
 
 
 def _apply_legacy_proxy_environment() -> None:
-    from src.config import parse_env_bool
-
     http_proxy = os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
     https_proxy = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy")
     if (
         not http_proxy
         and os.getenv("GITHUB_ACTIONS") != "true"
-        and parse_env_bool(os.getenv("USE_PROXY"), False)
+        and parse_env_bool(
+            os.getenv("USE_PROXY"),
+            False,
+            field_name="USE_PROXY",
+        )
     ):
         proxy_host = (os.getenv("PROXY_HOST") or "127.0.0.1").strip() or "127.0.0.1"
         proxy_port = (os.getenv("PROXY_PORT") or "10809").strip() or "10809"
@@ -746,6 +827,18 @@ def _apply_legacy_proxy_environment() -> None:
         if not https_proxy:
             https_proxy = http_proxy
     if http_proxy:
+        current_no_proxy = os.getenv("NO_PROXY") or os.getenv("no_proxy") or ""
+        no_proxy_domains = [
+            domain.strip()
+            for domain in current_no_proxy.split(",")
+            if domain.strip()
+        ]
+        for domain in _DOMESTIC_NO_PROXY_DOMAINS:
+            if domain not in no_proxy_domains:
+                no_proxy_domains.append(domain)
+        normalized_no_proxy = ",".join(no_proxy_domains)
+        os.environ["NO_PROXY"] = normalized_no_proxy
+        os.environ["no_proxy"] = normalized_no_proxy
         os.environ["HTTP_PROXY"] = http_proxy
         os.environ["http_proxy"] = http_proxy
     if https_proxy:
@@ -759,33 +852,6 @@ def _read_env_file(env_file: Path) -> dict[str, str]:
     except (OSError, UnicodeError):
         return {}
     return {name: str(value) for name, value in parsed.items() if value is not None}
-
-
-def get_env_file_value(key: str) -> str | None:
-    """Read one key from the active absolute env-file identity."""
-    return _read_env_file(_resolve_env_file(os.getenv("ENV_FILE"))).get(key)
-
-
-def resolve_report_language_env_value(
-    preexisting_env_value: str | None,
-) -> str:
-    """Preserve the process-over-file REPORT_LANGUAGE compatibility rule."""
-    env_file = _resolve_env_file(os.getenv("ENV_FILE"))
-    file_value = _read_env_file(env_file).get("REPORT_LANGUAGE")
-    if preexisting_env_value is not None:
-        env_text = preexisting_env_value.strip()
-        file_text = (file_value or "").strip()
-        if file_text and env_text and env_text.lower() != file_text.lower():
-            logger.warning(
-                "REPORT_LANGUAGE environment value '%s' overrides %s ('%s')",
-                preexisting_env_value,
-                env_file,
-                file_value,
-            )
-        return preexisting_env_value
-    if file_value is not None:
-        return file_value
-    return os.getenv("REPORT_LANGUAGE") or "zh"
 
 
 def _source_for_name(
@@ -945,19 +1011,21 @@ def _thaw(value: Any) -> Any:
     return value
 
 
-def parse_runtime_config(config_type):
+def _parse_config(config_type):
     """Parse all typed consumer values for one immutable runtime snapshot."""
     from src import config as config_facade
 
     cls = config_type
-    setup_env = config_facade.setup_env
-    parse_env_bool = config_facade.parse_env_bool
-    parse_env_float = config_facade.parse_env_float
-    parse_env_int = config_facade.parse_env_int
-    parse_env_int_list = config_facade.parse_env_int_list
     get_configured_llm_models = config_facade.get_configured_llm_models
     normalize_agent_litellm_model = config_facade.normalize_agent_litellm_model
     resolve_configured_llm_model_alias = config_facade.resolve_configured_llm_model_alias
+
+    def env_bool(name: str, default: bool) -> bool:
+        return parse_env_bool(
+            os.getenv(name),
+            default=default,
+            field_name=name,
+        )
 
     """
     Parse consumer values for the runtime settings owner.
@@ -967,52 +1035,6 @@ def parse_runtime_config(config_type):
     2. .env 文件
     3. 代码中的默认值
     """
-    preexisting_report_language = os.environ.get("REPORT_LANGUAGE")
-
-    # 确保环境变量已加载
-    setup_env()
-
-    # === 智能代理配置 (关键修复) ===
-    # 如果配置了代理，自动设置 NO_PROXY 以排除国内数据源，避免行情获取失败
-    http_proxy = os.getenv('HTTP_PROXY') or os.getenv('http_proxy')
-    if http_proxy:
-        # 国内金融数据源域名列表
-        domestic_domains = [
-            'eastmoney.com',   # 东方财富 (Efinance/Akshare)
-            'sina.com.cn',     # 新浪财经 (Akshare)
-            '163.com',         # 网易财经 (Akshare)
-            'tushare.pro',     # Tushare
-            'baostock.com',    # Baostock
-            'sse.com.cn',      # 上交所
-            'szse.cn',         # 深交所
-            'csindex.com.cn',  # 中证指数
-            'cninfo.com.cn',   # 巨潮资讯
-            'localhost',
-            '127.0.0.1'
-        ]
-
-        # 获取现有的 no_proxy
-        current_no_proxy = os.getenv('NO_PROXY') or os.getenv('no_proxy') or ''
-        existing_domains = current_no_proxy.split(',') if current_no_proxy else []
-
-        # 合并去重
-        final_domains = list(set(existing_domains + domestic_domains))
-        final_no_proxy = ','.join(filter(None, final_domains))
-
-        # 设置环境变量 (requests/urllib3/aiohttp 都会遵守此设置)
-        os.environ['NO_PROXY'] = final_no_proxy
-        os.environ['no_proxy'] = final_no_proxy
-
-        # 确保 HTTP_PROXY 也被正确设置（以防仅在 .env 中定义但未导出）
-        os.environ['HTTP_PROXY'] = http_proxy
-        os.environ['http_proxy'] = http_proxy
-
-        # HTTPS_PROXY 同理
-        https_proxy = os.getenv('HTTPS_PROXY') or os.getenv('https_proxy')
-        if https_proxy:
-            os.environ['HTTPS_PROXY'] = https_proxy
-            os.environ['https_proxy'] = https_proxy
-
     # 解析自选股列表（逗号分隔，统一为大写 Issue #355）
     stock_list_str = os.getenv('STOCK_LIST', '')
     stock_list = [
@@ -1114,7 +1136,7 @@ def parse_runtime_config(config_type):
 
     # Priority 1: LITELLM_CONFIG (standard LiteLLM YAML config file)
     if litellm_config_path:
-        llm_model_list = cls._parse_litellm_yaml(litellm_config_path)
+        llm_model_list = parse_litellm_yaml(cls, litellm_config_path)
         if llm_model_list:
             llm_models_source = "litellm_config"
 
@@ -1130,14 +1152,15 @@ def parse_runtime_config(config_type):
                 ]
             )
         if _channels_str:
-            llm_channels = cls._parse_llm_channels(_channels_str)
-            llm_model_list = cls._channels_to_model_list(llm_channels)
+            llm_channels = parse_llm_channels(cls, _channels_str)
+            llm_model_list = channels_to_model_list(cls, llm_channels)
             if llm_model_list:
                 llm_models_source = "llm_channels"
 
     # Priority 3: Legacy env vars → auto-build model_list (backward compatible)
     if not llm_model_list:
-        llm_model_list = cls._legacy_keys_to_model_list(
+        llm_model_list = legacy_keys_to_model_list(
+            cls,
             gemini_api_keys, anthropic_api_keys, openai_api_keys,
             os.getenv('OPENAI_BASE_URL') or (
                 'https://aihubmix.com/v1' if os.getenv('AIHUBMIX_KEY') else None
@@ -1239,13 +1262,14 @@ def parse_runtime_config(config_type):
         else:
             invalid_searxng_urls.append(u)
     if invalid_searxng_urls:
-        logger.warning(
-            "SEARXNG_BASE_URLS 中存在无效 URL，已忽略: %s",
-            ", ".join(invalid_searxng_urls[:3]),
+        raise ValueError(
+            "SEARXNG_BASE_URLS contains invalid URLs: "
+            + ", ".join(invalid_searxng_urls[:3])
         )
     searxng_public_instances_enabled = parse_env_bool(
         os.getenv('SEARXNG_PUBLIC_INSTANCES_ENABLED'),
         default=True,
+        field_name='SEARXNG_PUBLIC_INSTANCES_ENABLED',
     )
 
     # 企微消息类型与最大字节数逻辑
@@ -1267,20 +1291,43 @@ def parse_runtime_config(config_type):
     # literal "true" enables immediate execution; empty strings stay False.
     legacy_run_immediately_env = os.getenv('RUN_IMMEDIATELY')
     legacy_run_immediately = (
-        legacy_run_immediately_env.lower() == 'true'
+        False
         if legacy_run_immediately_env is not None
-        else True
+        and not legacy_run_immediately_env.strip()
+        else parse_env_bool(
+            legacy_run_immediately_env,
+            default=True,
+            field_name='RUN_IMMEDIATELY',
+        )
     )
 
     schedule_run_immediately_env = os.getenv('SCHEDULE_RUN_IMMEDIATELY')
     schedule_run_immediately = (
-        schedule_run_immediately_env.lower() == 'true'
+        False
         if schedule_run_immediately_env is not None
-        else legacy_run_immediately
+        and not schedule_run_immediately_env.strip()
+        else parse_env_bool(
+            schedule_run_immediately_env,
+            default=legacy_run_immediately,
+            field_name='SCHEDULE_RUN_IMMEDIATELY',
+        )
     )
 
-    report_language_raw = cls._resolve_report_language_env_value(
-        preexisting_report_language
+    report_language_raw = os.getenv("REPORT_LANGUAGE") or "zh"
+    gemini_temperature = parse_env_float(
+        os.getenv('GEMINI_TEMPERATURE'),
+        0.7,
+        field_name='GEMINI_TEMPERATURE',
+    )
+    anthropic_temperature = parse_env_float(
+        os.getenv('ANTHROPIC_TEMPERATURE'),
+        0.7,
+        field_name='ANTHROPIC_TEMPERATURE',
+    )
+    openai_temperature = parse_env_float(
+        os.getenv('OPENAI_TEMPERATURE'),
+        0.7,
+        field_name='OPENAI_TEMPERATURE',
     )
 
     return cls(
@@ -1298,10 +1345,16 @@ def parse_runtime_config(config_type):
         alpaca_data_feed=(os.getenv('ALPACA_DATA_FEED', 'iex').strip().lower() or 'iex'),
         litellm_model=litellm_model,
         litellm_fallback_models=litellm_fallback_models,
-        llm_temperature=resolve_unified_llm_temperature(litellm_model),
+        llm_temperature=resolve_unified_llm_temperature(
+            litellm_model,
+            gemini_temperature=gemini_temperature,
+            anthropic_temperature=anthropic_temperature,
+            openai_temperature=openai_temperature,
+        ),
         home_quick_analysis_enabled=parse_env_bool(
             os.getenv("HOME_QUICK_ANALYSIS_ENABLED"),
             default=True,
+            field_name="HOME_QUICK_ANALYSIS_ENABLED",
         ),
         home_quick_analysis_temperature=parse_env_float(
             os.getenv("HOME_QUICK_ANALYSIS_TEMPERATURE"),
@@ -1320,6 +1373,7 @@ def parse_runtime_config(config_type):
         home_analysis_log_full_prompt=parse_env_bool(
             os.getenv("HOME_ANALYSIS_LOG_FULL_PROMPT"),
             default=False,
+            field_name="HOME_ANALYSIS_LOG_FULL_PROMPT",
         ),
         litellm_config_path=litellm_config_path,
         llm_models_source=llm_models_source,
@@ -1332,13 +1386,13 @@ def parse_runtime_config(config_type):
         gemini_api_key=os.getenv('GEMINI_API_KEY'),
         gemini_model=os.getenv('GEMINI_MODEL', 'gemini-3-flash-preview'),
         gemini_model_fallback=os.getenv('GEMINI_MODEL_FALLBACK', 'gemini-2.5-flash'),
-        gemini_temperature=parse_env_float(os.getenv('GEMINI_TEMPERATURE'), 0.7, field_name='GEMINI_TEMPERATURE'),
+        gemini_temperature=gemini_temperature,
         gemini_request_delay=parse_env_float(os.getenv('GEMINI_REQUEST_DELAY'), 2.0, field_name='GEMINI_REQUEST_DELAY', minimum=0.0),
         gemini_max_retries=parse_env_int(os.getenv('GEMINI_MAX_RETRIES'), 5, field_name='GEMINI_MAX_RETRIES', minimum=0),
         gemini_retry_delay=parse_env_float(os.getenv('GEMINI_RETRY_DELAY'), 5.0, field_name='GEMINI_RETRY_DELAY', minimum=0.0),
         anthropic_api_key=os.getenv('ANTHROPIC_API_KEY'),
         anthropic_model=os.getenv('ANTHROPIC_MODEL', 'claude-3-5-sonnet-20241022'),
-        anthropic_temperature=parse_env_float(os.getenv('ANTHROPIC_TEMPERATURE'), 0.7, field_name='ANTHROPIC_TEMPERATURE'),
+        anthropic_temperature=anthropic_temperature,
         anthropic_max_tokens=parse_env_int(os.getenv('ANTHROPIC_MAX_TOKENS'), 8192, field_name='ANTHROPIC_MAX_TOKENS', minimum=1),
         # AIHubmix is the preferred OpenAI-compatible provider (one key, all models, no VPN required).
         # Within the OpenAI-compatible layer: AIHUBMIX_KEY takes priority over OPENAI_API_KEY.
@@ -1352,7 +1406,7 @@ def parse_runtime_config(config_type):
         ),  # noqa: E501
         openai_model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
         openai_vision_model=os.getenv('OPENAI_VISION_MODEL') or None,
-        openai_temperature=parse_env_float(os.getenv('OPENAI_TEMPERATURE'), 0.7, field_name='OPENAI_TEMPERATURE'),
+        openai_temperature=openai_temperature,
         # Vision model: VISION_MODEL > OPENAI_VISION_MODEL (alias) > default
         vision_model=(
             os.getenv('VISION_MODEL')
@@ -1373,17 +1427,18 @@ def parse_runtime_config(config_type):
         social_sentiment_api_key=os.getenv('SOCIAL_SENTIMENT_API_KEY') or None,
         social_sentiment_api_url=os.getenv('SOCIAL_SENTIMENT_API_URL', 'https://api.adanos.org').rstrip('/'),
         news_max_age_days=parse_env_int(os.getenv('NEWS_MAX_AGE_DAYS'), 3, field_name='NEWS_MAX_AGE_DAYS', minimum=1),
-        news_strategy_profile=cls._parse_news_strategy_profile(
+        news_strategy_profile=parse_news_strategy_profile(
+            cls,
             os.getenv('NEWS_STRATEGY_PROFILE', 'short')
         ),
         bias_threshold=parse_env_float(os.getenv('BIAS_THRESHOLD'), 5.0, field_name='BIAS_THRESHOLD', minimum=1.0),
         agent_litellm_model=agent_litellm_model,
-        agent_mode=os.getenv('AGENT_MODE', 'false').lower() == 'true',
+        agent_mode=env_bool('AGENT_MODE', False),
         _agent_mode_explicit=os.getenv('AGENT_MODE') is not None,
         agent_max_steps=parse_env_int(os.getenv('AGENT_MAX_STEPS'), 10, field_name='AGENT_MAX_STEPS', minimum=1),
         agent_skills=[s.strip() for s in os.getenv('AGENT_SKILLS', '').split(',') if s.strip()],
         agent_skill_dir=os.getenv('AGENT_SKILL_DIR') or os.getenv('AGENT_STRATEGY_DIR'),
-        agent_nl_routing=os.getenv('AGENT_NL_ROUTING', 'false').lower() == 'true',
+        agent_nl_routing=env_bool('AGENT_NL_ROUTING', False),
         agent_arch=os.getenv('AGENT_ARCH', 'single').lower(),
         agent_orchestrator_mode=os.getenv('AGENT_ORCHESTRATOR_MODE', 'standard').lower(),
         agent_orchestrator_timeout_s=parse_env_int(
@@ -1392,36 +1447,18 @@ def parse_runtime_config(config_type):
             field_name='AGENT_ORCHESTRATOR_TIMEOUT_S',
             minimum=0,
         ),
-        agent_risk_override=os.getenv('AGENT_RISK_OVERRIDE', 'true').lower() == 'true',
-        agent_deep_research_budget=parse_env_int(
-            os.getenv('AGENT_DEEP_RESEARCH_BUDGET'),
-            30000,
-            field_name='AGENT_DEEP_RESEARCH_BUDGET',
-            minimum=5000,
-        ),
-        agent_deep_research_timeout=parse_env_int(
-            os.getenv('AGENT_DEEP_RESEARCH_TIMEOUT'),
-            180,
-            field_name='AGENT_DEEP_RESEARCH_TIMEOUT',
-            minimum=30,
-        ),
-        agent_memory_enabled=os.getenv('AGENT_MEMORY_ENABLED', 'false').lower() == 'true',
-        agent_skill_autoweight=(
+        agent_risk_override=env_bool('AGENT_RISK_OVERRIDE', True),
+        agent_memory_enabled=env_bool('AGENT_MEMORY_ENABLED', False),
+        agent_skill_autoweight=parse_env_bool(
             os.getenv('AGENT_SKILL_AUTOWEIGHT')
-            or os.getenv('AGENT_STRATEGY_AUTOWEIGHT', 'true')
-        ).lower() == 'true',
+            or os.getenv('AGENT_STRATEGY_AUTOWEIGHT'),
+            default=True,
+            field_name='AGENT_SKILL_AUTOWEIGHT',
+        ),
         agent_skill_routing=(
             os.getenv('AGENT_SKILL_ROUTING')
             or os.getenv('AGENT_STRATEGY_ROUTING', 'auto')
         ).lower(),
-        agent_event_monitor_enabled=os.getenv('AGENT_EVENT_MONITOR_ENABLED', 'false').lower() == 'true',
-        agent_event_monitor_interval_minutes=parse_env_int(
-            os.getenv('AGENT_EVENT_MONITOR_INTERVAL_MINUTES'),
-            5,
-            field_name='AGENT_EVENT_MONITOR_INTERVAL_MINUTES',
-            minimum=1,
-        ),
-        agent_event_alert_rules_json=os.getenv('AGENT_EVENT_ALERT_RULES_JSON', ''),
         wechat_webhook_url=os.getenv('WECHAT_WEBHOOK_URL'),
         feishu_webhook_url=os.getenv('FEISHU_WEBHOOK_URL'),
         telegram_bot_token=os.getenv('TELEGRAM_BOT_TOKEN'),
@@ -1431,7 +1468,7 @@ def parse_runtime_config(config_type):
         email_sender_name=os.getenv('EMAIL_SENDER_NAME', 'WolfyStock股票分析助手'),
         email_password=os.getenv('EMAIL_PASSWORD'),
         email_receivers=[r.strip() for r in os.getenv('EMAIL_RECEIVERS', '').split(',') if r.strip()],
-        stock_email_groups=cls._parse_stock_email_groups(),
+        stock_email_groups=parse_stock_email_groups(cls),
         pushover_user_key=os.getenv('PUSHOVER_USER_KEY'),
         pushover_api_token=os.getenv('PUSHOVER_API_TOKEN'),
         pushplus_token=os.getenv('PUSHPLUS_TOKEN'),
@@ -1439,7 +1476,7 @@ def parse_runtime_config(config_type):
         serverchan3_sendkey=os.getenv('SERVERCHAN3_SENDKEY'),
         custom_webhook_urls=[u.strip() for u in os.getenv('CUSTOM_WEBHOOK_URLS', '').split(',') if u.strip()],
         custom_webhook_bearer_token=os.getenv('CUSTOM_WEBHOOK_BEARER_TOKEN'),
-        webhook_verify_ssl=os.getenv('WEBHOOK_VERIFY_SSL', 'true').lower() == 'true',
+        webhook_verify_ssl=env_bool('WEBHOOK_VERIFY_SSL', True),
         discord_bot_token=os.getenv('DISCORD_BOT_TOKEN'),
         discord_main_channel_id=(
             os.getenv('DISCORD_MAIN_CHANNEL_ID')
@@ -1451,17 +1488,17 @@ def parse_runtime_config(config_type):
         slack_channel_id=os.getenv('SLACK_CHANNEL_ID'),
         astrbot_url=os.getenv('ASTRBOT_URL'),
         astrbot_token=os.getenv('ASTRBOT_TOKEN'),
-        single_stock_notify=os.getenv('SINGLE_STOCK_NOTIFY', 'false').lower() == 'true',
-        report_type=cls._parse_report_type(os.getenv('REPORT_TYPE', 'simple')),
-        report_language=cls._parse_report_language(report_language_raw),
-        report_summary_only=os.getenv('REPORT_SUMMARY_ONLY', 'false').lower() == 'true',
+        single_stock_notify=env_bool('SINGLE_STOCK_NOTIFY', False),
+        report_type=parse_report_type(cls, os.getenv('REPORT_TYPE', 'simple')),
+        report_language=parse_report_language(cls, report_language_raw),
+        report_summary_only=env_bool('REPORT_SUMMARY_ONLY', False),
         report_templates_dir=os.getenv('REPORT_TEMPLATES_DIR', 'templates'),
-        report_renderer_enabled=os.getenv('REPORT_RENDERER_ENABLED', 'false').lower() == 'true',
-        report_integrity_enabled=os.getenv('REPORT_INTEGRITY_ENABLED', 'true').lower() == 'true',
+        report_renderer_enabled=env_bool('REPORT_RENDERER_ENABLED', False),
+        report_integrity_enabled=env_bool('REPORT_INTEGRITY_ENABLED', True),
         report_integrity_retry=parse_env_int(os.getenv('REPORT_INTEGRITY_RETRY'), 1, field_name='REPORT_INTEGRITY_RETRY', minimum=0),
         report_history_compare_n=parse_env_int(os.getenv('REPORT_HISTORY_COMPARE_N'), 0, field_name='REPORT_HISTORY_COMPARE_N', minimum=0),
         analysis_delay=parse_env_float(os.getenv('ANALYSIS_DELAY'), 0.0, field_name='ANALYSIS_DELAY', minimum=0.0),
-        merge_email_notification=os.getenv('MERGE_EMAIL_NOTIFICATION', 'false').lower() == 'true',
+        merge_email_notification=env_bool('MERGE_EMAIL_NOTIFICATION', False),
         feishu_max_bytes=parse_env_int(os.getenv('FEISHU_MAX_BYTES'), 20000, field_name='FEISHU_MAX_BYTES', minimum=1),
         wechat_max_bytes=wechat_max_bytes,
         wechat_msg_type=wechat_msg_type_lower,
@@ -1477,11 +1514,11 @@ def parse_runtime_config(config_type):
             field_name='MARKDOWN_TO_IMAGE_MAX_CHARS',
             minimum=1,
         ),
-        md2img_engine=cls._parse_md2img_engine(os.getenv('MD2IMG_ENGINE', 'wkhtmltoimage')),
-        prefetch_realtime_quotes=os.getenv('PREFETCH_REALTIME_QUOTES', 'true').lower() == 'true',
+        md2img_engine=parse_md2img_engine(cls, os.getenv('MD2IMG_ENGINE', 'wkhtmltoimage')),
+        prefetch_realtime_quotes=env_bool('PREFETCH_REALTIME_QUOTES', True),
         database_path=os.getenv('DATABASE_PATH', './data/stock_analysis.db'),
         postgres_phase_a_url=(os.getenv('POSTGRES_PHASE_A_URL') or '').strip() or None,
-        postgres_phase_a_apply_schema=os.getenv('POSTGRES_PHASE_A_APPLY_SCHEMA', 'true').lower() == 'true',
+        postgres_phase_a_apply_schema=env_bool('POSTGRES_PHASE_A_APPLY_SCHEMA', True),
         admin_logs_retention_days=parse_env_int(
             os.getenv('ADMIN_LOG_RETENTION_DAYS') or os.getenv('ADMIN_LOGS_RETENTION_DAYS'),
             90,
@@ -1515,6 +1552,7 @@ def parse_runtime_config(config_type):
         admin_logs_auto_cleanup_enabled=parse_env_bool(
             os.getenv('ADMIN_LOG_AUTO_CLEANUP_ENABLED') or os.getenv('ADMIN_LOGS_AUTO_CLEANUP_ENABLED'),
             True,
+            field_name='ADMIN_LOG_AUTO_CLEANUP_ENABLED',
         ),
         admin_logs_warning_threshold_count=parse_env_int(
             os.getenv('ADMIN_LOGS_WARNING_THRESHOLD_COUNT'),
@@ -1540,6 +1578,7 @@ def parse_runtime_config(config_type):
         enable_phase_f_trades_list_comparison=parse_env_bool(
             os.getenv('ENABLE_PHASE_F_TRADES_LIST_COMPARISON'),
             False,
+            field_name='ENABLE_PHASE_F_TRADES_LIST_COMPARISON',
         ),
         phase_f_trades_list_comparison_account_ids=parse_env_int_list(
             os.getenv('PHASE_F_TRADES_LIST_COMPARISON_ACCOUNT_IDS'),
@@ -1548,6 +1587,7 @@ def parse_runtime_config(config_type):
         enable_phase_f_cash_ledger_comparison=parse_env_bool(
             os.getenv('ENABLE_PHASE_F_CASH_LEDGER_COMPARISON'),
             False,
+            field_name='ENABLE_PHASE_F_CASH_LEDGER_COMPARISON',
         ),
         phase_f_cash_ledger_comparison_account_ids=parse_env_int_list(
             os.getenv('PHASE_F_CASH_LEDGER_COMPARISON_ACCOUNT_IDS'),
@@ -1556,13 +1596,14 @@ def parse_runtime_config(config_type):
         enable_phase_f_corporate_actions_comparison=parse_env_bool(
             os.getenv('ENABLE_PHASE_F_CORPORATE_ACTIONS_COMPARISON'),
             False,
+            field_name='ENABLE_PHASE_F_CORPORATE_ACTIONS_COMPARISON',
         ),
         phase_f_corporate_actions_comparison_account_ids=parse_env_int_list(
             os.getenv('PHASE_F_CORPORATE_ACTIONS_COMPARISON_ACCOUNT_IDS'),
             field_name='PHASE_F_CORPORATE_ACTIONS_COMPARISON_ACCOUNT_IDS',
         ),
-        save_context_snapshot=os.getenv('SAVE_CONTEXT_SNAPSHOT', 'true').lower() == 'true',
-        backtest_enabled=os.getenv('BACKTEST_ENABLED', 'true').lower() == 'true',
+        save_context_snapshot=env_bool('SAVE_CONTEXT_SNAPSHOT', True),
+        backtest_enabled=env_bool('BACKTEST_ENABLED', True),
         backtest_eval_window_days=parse_env_int(os.getenv('BACKTEST_EVAL_WINDOW_DAYS'), 10, field_name='BACKTEST_EVAL_WINDOW_DAYS', minimum=1),
         backtest_min_age_days=parse_env_int(os.getenv('BACKTEST_MIN_AGE_DAYS'), 14, field_name='BACKTEST_MIN_AGE_DAYS', minimum=0),
         backtest_engine_version=os.getenv('BACKTEST_ENGINE_VERSION', 'v1'),
@@ -1575,7 +1616,7 @@ def parse_runtime_config(config_type):
         quant_engine=os.getenv('QUANT_ENGINE', 'python'),
         duckdb_database_path=os.getenv('DUCKDB_DATABASE_PATH', 'data/quant/wolfystock.duckdb'),
         quant_parquet_root=os.getenv('QUANT_PARQUET_ROOT', 'data/quant/parquet'),
-        quant_duckdb_enabled=os.getenv('QUANT_DUCKDB_ENABLED', 'false').lower() == 'true',
+        quant_duckdb_enabled=env_bool('QUANT_DUCKDB_ENABLED', False),
         quant_max_benchmark_symbols=parse_env_int(
             os.getenv('QUANT_MAX_BENCHMARK_SYMBOLS'),
             5000,
@@ -1585,16 +1626,16 @@ def parse_runtime_config(config_type):
         log_dir=os.getenv('LOG_DIR', './logs'),
         log_level=os.getenv('LOG_LEVEL', 'INFO'),
         max_workers=parse_env_int(os.getenv('MAX_WORKERS'), 3, field_name='MAX_WORKERS', minimum=1),
-        debug=os.getenv('DEBUG', 'false').lower() == 'true',
+        debug=env_bool('DEBUG', False),
         config_validate_mode=os.getenv('CONFIG_VALIDATE_MODE', 'warn').lower(),
         http_proxy=os.getenv('HTTP_PROXY'),
         https_proxy=os.getenv('HTTPS_PROXY'),
-        schedule_enabled=os.getenv('SCHEDULE_ENABLED', 'false').lower() == 'true',
+        schedule_enabled=env_bool('SCHEDULE_ENABLED', False),
         schedule_time=os.getenv('SCHEDULE_TIME', '18:00'),
         schedule_run_immediately=schedule_run_immediately,
         scanner_profile=os.getenv('SCANNER_PROFILE', 'cn_preopen_v1'),
         scanner_local_universe_path=os.getenv('SCANNER_LOCAL_UNIVERSE_PATH', './data/scanner_cn_universe_cache.csv'),
-        scanner_ai_enabled=os.getenv('SCANNER_AI_ENABLED', 'false').lower() == 'true',
+        scanner_ai_enabled=env_bool('SCANNER_AI_ENABLED', False),
         scanner_ai_top_n=parse_env_int(
             os.getenv('SCANNER_AI_TOP_N'),
             3,
@@ -1602,11 +1643,11 @@ def parse_runtime_config(config_type):
             minimum=1,
             maximum=10,
         ),
-        scanner_schedule_enabled=os.getenv('SCANNER_SCHEDULE_ENABLED', 'false').lower() == 'true',
+        scanner_schedule_enabled=env_bool('SCANNER_SCHEDULE_ENABLED', False),
         scanner_schedule_time=os.getenv('SCANNER_SCHEDULE_TIME', '08:40'),
-        scanner_schedule_run_immediately=os.getenv('SCANNER_SCHEDULE_RUN_IMMEDIATELY', 'false').lower() == 'true',
-        scanner_notification_enabled=os.getenv('SCANNER_NOTIFICATION_ENABLED', 'true').lower() == 'true',
-        watchlist_score_refresh_enabled=os.getenv('WATCHLIST_SCORE_REFRESH_ENABLED', 'true').lower() == 'true',
+        scanner_schedule_run_immediately=env_bool('SCANNER_SCHEDULE_RUN_IMMEDIATELY', False),
+        scanner_notification_enabled=env_bool('SCANNER_NOTIFICATION_ENABLED', True),
+        watchlist_score_refresh_enabled=env_bool('WATCHLIST_SCORE_REFRESH_ENABLED', True),
         watchlist_score_refresh_us_time=os.getenv('WATCHLIST_SCORE_REFRESH_US_TIME', '08:45'),
         watchlist_score_refresh_cn_time=os.getenv('WATCHLIST_SCORE_REFRESH_CN_TIME', '09:00'),
         watchlist_score_refresh_hk_time=os.getenv('WATCHLIST_SCORE_REFRESH_HK_TIME', '09:00'),
@@ -1617,16 +1658,17 @@ def parse_runtime_config(config_type):
             minimum=1,
         ),
         run_immediately=legacy_run_immediately,
-        market_review_enabled=os.getenv('MARKET_REVIEW_ENABLED', 'true').lower() == 'true',
-        market_review_region=cls._parse_market_review_region(
+        market_review_enabled=env_bool('MARKET_REVIEW_ENABLED', True),
+        market_review_region=parse_market_review_region(
+            cls,
             os.getenv('MARKET_REVIEW_REGION', 'cn')
         ),
-        trading_day_check_enabled=os.getenv('TRADING_DAY_CHECK_ENABLED', 'true').lower() != 'false',
-        webui_enabled=os.getenv('WEBUI_ENABLED', 'false').lower() == 'true',
+        trading_day_check_enabled=env_bool('TRADING_DAY_CHECK_ENABLED', True),
+        webui_enabled=env_bool('WEBUI_ENABLED', False),
         webui_host=os.getenv('WEBUI_HOST', '127.0.0.1'),
         webui_port=parse_env_int(os.getenv('WEBUI_PORT'), 8000, field_name='WEBUI_PORT', minimum=1, maximum=65535),
         # 机器人配置
-        bot_enabled=os.getenv('BOT_ENABLED', 'true').lower() == 'true',
+        bot_enabled=env_bool('BOT_ENABLED', True),
         bot_command_prefix=os.getenv('BOT_COMMAND_PREFIX', '/'),
         bot_rate_limit_requests=parse_env_int(os.getenv('BOT_RATE_LIMIT_REQUESTS'), 10, field_name='BOT_RATE_LIMIT_REQUESTS', minimum=1),
         bot_rate_limit_window=parse_env_int(os.getenv('BOT_RATE_LIMIT_WINDOW'), 60, field_name='BOT_RATE_LIMIT_WINDOW', minimum=1),
@@ -1634,11 +1676,11 @@ def parse_runtime_config(config_type):
         # 飞书机器人
         feishu_verification_token=os.getenv('FEISHU_VERIFICATION_TOKEN'),
         feishu_encrypt_key=os.getenv('FEISHU_ENCRYPT_KEY'),
-        feishu_stream_enabled=os.getenv('FEISHU_STREAM_ENABLED', 'false').lower() == 'true',
+        feishu_stream_enabled=env_bool('FEISHU_STREAM_ENABLED', False),
         # 钉钉机器人
         dingtalk_app_key=os.getenv('DINGTALK_APP_KEY'),
         dingtalk_app_secret=os.getenv('DINGTALK_APP_SECRET'),
-        dingtalk_stream_enabled=os.getenv('DINGTALK_STREAM_ENABLED', 'false').lower() == 'true',
+        dingtalk_stream_enabled=env_bool('DINGTALK_STREAM_ENABLED', False),
         # 企业微信机器人
         wecom_corpid=os.getenv('WECOM_CORPID'),
         wecom_token=os.getenv('WECOM_TOKEN'),
@@ -1649,19 +1691,19 @@ def parse_runtime_config(config_type):
         # Discord 机器人扩展配置
         discord_bot_status=os.getenv('DISCORD_BOT_STATUS', 'A股智能分析 | /help'),
         # 实时行情增强数据配置
-        enable_realtime_quote=os.getenv('ENABLE_REALTIME_QUOTE', 'true').lower() == 'true',
-        enable_realtime_technical_indicators=os.getenv(
-            'ENABLE_REALTIME_TECHNICAL_INDICATORS', 'true'
-        ).lower() == 'true',
-        enable_chip_distribution=os.getenv('ENABLE_CHIP_DISTRIBUTION', 'true').lower() == 'true',
+        enable_realtime_quote=env_bool('ENABLE_REALTIME_QUOTE', True),
+        enable_realtime_technical_indicators=env_bool(
+            'ENABLE_REALTIME_TECHNICAL_INDICATORS', True
+        ),
+        enable_chip_distribution=env_bool('ENABLE_CHIP_DISTRIBUTION', True),
         # 东财接口补丁开关
-        enable_eastmoney_patch=os.getenv('ENABLE_EASTMONEY_PATCH', 'false').lower() == 'true',
+        enable_eastmoney_patch=env_bool('ENABLE_EASTMONEY_PATCH', False),
         # 实时行情数据源优先级：
         # - tencent: 腾讯财经，有量比/换手率/PE/PB等，单股查询稳定（推荐）
         # - akshare_sina: 新浪财经，基本行情稳定，但无量比
         # - efinance/akshare_em: 东财全量接口，数据最全但容易被封
         # - tushare: Tushare Pro，需要2000积分，数据全面
-        realtime_source_priority=cls._resolve_realtime_source_priority(),
+        realtime_source_priority=resolve_realtime_source_priority(cls),
         realtime_cache_ttl=parse_env_int(os.getenv('REALTIME_CACHE_TTL'), 600, field_name='REALTIME_CACHE_TTL', minimum=0),
         market_cache_remote_backend=(os.getenv('MARKET_CACHE_REMOTE_BACKEND') or 'disabled').strip().lower(),
         market_cache_remote_url=(os.getenv('MARKET_CACHE_REMOTE_URL') or '').strip() or None,
@@ -1679,7 +1721,7 @@ def parse_runtime_config(config_type):
             minimum=1,
         ),
         circuit_breaker_cooldown=parse_env_int(os.getenv('CIRCUIT_BREAKER_COOLDOWN'), 300, field_name='CIRCUIT_BREAKER_COOLDOWN', minimum=0),
-        enable_fundamental_pipeline=os.getenv('ENABLE_FUNDAMENTAL_PIPELINE', 'true').lower() == 'true',
+        enable_fundamental_pipeline=env_bool('ENABLE_FUNDAMENTAL_PIPELINE', True),
         fundamental_stage_timeout_seconds=parse_env_float(
             os.getenv('FUNDAMENTAL_STAGE_TIMEOUT_SECONDS'),
             1.5,
@@ -1735,7 +1777,7 @@ def parse_runtime_config(config_type):
             field_name='PORTFOLIO_RISK_LOOKBACK_DAYS',
             minimum=1,
         ),
-        portfolio_fx_update_enabled=os.getenv('PORTFOLIO_FX_UPDATE_ENABLED', 'true').lower() == 'true'
+        portfolio_fx_update_enabled=env_bool('PORTFOLIO_FX_UPDATE_ENABLED', True)
     )
 
 
@@ -1743,38 +1785,40 @@ def parse_litellm_yaml(config_type, config_path: str) -> List[Dict[str, Any]]:
     """Parse a standard LiteLLM config YAML file into Router model_list.
 
     Supports the ``os.environ/VAR_NAME`` syntax for secret references.
-    Returns an empty list on any error (logged, never raises).
+    Invalid explicit configuration raises instead of selecting another source.
     """
     import logging
     _logger = logging.getLogger(__name__)
     try:
         import yaml
-    except ImportError:
-        _logger.warning("PyYAML not installed; LITELLM_CONFIG ignored. Install with: pip install pyyaml")
-        return []
+    except ImportError as exc:
+        raise ValueError("LITELLM_CONFIG requires PyYAML") from exc
 
     path = Path(config_path)
     if not path.is_absolute():
         path = _REPOSITORY_ROOT / path
     if not path.exists():
-        _logger.warning(f"LITELLM_CONFIG file not found: {path}")
-        return []
+        raise ValueError(f"LITELLM_CONFIG file not found: {path}")
 
     try:
         with open(path, encoding='utf-8') as f:
             yaml_config = yaml.safe_load(f) or {}
-    except Exception as e:
-        _logger.warning(f"Failed to parse LITELLM_CONFIG: {e}")
-        return []
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
+        raise ValueError(f"LITELLM_CONFIG could not be parsed: {path}") from exc
 
+    if not isinstance(yaml_config, dict):
+        raise ValueError("LITELLM_CONFIG must contain a mapping")
     model_list = yaml_config.get('model_list', [])
-    if not isinstance(model_list, list):
-        _logger.warning("LITELLM_CONFIG: model_list must be a list")
-        return []
+    if not isinstance(model_list, list) or not model_list:
+        raise ValueError("LITELLM_CONFIG model_list must be a non-empty list")
 
     # Resolve os.environ/ references in string params
     for entry in model_list:
+        if not isinstance(entry, dict):
+            raise ValueError("LITELLM_CONFIG model_list entries must be mappings")
         params = entry.get('litellm_params', {})
+        if not isinstance(params, dict):
+            raise ValueError("LITELLM_CONFIG litellm_params must be a mapping")
         for key in list(params.keys()):
             val = params.get(key)
             if isinstance(val, str) and val.startswith('os.environ/'):
@@ -1785,52 +1829,49 @@ def parse_litellm_yaml(config_type, config_path: str) -> List[Dict[str, Any]]:
     return model_list
 
 
-def resolve_unified_llm_temperature(model: str) -> float:
+def resolve_unified_llm_temperature(
+    model: str,
+    *,
+    gemini_temperature: float,
+    anthropic_temperature: float,
+    openai_temperature: float,
+) -> float:
     """Resolve the unified temperature with the historical fallback order."""
     from src import config as config_facade
 
     llm_temperature_raw = os.getenv("LLM_TEMPERATURE")
     if llm_temperature_raw and llm_temperature_raw.strip():
-        try:
-            return float(llm_temperature_raw)
-        except (ValueError, TypeError):
-            pass
+        return parse_env_float(
+            llm_temperature_raw,
+            0.7,
+            field_name="LLM_TEMPERATURE",
+        )
 
     provider_temperature_env = {
-        "gemini": "GEMINI_TEMPERATURE",
-        "vertex_ai": "GEMINI_TEMPERATURE",
-        "anthropic": "ANTHROPIC_TEMPERATURE",
-        "openai": "OPENAI_TEMPERATURE",
-        "deepseek": "OPENAI_TEMPERATURE",
+        "gemini": ("GEMINI_TEMPERATURE", gemini_temperature),
+        "vertex_ai": ("GEMINI_TEMPERATURE", gemini_temperature),
+        "anthropic": ("ANTHROPIC_TEMPERATURE", anthropic_temperature),
+        "openai": ("OPENAI_TEMPERATURE", openai_temperature),
+        "deepseek": ("OPENAI_TEMPERATURE", openai_temperature),
     }
-    preferred_env = provider_temperature_env.get(
+    preferred = provider_temperature_env.get(
         config_facade._get_litellm_provider(model)
     )
-    if preferred_env:
-        preferred_value = os.getenv(preferred_env)
-        if preferred_value and preferred_value.strip():
-            try:
-                return float(preferred_value)
-            except (ValueError, TypeError):
-                pass
+    if preferred and os.getenv(preferred[0]) not in (None, ""):
+        return preferred[1]
 
-    for env_name in (
-        "GEMINI_TEMPERATURE",
-        "ANTHROPIC_TEMPERATURE",
-        "OPENAI_TEMPERATURE",
+    for env_name, parsed_value in (
+        ("GEMINI_TEMPERATURE", gemini_temperature),
+        ("ANTHROPIC_TEMPERATURE", anthropic_temperature),
+        ("OPENAI_TEMPERATURE", openai_temperature),
     ):
-        env_value = os.getenv(env_name)
-        if env_value and env_value.strip():
-            try:
-                return float(env_value)
-            except (ValueError, TypeError):
-                continue
+        if os.getenv(env_name) not in (None, ""):
+            return parsed_value
     return 0.7
 
 
 def parse_llm_channels(config_type, channels_str: str) -> List[Dict[str, Any]]:
     from src import config as config_facade
-    parse_env_bool = config_facade.parse_env_bool
     resolve_llm_channel_protocol = config_facade.resolve_llm_channel_protocol
     normalize_llm_channel_model = config_facade.normalize_llm_channel_model
     canonicalize_llm_channel_protocol = config_facade.canonicalize_llm_channel_protocol
@@ -1858,7 +1899,12 @@ def parse_llm_channels(config_type, channels_str: str) -> List[Dict[str, Any]]:
 
         base_url = os.getenv(f'LLM_{ch_upper}_BASE_URL', '').strip() or None
         protocol_raw = os.getenv(f'LLM_{ch_upper}_PROTOCOL', '').strip()
-        enabled = parse_env_bool(os.getenv(f'LLM_{ch_upper}_ENABLED'), default=True)
+        enabled_name = f'LLM_{ch_upper}_ENABLED'
+        enabled = parse_env_bool(
+            os.getenv(enabled_name),
+            default=True,
+            field_name=enabled_name,
+        )
 
         # API keys: LLM_{NAME}_API_KEYS (multi) > LLM_{NAME}_API_KEY (single)
         api_keys_raw = os.getenv(f'LLM_{ch_upper}_API_KEYS', '')
@@ -1880,19 +1926,20 @@ def parse_llm_channels(config_type, channels_str: str) -> List[Dict[str, Any]]:
         if extra_headers_raw:
             try:
                 extra_headers = json.loads(extra_headers_raw)
-            except json.JSONDecodeError:
-                _logger.warning(f"LLM_{ch_upper}_EXTRA_HEADERS: invalid JSON, ignored")
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"LLM_{ch_upper}_EXTRA_HEADERS must be valid JSON"
+                ) from exc
+            if not isinstance(extra_headers, dict):
+                raise ValueError(f"LLM_{ch_upper}_EXTRA_HEADERS must be a JSON object")
 
         if not enabled:
             _logger.info(f"LLM channel '{ch_name}': disabled, skipped")
             continue
 
         if protocol_raw and canonicalize_llm_channel_protocol(protocol_raw) not in SUPPORTED_LLM_CHANNEL_PROTOCOLS:
-            _logger.warning(
-                "LLM_%s_PROTOCOL=%s is unsupported; auto-detected protocol=%s",
-                ch_upper,
-                protocol_raw,
-                protocol or "unknown",
+            raise ValueError(
+                f"LLM_{ch_upper}_PROTOCOL={protocol_raw!r} is unsupported"
             )
 
         if not api_keys and channel_allows_empty_api_key(protocol, base_url):
@@ -2027,68 +2074,51 @@ def parse_stock_email_groups(config_type) -> List[Tuple[List[str], List[str]]]:
 
 
 def parse_report_type(config_type, value: str) -> str:
-    """Parse REPORT_TYPE, fallback to simple for invalid values (supports brief)."""
+    """Parse the supported REPORT_TYPE values."""
     v = (value or 'simple').strip().lower()
     if v in ('simple', 'full', 'brief'):
         return v
-    import logging
-    logging.getLogger(__name__).warning(
-        f"REPORT_TYPE '{value}' invalid, fallback to 'simple' (valid: simple/full/brief)"
-    )
-    return 'simple'
+    raise ValueError("REPORT_TYPE must be one of: simple, full, brief")
 
 
 def parse_report_language(config_type, value: Optional[str]) -> str:
-    """Parse REPORT_LANGUAGE, fallback to zh for invalid values."""
-    normalized = normalize_report_language(value, default="zh")
+    """Parse REPORT_LANGUAGE while retaining documented aliases."""
     raw = (value or "").strip()
     if raw and not is_supported_report_language_value(raw):
-        logging.getLogger(__name__).warning(
-            "REPORT_LANGUAGE '%s' invalid, fallback to 'zh' (valid: zh/en)",
-            value,
-        )
-    return normalized
+        raise ValueError("REPORT_LANGUAGE must be zh or en")
+    return normalize_report_language(value, default="zh")
 
 
 def parse_news_strategy_profile(config_type, value: Optional[str]) -> str:
     from src import config as config_facade
     normalize_news_strategy_profile = config_facade.normalize_news_strategy_profile
-    """Parse NEWS_STRATEGY_PROFILE, fallback to short for invalid values."""
+    """Parse NEWS_STRATEGY_PROFILE without coercing invalid values."""
     normalized = normalize_news_strategy_profile(value)
     raw = (value or "short").strip().lower()
     if raw != normalized:
-        logging.getLogger(__name__).warning(
-            "NEWS_STRATEGY_PROFILE '%s' invalid, fallback to 'short' "
-            "(valid: ultra_short/short/medium/long)",
-            value,
+        raise ValueError(
+            "NEWS_STRATEGY_PROFILE must be one of: "
+            "ultra_short, short, medium, long"
         )
     return normalized
 
 
 def parse_market_review_region(config_type, value: str) -> str:
-    """解析大盘复盘市场区域，非法值记录警告后回退为 cn"""
-    import logging
+    """解析大盘复盘市场区域。"""
     v = (value or 'cn').strip().lower()
     if v in ('cn', 'us', 'both'):
         return v
-    logging.getLogger(__name__).warning(
-        f"MARKET_REVIEW_REGION 配置值 '{value}' 无效，已回退为默认值 'cn'（合法值：cn / us / both）"
-    )
-    return 'cn'
+    raise ValueError("MARKET_REVIEW_REGION must be one of: cn, us, both")
 
 
 def parse_md2img_engine(config_type, value: str) -> str:
-    """Parse MD2IMG_ENGINE, fallback to wkhtmltoimage for invalid values (Issue #455)."""
+    """Parse the supported MD2IMG_ENGINE values."""
     v = (value or 'wkhtmltoimage').strip().lower()
     if v in ('wkhtmltoimage', 'markdown-to-file'):
         return v
-    if v:
-        import logging
-        logging.getLogger(__name__).warning(
-            f"MD2IMG_ENGINE '{value}' invalid, fallback to 'wkhtmltoimage' "
-            "(valid: wkhtmltoimage | markdown-to-file)"
-        )
-    return 'wkhtmltoimage'
+    raise ValueError(
+        "MD2IMG_ENGINE must be one of: wkhtmltoimage, markdown-to-file"
+    )
 
 
 def resolve_realtime_source_priority(config_type) -> str:

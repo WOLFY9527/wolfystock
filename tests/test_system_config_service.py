@@ -75,7 +75,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
                     "HTTP_PROXY=http://proxy.example.com:8080",
                     "WEBUI_PORT=5173",
                     "WEBHOOK_VERIFY_SSL=false",
-                    "LITELLM_CONFIG=/tmp/litellm.yaml",
+                    "LITELLM_CONFIG=",
                     "AGENT_SKILL_DIR=/tmp/skills",
                     "CUSTOM_DATA_SOURCE_LIBRARY=[]",
                     "UNREGISTERED_BOOTSTRAP_PASSWORD=secret-password",

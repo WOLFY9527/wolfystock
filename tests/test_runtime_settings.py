@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import os
 from dataclasses import FrozenInstanceError, fields
@@ -17,14 +18,15 @@ from src.runtime.settings import (
     REDACTED_VALUE,
     RuntimeSettings,
     SettingSource,
+    _parse_config,
 )
 
 
 EXPECTED_INVENTORY_SHA256 = (
-    "e2848e4df5955d4b867adcede5921e583f7e9cde751bfc33f03d10a105d77b67"
+    "7acf195db9a8c66a3bc2e065c58eefddaf361ef4ff512275020f6eaff9278473"
 )
 EXPECTED_DEFAULT_CONFIG_SHA256 = (
-    "c63b4317e4170b08964626c37a87f098a9a33063fb7b555a45b572994c50777d"
+    "41d90d476212f77644f9be4287f9d8e156adcc68caecdc27b71abfbc1ec15458"
 )
 
 
@@ -63,22 +65,39 @@ def _config_contract_digest(config: Config) -> str:
 def test_runtime_settings_inventory_preserves_all_344_names() -> None:
     inventory = "\n".join(sorted(RECOGNIZED_SETTING_NAMES)) + "\n"
 
-    assert len(RECOGNIZED_SETTING_NAMES) == 352
+    unavailable_inputs = {
+        "AGENT_DEEP_RESEARCH_BUDGET",
+        "AGENT_DEEP_RESEARCH_TIMEOUT",
+        "AGENT_EVENT_MONITOR_ENABLED",
+        "AGENT_EVENT_MONITOR_INTERVAL_MINUTES",
+        "AGENT_EVENT_ALERT_RULES_JSON",
+    }
+
+    assert unavailable_inputs.isdisjoint(RECOGNIZED_SETTING_NAMES)
+    assert unavailable_inputs.isdisjoint(field.name.upper() for field in fields(Config))
+    assert len(RECOGNIZED_SETTING_NAMES) == 347
     assert hashlib.sha256(inventory.encode("utf-8")).hexdigest() == (
         EXPECTED_INVENTORY_SHA256
     )
+    assert not hasattr(Config, "_parse_environment")
+    assert "cls._parse" not in inspect.getsource(_parse_config)
 
 
 def test_runtime_settings_preserves_complete_default_value_and_type_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from src.runtime.composition import RuntimeContainer
+
     monkeypatch.setattr("src.config.setup_env", lambda override=False: None)
     with patch.dict(os.environ, {}, clear=True):
         snapshot = _load_snapshot()
         config = snapshot.to_config(Config)
 
-    assert len(snapshot.config_values) == 229
+    assert len(snapshot.config_values) == 224
     assert _config_contract_digest(config) == EXPECTED_DEFAULT_CONFIG_SHA256
+    container = RuntimeContainer(runtime_settings=snapshot)
+    assert container.runtime_settings is snapshot
+    assert container.config.runtime_settings is snapshot
 
 
 def test_runtime_settings_preserves_process_over_file_over_default_precedence(
@@ -99,6 +118,8 @@ def test_runtime_settings_preserves_process_over_file_over_default_precedence(
             "ENV_FILE": "runtime.env",
             "MAX_WORKERS": "7",
             "REPORT_LANGUAGE": "en",
+            "CORS_ORIGINS": "https://one.example, https://two.example",
+            "CORS_ALLOW_ALL": "true",
         },
         clear=True,
     ):
@@ -115,6 +136,11 @@ def test_runtime_settings_preserves_process_over_file_over_default_precedence(
     assert snapshot.provenance["APP_ENV"].source_name == "ENVIRONMENT"
     assert snapshot.provenance["APP_ENV"].is_alias is True
     assert snapshot.provenance["WEBUI_PORT"].source is SettingSource.DEFAULT
+    assert snapshot.cors_origins == (
+        "https://one.example",
+        "https://two.example",
+    )
+    assert snapshot.cors_allow_all is True
 
 
 def test_runtime_settings_owns_validated_portfolio_import_limits(
@@ -171,6 +197,23 @@ def test_runtime_settings_rejects_invalid_portfolio_import_limits(
             match="PORTFOLIO_IMPORT_PARSE_TIMEOUT_SECONDS",
         ):
             _load_snapshot()
+
+    invalid_values = {
+        "DEBUG": "sometimes",
+        "CORS_ALLOW_ALL": "",
+        "RUN_IMMEDIATELY": "sometimes",
+        "MAX_WORKERS": "not-an-integer",
+        "WEBUI_PORT": "70000",
+        "GEMINI_TEMPERATURE": "nan",
+        "REPORT_TYPE": "verbose",
+        "MARKET_CACHE_REMOTE_BACKEND": "memory",
+        "SEARXNG_BASE_URLS": "not-a-url",
+        "LITELLM_CONFIG": "/definitely/missing/litellm.yaml",
+    }
+    for name, value in invalid_values.items():
+        with patch.dict(os.environ, {name: value}, clear=True):
+            with pytest.raises(ValueError, match=name):
+                _load_snapshot()
 
 
 def test_runtime_settings_preserves_profile_matrix_and_environment_overrides(
