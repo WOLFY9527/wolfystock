@@ -1,0 +1,711 @@
+{
+  "schemaVersion": "wolfystock.audit.official-macro-provider-order-decision.v1",
+  "taskId": "T570",
+  "title": "Official macro provider-order decision dossier",
+  "generatedAt": "2026-07-19T11:43:58Z",
+  "decisionStatus": "awaiting_user_approval",
+  "decisionType": "audit_only",
+  "scope": {
+    "productionBehaviorChanged": false,
+    "testExpectationsChanged": false,
+    "topologyChanged": false,
+    "knownBaselinesChanged": false,
+    "authorizedWrites": [
+      "docs/audits/t570-official-macro-provider-order-decision.md",
+      "validation/t570_official_macro_provider_order_decision.json"
+    ],
+    "protectedNodeCount": 4,
+    "implementationTask": "T568"
+  },
+  "gitIdentity": {
+    "branch": "codex/t570-official-macro-order-decision-audit",
+    "acceptedBase": "4220b383cdfd0afa70f51e674c22246262ec0195",
+    "headAtAuditStart": "4220b383cdfd0afa70f51e674c22246262ec0195",
+    "treeAtAuditStart": "74b8cae5ba78cd5944f66286ccc9d44ff21a92a3",
+    "headEqualsMain": true,
+    "headEqualsOriginMain": true,
+    "initialStatusClean": true,
+    "remoteActionAuthorized": false
+  },
+  "environmentIdentity": {
+    "operatingSystem": "macOS 26.5.2",
+    "build": "25F84",
+    "kernel": "Darwin 25.5.0",
+    "architecture": "arm64",
+    "shell": "zsh 5.9",
+    "git": "2.50.1",
+    "python": "CPython 3.11.15",
+    "node": "20.20.2",
+    "npm": "10.8.2",
+    "pythonLockProjection": "requirements-python311-dev.lock",
+    "environmentFingerprint": "f706a3347b41e5598fad2068950a4fbd6ccd14ac43d0480f22f4df76f8ffa07a",
+    "bootstrapImplementation": "wolfystock_bootstrap_v7",
+    "testEnvironmentPolicy": "wolfystock_test_environment_policy_v1",
+    "environmentVerifyStatus": "ok",
+    "bootstrapEnsureStatus": "ok",
+    "networkUsedForEnvironmentPreparation": false
+  },
+  "runtimeGraph": {
+    "consumers": [
+      "rates",
+      "macro",
+      "volatility"
+    ],
+    "owners": {
+      "consumerProjectionAndOrdering": "src/services/market_overview_service.py",
+      "transportAndRetry": "src/services/official_macro_transport.py",
+      "sourceContracts": "src/services/official_macro_source_registry.py",
+      "uatIsolation": "src/services/uat_provider_isolation.py",
+      "disputedExpectations": "tests/test_market_overview_provider_deadlines.py"
+    },
+    "attemptOrder": [
+      "fresh outer panel cache",
+      "eligible stale panel return with background refresh",
+      "valid per-series official macro micro-cache",
+      "FRED VIXCLS",
+      "terminal stop on absent or disabled FRED credential",
+      "Treasury batch for missing DGS2 DGS10 DGS30",
+      "skip matching FRED DGS after usable Treasury rows",
+      "remaining FRED series in fixed sequential order",
+      "consumer projection with exact observation truth"
+    ],
+    "fixedFredSeriesOrder": [
+      "VIXCLS",
+      "DGS10",
+      "DGS30",
+      "DGS2",
+      "SOFR",
+      "T10Y2Y",
+      "T10Y3M",
+      "DFF",
+      "CPIAUCSL",
+      "PPIACO",
+      "BAMLH0A0HYM2",
+      "WALCL",
+      "RRPONTSYD",
+      "WTREGEN",
+      "WRESBAL",
+      "DTWEXBGS"
+    ],
+    "concurrentProviderCalls": false
+  },
+  "currentPolicy": {
+    "outerColdStartSeconds": 2.0,
+    "officialMacroAggregateBudgetSeconds": 1.8,
+    "fredPerCallCapSeconds": 0.9,
+    "treasuryTotalCapSeconds": 0.25,
+    "criticalFredFloorSeconds": 0.2,
+    "officialMacroMicroCacheTtlSeconds": 15,
+    "outerPanelCacheTtlSeconds": {
+      "rates": 600,
+      "macro": 300,
+      "volatility": 300
+    },
+    "treasuryMaxAttempts": 2,
+    "treasuryRetryableOutcomes": [
+      "timeout",
+      "transport_error",
+      "empty_response"
+    ],
+    "fredConsumerRetryCount": 0,
+    "transportStandaloneDefaultSeconds": 4.0,
+    "separateLiveSmokeTimeoutsNotInConsumerGraphSeconds": {
+      "fred": 1.0,
+      "treasury": 1.5
+    },
+    "microCacheEligibility": "non-empty, structurally valid, non-stale observations only",
+    "outerFallbackOrder": [
+      "in-memory snapshot",
+      "persisted snapshot",
+      "explicit unavailable or fallback"
+    ],
+    "stalePanelTreatment": "eligible stale display fallback, never promoted to fresh source authority",
+    "missingValueTreatment": "null, never synthesized as zero",
+    "credentialActivationBehavior": "absent or disabled FRED credential stops remaining cold network fanout",
+    "ordinaryVixFailureBehavior": "transient or empty VIXCLS does not prevent the Treasury attempt",
+    "isolationViolationBehavior": "propagates to the outer cache/fallback boundary and is not treated as provider miss"
+  },
+  "sourceAuthority": {
+    "treasury": {
+      "role": "direct US Treasury daily par-yield publisher",
+      "series": [
+        "DGS2",
+        "DGS10",
+        "DGS30"
+      ],
+      "cadence": "business_daily",
+      "live": false,
+      "delayedEligible": true,
+      "scoreContributionEligible": false
+    },
+    "fredDgs": {
+      "role": "FRED relay of official Treasury daily-yield series",
+      "series": [
+        "DGS2",
+        "DGS10",
+        "DGS30"
+      ],
+      "cadence": "business_daily",
+      "live": false,
+      "delayedEligible": true,
+      "scoreContributionEligible": false
+    },
+    "truthRules": [
+      "preserve exact source_id",
+      "preserve observation timestamp",
+      "preserve freshness and availability",
+      "reject stale calendar rows from the official macro aggregate",
+      "keep delayed observations delayed",
+      "keep missing observations null",
+      "do not treat a proxy as official",
+      "do not treat synthetic values as real observations",
+      "do not treat fixture transport as production or live evidence",
+      "do not treat not checked as ready",
+      "nominal authority does not make an unusable row usable"
+    ]
+  },
+  "providerIsolation": {
+    "noLiveEnvironmentVariable": "WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS",
+    "injectedTransportAllowed": true,
+    "injectedTransportIdentity": "injected_test_transport",
+    "injectedEvidenceKind": "fixture_mock",
+    "defaultLiveTransportBlockedUnlessAllowlisted": true,
+    "credentialPresenceBypassesNoLive": false,
+    "diagnosticsSanitized": true
+  },
+  "protectedNodes": [
+    {
+      "id": "tests/test_market_overview_provider_deadlines.py::test_official_macro_points_attempt_fred_dgs10_dgs30_after_treasury_timeout",
+      "observedCalls": [
+        "VIXCLS",
+        "treasury",
+        "DGS10",
+        "DGS30"
+      ],
+      "staleExpectationPrefix": [
+        "VIXCLS",
+        "DGS10",
+        "DGS30",
+        "DGS2"
+      ],
+      "disagreement": "test expects FRED DGS before Treasury",
+      "requiredT568Assertion": "Treasury precedes FRED DGS fallback after Treasury timeout"
+    },
+    {
+      "id": "tests/test_market_overview_provider_deadlines.py::test_official_macro_points_prioritize_vixcls_then_fred_dgs10_dgs30_after_treasury_miss",
+      "observedCalls": [
+        "VIXCLS",
+        "treasury",
+        "DGS10",
+        "DGS30"
+      ],
+      "staleExpectationPrefix": [
+        "VIXCLS",
+        "DGS10",
+        "DGS30",
+        "DGS2"
+      ],
+      "disagreement": "test expects all critical FRED DGS attempts before Treasury",
+      "requiredT568Assertion": "VIX remains first, Treasury is DGS primary, and FRED DGS is fallback"
+    },
+    {
+      "id": "tests/test_market_overview_provider_deadlines.py::test_official_macro_points_protect_fred_series_from_slow_treasury_fallback",
+      "observedCalls": [
+        "VIXCLS",
+        "treasury",
+        "DGS10",
+        "DGS30",
+        "DGS2",
+        "SOFR",
+        "T10Y2Y",
+        "T10Y3M",
+        "DTWEXBGS"
+      ],
+      "disagreement": "test expects the FRED sequence before Treasury",
+      "requiredT568Assertion": "bounded Treasury slot leaves aggregate budget for remaining FRED fallback series"
+    },
+    {
+      "id": "tests/test_market_overview_provider_deadlines.py::test_rates_macro_and_volatility_reuse_official_macro_observations_within_micro_cache_ttl",
+      "observedCalls": [
+        "VIXCLS",
+        "treasury",
+        "SOFR",
+        "T10Y2Y",
+        "T10Y3M",
+        "DFF",
+        "CPIAUCSL",
+        "PPIACO",
+        "BAMLH0A0HYM2",
+        "WALCL",
+        "RRPONTSYD",
+        "WTREGEN",
+        "WRESBAL",
+        "DTWEXBGS"
+      ],
+      "disagreement": "test expects FRED DGS calls even though successful Treasury rows intentionally suppress them",
+      "requiredT568Assertion": "the three consumers reuse one observation set and successful Treasury DGS suppresses duplicate FRED DGS calls"
+    }
+  ],
+  "history": [
+    {
+      "commit": "97ece532c65ef307c02aaeaa8542d0e43b48d3a3",
+      "subject": "fix(market-overview): protect FRED macro budget",
+      "effect": "moved implementation and the four expectations toward FRED-first behavior"
+    },
+    {
+      "commit": "14dbb5110e51d34460634c305a950d0f5db15647",
+      "subject": "fix(market-overview): repair provider regression baseline",
+      "effect": "restored Treasury before the remaining FRED loop without reconciling the four expectations"
+    },
+    {
+      "commit": "d43ccdfcbec6900ff71628d21983a5ef4f243a20",
+      "task": "T539",
+      "subject": "fix(provider): preserve isolation through injected seams",
+      "effect": "tightened injected transport identity and no-live enforcement without changing provider order"
+    },
+    {
+      "commit": "2ff65fa38b67660e10e0ec4eb7838f42ab3e9c01",
+      "task": "T552",
+      "subject": "fix(history): reconcile managed cache readiness contracts",
+      "effect": "changed cache and fallback truth without changing provider order"
+    },
+    {
+      "commit": "aebeac2d15c6fc9d2831238bd4589b3fb67f98d3",
+      "task": "T562",
+      "subject": "fix(integration): reconcile provider and cache truth",
+      "effect": "changed provider error import ownership without changing provider order"
+    },
+    {
+      "commit": "9b9a680f",
+      "task": "T563",
+      "effect": "allocated the exact four residual failures to T568 and required this decision"
+    }
+  ],
+  "optionCriteria": [
+    "sourceAuthority",
+    "freshness",
+    "expectedLatency",
+    "worstCaseLatency",
+    "timeoutAmplification",
+    "retryAmplification",
+    "cacheEfficiency",
+    "cacheHitLatency",
+    "partialFailureBehavior",
+    "providerIsolation",
+    "noLiveBehavior",
+    "deterministicOutput",
+    "observability",
+    "operationalComplexity",
+    "rateLimitExposure",
+    "externalDependencyExposure",
+    "consumerVisibleTruth",
+    "migrationRisk",
+    "regressionRisk",
+    "rollbackComplexity"
+  ],
+  "options": [
+    {
+      "id": "A",
+      "name": "Treasury-first",
+      "definition": "After cache lookup, use Treasury first for overlapping DGS observations and retain FRED DGS fallback.",
+      "evaluation": {
+        "sourceAuthority": "strong: direct publisher is primary for DGS",
+        "freshness": "strong: same business-daily class with validation retained",
+        "expectedLatency": "strong by request shape: one batch covers three rates",
+        "worstCaseLatency": "mixed: bounded Treasury plus sequential fallback",
+        "timeoutAmplification": "strong: one bounded primary rate slot",
+        "retryAmplification": "strong: at most two Treasury attempts",
+        "cacheEfficiency": "strong: compatible with shared caches",
+        "cacheHitLatency": "strong: provider order is bypassed on hit",
+        "partialFailureBehavior": "strong: explicit FRED fallback",
+        "providerIsolation": "strong with existing transport guard",
+        "noLiveBehavior": "strong with existing no-live policy",
+        "deterministicOutput": "strong: fixed order",
+        "observability": "strong: simple sequential attempts",
+        "operationalComplexity": "strong: low",
+        "rateLimitExposure": "strong: one Treasury batch before FRED DGS",
+        "externalDependencyExposure": "strong: direct source plus alternate relay",
+        "consumerVisibleTruth": "strong: selected source remains explicit",
+        "migrationRisk": "mixed: a pure form would still need repository-specific VIX/cache rules",
+        "regressionRisk": "mixed: implementation changes if applied literally",
+        "rollbackComplexity": "strong: localized policy revert"
+      }
+    },
+    {
+      "id": "B",
+      "name": "FRED-first",
+      "definition": "After cache lookup, attempt FRED VIXCLS DGS10 DGS30 and DGS2 when requested before Treasury fallback.",
+      "evaluation": {
+        "sourceAuthority": "mixed: official relay precedes direct DGS publisher",
+        "freshness": "strong: same business-daily class with validation retained",
+        "expectedLatency": "mixed by request shape: multiple sequential calls",
+        "worstCaseLatency": "mixed: FRED sequence plus Treasury fallback",
+        "timeoutAmplification": "mixed: several per-series rate slots",
+        "retryAmplification": "strong: no consumer retry for FRED",
+        "cacheEfficiency": "strong: compatible with shared caches",
+        "cacheHitLatency": "strong: provider order is bypassed on hit",
+        "partialFailureBehavior": "strong: explicit Treasury fallback",
+        "providerIsolation": "strong with existing transport guard",
+        "noLiveBehavior": "strong with existing no-live policy",
+        "deterministicOutput": "strong: fixed order",
+        "observability": "strong: simple sequential attempts",
+        "operationalComplexity": "strong: low",
+        "rateLimitExposure": "weak: up to three additional FRED DGS calls",
+        "externalDependencyExposure": "mixed: FRED credential and relay lead",
+        "consumerVisibleTruth": "strong if exact source identity is retained",
+        "migrationRisk": "weak: reverses intentionally restored behavior",
+        "regressionRisk": "weak: conflicts with current source and timeout contracts",
+        "rollbackComplexity": "strong: localized policy revert"
+      }
+    },
+    {
+      "id": "C",
+      "name": "Race or concurrent",
+      "definition": "Launch Treasury and FRED DGS concurrently and accept a policy-defined winner.",
+      "evaluation": {
+        "sourceAuthority": "mixed: timing may choose relay over direct publisher",
+        "freshness": "mixed: winner may vary by timing",
+        "expectedLatency": "strong potential but unmeasured",
+        "worstCaseLatency": "mixed: bounded race still performs more work",
+        "timeoutAmplification": "mixed: concurrent deadlines require coordination",
+        "retryAmplification": "weak: retries can overlap the competing provider",
+        "cacheEfficiency": "mixed: duplicate winner and loser work",
+        "cacheHitLatency": "strong: provider race is bypassed on hit",
+        "partialFailureBehavior": "weak: cancellation and winner arbitration add states",
+        "providerIsolation": "weak: simultaneous egress paths enlarge the boundary",
+        "noLiveBehavior": "mixed: more fanout must be blocked and evidenced",
+        "deterministicOutput": "weak without source-priority arbitration",
+        "observability": "weak: winner loser and cancellation telemetry required",
+        "operationalComplexity": "weak: concurrency cancellation and arbitration",
+        "rateLimitExposure": "weak: both providers contacted",
+        "externalDependencyExposure": "weak: simultaneous dependency exposure",
+        "consumerVisibleTruth": "mixed: timing can change selected source",
+        "migrationRisk": "weak: substantial new behavior and tests",
+        "regressionRisk": "weak: concurrency and cancellation surface",
+        "rollbackComplexity": "weak: several coupled mechanisms"
+      }
+    },
+    {
+      "id": "D",
+      "name": "Cache-first bounded order",
+      "definition": "Strengthen cache or prewarm as the main latency policy, then use a bounded provider order selected separately.",
+      "evaluation": {
+        "sourceAuthority": "mixed: cached origin varies and cold order is unresolved",
+        "freshness": "strong on a valid hit, unresolved on miss",
+        "expectedLatency": "strongest on hit only",
+        "worstCaseLatency": "weak: cold-miss order remains unresolved",
+        "timeoutAmplification": "mixed: avoided on hit, unresolved on miss",
+        "retryAmplification": "mixed: avoided on hit, unresolved on miss",
+        "cacheEfficiency": "strong by design",
+        "cacheHitLatency": "strong",
+        "partialFailureBehavior": "weak: cold partial failures remain unresolved",
+        "providerIsolation": "strong on hit, unresolved on miss",
+        "noLiveBehavior": "strong on hit, unresolved on miss",
+        "deterministicOutput": "mixed: depends on cache state and prior source",
+        "observability": "mixed: requires stronger cache and prewarm telemetry",
+        "operationalComplexity": "mixed: prewarm invalidation and lifecycle work",
+        "rateLimitExposure": "strong on hit only",
+        "externalDependencyExposure": "strong on hit only",
+        "consumerVisibleTruth": "mixed: stale and cache policy dominate",
+        "migrationRisk": "mixed: changes cache or prewarm policy",
+        "regressionRisk": "mixed: freshness and invalidation surface",
+        "rollbackComplexity": "mixed: cache and prewarm rollback"
+      }
+    },
+    {
+      "id": "E",
+      "name": "Hybrid current policy",
+      "definition": "Cache-first, FRED VIXCLS, Treasury-primary DGS batch, then sequential FRED fallback for missing DGS and other series.",
+      "evaluation": {
+        "sourceAuthority": "strong: direct DGS publisher with exact fallback identity",
+        "freshness": "strong: existing validation and same daily class",
+        "expectedLatency": "strong by request shape: cache VIX then one rate batch",
+        "worstCaseLatency": "strong: existing aggregate 1.8 second bound",
+        "timeoutAmplification": "strong: Treasury occupies a 0.25 second slot",
+        "retryAmplification": "strong: retries are isolated to the Treasury slot",
+        "cacheEfficiency": "strong: shared micro-cache and panel caches",
+        "cacheHitLatency": "strong",
+        "partialFailureBehavior": "strong: usable rows skip duplicate fallback",
+        "providerIsolation": "strong: existing sequential transport guard",
+        "noLiveBehavior": "strong: injected transport identity stays explicit",
+        "deterministicOutput": "strong: fixed sequence and exact source identity",
+        "observability": "strong: existing provider attempt details",
+        "operationalComplexity": "strong: already implemented",
+        "rateLimitExposure": "strong: successful Treasury batch skips FRED DGS",
+        "externalDependencyExposure": "strong: bounded sequential dependencies",
+        "consumerVisibleTruth": "strong: source freshness and availability stay explicit",
+        "migrationRisk": "strong: no production migration",
+        "regressionRisk": "strong: only stale tests require reconciliation",
+        "rollbackComplexity": "strong: revert the test-only T568 commit"
+      }
+    }
+  ],
+  "recommendation": {
+    "optionId": "E",
+    "policyName": "cache-first VIX-first Treasury-primary DGS with FRED DGS fallback",
+    "productionBehaviorChangeRequired": false,
+    "testExpectationChangeRequired": true,
+    "rationale": [
+      "Treasury is the direct publisher for overlapping DGS observations while FRED is a relay.",
+      "One Treasury batch covers three DGS observations and successful rows suppress duplicate FRED calls.",
+      "The current sequential deadlines retries caches isolation and truth contracts are already covered by 151 focused passing tests outside the four stale expectations.",
+      "History shows that current Treasury-primary behavior was intentionally restored after the FRED-first expectations were introduced.",
+      "No live latency telemetry supports a concurrency or FRED-first production change."
+    ],
+    "normativeRules": [
+      "fresh panel cache and valid micro-cache entries remain first",
+      "VIXCLS remains the first cold provider attempt",
+      "Treasury remains primary for missing DGS2 DGS10 DGS30",
+      "FRED DGS remains fallback for Treasury-missing invalid or timed-out observations",
+      "all current deadlines retries and cache TTLs remain unchanged",
+      "source observation freshness availability and isolation truth remain unchanged",
+      "T568 changes only the four stale expectations"
+    ],
+    "completeContract": {
+      "providerAttemptOrder": [
+        "fresh consumer panel cache returns immediately",
+        "eligible stale panel returns explicitly stale while refresh runs in the background",
+        "valid per-series official macro micro-cache",
+        "FRED VIXCLS",
+        "current early stop when the FRED credential is absent or disabled",
+        "Treasury batch for missing DGS2 DGS10 DGS30",
+        "remaining FRED series in fixed order while skipping DGS rows supplied by Treasury"
+      ],
+      "scheduling": "sequential, never raced",
+      "deadlinesSeconds": {
+        "outerColdStart": 2.0,
+        "aggregate": 1.8,
+        "fredPerCallMaximum": 0.9,
+        "treasurySlotNormalMaximum": 0.25,
+        "criticalFredFloorWhenBudgetPermits": 0.2
+      },
+      "retryPolicy": "Treasury at most two attempts inside one supplied timeout for timeout transport error or empty response; no FRED retry added by the consumer.",
+      "cacheLookupOrder": "consumer fresh panel cache then aggregate per-series 15-second micro-cache then providers",
+      "cacheWriteOrder": "usable non-stale observations to per-series micro-cache under exact source truth; usable projection through the existing in-memory snapshot persisted snapshot and panel-cache owner path",
+      "cacheTtlSeconds": {
+        "officialMacroMicroCache": 15,
+        "ratesPanel": 600,
+        "macroPanel": 300,
+        "volatilityPanel": 300
+      },
+      "cacheReuseRules": "rates macro and volatility reuse the same valid observations within 15 seconds; failed empty or stale rows are not stored as observations",
+      "staleCacheEligibility": "eligible prior panel or snapshot only and always explicitly stale; stale provider rows do not enter the official aggregate",
+      "sourceAuthoritySelection": "direct Treasury publisher for overlapping DGS rows; exact FRED relay identity for fallback; FRED authority for VIXCLS and other FRED-only series",
+      "fallbackEligibility": "FRED DGS only when matching Treasury observation is missing invalid stale timed out or otherwise unusable; outer stale-panel fallback remains separate",
+      "partialResultBehavior": "keep each valid observation; missing series remain unavailable and null; successful Treasury subsets suppress only matching FRED DGS calls",
+      "unavailableProjection": "null and unavailable, never zero or neutral",
+      "staleProjection": "explicit stale only from an eligible prior panel or snapshot, never fresh",
+      "delayedProjection": "delayed remains delayed, never live",
+      "failureReasonProjection": "retain allowlisted sanitized not configured cache miss transport error HTTP error timeout missing credential disabled configuration empty response stale official row parse error missing series refresh not attempted or budget exhausted reasons; keep provider-attempt detail when both official paths are attempted",
+      "noLiveUatBehavior": "configuration does not authorize egress; default live transport remains blocked unless allowlisted; injected transport remains fixture mock evidence",
+      "oneSourceSlow": "per-provider caps and the aggregate deadline bound waiting; a slow Treasury slot leaves protected budget for eligible FRED work",
+      "oneSourceFails": "use FRED fallback only for overlapping DGS; keep valid partial observations; FRED-only failures remain unavailable unless an eligible stale panel exists",
+      "allSourcesFail": "synthesize nothing; return explicit unavailable or partial truth, or an eligible prior panel explicitly stale through the outer fallback path",
+      "protectedNodeTreatment": "update all four stale expectations for Treasury-before-FRED DGS bounded Treasury protection and duplicate-call suppression through successful Treasury rows plus micro-cache reuse",
+      "authoritativePolicyOwner": "src/services/market_overview_service.py"
+    },
+    "explicitlyOutOfScope": [
+      "changing absent or disabled FRED credential activation behavior",
+      "adding provider concurrency",
+      "changing provider adapters",
+      "changing source registry contracts",
+      "changing cache TTLs",
+      "changing topology or known baseline declarations"
+    ],
+    "rejectedAlternatives": [
+      {
+        "optionId": "A",
+        "reason": "Defensible for DGS alone but incomplete for VIX-first and shared-cache policy; Option E is its complete current repository form."
+      },
+      {
+        "optionId": "B",
+        "reason": "Restores stale expectations at the cost of direct-source precedence and avoidable sequential FRED DGS requests."
+      },
+      {
+        "optionId": "C",
+        "reason": "No latency telemetry supports doubled egress timing-dependent selection cancellation and new arbitration complexity."
+      },
+      {
+        "optionId": "D",
+        "reason": "Cache-first is already a policy layer but does not independently decide the cold-miss provider order."
+      }
+    ]
+  },
+  "t568Ownership": {
+    "expectedProductionFiles": [],
+    "expectedTestFiles": [
+      "tests/test_market_overview_provider_deadlines.py"
+    ],
+    "authoritativeReadOnlyProductionReferences": [
+      "src/services/market_overview_service.py",
+      "src/services/official_macro_transport.py",
+      "src/services/official_macro_source_registry.py",
+      "src/services/uat_provider_isolation.py"
+    ],
+    "expectedTopologyDelta": 0,
+    "expectedKnownBaselineDelta": 0,
+    "stopCondition": "If Option E requires a production change, stop T568 and request a new decision instead of expanding scope."
+  },
+  "t568RequiredAssertions": [
+    "VIX-first then Treasury-primary DGS order on a cold miss",
+    "FRED DGS fallback after Treasury timeout or miss without exceeding the aggregate budget contract",
+    "a slow Treasury slot leaves protected budget for remaining FRED work",
+    "successful Treasury DGS suppresses matching FRED DGS requests",
+    "rates macro and volatility reuse observations inside the micro-cache TTL",
+    "exact provider source and freshness truth remains intact"
+  ],
+  "validation": {
+    "commands": [
+      {
+        "name": "exact protected nodes",
+        "command": "./wolfy exec --profile test -- python -m pytest -vv tests/test_market_overview_provider_deadlines.py::test_official_macro_points_attempt_fred_dgs10_dgs30_after_treasury_timeout tests/test_market_overview_provider_deadlines.py::test_official_macro_points_prioritize_vixcls_then_fred_dgs10_dgs30_after_treasury_miss tests/test_market_overview_provider_deadlines.py::test_official_macro_points_protect_fred_series_from_slow_treasury_fallback tests/test_market_overview_provider_deadlines.py::test_rates_macro_and_volatility_reuse_official_macro_observations_within_micro_cache_ttl",
+        "exitCode": 1,
+        "expectedForAudit": true,
+        "collected": 4,
+        "passed": 0,
+        "failed": 4,
+        "durationSeconds": 1.85
+      },
+      {
+        "name": "provider deadline file",
+        "command": "./wolfy exec --profile test -- python -m pytest -q tests/test_market_overview_provider_deadlines.py",
+        "exitCode": 1,
+        "expectedForAudit": true,
+        "collected": 12,
+        "passed": 8,
+        "failed": 4,
+        "durationSeconds": 2.15
+      },
+      {
+        "name": "transport registry and prewarm focus",
+        "command": "./wolfy exec --profile test -- python -m pytest -q tests/test_official_macro_transport.py tests/test_official_macro_source_registry.py tests/test_official_macro_cache_prewarm.py",
+        "exitCode": 0,
+        "passed": 90,
+        "failed": 0,
+        "durationSeconds": 2.34
+      },
+      {
+        "name": "boundaries freshness fallback isolation and API focus",
+        "command": "./wolfy exec --profile test -- python -m pytest -q tests/test_market_overview_provider_boundaries.py tests/test_market_overview_provider_freshness.py tests/test_market_cache_fallback_contracts.py tests/test_uat_provider_isolation_boundary.py tests/test_market_overview_api.py",
+        "exitCode": 0,
+        "passed": 61,
+        "failed": 0,
+        "warnings": 3,
+        "durationSeconds": 5.96
+      },
+      {
+        "name": "domain topology",
+        "command": "./wolfy exec --profile test -- python scripts/domain_test_topology.py verify-all",
+        "exitCode": 0
+      }
+    ],
+    "focusedPassingOutsideDisagreement": 151,
+    "protectedFailuresReproduced": 4,
+    "deadlineFilePassed": 8,
+    "deadlineFileFailed": 4,
+    "liveProviderValidationRun": false,
+    "liveProviderValidationAuthorized": false,
+    "warnings": "Three existing framework or dependency deprecations; no assertion impact."
+  },
+  "topology": {
+    "verificationCommand": "./wolfy exec --profile test -- python scripts/domain_test_topology.py verify-all",
+    "verificationExitCode": 0,
+    "manifestStatus": "valid",
+    "inventory": {
+      "backendTests": 8142,
+      "baselineBackendTests": 7609,
+      "backendSha256": "383fd5b6f7cab1c9a343fb92a50e887ee512f17edc76b7e758fad6f533247745",
+      "networkTests": 0,
+      "vitestFiles": 176,
+      "vitestSha256": "9330504ca244199783332967bb8a62e8a29425a98d30a4086b70452a54d37608",
+      "largeVitestFiles": 18,
+      "playwrightSpecs": 64,
+      "playwrightProjectCases": 718,
+      "playwrightProjectCaseCounts": {
+        "chromium": 357,
+        "chromium-mobile": 357,
+        "release-real-runtime": 4
+      }
+    },
+    "currentNodeIdsPreserved": true,
+    "ownerChangesExpectedInT568": false,
+    "inventoryHashDeltaExpectedInT568": false,
+    "deltaCountExpectedInT568": 0
+  },
+  "uncertainties": [
+    "No live provider p50 or p95 latency telemetry was available or generated.",
+    "No live upstream availability-correlation evidence was generated.",
+    "The decision compares request shape and enforced budgets rather than claiming observed production latency."
+  ],
+  "risks": [
+    {
+      "id": "R1",
+      "risk": "Changing literal call arrays without preserving behavioral assertions could mask runtime drift.",
+      "mitigation": "T568 must assert order timeout fallback source and cross-consumer reuse semantics."
+    },
+    {
+      "id": "R2",
+      "risk": "The existing FRED credential activation gate may prevent Treasury-only cold fanout.",
+      "mitigation": "Keep it unchanged in T568 and raise a separate protected-policy decision if product behavior should change."
+    },
+    {
+      "id": "R3",
+      "risk": "A concurrency option could change selected source based on timing and double provider exposure.",
+      "mitigation": "Reject concurrency without telemetry and an explicit authority and cancellation contract."
+    },
+    {
+      "id": "R4",
+      "risk": "Test ownership or topology could drift during implementation.",
+      "mitigation": "Limit T568 to one existing test file and rerun topology verify-all."
+    }
+  ],
+  "rollback": {
+    "t570": "git revert <T570-commit-sha>",
+    "futureT568": "git revert <T568-commit-sha>",
+    "dataMigrationRequired": false,
+    "cacheInvalidationRequired": false
+  },
+  "releaseRisk": "low and test-only after approval if T568 stays within one test file and all focused validation passes; no live-provider qualification claim",
+  "rollbackRisk": "low because no schema data cache migration or production behavior change is expected; reverting T568 reopens the four known failures",
+  "approval": {
+    "heading": "Decision awaiting user approval:",
+    "recommendedPolicy": "Option E - retain cache-first VIX-first, Treasury-primary DGS, and FRED DGS fallback; update the four stale test expectations only.",
+    "productionBehaviorChangeRequired": "no",
+    "testExpectationChangeRequired": "yes",
+    "proposedImplementationTask": "T568",
+    "proposedCommitSubject": "fix(market): decide official macro fetch order",
+    "approvalOptions": [
+      "Approve recommended policy.",
+      "Reject and retain current behavior.",
+      "Request a specified alternative."
+    ],
+    "displayBlock": [
+      "Decision awaiting user approval:",
+      "- Recommended policy: Option E - retain cache-first VIX-first, Treasury-primary DGS, and FRED DGS fallback; update the four stale test expectations only.",
+      "- Production behavior change required: no",
+      "- Test expectation change required: yes",
+      "- Proposed implementation task: T568",
+      "- Proposed commit subject:",
+      "  fix(market): decide official macro fetch order",
+      "- Approval options:",
+      "  1. Approve recommended policy.",
+      "  2. Reject and retain current behavior.",
+      "  3. Request a specified alternative."
+    ]
+  },
+  "arithmetic": {
+    "alternativeCount": 5,
+    "criteriaCount": 20,
+    "evaluationCellsExpected": 100,
+    "evaluationCellsPresent": 100,
+    "protectedNodeCount": 4,
+    "protectedFailureCount": 4,
+    "focusedPassingOutsideDisagreement": 151,
+    "deadlineFileCollected": 12,
+    "deadlineFilePassed": 8,
+    "deadlineFileFailed": 4,
+    "expectedProductionFileCountInT568": 0,
+    "expectedTestFileCountInT568": 1,
+    "expectedTopologyDelta": 0
+  }
+}
