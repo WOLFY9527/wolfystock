@@ -457,12 +457,17 @@ def _build_symbol_payload(
         adjustment_state=adjustment_state,
         require_adjusted=require_adjusted,
     )
+    cache_config = cache.get("cacheConfig") or {}
+    cache_path_configured = bool(
+        cache_config.get("pathConfigured")
+        and (cache_config.get("envKey") or cache_config.get("pathBasename"))
+    )
     status = _operator_status(
         runtime_state=runtime_state,
         cache_state=cache_state,
         data_state=data_state,
         cached_bars=cached_bars,
-        cache_configured=bool((cache.get("cacheConfig") or {}).get("pathConfigured")),
+        cache_path_configured=cache_path_configured,
     )
     date_range = _date_range(cache=cache, seed_report=seed_report)
     next_action = _next_action(
@@ -471,6 +476,7 @@ def _build_symbol_payload(
         seed_state,
         cache_state=cache_state,
         data_state=data_state,
+        cache_path_configured=cache_path_configured,
     )
     return {
         "market": market,
@@ -681,7 +687,7 @@ def _operator_status(
     cache_state: str,
     data_state: str,
     cached_bars: int,
-    cache_configured: bool,
+    cache_path_configured: bool,
 ) -> str:
     if data_state == "fresh" or (
         cache_state == "cache_hit"
@@ -699,10 +705,10 @@ def _operator_status(
         return "not_configured"
     if data_state == "runtime_unavailable":
         return "unavailable"
+    if data_state == "cache_missing" and cache_path_configured:
+        return "missing"
     if runtime_state in {"disabled_by_config", "seed_disabled_by_config", "dependency_missing"}:
         return "not_configured"
-    if data_state == "cache_missing" and cache_configured:
-        return "missing"
     if data_state == "cache_missing" and runtime_state == "available":
         return "missing"
     return "unavailable"
@@ -731,6 +737,7 @@ def _next_action(
     *,
     cache_state: str,
     data_state: str,
+    cache_path_configured: bool,
 ) -> dict[str, Any]:
     if seed_state == "cache_updated":
         state = _ACTIVATION_STATE_CACHED
@@ -738,6 +745,12 @@ def _next_action(
     elif cache_state == "cache_hit":
         state = _ACTIVATION_STATE_CACHED
         summary = "Representative cache is already present; validate bars, freshness, and adjustments before widening coverage."
+    elif cache_state == "cache_not_configured":
+        state = _ACTIVATION_STATE_DISABLED
+        summary = "Configure LOCAL_US_PARQUET_DIR or US_STOCK_PARQUET_DIR before product readiness can inspect local OHLCV cache rows."
+    elif cache_state == "cache_missing" and cache_path_configured:
+        state = _ACTIVATION_STATE_READY_TO_SEED
+        summary = "Configured cache directory is readable, but representative symbol parquet files are missing."
     elif seed_state == "symbol_not_allowlisted":
         state = "symbol_not_allowlisted"
         summary = "Use the documented small representative symbol set for cache seed."
@@ -753,9 +766,6 @@ def _next_action(
     elif runtime_state == "runtime_unavailable" or cache_state == "cache_error" or data_state == "runtime_unavailable":
         state = _ACTIVATION_STATE_FAILED_SAFELY
         summary = "Retry only after the provider runtime issue is resolved."
-    elif cache_state == "cache_not_configured":
-        state = _ACTIVATION_STATE_DISABLED
-        summary = "Configure LOCAL_US_PARQUET_DIR or US_STOCK_PARQUET_DIR before product readiness can inspect local OHLCV cache rows."
     elif cache_state == "cache_missing":
         state = _ACTIVATION_STATE_READY_TO_SEED
         summary = "Configured cache directory is readable, but representative symbol parquet files are missing."

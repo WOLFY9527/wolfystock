@@ -20,18 +20,6 @@ _YFINANCE_HISTORY_EXECUTOR = ThreadPoolExecutor(
 _YFINANCE_HISTORY_SLOTS = BoundedSemaphore(YFINANCE_HISTORY_TIMEOUT_WORKERS)
 
 
-def _fetch_default_quote_history(ticker: str) -> Any:
-    import yfinance as yf
-
-    return yf.Ticker(ticker).history(period="5d", interval="1d", auto_adjust=False)
-
-
-def _fetch_default_spy_atr_history() -> Any:
-    import yfinance as yf
-
-    return yf.Ticker("SPY").history(period="1mo", interval="1d", auto_adjust=False)
-
-
 def fetch_yfinance_quote_history_frame(
     ticker: str,
     *,
@@ -44,9 +32,16 @@ def fetch_yfinance_quote_history_frame(
         route="market_overview_yfinance_transport.fetch_yfinance_quote_history_frame",
         injected_transport=history_transport,
     )
+    if history_transport is None:
+        import yfinance as yf
+
+        history_transport = lambda: yf.Ticker(ticker).history(
+            period="5d",
+            interval="1d",
+            auto_adjust=False,
+        )
     return _run_yfinance_history_with_timeout(
-        history_transport
-        or (lambda: _fetch_default_quote_history(ticker)),
+        history_transport,
         timeout=timeout,
         task_name="yfinance history",
     )
@@ -63,9 +58,16 @@ def fetch_yfinance_spy_atr_history_frame(
         route="market_overview_yfinance_transport.fetch_yfinance_spy_atr_history_frame",
         injected_transport=history_transport,
     )
+    if history_transport is None:
+        import yfinance as yf
+
+        history_transport = lambda: yf.Ticker("SPY").history(
+            period="1mo",
+            interval="1d",
+            auto_adjust=False,
+        )
     return _run_yfinance_history_with_timeout(
-        history_transport
-        or _fetch_default_spy_atr_history,
+        history_transport,
         timeout=timeout,
         task_name="yfinance history",
     )

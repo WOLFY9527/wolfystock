@@ -19,7 +19,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
-from src.providers import classify_provider_retry_disposition
+from src.providers.errors import classify_provider_retry_disposition
 from src.services.uat_provider_isolation import require_uat_provider_transport_allowed
 
 

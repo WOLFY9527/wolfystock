@@ -382,6 +382,28 @@ class StockStructureDecisionService:
                 dispatch.transport_identity,
                 dispatch.evidence_kind,
             )
+        elif uat_no_live_providers_enabled():
+            readiness = _fallback_historical_ohlcv_readiness(
+                symbol=ticker,
+                data_quality={
+                    "status": "unavailable",
+                    "source": "unavailable",
+                    "reason": "provider_missing",
+                },
+            )
+            return {
+                "bars": [],
+                "data_quality": {
+                    "status": "unavailable",
+                    "source": "unavailable",
+                    "period": "daily",
+                    "requestedDays": DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS,
+                    "observedBars": 0,
+                    "usableBars": 0,
+                    "reason": "uat_no_live_providers",
+                },
+                "historical_ohlcv_readiness": readiness,
+            }
 
         runtime_result = self._load_runtime_ohlcv(ticker)
         if runtime_result is not None:

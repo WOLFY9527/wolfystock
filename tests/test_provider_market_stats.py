@@ -17,7 +17,6 @@ import pandas as pd
 import pytest
 
 from data_provider import akshare_fetcher as akshare_module
-from data_provider import efinance_fetcher as efinance_module
 from data_provider import tushare_fetcher as tushare_module
 from data_provider.akshare_fetcher import AkshareFetcher
 from data_provider.efinance_fetcher import EfinanceFetcher
@@ -273,22 +272,18 @@ def test_akshare_facade_keeps_fetch_order_lineage_and_result(monkeypatch: pytest
 
 def test_efinance_facade_keeps_fetch_cache_boundary_and_result(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
-    fake_efinance = types.ModuleType("efinance")
-    fake_efinance.stock = types.SimpleNamespace(
-        get_realtime_quotes=lambda: calls.append("realtime") or _representative_frame()
+    fetcher = EfinanceFetcher(
+        transport=lambda operation, *_args, **_kwargs: (
+            calls.append(operation) or _representative_frame()
+        )
     )
-    fetcher = EfinanceFetcher.__new__(EfinanceFetcher)
-    _configure_fetcher(fetcher)
-    monkeypatch.setitem(sys.modules, "efinance", fake_efinance)
-    monkeypatch.setattr(efinance_module, "_ef_call_with_timeout", lambda function: function())
-    monkeypatch.setattr(efinance_module, "_realtime_cache", {"data": None, "timestamp": 0, "ttl": 600})
 
     result = fetcher.get_market_stats()
 
     assert result is not None
     assert result["down_count"] == 2
-    assert calls == ["realtime"]
-    assert efinance_module._realtime_cache["data"] is not None
+    assert calls == ["stock.get_realtime_quotes"]
+    assert fetcher._realtime_cache_state["data"] is not None
 
     index_rows = _fetch_main_indices(
         "efinance",
@@ -311,15 +306,15 @@ def test_efinance_facade_keeps_fetch_cache_boundary_and_result(monkeypatch: pyte
 
 def test_tushare_facade_keeps_fetch_scope_lineage_and_result(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, dict[str, object]]] = []
-    lineage: list[dict[str, str]] = []
-    fetcher = TushareFetcher.__new__(TushareFetcher)
-    fetcher._api = object()
+    lineage: list[dict[str, object]] = []
+    api = object()
+    fetcher = TushareFetcher(api=api)
     fetcher._get_china_now = lambda: datetime(2026, 7, 15, 10, 0)
     fetcher._get_trade_dates = lambda _date: ["20260715"]
     fetcher._call_api_with_rate_limit = (
         lambda api_name, **kwargs: calls.append((api_name, kwargs)) or _representative_frame()
     )
-    monkeypatch.setattr(tushare_module, "require_uat_provider_dispatch_allowed", lambda **kwargs: lineage.append(kwargs))
+    monkeypatch.setattr(tushare_module, "require_uat_provider_transport_allowed", lambda **kwargs: lineage.append(kwargs))
 
     result = fetcher.get_market_stats()
 
@@ -327,7 +322,12 @@ def test_tushare_facade_keeps_fetch_scope_lineage_and_result(monkeypatch: pytest
     assert result["flat_count"] == 1
     assert calls == [("rt_k", {"ts_code": "3*.SZ,6*.SH,0*.SZ,92*.BJ"})]
     assert lineage == [
-        {"provider": "tushare", "capability": "market_stats", "route": "TushareFetcher.get_market_stats"}
+        {
+            "provider": "tushare",
+            "capability": "market_stats",
+            "route": "TushareFetcher.get_market_stats",
+            "injected_transport": api,
+        }
     ]
 
 
@@ -346,20 +346,12 @@ def test_provider_facades_keep_unavailable_snapshots_distinct_from_numeric_zero(
         monkeypatch.setitem(sys.modules, "akshare", fake_module)
         monkeypatch.setattr(akshare_module, "require_uat_provider_dispatch_allowed", lambda **_kwargs: None)
     elif provider == "efinance":
-        fake_module = types.ModuleType("efinance")
-        fake_module.stock = types.SimpleNamespace(get_realtime_quotes=lambda: empty)
-        fetcher = EfinanceFetcher.__new__(EfinanceFetcher)
-        _configure_fetcher(fetcher)
-        monkeypatch.setitem(sys.modules, "efinance", fake_module)
-        monkeypatch.setattr(efinance_module, "_ef_call_with_timeout", lambda function: function())
-        monkeypatch.setattr(efinance_module, "_realtime_cache", {"data": None, "timestamp": 0, "ttl": 600})
+        fetcher = EfinanceFetcher(transport=lambda *_args, **_kwargs: empty)
     else:
-        fetcher = TushareFetcher.__new__(TushareFetcher)
-        fetcher._api = object()
+        fetcher = TushareFetcher(api=object())
         fetcher._get_china_now = lambda: datetime(2026, 7, 15, 10, 0)
         fetcher._get_trade_dates = lambda _date: ["20260715"]
         fetcher._call_api_with_rate_limit = lambda _api_name, **_kwargs: empty
-        monkeypatch.setattr(tushare_module, "require_uat_provider_dispatch_allowed", lambda **_kwargs: None)
 
     assert fetcher.get_market_stats() is None
 
@@ -389,19 +381,14 @@ def test_provider_facades_keep_provider_errors_unavailable(
         fake_module = types.ModuleType("efinance")
         fake_module.stock = types.SimpleNamespace()
         configure(fake_module)
-        fetcher = EfinanceFetcher.__new__(EfinanceFetcher)
-        _configure_fetcher(fetcher)
-        monkeypatch.setitem(sys.modules, "efinance", fake_module)
-        monkeypatch.setattr(efinance_module, "_ef_call_with_timeout", lambda function: function())
-        monkeypatch.setattr(efinance_module, "_realtime_cache", {"data": None, "timestamp": 0, "ttl": 600})
+        fetcher = EfinanceFetcher(
+            transport=lambda *_args, **_kwargs: fake_module.stock.get_realtime_quotes()
+        )
     else:
-        fake_module = types.ModuleType("tushare")
-        fetcher = TushareFetcher.__new__(TushareFetcher)
-        fetcher._api = object()
+        fetcher = TushareFetcher(api=object())
         fetcher._get_china_now = lambda: datetime(2026, 7, 15, 10, 0)
         fetcher._get_trade_dates = lambda _date: ["20260715"]
         fetcher._call_api_with_rate_limit = lambda _api_name, **_kwargs: (_ for _ in ()).throw(RuntimeError("fail"))
-        monkeypatch.setattr(tushare_module, "require_uat_provider_dispatch_allowed", lambda **_kwargs: None)
 
     assert fetcher.get_market_stats() is None
 
@@ -517,15 +504,8 @@ def _fetch_main_indices(
             lambda **_kwargs: None,
         )
     else:
-        fake_module = types.ModuleType("efinance")
-        fake_module.stock = types.SimpleNamespace(get_realtime_quotes=lambda _scope: frame)
-        fetcher = EfinanceFetcher.__new__(EfinanceFetcher)
-        _configure_fetcher(fetcher)
-        monkeypatch.setitem(sys.modules, "efinance", fake_module)
-        monkeypatch.setattr(
-            efinance_module,
-            "_ef_call_with_timeout",
-            lambda function, *args: function(*args),
+        fetcher = EfinanceFetcher(
+            transport=lambda _operation, *_args, **_kwargs: frame,
         )
     return fetcher.get_main_indices(region="cn")
 

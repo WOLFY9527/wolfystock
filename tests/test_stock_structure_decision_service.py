@@ -573,7 +573,12 @@ def test_uat_no_live_provider_mode_keeps_aapl_structure_decision_on_unavailable_
         def get_history_data(self, **_kwargs):
             raise AssertionError("live history runtime must not be called in UAT no-live mode")
 
-    payload = StockStructureDecisionService(history_service=ForbiddenHistoryService()).get_structure_decision("AAPL")
+    monkeypatch.setattr(
+        "src.services.stock_structure_decision_service.StockService",
+        lambda: ForbiddenHistoryService(),
+    )
+
+    payload = StockStructureDecisionService().get_structure_decision("AAPL")
 
     _assert_required_contract(payload)
     assert payload["ticker"] == "AAPL"
