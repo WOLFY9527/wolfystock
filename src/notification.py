@@ -2071,61 +2071,6 @@ class NotificationService(
         return str(filepath)
 
 
-class NotificationBuilder:
-    """
-    通知消息构建器
-    
-    提供便捷的消息构建方法
-    """
-    
-    @staticmethod
-    def build_simple_alert(
-        title: str,
-        content: str,
-        alert_type: str = "info"
-    ) -> str:
-        """
-        构建简单的提醒消息
-        
-        Args:
-            title: 标题
-            content: 内容
-            alert_type: 类型（info, warning, error, success）
-        """
-        emoji_map = {
-            "info": "ℹ️",
-            "warning": "⚠️",
-            "error": "❌",
-            "success": "✅",
-        }
-        emoji = emoji_map.get(alert_type, "📢")
-        
-        return f"{emoji} **{title}**\n\n{content}"
-    
-    @staticmethod
-    def build_stock_summary(results: List[AnalysisResult]) -> str:
-        """
-        构建股票摘要（简短版）
-        
-        适用于快速通知
-        """
-        report_language = normalize_report_language(
-            next((getattr(result, "report_language", None) for result in results if getattr(result, "report_language", None)), None)
-        )
-        labels = _notification_safe_labels(report_language)
-        lines = [f"📊 **{labels['summary_heading']}**", ""]
-        
-        for r in sorted(results, key=lambda x: x.sentiment_score, reverse=True):
-            _, emoji, _ = get_signal_level(r.operation_advice, r.sentiment_score, report_language)
-            name = get_localized_stock_name(r.name, r.code, report_language)
-            lines.append(
-                f"{emoji} {name}({r.code}): {_notification_safe_operation_text(r.operation_advice, report_language)} | "
-                f"{labels['score_label']} {r.sentiment_score}"
-            )
-        
-        return _sanitize_notification_visible_copy("\n".join(lines))
-
-
 # 便捷函数
 def get_notification_service() -> NotificationService:
     """获取通知服务实例"""

@@ -22,7 +22,7 @@ except ModuleNotFoundError:
 import src.auth as auth
 from src.config import Config
 from src.data.stock_mapping import STOCK_NAME_MAP
-from src.postgres_phase_c import (
+from src.postgres_market_metadata_store import (
     PhaseCMarketDataManifest,
     PhaseCMarketDataUsageRef,
     PhaseCMarketDatasetVersion,

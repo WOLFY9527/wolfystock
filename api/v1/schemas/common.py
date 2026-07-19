@@ -14,30 +14,6 @@ from typing import Optional, Any, Dict, List
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class RootResponse(BaseModel):
-    """API 根路由响应"""
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "message": "WolfyStock API is running",
-                "version": "1.0.0",
-            }
-        }
-    )
-
-    message: str = Field(
-        ...,
-        description="API 运行状态消息",
-        json_schema_extra={"example": "WolfyStock API is running"},
-    )
-    version: Optional[str] = Field(
-        None,
-        description="API 版本",
-        json_schema_extra={"example": "1.0.0"},
-    )
-
-
 class HealthResponse(BaseModel):
     """健康检查响应"""
 

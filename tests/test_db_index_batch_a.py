@@ -9,7 +9,7 @@ from pathlib import Path
 
 from sqlalchemy import inspect, text
 
-from src.postgres_phase_a import PostgresPhaseAStore, load_phase_a_sql_statements
+from src.postgres_identity_store import PostgresPhaseAStore, load_phase_a_sql_statements
 from src.storage import DatabaseManager
 
 

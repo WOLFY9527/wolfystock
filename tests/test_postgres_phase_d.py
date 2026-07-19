@@ -111,7 +111,7 @@ class PostgresPhaseDStorageTestCase(unittest.TestCase):
         return DatabaseManager.get_instance()
 
     def test_phase_d_dual_writes_scanner_runs_candidates_and_watchlists(self) -> None:
-        from src.postgres_phase_d import (
+        from src.postgres_scanner_watchlist_store import (
             PhaseDScannerCandidate,
             PhaseDScannerRun,
             PhaseDWatchlist,
@@ -185,7 +185,7 @@ class PostgresPhaseDStorageTestCase(unittest.TestCase):
         self.assertEqual(pg_watchlist_items[0].selection_reason, "趋势共振最强。")
 
     def test_phase_d_updates_shadow_watchlist_metadata_when_run_operation_state_changes(self) -> None:
-        from src.postgres_phase_d import PhaseDScannerRun, PhaseDWatchlist, PhaseDWatchlistItem
+        from src.postgres_scanner_watchlist_store import PhaseDScannerRun, PhaseDWatchlist, PhaseDWatchlistItem
 
         db = self._db()
         db.create_or_update_app_user(user_id="ops-user", username="ops-user")
@@ -294,7 +294,7 @@ class PostgresPhaseDStorageTestCase(unittest.TestCase):
         self.assertEqual(ref_count, 1)
 
     def test_phase_d_preserves_owner_partitioning_and_system_watchlist_visibility_contract(self) -> None:
-        from src.postgres_phase_d import PhaseDScannerRun, PhaseDWatchlist
+        from src.postgres_scanner_watchlist_store import PhaseDScannerRun, PhaseDWatchlist
 
         db = self._db()
         db.create_or_update_app_user(user_id="user-a", username="user-a")
@@ -385,7 +385,7 @@ class PostgresPhaseDStorageTestCase(unittest.TestCase):
         )
 
     def test_phase_d_factory_reset_clears_user_shadow_state_but_keeps_system_watchlists(self) -> None:
-        from src.postgres_phase_d import PhaseDScannerRun, PhaseDWatchlist
+        from src.postgres_scanner_watchlist_store import PhaseDScannerRun, PhaseDWatchlist
 
         db = self._db()
         db.create_or_update_app_user(user_id="cleanup-user", username="cleanup-user")

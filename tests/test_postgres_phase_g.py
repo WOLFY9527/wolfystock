@@ -20,7 +20,7 @@ from api.v1.endpoints import auth as auth_endpoint
 from src.config import Config
 from src.core.config_manager import ConfigManager
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
-from src.postgres_phase_g import (
+from src.postgres_control_plane_store import (
     PhaseGAdminLog,
     PhaseGProviderConfig,
     PhaseGExecutionEvent,

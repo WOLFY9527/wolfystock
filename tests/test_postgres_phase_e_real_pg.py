@@ -22,7 +22,7 @@ except ModuleNotFoundError:
 
 import src.auth as auth
 from src.config import Config
-from src.postgres_phase_e import PhaseEBacktestArtifact, PhaseEBacktestRun, phase_e_shadow_run_id
+from src.postgres_backtest_store import PhaseEBacktestArtifact, PhaseEBacktestRun, phase_e_shadow_run_id
 from src.services.backtest_service import BacktestService
 from src.services.rule_backtest_service import RuleBacktestService
 from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE

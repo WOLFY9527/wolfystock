@@ -22,7 +22,7 @@ from sqlalchemy import create_engine, text
 import src.auth as auth
 from src.config import Config
 from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER
-from src.postgres_phase_d import (
+from src.postgres_scanner_watchlist_store import (
     PhaseDScannerCandidate,
     PhaseDScannerRun,
     PhaseDWatchlist,

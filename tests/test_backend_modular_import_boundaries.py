@@ -67,7 +67,6 @@ ARCHITECTURE_DOMAIN_CLASSIFICATIONS = {
     "AI routing / cost": {
         "src.services.agent_model_service",
         "src.services.ai_evidence_adapters",
-        "src.services.ai_evidence_dry_run_explanation",
         "src.services.duplicate_cost_summary_service",
         "src.services.image_stock_extractor",
         "src.services.litellm_runtime",
@@ -228,7 +227,6 @@ EXPLICITLY_FORBIDDEN_OPTIONS_LAB_SCHEMA_IMPORT_NAMES = {
     "OptionsStrategyGateSummary",
 }
 EXPECTED_API_SCHEMA_UPWARD_IMPORTS = {
-    "src/services/factor_experiment_manifest.py": {"api.v1.schemas.factors"},
     "src/services/factor_exposure.py": {"api.v1.schemas.factors"},
     "src/services/factor_metrics.py": {"api.v1.schemas.factors"},
     "src/services/factor_neutralization.py": {"api.v1.schemas.factors"},

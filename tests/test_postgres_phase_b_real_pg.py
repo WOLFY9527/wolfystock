@@ -21,7 +21,7 @@ except ModuleNotFoundError:
 import src.auth as auth
 from src.analyzer import AnalysisResult
 from src.config import Config
-from src.postgres_phase_b import (
+from src.postgres_analysis_chat_store import (
     PhaseBAnalysisRecord,
     PhaseBAnalysisSession,
     PhaseBChatMessage,

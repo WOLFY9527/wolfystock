@@ -30,7 +30,7 @@ import src.auth as auth
 from api.deps import resolve_current_user
 from src.config import Config
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, BOOTSTRAP_ADMIN_USERNAME, ROLE_ADMIN
-from src.postgres_phase_a import (
+from src.postgres_identity_store import (
     PhaseAAppUser,
     PhaseAAppUserSession,
     PhaseAGuestSession,
