@@ -97,7 +97,10 @@ echo "[INFO] Provider-dependent test.sh warnings are treated as environment/prov
 run_step "test.sh code" ./test.sh code
 run_step "test.sh yfinance" ./test.sh yfinance
 
-run_step "offline test suite (outbound denied + domain parity)" "${PYTHON_BIN}" -m pytest --domain-topology-verify-full
+TEST_EVIDENCE_DIR="output/domain-test-topology/${WOLFYSTOCK_TEST_RUN_ID}"
+run_step "offline test suite (outbound denied + domain parity)" \
+  "${PYTHON_BIN}" "${SCRIPT_DIR}/domain_test_topology.py" run-backend \
+  --output-dir "${TEST_EVIDENCE_DIR}" --retry-failures 0
 
 print_step "summary"
 echo "[PASS] backend-gate completed successfully"

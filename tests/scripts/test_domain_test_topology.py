@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from collections import Counter
 from copy import deepcopy
 from pathlib import Path
 
 import pytest
+from _pytest.unittest import SubtestContext, SubtestReport
 
 from scripts import domain_test_topology as topology
 
@@ -161,7 +163,10 @@ def test_playwright_ownership_retains_projects_and_mandatory_auth_cases() -> Non
     assert sum(case["owner"] == "bounded_integration" and not case["mandatory"] for case in release_cases) == 3
 
 
-def test_first_attempts_and_retries_are_never_coalesced() -> None:
+def test_first_attempts_and_retries_are_never_coalesced(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     records = [
         {"id": "case-a", "retry": 0, "status": "failed"},
         {"id": "case-a", "retry": 1, "status": "passed"},
@@ -178,3 +183,218 @@ def test_first_attempts_and_retries_are_never_coalesced() -> None:
         "establishedBaselineFailures": ["test-b"],
         "unknownFirstAttemptFailures": ["test-a"],
     }
+
+    parent_id = "tests/scripts/test_fixture.py::FixtureCase::test_parent"
+    child_id = f"{parent_id}::subtest:{'a' * 64}:0"
+    event_state = {
+        "owners": {parent_id: "runtime_operator_tooling"},
+        "children": [],
+        "childOrdinals": Counter(),
+    }
+    event_config = type("EventConfig", (), {"_test_result_evidence": event_state})()
+    monkeypatch.setattr(topology, "_ACTIVE_TEST_RESULT_CONFIG", event_config)
+    topology.pytest_runtest_logreport(
+        SubtestReport(
+            nodeid=parent_id,
+            location=("tests/scripts/test_fixture.py", 1, "test_parent"),
+            keywords={},
+            outcome="failed",
+            longrepr="fixture failure",
+            when="call",
+            duration=0.1,
+            context=SubtestContext(msg=None, kwargs={"reason": "not_configured"}),
+        )
+    )
+    assert event_state["children"][0]["outcome"] == "failed"
+    assert event_state["children"][0]["presentation"].startswith("SUBFAILED(")
+    assert event_state["children"][0]["parentId"] == parent_id
+
+    selected_ids = [parent_id]
+    command = ["python", "-m", "pytest", "--domain-topology-verify-full"]
+    identity = {
+        "candidate": {
+            "commitSha": "1" * 40,
+            "treeSha": "2" * 40,
+            "workingTreeSha256": "3" * 64,
+            "dirty": False,
+        },
+        "environment": {"fingerprint": "4" * 64},
+        "dependencyLock": {
+            "contentHash": "5" * 64,
+            "selectedLock": "requirements-python311-dev.lock",
+            "selectedProjection": "darwin-arm64-cpython311-development",
+            "selectedProjectionHash": "6" * 64,
+        },
+        "command": {
+            "argv": command,
+            "sha256": topology.canonical_json_hash(command),
+        },
+        "selection": {
+            "count": 1,
+            "sha256": topology.inventory_hash(selected_ids),
+        },
+        "topology": {
+            "count": 1,
+            "sha256": topology.inventory_hash(selected_ids),
+        },
+    }
+    evidence = {
+        "schemaVersion": topology.TEST_RESULT_SCHEMA_VERSION,
+        "kind": "attempt",
+        "state": "completed",
+        "surface": "backend",
+        "identity": identity,
+        "attempt": {"index": 0, "kind": "first"},
+        "timing": {
+            "startedAtUtc": "2026-07-19T12:00:00Z",
+            "endedAtUtc": "2026-07-19T12:00:01Z",
+            "wallSeconds": 1.0,
+        },
+        "exitCode": 1,
+        "status": "failed",
+        "counts": {
+            "parents": {outcome: int(outcome == "passed") for outcome in topology.TEST_OUTCOMES},
+            "children": {outcome: int(outcome == "failed") for outcome in topology.TEST_OUTCOMES},
+        },
+        "parents": [
+            {
+                "id": parent_id,
+                "kind": "parent",
+                "owner": "runtime_operator_tooling",
+                "outcome": "passed",
+                "failureFamily": None,
+                "durationSeconds": 1.0,
+            }
+        ],
+        "children": [
+            {
+                "id": child_id,
+                "parentId": parent_id,
+                "kind": "unittest_subtest",
+                "owner": "runtime_operator_tooling",
+                "outcome": "failed",
+                "failureFamily": None,
+                "durationSeconds": 0.0,
+                "contextSha256": "a" * 64,
+                "presentation": "SUBFAILED(reason='not_configured')",
+            }
+        ],
+        "artifacts": [
+            {"kind": "log", "path": "attempt-0.log", "sha256": "7" * 64},
+            {"kind": "junit", "path": "attempt-0.junit.xml", "sha256": "8" * 64},
+        ],
+    }
+
+    validated = topology.validate_test_result_evidence(evidence, expected_identity=identity)
+
+    assert validated["counts"]["parents"]["passed"] == 1
+    assert validated["counts"]["parents"]["failed"] == 0
+    assert validated["counts"]["children"]["failed"] == 1
+    assert validated["children"][0]["presentation"].startswith("SUBFAILED(")
+    assert topology._failed_parent_ids(validated) == [parent_id]
+
+    successful = deepcopy(evidence)
+    successful["exitCode"] = 0
+    successful["status"] = "passed"
+    successful["children"] = []
+    successful["counts"] = {
+        "parents": {outcome: int(outcome == "passed") for outcome in topology.TEST_OUTCOMES},
+        "children": {outcome: 0 for outcome in topology.TEST_OUTCOMES},
+    }
+    assert topology.validate_test_result_evidence(successful)["status"] == "passed"
+
+    terminal_outcomes = {
+        "skipped": 0,
+        "cancelled": 2,
+        "missing": 3,
+        "unknown": 3,
+    }
+    for outcome, exit_code in terminal_outcomes.items():
+        terminal = deepcopy(successful)
+        terminal["exitCode"] = exit_code
+        terminal["status"] = outcome
+        terminal["parents"][0]["outcome"] = outcome
+        terminal["counts"]["parents"] = {
+            candidate: int(candidate == outcome) for candidate in topology.TEST_OUTCOMES
+        }
+        assert topology.validate_test_result_evidence(terminal)["status"] == outcome
+        assert terminal["status"] != "passed"
+        misclassified = deepcopy(terminal)
+        misclassified["status"] = "passed"
+        with pytest.raises(topology.TopologyError, match="status does not match"):
+            topology.validate_test_result_evidence(misclassified)
+
+    assert topology._test_result_exit_code(process_exit_code=0, status="passed") == 0
+    assert topology._test_result_exit_code(process_exit_code=0, status="skipped") == 0
+    assert topology._test_result_exit_code(process_exit_code=1, status="failed") == 1
+    assert topology._test_result_exit_code(process_exit_code=2, status="cancelled") == 2
+    assert topology._test_result_exit_code(process_exit_code=0, status="missing") == 1
+    assert topology._test_result_exit_code(process_exit_code=0, status="unknown") == 1
+
+    emitted_outcomes = {
+        pytest.ExitCode.OK: "missing",
+        pytest.ExitCode.INTERRUPTED: "cancelled",
+        pytest.ExitCode.INTERNAL_ERROR: "unknown",
+    }
+    for exit_status, expected_outcome in emitted_outcomes.items():
+        emitted_path = tmp_path / f"emitted-{int(exit_status)}.json"
+        emitted_state = {
+            "output": emitted_path,
+            "identity": identity,
+            "attempt": {"index": 0, "kind": "first"},
+            "startedAtUtc": "2026-07-19T12:00:00Z",
+            "timer": topology.time.perf_counter(),
+            "parents": {},
+            "children": [],
+            "owners": {parent_id: "runtime_operator_tooling"},
+            "selectedIds": [parent_id],
+        }
+        emitted_config = type("EmittedConfig", (), {"_test_result_evidence": emitted_state})()
+        emitted_session = type("EmittedSession", (), {"config": emitted_config})()
+        monkeypatch.setattr(topology, "_ACTIVE_TEST_RESULT_CONFIG", emitted_config)
+        topology.pytest_sessionfinish(emitted_session, exit_status)
+        emitted = topology.load_test_result_evidence(emitted_path, require_completed=False)
+        assert emitted["status"] == "incomplete"
+        assert emitted["parents"][0]["outcome"] == expected_outcome
+        assert emitted["counts"]["parents"][expected_outcome] == 1
+
+    retry = deepcopy(evidence)
+    retry["attempt"] = {"index": 1, "kind": "retry"}
+    assert topology.validate_test_result_evidence(retry)["attempt"]["kind"] == "retry"
+    retry["attempt"]["kind"] = "first"
+    with pytest.raises(topology.TopologyError, match="kind/index mismatch"):
+        topology.validate_test_result_evidence(retry)
+
+    collapsed_child_failure = deepcopy(evidence)
+    collapsed_child_failure["status"] = "passed"
+    with pytest.raises(topology.TopologyError, match="status does not match"):
+        topology.validate_test_result_evidence(collapsed_child_failure)
+
+    malformed = deepcopy(evidence)
+    del malformed["children"][0]["outcome"]
+    with pytest.raises(topology.TopologyError, match="child outcome"):
+        topology.validate_test_result_evidence(malformed)
+
+    missing_path = tmp_path / "missing.json"
+    with pytest.raises(topology.TopologyError, match="missing or malformed"):
+        topology.load_test_result_evidence(missing_path)
+    malformed_path = tmp_path / "malformed.json"
+    malformed_path.write_text("{", encoding="utf-8")
+    with pytest.raises(topology.TopologyError, match="missing or malformed"):
+        topology.load_test_result_evidence(malformed_path)
+
+    incomplete = deepcopy(evidence)
+    incomplete["state"] = "incomplete"
+    with pytest.raises(topology.TopologyError, match="incomplete"):
+        topology.validate_test_result_evidence(incomplete)
+
+    mismatched_identity = deepcopy(identity)
+    mismatched_identity["command"]["sha256"] = "9" * 64
+    with pytest.raises(topology.TopologyError, match="identity mismatch"):
+        topology.validate_test_result_evidence(evidence, expected_identity=mismatched_identity)
+
+    gate = (ROOT / "scripts" / "ci_gate.sh").read_text(encoding="utf-8")
+    assert "domain_test_topology.py" in gate
+    assert "run-backend" in gate
+    assert "--retry-failures 0" in gate
+    assert '"${PYTHON_BIN}" -m pytest --domain-topology-verify-full' not in gate

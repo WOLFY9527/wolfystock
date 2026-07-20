@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
+import platform
 import re
 import subprocess
 import sys
@@ -17,11 +19,29 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB_ROOT = ROOT / "apps" / "dsa-web"
 DEFAULT_MANIFEST = ROOT / "validation" / "domain_test_topology.json"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 BASE_SHA = "1f554d42ca7fee0e4c71f80f0b1c15680526032a"
+TEST_RESULT_SCHEMA_VERSION = "wolfystock.test-result.v1"
+TEST_OUTCOMES = (
+    "passed",
+    "failed",
+    "skipped",
+    "error",
+    "cancelled",
+    "incomplete",
+    "missing",
+    "unknown",
+)
+SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
+GIT_SHA_PATTERN = re.compile(r"[0-9a-f]{40}")
+SAFE_FAILURE_FAMILY_PATTERN = re.compile(r"[a-z0-9_.:-]+")
 
 BACKEND_DOMAINS = (
     "auth_security",
@@ -79,6 +99,361 @@ PLAYWRIGHT_PROTECTED_CASE_PATTERN = re.compile(
 
 class TopologyError(ValueError):
     """Raised when an ownership inventory is incomplete or ambiguous."""
+
+
+def canonical_json_hash(value: object) -> str:
+    encoded = json.dumps(
+        value,
+        allow_nan=False,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def file_hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _require_object(value: object, field: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise TopologyError(f"structured evidence {field} must be an object")
+    return value
+
+
+def _require_list(value: object, field: str) -> list[Any]:
+    if not isinstance(value, list):
+        raise TopologyError(f"structured evidence {field} must be a list")
+    return value
+
+
+def _require_string(value: object, field: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise TopologyError(f"structured evidence {field} must be a non-empty string")
+    return value
+
+
+def _require_digest(value: object, field: str, pattern: re.Pattern[str] = SHA256_PATTERN) -> str:
+    text = _require_string(value, field)
+    if pattern.fullmatch(text) is None:
+        raise TopologyError(f"structured evidence {field} must be a lowercase digest")
+    return text
+
+
+def _require_utc_timestamp(value: object, field: str) -> datetime:
+    text = _require_string(value, field)
+    if not text.endswith("Z"):
+        raise TopologyError(f"structured evidence {field} must be a UTC timestamp")
+    try:
+        parsed = datetime.fromisoformat(f"{text[:-1]}+00:00")
+    except ValueError as exc:
+        raise TopologyError(f"structured evidence {field} must be a UTC timestamp") from exc
+    if parsed.tzinfo != UTC:
+        raise TopologyError(f"structured evidence {field} must be a UTC timestamp")
+    return parsed
+
+
+def _require_non_negative_number(value: object, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+        raise TopologyError(f"structured evidence {field} must be a finite non-negative number")
+    return float(value)
+
+
+def _validate_test_result_identity(identity: object) -> dict[str, Any]:
+    value = _require_object(identity, "identity")
+    candidate = _require_object(value.get("candidate"), "identity.candidate")
+    _require_digest(candidate.get("commitSha"), "identity.candidate.commitSha", GIT_SHA_PATTERN)
+    _require_digest(candidate.get("treeSha"), "identity.candidate.treeSha", GIT_SHA_PATTERN)
+    _require_digest(candidate.get("workingTreeSha256"), "identity.candidate.workingTreeSha256")
+    if not isinstance(candidate.get("dirty"), bool):
+        raise TopologyError("structured evidence identity.candidate.dirty must be boolean")
+
+    environment = _require_object(value.get("environment"), "identity.environment")
+    _require_digest(environment.get("fingerprint"), "identity.environment.fingerprint")
+
+    dependency = _require_object(value.get("dependencyLock"), "identity.dependencyLock")
+    _require_digest(dependency.get("contentHash"), "identity.dependencyLock.contentHash")
+    _require_string(dependency.get("selectedLock"), "identity.dependencyLock.selectedLock")
+    _require_string(dependency.get("selectedProjection"), "identity.dependencyLock.selectedProjection")
+    _require_digest(dependency.get("selectedProjectionHash"), "identity.dependencyLock.selectedProjectionHash")
+
+    command = _require_object(value.get("command"), "identity.command")
+    argv = _require_list(command.get("argv"), "identity.command.argv")
+    if not argv or any(not isinstance(argument, str) or not argument for argument in argv):
+        raise TopologyError("structured evidence identity.command.argv must contain non-empty strings")
+    if command.get("sha256") != canonical_json_hash(argv):
+        raise TopologyError("structured evidence command identity hash mismatch")
+
+    for field in ("selection", "topology"):
+        inventory = _require_object(value.get(field), f"identity.{field}")
+        count = inventory.get("count")
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            raise TopologyError(f"structured evidence identity.{field}.count must be a non-negative integer")
+        _require_digest(inventory.get("sha256"), f"identity.{field}.sha256")
+    return value
+
+
+def _validate_outcome_record(record: object, *, child: bool) -> dict[str, Any]:
+    label = "child" if child else "parent"
+    value = _require_object(record, label)
+    _require_string(value.get("id"), f"{label} id")
+    expected_kind = "unittest_subtest" if child else "parent"
+    if value.get("kind") != expected_kind:
+        raise TopologyError(f"structured evidence {label} kind must be {expected_kind}")
+    owner = _require_string(value.get("owner"), f"{label} owner")
+    if owner not in BACKEND_DOMAINS:
+        raise TopologyError(f"structured evidence {label} owner is invalid: {owner}")
+    outcome = value.get("outcome")
+    if outcome not in TEST_OUTCOMES:
+        raise TopologyError(f"structured evidence {label} outcome is invalid or missing")
+    _require_non_negative_number(value.get("durationSeconds"), f"{label} durationSeconds")
+    family = value.get("failureFamily")
+    if family is not None and (not isinstance(family, str) or SAFE_FAILURE_FAMILY_PATTERN.fullmatch(family) is None):
+        raise TopologyError(f"structured evidence {label} failureFamily must be null or a stable token")
+    if child:
+        _require_string(value.get("parentId"), "child parentId")
+        _require_digest(value.get("contextSha256"), "child contextSha256")
+        _require_string(value.get("presentation"), "child presentation")
+    return value
+
+
+def _outcome_counts(records: Sequence[dict[str, Any]]) -> dict[str, int]:
+    counts = Counter(record["outcome"] for record in records)
+    return {outcome: counts.get(outcome, 0) for outcome in TEST_OUTCOMES}
+
+
+def _test_result_status(*, state: str, exit_code: int, counts: dict[str, dict[str, int]]) -> str:
+    if state == "incomplete":
+        return "incomplete"
+    totals = Counter()
+    for group in counts.values():
+        totals.update(group)
+    if exit_code == pytest.ExitCode.INTERRUPTED or totals["cancelled"]:
+        return "cancelled"
+    for outcome in ("missing", "incomplete", "unknown"):
+        if totals[outcome]:
+            return outcome
+    if totals["failed"] or totals["error"]:
+        return "failed"
+    if exit_code != pytest.ExitCode.OK:
+        return "unknown"
+    if sum(totals.values()) == totals["skipped"]:
+        return "skipped" if totals["skipped"] else "missing"
+    return "passed"
+
+
+def _test_result_exit_code(*, process_exit_code: int, status: str) -> int:
+    if status in {"passed", "skipped"}:
+        return process_exit_code
+    return process_exit_code or 1
+
+
+def validate_test_result_evidence(
+    evidence: object,
+    *,
+    expected_identity: dict[str, Any] | None = None,
+    require_completed: bool = True,
+) -> dict[str, Any]:
+    payload = _require_object(evidence, "root")
+    if payload.get("schemaVersion") != TEST_RESULT_SCHEMA_VERSION or payload.get("kind") != "attempt":
+        raise TopologyError("unsupported structured test-result schema or kind")
+    state = payload.get("state")
+    if state not in {"incomplete", "completed"}:
+        raise TopologyError("structured evidence state must be incomplete or completed")
+    if require_completed and state != "completed":
+        raise TopologyError("structured test evidence is incomplete")
+    if payload.get("surface") != "backend":
+        raise TopologyError("structured test evidence surface must be backend")
+    identity = _validate_test_result_identity(payload.get("identity"))
+    if expected_identity is not None and identity != expected_identity:
+        raise TopologyError("structured test evidence identity mismatch")
+
+    attempt = _require_object(payload.get("attempt"), "attempt")
+    if isinstance(attempt.get("index"), bool) or not isinstance(attempt.get("index"), int) or attempt["index"] < 0:
+        raise TopologyError("structured evidence attempt.index must be a non-negative integer")
+    expected_attempt_kind = "first" if attempt["index"] == 0 else "retry"
+    if attempt.get("kind") != expected_attempt_kind:
+        raise TopologyError("structured evidence attempt kind/index mismatch")
+
+    timing = _require_object(payload.get("timing"), "timing")
+    started_at = _require_utc_timestamp(timing.get("startedAtUtc"), "timing.startedAtUtc")
+    ended_at = _require_utc_timestamp(timing.get("endedAtUtc"), "timing.endedAtUtc")
+    if ended_at < started_at:
+        raise TopologyError("structured evidence timing end precedes start")
+    _require_non_negative_number(timing.get("wallSeconds"), "timing.wallSeconds")
+    if isinstance(payload.get("exitCode"), bool) or not isinstance(payload.get("exitCode"), int):
+        raise TopologyError("structured evidence exitCode must be an integer")
+
+    parents = [
+        _validate_outcome_record(record, child=False)
+        for record in _require_list(payload.get("parents"), "parents")
+    ]
+    children = [
+        _validate_outcome_record(record, child=True)
+        for record in _require_list(payload.get("children"), "children")
+    ]
+    parent_ids = [record["id"] for record in parents]
+    child_ids = [record["id"] for record in children]
+    if _duplicates(parent_ids) or _duplicates(child_ids):
+        raise TopologyError("structured evidence parent/child identities must be unique")
+    parent_by_id = {record["id"]: record for record in parents}
+    for child in children:
+        parent = parent_by_id.get(child["parentId"])
+        if parent is None or parent["owner"] != child["owner"]:
+            raise TopologyError("structured evidence child must reference its owned parent")
+
+    counts = _require_object(payload.get("counts"), "counts")
+    expected_counts = {"parents": _outcome_counts(parents), "children": _outcome_counts(children)}
+    if counts != expected_counts:
+        raise TopologyError("structured evidence parent/child counts do not match records")
+    selection = identity["selection"]
+    if state == "completed" and (
+        len(parent_ids) != selection["count"] or inventory_hash(parent_ids) != selection["sha256"]
+    ):
+        raise TopologyError("structured evidence completed parent inventory does not match selection identity")
+
+    expected_status = _test_result_status(
+        state=state,
+        exit_code=payload["exitCode"],
+        counts=expected_counts,
+    )
+    if state == "completed" and payload.get("status") != expected_status:
+        raise TopologyError("structured evidence status does not match outcomes and exit code")
+    if state == "incomplete" and payload.get("status") != "incomplete":
+        raise TopologyError("incomplete structured evidence must retain incomplete status")
+
+    artifacts = _require_list(payload.get("artifacts"), "artifacts")
+    if state == "completed":
+        artifact_kinds: set[str] = set()
+        for raw in artifacts:
+            artifact = _require_object(raw, "artifact")
+            artifact_kinds.add(_require_string(artifact.get("kind"), "artifact kind"))
+            path = _require_string(artifact.get("path"), "artifact path")
+            if Path(path).is_absolute() or ".." in Path(path).parts:
+                raise TopologyError("structured evidence artifact paths must be relative and contained")
+            _require_digest(artifact.get("sha256"), "artifact sha256")
+        if len(artifacts) != 2 or artifact_kinds != {"junit", "log"}:
+            raise TopologyError("completed structured evidence requires exactly junit and log artifacts")
+    return payload
+
+
+def load_test_result_evidence(
+    path: Path,
+    *,
+    expected_identity: dict[str, Any] | None = None,
+    require_completed: bool = True,
+) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise TopologyError(f"missing or malformed structured test evidence: {path.name}") from exc
+    validated = validate_test_result_evidence(
+        payload,
+        expected_identity=expected_identity,
+        require_completed=require_completed,
+    )
+    if require_completed:
+        for artifact in validated["artifacts"]:
+            artifact_path = path.parent / artifact["path"]
+            if not artifact_path.is_file() or file_hash(artifact_path) != artifact["sha256"]:
+                raise TopologyError(f"structured test evidence artifact is missing or mismatched: {artifact['kind']}")
+    return validated
+
+
+def _git_output(*args: str) -> str:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if result.returncode:
+        raise TopologyError(f"git identity command failed: git {' '.join(args)}")
+    return result.stdout.strip()
+
+
+def _working_tree_fingerprint() -> str:
+    result = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        cwd=ROOT,
+        capture_output=True,
+    )
+    if result.returncode:
+        raise TopologyError("candidate working-tree inventory failed")
+    digest = hashlib.sha256()
+    paths = sorted(path for path in result.stdout.split(b"\0") if path)
+    for raw_path in paths:
+        relative = raw_path.decode("utf-8", errors="surrogateescape")
+        path = ROOT / relative
+        digest.update(raw_path)
+        digest.update(b"\0")
+        if path.is_symlink():
+            digest.update(b"symlink\0")
+            digest.update(os.readlink(path).encode("utf-8", errors="surrogateescape"))
+        elif path.is_file():
+            digest.update(b"executable\0" if os.access(path, os.X_OK) else b"file\0")
+            digest.update(file_hash(path).encode("ascii"))
+        else:
+            digest.update(b"missing\0")
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def build_test_result_identity(
+    manifest: dict[str, Any],
+    *,
+    command: Sequence[str],
+    selected_ids: Sequence[str],
+) -> dict[str, Any]:
+    environment_fingerprint = os.environ.get("WOLFYSTOCK_ENV_FINGERPRINT", "")
+    if SHA256_PATTERN.fullmatch(environment_fingerprint) is None:
+        raise TopologyError("WOLFYSTOCK_ENV_FINGERPRINT is required for structured test evidence")
+
+    from scripts.environment.python_lock import load_python_lock
+
+    lock = load_python_lock(
+        ROOT,
+        os_name=platform.system(),
+        architecture=platform.machine(),
+        python_version=platform.python_version(),
+        python_implementation=platform.python_implementation(),
+        profile="development",
+    ).evidence()
+    topology_inventory = manifest["backend"]["currentInventory"]
+    status = _git_output("status", "--porcelain", "--untracked-files=all")
+    identity = {
+        "candidate": {
+            "commitSha": _git_output("rev-parse", "HEAD"),
+            "treeSha": _git_output("rev-parse", "HEAD^{tree}"),
+            "workingTreeSha256": _working_tree_fingerprint(),
+            "dirty": bool(status),
+        },
+        "environment": {"fingerprint": environment_fingerprint},
+        "dependencyLock": {
+            "contentHash": lock["contentHash"],
+            "selectedLock": lock["selectedLock"],
+            "selectedProjection": lock["selectedProjection"],
+            "selectedProjectionHash": lock["selectedProjectionHash"],
+        },
+        "command": {"argv": list(command), "sha256": canonical_json_hash(list(command))},
+        "selection": {"count": len(selected_ids), "sha256": inventory_hash(selected_ids)},
+        "topology": {
+            "count": topology_inventory["count"],
+            "sha256": topology_inventory["sha256"],
+        },
+    }
+    return _validate_test_result_identity(identity)
 
 
 def inventory_hash(values: Iterable[str]) -> str:
@@ -590,20 +965,373 @@ def verify_playwright(manifest: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_ACTIVE_TEST_RESULT_CONFIG: pytest.Config | None = None
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    group = parser.getgroup("structured-test-result", "versioned structured test-result evidence")
+    group.addoption("--test-result-evidence-output", default=None, metavar="PATH")
+    group.addoption("--test-result-evidence-context", default=None, metavar="PATH")
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    global _ACTIVE_TEST_RESULT_CONFIG
+    output = config.getoption("--test-result-evidence-output")
+    context_path = config.getoption("--test-result-evidence-context")
+    if not output and not context_path:
+        return
+    if not output or not context_path:
+        raise pytest.UsageError("structured test evidence requires both output and context paths")
+    try:
+        context = json.loads(Path(context_path).read_text(encoding="utf-8"))
+        identity = _validate_test_result_identity(context.get("identity"))
+        attempt = _require_object(context.get("attempt"), "attempt")
+        manifest = load_manifest()
+        validate_manifest(manifest)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise pytest.UsageError(f"invalid structured test evidence context: {exc}") from exc
+    config._test_result_evidence = {  # type: ignore[attr-defined]
+        "output": Path(output),
+        "identity": identity,
+        "attempt": attempt,
+        "startedAtUtc": _utc_now(),
+        "timer": time.perf_counter(),
+        "parents": {},
+        "children": [],
+        "childOrdinals": Counter(),
+        "owners": {entry["id"]: entry["domain"] for entry in manifest["backend"]["tests"]},
+        "selectedIds": [],
+    }
+    _ACTIVE_TEST_RESULT_CONFIG = config
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    state = getattr(config, "_test_result_evidence", None)
+    if state is not None:
+        state["selectedIds"] = [item.nodeid for item in items]
+
+
+def pytest_collection_finish(session: pytest.Session) -> None:
+    state = getattr(session.config, "_test_result_evidence", None)
+    if state is not None:
+        state["selectedIds"] = [item.nodeid for item in session.items]
+
+
+def _report_failure_family(report: pytest.TestReport) -> str | None:
+    for name, raw_value in getattr(report, "user_properties", []):
+        if name != "failure_family":
+            continue
+        if not isinstance(raw_value, str):
+            raise TopologyError("failure_family test property must be a stable token")
+        value = raw_value.strip().lower()
+        if SAFE_FAILURE_FAMILY_PATTERN.fullmatch(value) is None:
+            raise TopologyError("failure_family test property must be a stable token")
+        return value
+    return None
+
+
+def _report_outcome(report: pytest.TestReport) -> str:
+    if report.passed:
+        return "passed"
+    if report.skipped:
+        return "skipped"
+    return "failed"
+
+
+def _stable_subtest_value(value: object) -> object:
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        return {"pythonType": "builtins.float", "sha256": hashlib.sha256(repr(value).encode()).hexdigest()}
+    if isinstance(value, bytes):
+        return {"pythonType": "builtins.bytes", "sha256": hashlib.sha256(value).hexdigest()}
+    if isinstance(value, dict):
+        entries = [
+            [_stable_subtest_value(key), _stable_subtest_value(item)]
+            for key, item in value.items()
+        ]
+        return {"pythonType": "builtins.dict", "entries": sorted(entries, key=canonical_json_hash)}
+    if isinstance(value, (list, tuple)):
+        return {
+            "pythonType": f"builtins.{type(value).__name__}",
+            "items": [_stable_subtest_value(item) for item in value],
+        }
+    if isinstance(value, (set, frozenset)):
+        items = [_stable_subtest_value(item) for item in value]
+        return {
+            "pythonType": f"builtins.{type(value).__name__}",
+            "items": sorted(items, key=canonical_json_hash),
+        }
+    value_type = type(value)
+    return {"pythonType": f"{value_type.__module__}.{value_type.__qualname__}"}
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    config = _ACTIVE_TEST_RESULT_CONFIG
+    if config is None:
+        return
+    state = getattr(config, "_test_result_evidence", None)
+    if state is None:
+        return
+    owner = state["owners"].get(report.nodeid)
+    if owner is None:
+        return
+    context = getattr(report, "context", None)
+    if context is not None:
+        context_payload = {
+            "message": _stable_subtest_value(context.msg),
+            "parameters": _stable_subtest_value(dict(context.kwargs)),
+        }
+        context_hash = canonical_json_hash(context_payload)
+        ordinal_key = (report.nodeid, context_hash)
+        ordinal = state["childOrdinals"][ordinal_key]
+        state["childOrdinals"][ordinal_key] += 1
+        outcome = _report_outcome(report)
+        status = "SUBFAILED" if outcome == "failed" else "SUBSKIPPED" if outcome == "skipped" else "SUBPASSED"
+        state["children"].append(
+            {
+                "id": f"{report.nodeid}::subtest:{context_hash}:{ordinal}",
+                "parentId": report.nodeid,
+                "kind": "unittest_subtest",
+                "owner": owner,
+                "outcome": outcome,
+                "failureFamily": _report_failure_family(report),
+                "durationSeconds": round(float(report.duration), 6),
+                "contextSha256": context_hash,
+                "presentation": f"{status}(<context:{context_hash[:12]}>)",
+            }
+        )
+        return
+
+    record = state["parents"].setdefault(
+        report.nodeid,
+        {
+            "id": report.nodeid,
+            "kind": "parent",
+            "owner": owner,
+            "outcome": None,
+            "failureFamily": None,
+            "durationSeconds": 0.0,
+        },
+    )
+    record["durationSeconds"] = round(record["durationSeconds"] + float(report.duration), 6)
+    if report.when == "setup" and report.skipped:
+        record["outcome"] = "skipped"
+    elif report.when == "setup" and report.failed:
+        record["outcome"] = "error"
+    elif report.when == "call":
+        record["outcome"] = _report_outcome(report)
+        record["failureFamily"] = _report_failure_family(report)
+    elif report.when == "teardown" and report.failed:
+        record["outcome"] = "error"
+        record["failureFamily"] = _report_failure_family(report)
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    global _ACTIVE_TEST_RESULT_CONFIG
+    state = getattr(session.config, "_test_result_evidence", None)
+    if state is None:
+        return
+    unreported_outcome = (
+        "cancelled"
+        if exitstatus == pytest.ExitCode.INTERRUPTED
+        else "unknown"
+        if exitstatus in {pytest.ExitCode.INTERNAL_ERROR, pytest.ExitCode.USAGE_ERROR, pytest.ExitCode.NO_TESTS_COLLECTED}
+        else "missing"
+    )
+    parents = []
+    for nodeid in state["selectedIds"]:
+        record = state["parents"].get(nodeid)
+        if record is None:
+            record = {
+                "id": nodeid,
+                "kind": "parent",
+                "owner": state["owners"][nodeid],
+                "outcome": unreported_outcome,
+                "failureFamily": None,
+                "durationSeconds": 0.0,
+            }
+        elif record["outcome"] not in TEST_OUTCOMES:
+            record["outcome"] = unreported_outcome
+        parents.append(record)
+    parents.sort(key=lambda record: record["id"])
+    children = sorted(state["children"], key=lambda record: record["id"])
+    payload = {
+        "schemaVersion": TEST_RESULT_SCHEMA_VERSION,
+        "kind": "attempt",
+        "state": "incomplete",
+        "surface": "backend",
+        "identity": state["identity"],
+        "attempt": state["attempt"],
+        "timing": {
+            "startedAtUtc": state["startedAtUtc"],
+            "endedAtUtc": _utc_now(),
+            "wallSeconds": round(time.perf_counter() - state["timer"], 6),
+        },
+        "exitCode": int(exitstatus),
+        "status": "incomplete",
+        "counts": {"parents": _outcome_counts(parents), "children": _outcome_counts(children)},
+        "parents": parents,
+        "children": children,
+        "artifacts": [],
+    }
+    write_json(state["output"], payload)
+    _ACTIVE_TEST_RESULT_CONFIG = None
+
+
 def _backend_command(*extra: str) -> list[str]:
     return [sys.executable, "-m", "pytest", "-q", "--tb=short", *extra]
 
 
-def _attempt_summary(attempt: dict[str, Any], relative_path: str) -> dict[str, Any]:
+def _display_command(command: Sequence[str], *, output_dir: Path) -> list[str]:
+    displayed: list[str] = []
+    root = str(ROOT)
+    output = str(output_dir)
+    for argument in command:
+        value = "$PYTHON" if argument == sys.executable else argument
+        value = value.replace(output, "$OUTPUT").replace(root, "$ROOT")
+        displayed.append(value)
+    return displayed
+
+
+def _run_logged(command: Sequence[str], *, log_path: Path) -> int:
+    with log_path.open("w", encoding="utf-8") as log:
+        process = subprocess.Popen(
+            command,
+            cwd=ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        assert process.stdout is not None
+        for line in process.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            log.write(line)
+            log.flush()
+        return process.wait()
+
+
+def _attempt_summary(attempt: dict[str, Any], path: Path) -> dict[str, Any]:
+    failures = _failed_parent_ids(attempt)
     return {
-        "path": relative_path,
-        "attemptIndex": attempt["attemptIndex"],
-        "durationSeconds": attempt["durationSeconds"],
+        "path": path.name,
+        "sha256": file_hash(path),
+        "state": attempt["state"],
+        "attemptIndex": attempt["attempt"]["index"],
+        "startedAtUtc": attempt["timing"]["startedAtUtc"],
+        "endedAtUtc": attempt["timing"]["endedAtUtc"],
+        "durationSeconds": attempt["timing"]["wallSeconds"],
         "exitCode": attempt["exitCode"],
+        "status": attempt["status"],
         "counts": attempt["counts"],
-        "domains": attempt["domains"],
-        "failures": attempt["failures"],
+        "failures": failures,
+        "identity": attempt["identity"],
     }
+
+
+def _failed_parent_ids(attempt: dict[str, Any]) -> list[str]:
+    failed = {
+        record["id"]
+        for record in attempt["parents"]
+        if record["outcome"] in {"failed", "error"}
+    }
+    failed.update(
+        record["parentId"]
+        for record in attempt["children"]
+        if record["outcome"] in {"failed", "error"}
+    )
+    return sorted(failed)
+
+
+def _run_backend_attempt(
+    manifest: dict[str, Any],
+    *,
+    output_dir: Path,
+    selected_ids: Sequence[str],
+    attempt_index: int,
+    selection_args: Sequence[str],
+) -> tuple[int, dict[str, Any], Path]:
+    attempt_path = output_dir / f"attempt-{attempt_index}.json"
+    context_path = output_dir / f"attempt-{attempt_index}-context.json"
+    log_path = output_dir / f"attempt-{attempt_index}.log"
+    junit_path = output_dir / f"attempt-{attempt_index}.junit.xml"
+    topology_args = ("--domain-topology-verify-full",) if attempt_index == 0 else ()
+    command = _backend_command(
+        "-p",
+        "scripts.domain_test_topology",
+        *topology_args,
+        "--test-result-evidence-output",
+        str(attempt_path),
+        "--test-result-evidence-context",
+        str(context_path),
+        f"--junitxml={junit_path}",
+        *selection_args,
+    )
+    identity = build_test_result_identity(
+        manifest,
+        command=_display_command(command, output_dir=output_dir),
+        selected_ids=selected_ids,
+    )
+    attempt = {"index": attempt_index, "kind": "first" if attempt_index == 0 else "retry"}
+    started_at = _utc_now()
+    write_json(context_path, {"identity": identity, "attempt": attempt})
+    write_json(
+        attempt_path,
+        {
+            "schemaVersion": TEST_RESULT_SCHEMA_VERSION,
+            "kind": "attempt",
+            "state": "incomplete",
+            "surface": "backend",
+            "identity": identity,
+            "attempt": attempt,
+            "timing": {"startedAtUtc": started_at, "endedAtUtc": started_at, "wallSeconds": 0.0},
+            "exitCode": 2,
+            "status": "incomplete",
+            "counts": {
+                "parents": {outcome: 0 for outcome in TEST_OUTCOMES},
+                "children": {outcome: 0 for outcome in TEST_OUTCOMES},
+            },
+            "parents": [],
+            "children": [],
+            "artifacts": [],
+        },
+    )
+
+    process_rc = _run_logged(command, log_path=log_path)
+    raw = load_test_result_evidence(
+        attempt_path,
+        expected_identity=identity,
+        require_completed=False,
+    )
+    if raw["attempt"] != attempt or raw["exitCode"] != process_rc:
+        raise TopologyError("structured test evidence attempt or exit-code identity mismatch")
+    parent_ids = [record["id"] for record in raw["parents"]]
+    if len(parent_ids) != len(selected_ids) or inventory_hash(parent_ids) != inventory_hash(selected_ids):
+        raise TopologyError("structured test evidence remained incomplete: parent inventory differs from selection")
+    if not log_path.is_file() or not junit_path.is_file():
+        raise TopologyError("structured test evidence remained incomplete: log or JUnit artifact missing")
+
+    raw["state"] = "completed"
+    raw["status"] = _test_result_status(
+        state=raw["state"],
+        exit_code=process_rc,
+        counts=raw["counts"],
+    )
+    raw["artifacts"] = [
+        {"kind": "junit", "path": junit_path.name, "sha256": file_hash(junit_path)},
+        {"kind": "log", "path": log_path.name, "sha256": file_hash(log_path)},
+    ]
+    validate_test_result_evidence(raw, expected_identity=identity)
+    write_json(attempt_path, raw)
+    raw = load_test_result_evidence(attempt_path, expected_identity=identity)
+    context_path.unlink()
+    return process_rc, raw, attempt_path
 
 
 def classify_failures(failures: Iterable[str], known_baseline_failures: Iterable[str]) -> dict[str, list[str]]:
@@ -634,67 +1362,114 @@ def run_backend(
         selection_args = ["--domain-topology-select-file", str(selection_path)]
 
     started = time.perf_counter()
-    attempt_path = output_dir / "attempt-0.json"
-    command = _backend_command(
-        "--domain-topology-verify-full",
-        "--domain-topology-attempt-output",
-        str(attempt_path),
-        "--domain-topology-attempt-index",
-        "0",
-        *selection_args,
+    first_rc, first, attempt_path = _run_backend_attempt(
+        manifest,
+        output_dir=output_dir,
+        selected_ids=selected,
+        attempt_index=0,
+        selection_args=selection_args,
     )
-    first_rc = subprocess.run(command, cwd=ROOT).returncode
-    if not attempt_path.exists():
-        raise TopologyError(f"backend attempt did not write evidence: {attempt_path}")
-    first = json.loads(attempt_path.read_text(encoding="utf-8"))
     retry_summaries: list[dict[str, Any]] = []
-    remaining = list(first["failures"])
+    remaining = _failed_parent_ids(first)
     for attempt_index in range(1, retry_failures + 1):
         if not remaining:
             break
         retry_selection = output_dir / f"retry-{attempt_index}-selection.json"
         write_json(retry_selection, remaining)
-        retry_path = output_dir / f"attempt-{attempt_index}.json"
-        retry_command = _backend_command(
-            "--domain-topology-attempt-output",
-            str(retry_path),
-            "--domain-topology-attempt-index",
-            str(attempt_index),
-            "--domain-topology-select-file",
-            str(retry_selection),
+        _, retry, retry_path = _run_backend_attempt(
+            manifest,
+            output_dir=output_dir,
+            selected_ids=remaining,
+            attempt_index=attempt_index,
+            selection_args=("--domain-topology-select-file", str(retry_selection)),
         )
-        subprocess.run(retry_command, cwd=ROOT)
-        retry = json.loads(retry_path.read_text(encoding="utf-8"))
-        retry_summaries.append(_attempt_summary(retry, retry_path.name))
-        remaining = list(retry["failures"])
+        retry_summaries.append(_attempt_summary(retry, retry_path))
+        remaining = _failed_parent_ids(retry)
 
-    first_failures = set(first["failures"])
+    first_failures = _failed_parent_ids(first)
     classification = classify_failures(first_failures, manifest["backend"].get("knownBaselineFailures", []))
+    ended_at = _utc_now()
     result = {
-        "schemaVersion": 1,
+        "schemaVersion": TEST_RESULT_SCHEMA_VERSION,
+        "kind": "aggregate",
+        "state": "completed",
         "surface": "backend-domain-aggregate",
-        "shadowOnly": True,
-        "createdAt": datetime.now(UTC).isoformat(),
+        "authority": "structured-test-result",
+        "createdAt": ended_at,
+        "identity": first["identity"],
         "domains": list(domains),
         "selectedCount": len(selected),
         "durationSeconds": round(time.perf_counter() - started, 6),
-        "firstAttempt": _attempt_summary(first, attempt_path.name),
+        "firstAttempt": _attempt_summary(first, attempt_path),
         "retries": retry_summaries,
         **classification,
         "remainingFailuresAfterRetries": remaining,
-        "status": "passed" if first_rc == 0 else "failed_first_attempt",
+        "status": (
+            first["status"]
+            if first["status"] in {"passed", "skipped"}
+            else f"{first['status']}_first_attempt"
+        ),
     }
     write_json(output_dir / "result.json", result)
-    return first_rc, result
+    decision_rc = _test_result_exit_code(process_exit_code=first_rc, status=first["status"])
+    return decision_rc, result
+
+
+def _load_summarized_attempt(
+    result_path: Path,
+    summary_value: object,
+    *,
+    expected_index: int,
+) -> dict[str, Any]:
+    summary = _require_object(summary_value, f"attempt-{expected_index} summary")
+    relative_path = _require_string(summary.get("path"), f"attempt-{expected_index} summary path")
+    if Path(relative_path).name != relative_path:
+        raise TopologyError("structured attempt summary path must be a contained filename")
+    expected_hash = _require_digest(summary.get("sha256"), f"attempt-{expected_index} summary sha256")
+    attempt_path = result_path.parent / relative_path
+    if not attempt_path.is_file() or file_hash(attempt_path) != expected_hash:
+        raise TopologyError(f"structured attempt-{expected_index} evidence is missing or mismatched")
+    identity = _validate_test_result_identity(summary.get("identity"))
+    attempt = load_test_result_evidence(attempt_path, expected_identity=identity)
+    if attempt["attempt"]["index"] != expected_index or summary != _attempt_summary(attempt, attempt_path):
+        raise TopologyError(f"structured attempt-{expected_index} summary does not match attempt evidence")
+    return attempt
 
 
 def reclassify_backend_result(manifest: dict[str, Any], result_path: Path) -> dict[str, Any]:
-    result = json.loads(result_path.read_text(encoding="utf-8"))
-    if result.get("surface") != "backend-domain-aggregate" or not isinstance(result.get("firstAttempt"), dict):
+    result = _require_object(json.loads(result_path.read_text(encoding="utf-8")), "aggregate")
+    if (
+        result.get("schemaVersion") != TEST_RESULT_SCHEMA_VERSION
+        or result.get("kind") != "aggregate"
+        or result.get("state") != "completed"
+        or result.get("surface") != "backend-domain-aggregate"
+        or result.get("authority") != "structured-test-result"
+    ):
         raise TopologyError(f"not a backend aggregate result: {result_path}")
-    classification = classify_failures(
-        result["firstAttempt"].get("failures", []), manifest["backend"].get("knownBaselineFailures", [])
+    identity = _validate_test_result_identity(result.get("identity"))
+    _require_utc_timestamp(result.get("createdAt"), "aggregate.createdAt")
+    _require_non_negative_number(result.get("durationSeconds"), "aggregate.durationSeconds")
+    selected_count = result.get("selectedCount")
+    if isinstance(selected_count, bool) or not isinstance(selected_count, int) or selected_count != identity["selection"]["count"]:
+        raise TopologyError("structured aggregate selectedCount does not match selection identity")
+    first = _load_summarized_attempt(result_path, result.get("firstAttempt"), expected_index=0)
+    if first["identity"] != identity:
+        raise TopologyError("structured aggregate identity does not match first attempt")
+    retries = _require_list(result.get("retries"), "aggregate.retries")
+    attempts = [first]
+    for expected_index, summary in enumerate(retries, start=1):
+        attempts.append(_load_summarized_attempt(result_path, summary, expected_index=expected_index))
+    expected_remaining = _failed_parent_ids(attempts[-1])
+    if result.get("remainingFailuresAfterRetries") != expected_remaining:
+        raise TopologyError("structured aggregate retry result does not match attempt evidence")
+    expected_status = (
+        first["status"]
+        if first["status"] in {"passed", "skipped"}
+        else f"{first['status']}_first_attempt"
     )
+    if result.get("status") != expected_status:
+        raise TopologyError("structured aggregate status does not match first attempt")
+    classification = classify_failures(_failed_parent_ids(first), manifest["backend"]["knownBaselineFailures"])
     result.update(classification)
     write_json(result_path, result)
     return {"path": str(result_path), **classification}
