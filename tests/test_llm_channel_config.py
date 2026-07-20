@@ -16,7 +16,7 @@ from src.config import (
 
 class LLMChannelConfigTestCase(unittest.TestCase):
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_protocol_prefixes_bare_model_names(self, _mock_parse_yaml, _mock_setup_env) -> None:
         env = {
             "LLM_CHANNELS": "primary",
@@ -35,7 +35,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         self.assertEqual(config.llm_model_list[0]["litellm_params"]["model"], "deepseek/deepseek-chat")
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_openai_compatible_channel_prefixes_non_provider_slash_models(self, _mock_parse_yaml, _mock_setup_env) -> None:
         env = {
             "LLM_CHANNELS": "siliconflow",
@@ -54,7 +54,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         )
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_alias_prefixed_models_are_canonicalized_once(self, _mock_parse_yaml, _mock_setup_env) -> None:
         env = {
             "LLM_CHANNELS": "vertex",
@@ -70,7 +70,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         self.assertEqual(config.llm_model_list[0]["litellm_params"]["model"], "vertex_ai/gemini-2.5-flash")
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_disabled_channel_is_skipped(self, _mock_parse_yaml, _mock_setup_env) -> None:
         env = {
             "LLM_CHANNELS": "primary",
@@ -87,7 +87,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         self.assertEqual(config.llm_model_list, [])
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_local_ollama_channel_can_skip_api_key(self, _mock_parse_yaml, _mock_setup_env) -> None:
         env = {
             "LLM_CHANNELS": "local",
@@ -106,7 +106,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         self.assertNotIn("api_key", params)
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_llm_temperature_falls_back_to_legacy_provider_temperature(self, _mock_parse_yaml, _mock_setup_env) -> None:
         env = {
             "GEMINI_API_KEY": "secret-key-value",
@@ -120,7 +120,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         self.assertAlmostEqual(config.llm_temperature, 0.15)
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_llm_temperature_prefers_unified_setting_when_present(self, _mock_parse_yaml, _mock_setup_env) -> None:
         env = {
             "GEMINI_API_KEY": "secret-key-value",
@@ -134,7 +134,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         self.assertAlmostEqual(config.llm_temperature, 0.35)
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_llm_temperature_falls_back_to_openai_temperature(self, _mock_parse_yaml, _mock_setup_env) -> None:
         env = {
             "LLM_CHANNELS": "primary",
@@ -151,7 +151,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         self.assertAlmostEqual(config.llm_temperature, 0.42)
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_llm_temperature_falls_back_to_any_legacy_when_provider_mismatch(self, _mock_parse_yaml, _mock_setup_env) -> None:
         env = {
             "LLM_CHANNELS": "primary",
@@ -168,7 +168,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         self.assertAlmostEqual(config.llm_temperature, 0.55)
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_llm_temperature_ignores_invalid_value(self, _mock_parse_yaml, _mock_setup_env) -> None:
         env = {
             "GEMINI_API_KEY": "secret-key-value",
@@ -177,12 +177,11 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         }
 
         with patch.dict(os.environ, env, clear=True):
-            config = Config._load_from_env()
-
-        self.assertAlmostEqual(config.llm_temperature, 0.25)
+            with self.assertRaisesRegex(ValueError, "LLM_TEMPERATURE"):
+                Config._load_from_env()
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_local_openai_compatible_channel_defaults_to_openai_protocol(self, _mock_parse_yaml, _mock_setup_env) -> None:
         """Localhost channels without explicit protocol should default to openai, not ollama."""
         env = {
@@ -200,7 +199,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         self.assertEqual(config.llm_channels[0]["protocol"], "openai")
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_agent_model_empty_inherits_primary_model(self, _mock_parse_yaml, _mock_setup_env) -> None:
         env = {
             "OPENAI_API_KEY": "sk-test-value",
@@ -215,7 +214,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         self.assertEqual(get_effective_agent_primary_model(config), "openai/gpt-4o-mini")
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_agent_model_without_provider_prefix_is_normalized(self, _mock_parse_yaml, _mock_setup_env) -> None:
         env = {
             "OPENAI_API_KEY": "sk-test-value",
@@ -230,7 +229,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         self.assertEqual(get_effective_agent_primary_model(config), "openai/deepseek-chat")
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_agent_models_to_try_are_deduped_in_order(self, _mock_parse_yaml, _mock_setup_env) -> None:
         env = {
             "OPENAI_API_KEY": "sk-test-value",
@@ -248,7 +247,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         )
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_agent_models_to_try_dedupes_semantically_equivalent_openai_models(self, _mock_parse_yaml, _mock_setup_env) -> None:
         env = {
             "OPENAI_API_KEY": "sk-test-value",
@@ -266,9 +265,8 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         )
 
     @patch("src.config.setup_env")
-    @patch.object(
-        Config,
-        "_parse_litellm_yaml",
+    @patch(
+        "src.runtime.settings.parse_litellm_yaml",
         return_value=[
             {
                 "model_name": "gpt4o",
@@ -297,7 +295,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         )
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_primary_model_without_provider_prefix_normalizes_to_unique_router_model(
         self,
         _mock_parse_yaml,
@@ -320,7 +318,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         )
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_invalid_primary_model_can_fall_back_to_first_available_router_model(
         self,
         _mock_parse_yaml,
@@ -350,7 +348,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         )
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_agent_model_inherits_primary_fallback_selection_when_unset(
         self,
         _mock_parse_yaml,

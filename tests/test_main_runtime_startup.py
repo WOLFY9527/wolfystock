@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import main as runtime_main
 import pytest
+from src.runtime.settings import SettingSource
 
 
 class _FakeUvicornConfig:
@@ -112,6 +113,8 @@ def _config(**overrides: object) -> SimpleNamespace:
     values = {
         "log_dir": None,
         "log_level": "INFO",
+        "webui_host": "127.0.0.1",
+        "webui_port": 8765,
         "webui_enabled": False,
         "dingtalk_stream_enabled": False,
         "feishu_stream_enabled": False,
@@ -341,17 +344,35 @@ def test_main_returns_one_and_skips_bots_on_api_startup_failure(monkeypatch, arg
 
 
 def test_static_asset_degradation_remains_nonfatal(monkeypatch) -> None:
-    _patch_main(monkeypatch, args=_args(serve_only=True))
+    args = _args(serve_only=True, host="0.0.0.0", port=8000)
+    config = _config(
+        webui_host="127.0.0.1",
+        webui_port=8765,
+        runtime_settings=SimpleNamespace(
+            provenance={
+                "WEBUI_HOST": SimpleNamespace(source=SettingSource.ENV_FILE),
+                "WEBUI_PORT": SimpleNamespace(source=SettingSource.ENV_FILE),
+            }
+        ),
+    )
+    _patch_main(monkeypatch, args=args, config=config)
     handle = _RecordingHandle()
     bot_calls: list[str] = []
+    server_kwargs: dict[str, object] = {}
     monkeypatch.setattr(runtime_main, "prepare_webui_frontend_assets", lambda: False)
-    monkeypatch.setattr(runtime_main, "start_api_server", lambda **kwargs: handle)
+    monkeypatch.setattr(
+        runtime_main,
+        "start_api_server",
+        lambda **kwargs: (server_kwargs.update(kwargs) or handle),
+    )
     monkeypatch.setattr(runtime_main, "start_bot_stream_clients", lambda config: bot_calls.append("bot"))
     monkeypatch.setattr(runtime_main.time, "sleep", lambda seconds: (_ for _ in ()).throw(KeyboardInterrupt()))
 
     assert runtime_main.main() == 0
     assert bot_calls == ["bot"]
     assert handle.stop_calls == 1
+    assert server_kwargs["host"] == "127.0.0.1"
+    assert server_kwargs["port"] == 8765
 
 
 def test_main_stops_api_when_interrupted_during_bot_start(monkeypatch) -> None:

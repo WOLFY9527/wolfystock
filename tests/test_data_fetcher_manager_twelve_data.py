@@ -104,7 +104,7 @@ class DataFetcherManagerTwelveDataTestCase(unittest.TestCase):
         )
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_each_twelve_data_alias_is_runtime_eligible_without_provider_calls(
         self,
         _mock_parse_litellm_yaml,
@@ -137,7 +137,7 @@ class DataFetcherManagerTwelveDataTestCase(unittest.TestCase):
                 manager.close()
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_empty_twelve_data_credentials_are_runtime_ineligible(
         self,
         _mock_parse_litellm_yaml,

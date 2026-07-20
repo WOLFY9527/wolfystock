@@ -24,9 +24,8 @@ class ProviderCredentialsTestCase(unittest.TestCase):
         Config.reset_instance()
 
     def _credentials_from_env(self, provider: str, env: dict[str, str]):
-        with patch("src.config.setup_env"), patch.object(
-            Config,
-            "_parse_litellm_yaml",
+        with patch("src.config.setup_env"), patch(
+            "src.runtime.settings.parse_litellm_yaml",
             return_value=[],
         ), patch.dict(os.environ, {"STOCK_LIST": "600519", **env}, clear=True):
             Config.reset_instance()

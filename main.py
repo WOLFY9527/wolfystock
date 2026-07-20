@@ -41,6 +41,7 @@ from src.core.market_review import run_market_review
 from src.webui_frontend import prepare_webui_frontend_assets
 from src.config import get_config, Config
 from src.logging_config import setup_logging
+from src.runtime.settings import SettingSource
 
 
 logger = logging.getLogger(__name__)
@@ -554,11 +555,6 @@ def start_api_server(
         runtime.stopped.wait(timeout=min(0.01, remaining))
 
 
-def _is_truthy_env(var_name: str, default: str = "true") -> bool:
-    """Parse common truthy / falsy environment values."""
-    value = os.getenv(var_name, default).strip().lower()
-    return value not in {"0", "false", "no", "off"}
-
 def start_bot_stream_clients(config: Config) -> None:
     """Start bot stream clients when enabled in config."""
     # 启动钉钉 Stream 客户端
@@ -649,12 +645,22 @@ def main() -> int:
         logger.error("FastAPI 服务启动失败: reason=start_suppressed")
         return 1
 
-    # 兼容旧版 WEBUI_HOST/WEBUI_PORT：如果用户未通过 --host/--port 指定，则使用旧变量
+    # Use the validated runtime projection when CLI binding arguments are defaults.
     if start_serve:
-        if args.host == '0.0.0.0' and os.getenv('WEBUI_HOST'):
-            args.host = os.getenv('WEBUI_HOST')
-        if args.port == 8000 and os.getenv('WEBUI_PORT'):
-            args.port = int(os.getenv('WEBUI_PORT'))
+        runtime_settings = getattr(config, "runtime_settings", None)
+        if runtime_settings is not None:
+            if (
+                args.host == '0.0.0.0'
+                and runtime_settings.provenance["WEBUI_HOST"].source
+                is not SettingSource.DEFAULT
+            ):
+                args.host = config.webui_host
+            if (
+                args.port == 8000
+                and runtime_settings.provenance["WEBUI_PORT"].source
+                is not SettingSource.DEFAULT
+            ):
+                args.port = config.webui_port
 
     api_handle = None
     if start_serve:

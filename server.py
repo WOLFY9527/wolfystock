@@ -21,13 +21,11 @@ Daily Stock Analysis - FastAPI 后端服务入口
 import logging
 import os
 
-from src.config import setup_env, get_config
+from src.config import get_config
 from src.logging_config import setup_logging
 from src.webui_frontend import prepare_webui_frontend_assets
 
-# 初始化环境变量与日志
-setup_env()
-
+# Initialize the runtime snapshot before configuring process logging.
 config = get_config()
 level_name = (config.log_level or "INFO").upper()
 level = getattr(logging, level_name, logging.INFO)
@@ -64,7 +62,7 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "server:app",
-        host="0.0.0.0",
-        port=8000,
+        host=config.webui_host,
+        port=config.webui_port,
         reload=True,
     )

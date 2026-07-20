@@ -1809,18 +1809,34 @@ class SystemConfigService:
     @staticmethod
     def _uses_litellm_yaml(effective_map: Dict[str, str]) -> bool:
         """Return True when a valid LiteLLM YAML config takes precedence over channels."""
+        from src.runtime.settings import parse_litellm_yaml
+
         config_path = (effective_map.get("LITELLM_CONFIG") or "").strip()
         if not config_path:
             return False
-        return bool(Config._parse_litellm_yaml(config_path))
+        return bool(
+            parse_litellm_yaml(
+                Config,
+                config_path,
+                environment=effective_map,
+            )
+        )
 
     @staticmethod
     def _collect_yaml_models_from_map(effective_map: Dict[str, str]) -> List[str]:
         """Collect declared router model names from LiteLLM YAML config."""
+        from src.runtime.settings import parse_litellm_yaml
+
         config_path = (effective_map.get("LITELLM_CONFIG") or "").strip()
         if not config_path:
             return []
-        return get_configured_llm_models(Config._parse_litellm_yaml(config_path))
+        return get_configured_llm_models(
+            parse_litellm_yaml(
+                Config,
+                config_path,
+                environment=effective_map,
+            )
+        )
 
     @staticmethod
     def _has_legacy_key_for_provider(provider: str, effective_map: Dict[str, str]) -> bool:

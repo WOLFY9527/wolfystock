@@ -410,7 +410,7 @@ class AgentSkillsEndpointTestCase(unittest.TestCase):
         self.assertEqual(payload["content"], "ok")
 class AgentModelsSourceDetectionTestCase(unittest.TestCase):
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_load_from_env_marks_channels_as_actual_source_after_yaml_fallback(
         self,
         _mock_parse_yaml,
@@ -435,7 +435,7 @@ class AgentModelsSourceDetectionTestCase(unittest.TestCase):
         self.assertEqual(config.llm_model_list[0]["litellm_params"]["model"], "openai/gpt-4o-mini")
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_load_from_env_marks_legacy_as_actual_source_after_yaml_fallback(
         self,
         _mock_parse_yaml,

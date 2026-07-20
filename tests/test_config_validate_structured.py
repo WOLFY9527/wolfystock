@@ -344,9 +344,15 @@ class TestValidateStructuredNotification:
 
 class TestDeprecatedFieldHints:
     def test_openai_vision_model_deprecation_when_env_set(self):
-        """When OPENAI_VISION_MODEL is in env, validate_structured reports deprecation hint."""
-        cfg = _make_config()
-        with patch.dict("os.environ", {"OPENAI_VISION_MODEL": "openai/gpt-4o"}, clear=False):
+        """The construction snapshot retains the deprecated alias signal."""
+        with patch("src.runtime.settings.setup_environment"), patch.dict(
+            "os.environ",
+            {"OPENAI_VISION_MODEL": "openai/gpt-4o"},
+            clear=True,
+        ):
+            cfg = Config._load_from_env()
+
+        with patch.dict("os.environ", {}, clear=True):
             issues = cfg.validate_structured()
         deprec = [i for i in issues if i.field == "OPENAI_VISION_MODEL"]
         assert deprec, "Expected deprecation hint when OPENAI_VISION_MODEL is set"
@@ -354,17 +360,19 @@ class TestDeprecatedFieldHints:
         assert "VISION_MODEL" in deprec[0].message
 
     def test_no_deprecation_when_openai_vision_model_not_in_env(self):
-        """When OPENAI_VISION_MODEL is not in env, no deprecation hint."""
-        import os
-        cfg = _make_config()
-        real_getenv = os.getenv
+        """A later environment mutation cannot create a deprecation signal."""
+        with patch("src.runtime.settings.setup_environment"), patch.dict(
+            "os.environ",
+            {},
+            clear=True,
+        ):
+            cfg = Config._load_from_env()
 
-        def mock_getenv(key, default=None):
-            if key == "OPENAI_VISION_MODEL":
-                return None
-            return real_getenv(key, default)
-
-        with patch("src.config.os.getenv", side_effect=mock_getenv):
+        with patch.dict(
+            "os.environ",
+            {"OPENAI_VISION_MODEL": "openai/gpt-4o"},
+            clear=True,
+        ):
             issues = cfg.validate_structured()
         deprec = [i for i in issues if i.field == "OPENAI_VISION_MODEL"]
         assert not deprec, "Should not report deprecation when OPENAI_VISION_MODEL is unset"
@@ -441,7 +449,7 @@ class TestVisionKeyValidation:
 
 class TestEnvAliasCompatibility:
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_discord_channel_id_legacy_alias_is_still_loaded(
         self,
         _mock_parse_yaml,
@@ -461,7 +469,7 @@ class TestEnvAliasCompatibility:
         assert config.discord_main_channel_id == "legacy-channel"
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_discord_main_channel_id_takes_precedence_over_legacy_alias(
         self,
         _mock_parse_yaml,

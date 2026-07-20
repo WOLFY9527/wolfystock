@@ -4,11 +4,13 @@
 import unittest
 
 from src.config import Config, resolve_news_window_days
+from src.runtime.settings import parse_news_strategy_profile
 
 
 class NewsStrategyConfigTestCase(unittest.TestCase):
     def test_invalid_profile_fallback_to_short(self) -> None:
-        self.assertEqual(Config._parse_news_strategy_profile("bad_value"), "short")
+        with self.assertRaisesRegex(ValueError, "NEWS_STRATEGY_PROFILE"):
+            parse_news_strategy_profile(Config, "bad_value")
 
     def test_window_respects_news_max_age_days(self) -> None:
         # medium=7 but max-age=3 -> effective=3

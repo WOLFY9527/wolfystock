@@ -16,7 +16,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         Config.reset_instance()
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_load_from_env_reads_tickflow_api_key(
         self, _mock_parse_litellm_yaml, _mock_setup_env
     ):
@@ -33,7 +33,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         self.assertEqual(config.tickflow_api_key, "tf-secret")
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_load_from_env_keeps_default_behavior_without_tickflow_api_key(
         self, _mock_parse_litellm_yaml, _mock_setup_env
     ):
@@ -53,7 +53,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         )
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_load_from_env_reads_twelve_data_alias_and_alpaca_pair(
         self,
         _mock_parse_litellm_yaml,
@@ -79,7 +79,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         self.assertEqual(config.alpaca_data_feed, "sip")
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_load_from_env_accepts_each_twelve_data_alias(
         self,
         _mock_parse_litellm_yaml,
@@ -105,7 +105,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
                 self.assertEqual(config.twelve_data_api_key, credential_value)
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_schedule_run_immediately_falls_back_to_legacy_run_immediately(
         self,
         _mock_parse_yaml,
@@ -122,7 +122,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         self.assertFalse(config.run_immediately)
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_schedule_run_immediately_prefers_schedule_specific_setting(
         self,
         _mock_parse_yaml,
@@ -140,7 +140,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         self.assertFalse(config.run_immediately)
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_empty_legacy_run_immediately_stays_false_when_schedule_alias_is_unset(
         self,
         _mock_parse_yaml,
@@ -157,7 +157,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         self.assertFalse(config.run_immediately)
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_empty_schedule_run_immediately_stays_false_without_falling_back(
         self,
         _mock_parse_yaml,
@@ -175,7 +175,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         self.assertTrue(config.run_immediately)
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_report_language_prefers_preexisting_process_env_over_env_file(
         self,
         _mock_parse_yaml,
@@ -198,7 +198,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         self.assertEqual(config.report_language, "en")
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_report_language_uses_env_file_when_process_env_is_absent(
         self,
         _mock_parse_yaml,
@@ -226,7 +226,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         self.assertEqual(parsed, "zh")
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_invalid_numeric_env_values_fall_back_to_defaults(
         self,
         _mock_parse_yaml,
@@ -249,7 +249,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
                     Config._load_from_env()
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_home_quick_analysis_generation_overrides_are_loaded(
         self,
         _mock_parse_yaml,
@@ -267,7 +267,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         self.assertEqual(config.home_quick_analysis_temperature, 0.15)
 
     @patch("src.config.setup_env")
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_invalid_home_quick_analysis_generation_overrides_fall_back_to_defaults(
         self,
         _mock_parse_yaml,

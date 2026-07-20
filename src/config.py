@@ -73,118 +73,6 @@ def parse_env_bool(value: Optional[str], default: bool = False) -> bool:
     return normalized not in _FALSEY_ENV_VALUES
 
 
-def parse_env_int(
-    value: Optional[str],
-    default: int,
-    *,
-    field_name: str,
-    minimum: Optional[int] = None,
-    maximum: Optional[int] = None,
-) -> int:
-    """Parse an integer env value with warning + fallback semantics."""
-    raw_value = value
-    if raw_value is None or not str(raw_value).strip():
-        parsed = int(default)
-    else:
-        try:
-            parsed = int(str(raw_value).strip())
-        except (TypeError, ValueError):
-            logger.warning(
-                "%s=%r is not a valid integer; falling back to %s",
-                field_name,
-                raw_value,
-                default,
-            )
-            parsed = int(default)
-
-    if minimum is not None and parsed < minimum:
-        logger.warning(
-            "%s=%r is below minimum %s; clamping to %s",
-            field_name,
-            parsed,
-            minimum,
-            minimum,
-        )
-        parsed = minimum
-    if maximum is not None and parsed > maximum:
-        logger.warning(
-            "%s=%r is above maximum %s; clamping to %s",
-            field_name,
-            parsed,
-            maximum,
-            maximum,
-        )
-        parsed = maximum
-    return parsed
-
-
-def parse_env_float(
-    value: Optional[str],
-    default: float,
-    *,
-    field_name: str,
-    minimum: Optional[float] = None,
-    maximum: Optional[float] = None,
-) -> float:
-    """Parse a float env value with warning + fallback semantics."""
-    raw_value = value
-    if raw_value is None or not str(raw_value).strip():
-        parsed = float(default)
-    else:
-        try:
-            parsed = float(str(raw_value).strip())
-        except (TypeError, ValueError):
-            logger.warning(
-                "%s=%r is not a valid number; falling back to %s",
-                field_name,
-                raw_value,
-                default,
-            )
-            parsed = float(default)
-
-    if minimum is not None and parsed < minimum:
-        logger.warning(
-            "%s=%r is below minimum %s; clamping to %s",
-            field_name,
-            parsed,
-            minimum,
-            minimum,
-        )
-        parsed = minimum
-    if maximum is not None and parsed > maximum:
-        logger.warning(
-            "%s=%r is above maximum %s; clamping to %s",
-            field_name,
-            parsed,
-            maximum,
-            maximum,
-        )
-        parsed = maximum
-    return parsed
-
-
-def parse_env_int_list(value: Optional[str], *, field_name: str) -> List[int]:
-    """Parse a comma-separated integer list env value with warning + ignore semantics."""
-    raw_value = str(value or "").strip()
-    if not raw_value:
-        return []
-
-    parsed_values: List[int] = []
-    for token in raw_value.split(","):
-        raw_token = str(token or "").strip()
-        if not raw_token:
-            continue
-        try:
-            parsed_values.append(int(raw_token))
-        except (TypeError, ValueError):
-            logger.warning(
-                "%s token %r is not a valid integer; ignoring it",
-                field_name,
-                raw_token,
-            )
-    return parsed_values
-
-
 def normalize_news_strategy_profile(value: Optional[str]) -> str:
     """Normalize news strategy profile to known values."""
     candidate = (value or "short").strip().lower()
@@ -1075,12 +963,6 @@ class Config:
         """Return the immutable snapshot that created this compatibility facade."""
         return getattr(self, "_runtime_settings_snapshot", None)
     
-    @classmethod
-    def _parse_litellm_yaml(cls, config_path: str) -> List[Dict[str, Any]]:
-        from src.runtime.settings import parse_litellm_yaml
-
-        return parse_litellm_yaml(cls, config_path)
-
     def get_effective_news_window_days(self) -> int:
         """Return effective news window days after profile + max-age merge."""
         return resolve_news_window_days(

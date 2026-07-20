@@ -511,9 +511,8 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertTrue(validation["valid"])
         self.assertEqual(validation["issues"], [])
 
-    @patch.object(
-        Config,
-        "_parse_litellm_yaml",
+    @patch(
+        "src.runtime.settings.parse_litellm_yaml",
         return_value=[
             {
                 "model_name": "gpt4o",
@@ -532,9 +531,8 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertTrue(validation["valid"])
         self.assertEqual(validation["issues"], [])
 
-    @patch.object(
-        Config,
-        "_parse_litellm_yaml",
+    @patch(
+        "src.runtime.settings.parse_litellm_yaml",
         return_value=[{"model_name": "gemini/gemini-2.5-flash", "litellm_params": {"model": "gemini/gemini-2.5-flash"}}],
     )
     def test_validate_skips_channel_checks_when_litellm_yaml_is_active(self, _mock_parse_yaml) -> None:
@@ -626,9 +624,8 @@ class SystemConfigServiceTestCase(unittest.TestCase):
             ["quick", "standard", "full", "specialist", "strategy", "skill"],
         )
 
-    @patch.object(
-        Config,
-        "_parse_litellm_yaml",
+    @patch(
+        "src.runtime.settings.parse_litellm_yaml",
         return_value=[{"model_name": "gemini/gemini-2.5-flash", "litellm_params": {"model": "gemini/gemini-2.5-flash"}}],
     )
     def test_validate_reports_unknown_primary_model_for_litellm_yaml(self, _mock_parse_yaml) -> None:
@@ -642,7 +639,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertFalse(validation["valid"])
         self.assertTrue(any(issue["key"] == "LITELLM_MODEL" and issue["code"] == "unknown_model" for issue in validation["issues"]))
 
-    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    @patch("src.runtime.settings.parse_litellm_yaml", return_value=[])
     def test_validate_keeps_channel_checks_when_litellm_yaml_has_no_models(self, _mock_parse_yaml) -> None:
         validation = self.service.validate(
             items=[

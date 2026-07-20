@@ -212,6 +212,9 @@ def test_dependency_overrides_remain_isolated_between_apps(tmp_path: Path) -> No
 def test_app_lifespan_has_no_parallel_runtime_construction_or_cleanup_path() -> None:
     lifespan_source = inspect.getsource(api_app.app_lifespan)
     dependency_source = inspect.getsource(get_system_config_service)
+    from src.runtime.composition import RuntimeContainer
+
+    container_source = inspect.getsource(RuntimeContainer.__init__)
 
     assert "SystemConfigService(" not in lifespan_source
     assert "get_task_queue(" not in lifespan_source
@@ -221,3 +224,4 @@ def test_app_lifespan_has_no_parallel_runtime_construction_or_cleanup_path() -> 
     assert "SystemConfigService(" not in dependency_source
     assert "runtime_container" in lifespan_source
     assert "runtime_container" in dependency_source
+    assert "RuntimeSettings.load" not in container_source

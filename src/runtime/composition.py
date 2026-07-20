@@ -28,8 +28,18 @@ class RuntimeContainer:
         should_start_crypto_realtime: Callable[[], bool] = should_auto_start_crypto_realtime,
         runtime_settings: RuntimeSettings | None = None,
     ) -> None:
-        self.runtime_settings = runtime_settings or RuntimeSettings.load(config_type=Config)
-        self.config = self.runtime_settings.to_config(Config)
+        if runtime_settings is None:
+            config = Config.get_instance()
+            runtime_settings = config.runtime_settings
+            if runtime_settings is None:
+                raise RuntimeError(
+                    "RuntimeContainer requires a RuntimeSettings snapshot"
+                )
+        else:
+            config = runtime_settings.to_config(Config)
+
+        self.runtime_settings = runtime_settings
+        self.config = config
         self._system_config_service_factory = system_config_service_factory
         self._task_queue_factory = task_queue_factory
         self._crypto_realtime_service_factory = crypto_realtime_service_factory
