@@ -20,12 +20,18 @@ From any checkout or worktree:
 ./wolfy qualify-env
 ```
 
-`requirements.txt` and `requirements-dev.txt` preserve direct runtime and
-development/test intent. They are not install locks. `requirements-lock.json`
-and its CPython 3.11/3.12 lock family are the reviewed install authority. Each
-target/profile projection exact-pins distributions and compatible artifact
-filenames with SHA-256 coverage. Reviewed source distributions also bind their
-build backend and exact build requirements.
+`requirements.txt` preserves direct production-environment intent in explicit
+owner sections for application runtime integrations and projection-only
+lock/build tools. `requirements-dev.txt` inherits that intent and separately
+owns development and test tools. Each direct declaration has one owner and an
+inline reason; a package being installed transitively is not a reason to repeat
+it as direct intent. For example, the application owns the direct LiteLLM
+client, while its resolved `openai` dependency remains in the install closure
+without becoming an application direct dependency. These files are not install
+locks. `requirements-lock.json` and its CPython 3.11/3.12 lock family are the
+reviewed install authority. Each target/profile projection exact-pins
+distributions and compatible artifact filenames with SHA-256 coverage. Reviewed
+source distributions also bind their build backend and exact build requirements.
 
 Only an explicit dependency review may run:
 

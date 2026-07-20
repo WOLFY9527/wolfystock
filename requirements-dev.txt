@@ -1,3 +1,7 @@
 -r requirements.txt
-flake8>=7.1.0
-pytest>=8.0.0
+
+# Development owner: repository lint commands and CI gates
+flake8>=7.1.0               # Python lint CLI used by scripts/ci_gate.sh
+
+# Test owner: backend test runtime and repository pytest plugins
+pytest>=8.0.0               # Test runner used by canonical and focused validation

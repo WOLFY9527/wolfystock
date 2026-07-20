@@ -75,7 +75,7 @@ This manual is a generated navigation and integrity catalog. It does not copy do
 | [docs/contracts/data-trust.md](../contracts/data-trust.md) | canonical | active | yes | Cross-domain truth, source, readiness, no-advice, and protected semantics | 976c004be4f6 |
 | [docs/contracts/historical-market-data.md](../contracts/historical-market-data.md) | canonical | active | yes | Historical OHLCV foundation contract | be8438c651f5 |
 | [docs/design/frontend.md](../design/frontend.md) | canonical | active | yes | Consumer frontend design and implementation contract | 4a74cd9c85dc |
-| [docs/development/environment.md](../development/environment.md) | canonical | active | yes | Dependency, bootstrap, target, snapshot, runtime, and configuration authority | dafd93e3635e |
+| [docs/development/environment.md](../development/environment.md) | canonical | active | yes | Dependency, bootstrap, target, snapshot, runtime, and configuration authority | cf13b7b2b6c7 |
 | [docs/development/validation.md](../development/validation.md) | canonical | active | yes | Validation command routing and evidence reference | f1f4f1d6949d |
 | [docs/generated/AI_PROJECT_MANUAL.md](AI_PROJECT_MANUAL.md) | generated | generated | no | Generated complete documentation catalog | generated |
 | [docs/operations/database.md](../operations/database.md) | canonical | active | yes | Database diagnostics, baseline artifacts, Phase F, and DuckDB runbook | 96c9087a86be |

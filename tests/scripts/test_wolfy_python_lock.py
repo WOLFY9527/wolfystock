@@ -632,6 +632,9 @@ def test_non_linux_targets_select_reviewed_portable_litellm(
     )
 
     assert contract.distributions["litellm"] == frozenset({"1.91.3"})
+    assert {"litellm", "tiktoken", "httpx"} <= contract.direct_requirements
+    assert "openai" not in contract.direct_requirements
+    assert contract.distributions["openai"] == frozenset({"2.46.0"})
 
 
 def test_resolver_version_drift_fails_explicit_check(tmp_path: Path) -> None:
@@ -961,6 +964,8 @@ def test_linux_arm64_selected_distributions_have_compatible_hashed_artifacts() -
     assert set(contract.artifact_hashes) == set(contract.distributions)
     assert all(contract.artifact_hashes.values())
     assert contract.hash_count == sum(map(len, contract.artifact_hashes.values()))
+    assert "openai" not in contract.direct_requirements
+    assert contract.distributions["openai"] == frozenset({"2.46.0"})
 
 
 def test_macos_x86_cryptography_source_backend_is_exact_locked() -> None:
@@ -973,6 +978,7 @@ def test_macos_x86_cryptography_source_backend_is_exact_locked() -> None:
     )
 
     assert contract.distributions["cryptography"] == frozenset({"49.0.0"})
+    assert {"pip", "setuptools", "maturin"} <= contract.direct_requirements
     assert contract.build_requirements["maturin"] == "1.10.2"
     assert contract.build_requirements["setuptools"] == "82.0.1"
     assert contract.source_build_count >= 1

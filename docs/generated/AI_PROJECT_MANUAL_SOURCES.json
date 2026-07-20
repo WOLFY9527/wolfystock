@@ -141,7 +141,7 @@
     "docsIndex": "docs/README.md",
     "docsIndexSha256": "b9e676ba0d1699818d5cc63efb24a21980440082e3619c2ebccdd08dacb6ac6b",
     "manual": "docs/generated/AI_PROJECT_MANUAL.md",
-    "manualSha256": "81e999bda994666b98e1d83696a106873b55aa36b2c6effcb3568bbc1c2d52b0",
+    "manualSha256": "02ed687cdff9c05d60e263cc617d51fdcb41f3d9e3fc65e8d80b793d2241c6c4",
     "sourceManifest": "docs/generated/AI_PROJECT_MANUAL_SOURCES.json"
   },
   "registry": {
@@ -440,13 +440,13 @@
       "title": "Consumer Frontend Design Contract"
     },
     {
-      "bytes": 5920,
+      "bytes": 6416,
       "editable": true,
       "id": "development-environment",
       "kind": "canonical",
-      "lineCount": 159,
+      "lineCount": 165,
       "path": "docs/development/environment.md",
-      "sha256": "dafd93e3635e3fe4936e986d93101fef8808eab0066bcc6ea6a74f31fdfe425f",
+      "sha256": "cf13b7b2b6c7218cf0d45ec18903c5f9b51387d22154abf30cb48e60c1deeb54",
       "status": "active",
       "summary": "Dependency, bootstrap, target, snapshot, runtime, and configuration authority",
       "title": "Development Environment"

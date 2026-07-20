@@ -1,7 +1,7 @@
 {
   "inputHashes": {
-    "requirements-dev.txt": "fe786961e03419c986d96e98b20b5700c2107bd1fe05828e736add99a15b0302",
-    "requirements.txt": "ce0270b288e9def4f4e9b57a446f72fd58b418302aca55b594f9bb612b586e49"
+    "requirements-dev.txt": "431d7bd7bae8da39d66709342d3aa9b8ed2fc6c89989f23c472b01e28365b499",
+    "requirements.txt": "13aaece07d831f564912d006d3617126cde7bd3d4fcaa0a71b7a05902a0b2335"
   },
   "policyVersion": "wolfystock_python_lock_policy_v2",
   "profiles": {
