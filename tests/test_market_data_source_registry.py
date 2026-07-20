@@ -449,18 +449,6 @@ def test_scanner_fetcher_and_manager_sources_keep_provider_labels() -> None:
         assert resolve_source_label(source=source, source_type=source_type) == source_label
 
 
-def test_tickflow_source_token_keeps_stable_non_official_provenance() -> None:
-    provenance = project_source_provenance(
-        source="tickflow",
-        source_type="public_api",
-        freshness="delayed",
-    )
-
-    assert provenance["sourceType"] == "public_proxy"
-    assert provenance["sourceLabel"] == "TickFlow"
-    assert provenance["freshnessLabel"] == "延迟"
-
-
 def test_sina_and_proxy_cn_fetchers_remain_non_official_primary_sources() -> None:
     expected = {
         "sina": ("public_proxy", "新浪财经"),

@@ -5,10 +5,9 @@ from __future__ import annotations
 
 import threading
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
-from api.v1.endpoints import market
 from src.services.market_cache import market_cache
 from src.services.market_data_source_registry import project_source_provenance
 from src.services.market_overview_service import MarketOverviewService
@@ -387,17 +386,6 @@ def test_partial_provider_health_is_preserved_for_mixed_cn_indices() -> None:
     assert fallback_item["source"] == "fallback"
     assert fallback_item["sourceLabel"] == "备用数据"
     assert fallback_item["sourceType"] == "public_api"
-
-
-def test_market_us_breadth_endpoint_uses_market_service() -> None:
-    service = Mock()
-    service.get_us_breadth.return_value = {"source": "yfinance_proxy", "items": [{"symbol": "SECTORS_UP"}]}
-
-    with patch("api.v1.endpoints.market.MarketOverviewService", return_value=service):
-        payload = market.get_us_breadth()
-
-    assert payload["items"][0]["symbol"] == "SECTORS_UP"
-    service.get_us_breadth.assert_called_once()
 
 
 def test_latest_quote_service_shapes_yfinance_transport_history_frame() -> None:

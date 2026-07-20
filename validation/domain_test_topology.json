@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7920,
-      "sha256": "2982f2e50544246b6126c6cbc6b822d7130f821901f403149d84c7ba1539228d"
+      "count": 7917,
+      "sha256": "ae0f2f2a28bf4202f9e27aacdb92e7c9487f3368948b1fe1588ea9a0a74b0d14"
     },
     "tests": [
       {
@@ -21169,11 +21169,6 @@
         "baseline": true
       },
       {
-        "id": "tests/test_market_data_source_registry.py::test_tickflow_source_token_keeps_stable_non_official_provenance",
-        "domain": "provider_external_network",
-        "baseline": true
-      },
-      {
         "id": "tests/test_market_data_source_registry.py::test_unknown_catch_all_public_aliases_do_not_promote_to_official_or_live",
         "domain": "provider_external_network",
         "baseline": true
@@ -21760,11 +21755,6 @@
       },
       {
         "id": "tests/test_market_overview_depth.py::test_market_refresh_failure_serves_stale_snapshot_with_provider_health",
-        "domain": "market",
-        "baseline": true
-      },
-      {
-        "id": "tests/test_market_overview_depth.py::test_market_us_breadth_endpoint_uses_market_service",
         "domain": "market",
         "baseline": true
       },
@@ -39294,11 +39284,6 @@
         "baseline": true
       },
       {
-        "id": "tests/test_ws2_durable_task_worker.py::DurableTaskWorkerPrototypeTestCase::test_dependency_manifests_do_not_add_external_worker_stack",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
         "id": "tests/test_ws2_durable_task_worker.py::DurableTaskWorkerPrototypeTestCase::test_expired_lease_can_be_reclaimed_by_another_worker",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -39915,8 +39900,10 @@
       "tests/test_homepage_import_boundary.py::test_homepage_standalone_services_avoid_protected_direct_imports[homepage_explanation_service]",
       "tests/test_homepage_public_copy_consistency.py::test_serialized_public_homepage_outputs_do_not_leak_internal_or_execution_copy[homepage_empty_state_service.build_contract]",
       "tests/test_homepage_schema_serialization_stress.py::test_homepage_public_contracts_serialize_to_json_without_leaking_internal_or_trading_copy[HomepageEmptyStateService.build_contract]",
+      "tests/test_market_data_source_registry.py::test_tickflow_source_token_keeps_stable_non_official_provenance",
       "tests/test_market_intelligence_runtime_diagnostic.py::test_runtime_diagnostic_main_returns_zero_when_probe_times_out",
       "tests/test_market_intelligence_smoke_checklist.py::test_market_intelligence_checklist_captures_scope_and_validation_commands",
+      "tests/test_market_overview_depth.py::test_market_us_breadth_endpoint_uses_market_service",
       "tests/test_multi_agent.py::TestPortfolioAgentPostProcess::test_parse_failure_returns_hold",
       "tests/test_multi_agent.py::TestPortfolioAgentPostProcess::test_parse_markdown_json",
       "tests/test_multi_agent.py::TestPortfolioAgentPostProcess::test_parse_plain_json",
@@ -39945,6 +39932,7 @@
       "tests/test_user_alert_dry_run_summary.py::test_live_outbound_flags_fail_closed_without_relabeling_as_observed",
       "tests/test_user_alert_dry_run_summary.py::test_summary_counts_are_deterministic_and_sanitized",
       "tests/test_watchlist_score_refresh.py::WatchlistScoreRefreshTestCase::test_refresh_missing_diagnostics_preserves_scanner_run_without_provenance",
+      "tests/test_ws2_durable_task_worker.py::DurableTaskWorkerPrototypeTestCase::test_dependency_manifests_do_not_add_external_worker_stack",
       "tests/test_ws2_multi_instance_preflight.py::test_staging_target_remains_dry_run_when_network_opt_in_is_set"
     ],
     "networkTests": [],

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 import json
-import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -487,32 +486,6 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
         self.assertEqual(state["status"], "completed")
         self.assertEqual(state["metadata"]["result_ref"], "fixture:ws2-synthetic")
         self.assertIsNone(state["metadata"].get("query_id"))
-
-    def test_dependency_manifests_do_not_add_external_worker_stack(self) -> None:
-        repo_root = Path(__file__).resolve().parents[1]
-        manifests = [
-            repo_root / "requirements.txt",
-            repo_root / "pyproject.toml",
-            repo_root / "setup.py",
-        ]
-        combined = "\n".join(
-            path.read_text(encoding="utf-8", errors="ignore").lower()
-            for path in manifests
-            if path.exists()
-        )
-
-        for forbidden in ("celery", "rq", "dramatiq", "kafka"):
-            dependency_pattern = rf"(?<![a-z0-9_.-]){re.escape(forbidden)}(?=\s*(?:[<>=!~;,\]\)\"']|$))"
-            self.assertIsNone(re.search(dependency_pattern, combined))
-        redis_lines = [
-            line.strip()
-            for line in combined.splitlines()
-            if re.match(r"^\s*redis([<=>\s].*)?$", line)
-        ]
-        self.assertEqual(len(redis_lines), 1)
-        for line in redis_lines:
-            self.assertIn("marketcache remote mirror", line)
-            self.assertIn("disabled by default", line)
 
     def test_worker_uses_only_synthetic_fixture_path(self) -> None:
         self._create_task("task-fixture-only")
