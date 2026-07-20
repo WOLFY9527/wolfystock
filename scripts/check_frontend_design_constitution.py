@@ -672,7 +672,7 @@ def scan_text(path: str, text: str) -> ScanResult:
                     rule="page-level-solid-slab",
                     path=normalized,
                     line=index + 1,
-                    message="Avoid page-level solid black/gray/zinc/slate/neutral slabs; use DESIGN.md paper shell/panel primitives.",
+                    message="Avoid page-level solid black/gray/zinc/slate/neutral slabs; use docs/design/frontend.md paper shell/panel primitives.",
                     excerpt=line.strip()[:180],
                 ))
         if key_route_page and is_loud_warning_material(line):

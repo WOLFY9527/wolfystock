@@ -1,0 +1,563 @@
+{
+  "schemaVersion": 1,
+  "documentationRoot": "docs/README.md",
+  "mandatoryRead": [
+    "AGENTS.md",
+    "docs/README.md"
+  ],
+  "rootDocuments": [
+    {
+      "path": "AGENTS.md",
+      "reason": "model-independent AI instruction discovery and repository governance"
+    },
+    {
+      "path": "CLAUDE.md",
+      "reason": "Claude-compatible automatic discovery symlink to AGENTS.md"
+    },
+    {
+      "path": "README.md",
+      "reason": "repository platform and human entrypoint"
+    }
+  ],
+  "generatedOutputs": [
+    {
+      "path": "docs/README.md",
+      "generator": "scripts/build_ai_project_manual.py",
+      "purpose": "platform-discoverable documentation entry and task router"
+    },
+    {
+      "path": "docs/generated/AI_PROJECT_MANUAL.md",
+      "generator": "scripts/build_ai_project_manual.py",
+      "purpose": "complete generated catalog of authorities, task routes, lifecycles, and sources"
+    },
+    {
+      "path": "docs/generated/AI_PROJECT_MANUAL_SOURCES.json",
+      "generator": "scripts/build_ai_project_manual.py",
+      "purpose": "generated source hashes and freshness identity"
+    }
+  ],
+  "authorities": [
+    {
+      "id": "repository-governance",
+      "source": "AGENTS.md",
+      "scope": "AI collaboration rules, protected domains, completion evidence, Git authorization, and delivery gates"
+    },
+    {
+      "id": "human-onboarding",
+      "source": "README.md",
+      "scope": "product orientation and quick start"
+    },
+    {
+      "id": "documentation-architecture",
+      "source": "docs/documentation-manifest.json",
+      "scope": "Markdown classification, root placement, task routing, generated outputs, and temporary evidence lifecycle"
+    },
+    {
+      "id": "system-architecture",
+      "source": "docs/architecture/overview.md",
+      "scope": "runtime entrypoints, repository map, component ownership, and cross-module boundaries"
+    },
+    {
+      "id": "data-trust",
+      "source": "docs/contracts/data-trust.md",
+      "scope": "truth vocabulary, source authority, readiness, no-advice, and protected financial-domain distinctions"
+    },
+    {
+      "id": "historical-market-data",
+      "source": "docs/contracts/historical-market-data.md",
+      "scope": "normalized historical OHLCV contract, quality outcomes, persistence, and read interfaces"
+    },
+    {
+      "id": "frontend-design",
+      "source": "docs/design/frontend.md",
+      "scope": "consumer product experience, information architecture, visual system, accessibility, and frontend implementation"
+    },
+    {
+      "id": "development-environment",
+      "source": "docs/development/environment.md",
+      "scope": "dependency authority, supported targets, bootstrap, snapshots, local runtime, and optional configuration"
+    },
+    {
+      "id": "validation-reference",
+      "source": "docs/development/validation.md",
+      "scope": "validation command routing and evidence execution reference; AGENTS.md owns policy"
+    },
+    {
+      "id": "database-operations",
+      "source": "docs/operations/database.md",
+      "scope": "database diagnostics, baseline artifacts, Phase F configuration, and DuckDB local analytics"
+    },
+    {
+      "id": "historical-seed-operations",
+      "source": "docs/operations/historical-ohlcv-seed.md",
+      "scope": "explicit local historical OHLCV starter cache seeding and verification"
+    },
+    {
+      "id": "operator-evidence",
+      "source": "docs/operations/operator-evidence.md",
+      "scope": "sanitized offline operator-evidence preparation and manual review"
+    },
+    {
+      "id": "release-readiness",
+      "source": "docs/operations/release.md",
+      "scope": "production-readiness documentation, release qualification, and operational review boundaries"
+    },
+    {
+      "id": "audit-lifecycle",
+      "source": "docs/audits/README.md",
+      "scope": "temporary audit evidence classification and retirement policy"
+    }
+  ],
+  "taskRoutes": [
+    {
+      "id": "backend-api",
+      "task": "Backend, API, service, repository, or schema work",
+      "read": [
+        "docs/architecture/overview.md",
+        "docs/contracts/data-trust.md"
+      ],
+      "note": "Add the closest source and tests; shared schemas and public contracts require producer/consumer review."
+    },
+    {
+      "id": "provider-market-scanner",
+      "task": "Provider, market, scanner, freshness, or source-authority work",
+      "read": [
+        "docs/contracts/data-trust.md",
+        "docs/architecture/overview.md"
+      ],
+      "note": "Provider order, fallback, cache, freshness, and scoring are protected."
+    },
+    {
+      "id": "backtest-portfolio-auth",
+      "task": "Backtest, portfolio, broker, accounting, auth, RBAC, or security work",
+      "read": [
+        "docs/contracts/data-trust.md"
+      ],
+      "note": "Read the exact owner source/tests and retain all fail-closed distinctions."
+    },
+    {
+      "id": "frontend-design",
+      "task": "Web UI, route, content, interaction, accessibility, or visual design work",
+      "read": [
+        "docs/design/frontend.md",
+        "docs/contracts/data-trust.md",
+        "docs/architecture/overview.md"
+      ],
+      "note": "The design contract does not override runtime, auth, or domain truth."
+    },
+    {
+      "id": "environment-config",
+      "task": "Dependency, lock, environment, bootstrap, local runtime, or configuration work",
+      "read": [
+        "docs/development/environment.md"
+      ],
+      "note": "Use ./wolfy; do not create a second install or resolver authority."
+    },
+    {
+      "id": "validation",
+      "task": "Tests, topology, validation, browser UAT, or evidence qualification",
+      "read": [
+        "docs/development/validation.md"
+      ],
+      "note": "AGENTS.md owns evidence policy; this document routes commands."
+    },
+    {
+      "id": "database",
+      "task": "Database, storage, migration, restore, PostgreSQL, Phase F, or DuckDB work",
+      "read": [
+        "docs/operations/database.md",
+        "docs/contracts/data-trust.md"
+      ],
+      "note": "Migration and persistence changes require explicit scope."
+    },
+    {
+      "id": "release-operations",
+      "task": "Operator evidence, production readiness, release, or target-environment work",
+      "read": [
+        "docs/operations/operator-evidence.md",
+        "docs/operations/release.md",
+        "docs/development/validation.md"
+      ],
+      "note": "Sanitized evidence supports manual review and does not auto-approve release."
+    },
+    {
+      "id": "historical-ohlcv",
+      "task": "Historical OHLCV foundation, cache seed, or readiness work",
+      "read": [
+        "docs/contracts/historical-market-data.md",
+        "docs/operations/historical-ohlcv-seed.md",
+        "docs/contracts/data-trust.md"
+      ],
+      "note": "A successful seed does not imply quote, scanner, or backtest readiness."
+    },
+    {
+      "id": "documentation",
+      "task": "Documentation architecture, AI instructions, generators, or navigation work",
+      "read": [
+        "docs/documentation-manifest.json",
+        "docs/development/validation.md"
+      ],
+      "note": "Edit canonical sources and regenerate; do not edit generated outputs."
+    },
+    {
+      "id": "audit-remediation",
+      "task": "Audit follow-up, remediation roadmap, or evidence retirement",
+      "read": [
+        "docs/audits/README.md"
+      ],
+      "note": "Read only the specifically applicable temporary report, never the whole audit corpus."
+    }
+  ],
+  "documents": [
+    {
+      "id": "claude-skills-index",
+      "path": ".claude/skills/README.md",
+      "kind": "tool_workflow",
+      "status": "active",
+      "editable": true,
+      "summary": "Claude-compatible repository skill index; defers to AGENTS.md"
+    },
+    {
+      "id": "claude-analyze-issue",
+      "path": ".claude/skills/analyze-issue/SKILL.md",
+      "kind": "tool_workflow",
+      "status": "active",
+      "editable": true,
+      "summary": "Claude issue-analysis workflow; defers to AGENTS.md"
+    },
+    {
+      "id": "claude-analyze-pr",
+      "path": ".claude/skills/analyze-pr/SKILL.md",
+      "kind": "tool_workflow",
+      "status": "active",
+      "editable": true,
+      "summary": "Claude pull-request analysis workflow; defers to AGENTS.md"
+    },
+    {
+      "id": "claude-fix-issue",
+      "path": ".claude/skills/fix-issue/SKILL.md",
+      "kind": "tool_workflow",
+      "status": "active",
+      "editable": true,
+      "summary": "Claude issue-fix workflow; defers to AGENTS.md"
+    },
+    {
+      "id": "copilot-entry",
+      "path": ".github/copilot-instructions.md",
+      "kind": "tool_mirror",
+      "status": "mirror",
+      "editable": true,
+      "canonical": "AGENTS.md",
+      "summary": "GitHub Copilot compatibility entry"
+    },
+    {
+      "id": "copilot-backend",
+      "path": ".github/instructions/backend.instructions.md",
+      "kind": "tool_mirror",
+      "status": "mirror",
+      "editable": true,
+      "canonical": "AGENTS.md",
+      "summary": "Path-scoped backend instruction mirror"
+    },
+    {
+      "id": "copilot-client",
+      "path": ".github/instructions/client.instructions.md",
+      "kind": "tool_mirror",
+      "status": "mirror",
+      "editable": true,
+      "canonical": "AGENTS.md",
+      "summary": "Path-scoped client instruction mirror"
+    },
+    {
+      "id": "copilot-governance",
+      "path": ".github/instructions/governance.instructions.md",
+      "kind": "tool_mirror",
+      "status": "mirror",
+      "editable": true,
+      "canonical": "AGENTS.md",
+      "summary": "Path-scoped governance instruction mirror"
+    },
+    {
+      "id": "github-bug-template",
+      "path": ".github/ISSUE_TEMPLATE/bug_report.md",
+      "kind": "platform_template",
+      "status": "active",
+      "editable": true,
+      "summary": "GitHub bug-report form body"
+    },
+    {
+      "id": "github-feature-template",
+      "path": ".github/ISSUE_TEMPLATE/feature_request.md",
+      "kind": "platform_template",
+      "status": "active",
+      "editable": true,
+      "summary": "GitHub feature-request form body"
+    },
+    {
+      "id": "github-pr-template",
+      "path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "kind": "platform_template",
+      "status": "active",
+      "editable": true,
+      "summary": "GitHub pull-request template"
+    },
+    {
+      "id": "repository-rules",
+      "path": "AGENTS.md",
+      "kind": "canonical",
+      "status": "active",
+      "editable": true,
+      "authorityIds": [
+        "repository-governance"
+      ],
+      "summary": "Repository AI rules and protected-domain boundaries"
+    },
+    {
+      "id": "claude-discovery",
+      "path": "CLAUDE.md",
+      "kind": "tool_entry",
+      "status": "mirror",
+      "editable": false,
+      "canonical": "AGENTS.md",
+      "symlinkTarget": "AGENTS.md",
+      "summary": "Claude automatic-discovery symlink"
+    },
+    {
+      "id": "human-entry",
+      "path": "README.md",
+      "kind": "canonical",
+      "status": "active",
+      "editable": true,
+      "authorityIds": [
+        "human-onboarding"
+      ],
+      "summary": "Human product orientation and quick start"
+    },
+    {
+      "id": "docs-entry",
+      "path": "docs/README.md",
+      "kind": "generated",
+      "status": "generated",
+      "editable": false,
+      "generator": "scripts/build_ai_project_manual.py",
+      "summary": "Generated platform-discoverable documentation entry and task router"
+    },
+    {
+      "id": "system-architecture",
+      "path": "docs/architecture/overview.md",
+      "kind": "canonical",
+      "status": "active",
+      "editable": true,
+      "authorityIds": [
+        "system-architecture"
+      ],
+      "summary": "System map, runtime entrypoints, and component ownership"
+    },
+    {
+      "id": "audit-lifecycle",
+      "path": "docs/audits/README.md",
+      "kind": "canonical",
+      "status": "active",
+      "editable": true,
+      "authorityIds": [
+        "audit-lifecycle"
+      ],
+      "summary": "Temporary audit evidence lifecycle policy"
+    },
+    {
+      "id": "audit-t563",
+      "path": "docs/audits/t563-latest-residual-failure-census.md",
+      "kind": "temporary_evidence",
+      "status": "temporary",
+      "editable": true,
+      "summary": "Residual failure census and T564-T568 remediation map",
+      "lifecycle": {
+        "owner": "residual-failure remediation owners T564-T568",
+        "retireWhen": "T564 through T568 are completed, superseded, or explicitly rejected; durable decisions and current failure identity are owned by source, tests, or canonical validation policy; and no current reference depends on this report",
+        "retirementAction": "delete",
+        "archiveCopyAllowed": false
+      }
+    },
+    {
+      "id": "audit-t569",
+      "path": "docs/audits/t569-test-redundancy-performance-audit.md",
+      "kind": "temporary_evidence",
+      "status": "temporary",
+      "editable": true,
+      "summary": "Test redundancy, runtime cost, and T630-T643 roadmap evidence",
+      "lifecycle": {
+        "owner": "test-performance roadmap owners T630-T643",
+        "machineEvidence": "validation/t569_test_redundancy_performance_audit.json",
+        "retireWhen": "T643 has landed after T630 through T642 resolve, durable risk-tier and validation-selection policy has moved to canonical owners, and no current reference depends on the report or JSON",
+        "retirementAction": "delete report and JSON when its executable dependencies have migrated",
+        "archiveCopyAllowed": false
+      }
+    },
+    {
+      "id": "audit-t570",
+      "path": "docs/audits/t570-official-macro-provider-order-decision.md",
+      "kind": "temporary_evidence",
+      "status": "temporary",
+      "editable": true,
+      "summary": "Official macro provider-order decision evidence",
+      "lifecycle": {
+        "owner": "official macro provider-order owner",
+        "machineEvidence": "validation/t570_official_macro_provider_order_decision.json",
+        "retireWhen": "the approved decision is encoded in canonical source and focused tests, residual disagreement is resolved, and no current reference depends on the dossier or JSON",
+        "retirementAction": "delete report and JSON",
+        "archiveCopyAllowed": false
+      }
+    },
+    {
+      "id": "audit-t575",
+      "path": "docs/audits/t575-backend-production-simplification-audit.md",
+      "kind": "temporary_evidence",
+      "status": "temporary",
+      "editable": true,
+      "summary": "Backend simplification evidence and T612-T629 roadmap",
+      "lifecycle": {
+        "owner": "backend simplification roadmap owners T612-T629",
+        "machineEvidence": "validation/t575_backend_production_simplification_audit.json",
+        "retireWhen": "T612 through T629 are completed, superseded, or explicitly rejected; durable architecture decisions are encoded in current source, tests, and canonical manifests; and no current reference depends on the report or JSON",
+        "retirementAction": "delete report and JSON",
+        "archiveCopyAllowed": false
+      }
+    },
+    {
+      "id": "audit-t576",
+      "path": "docs/audits/t576-frontend-production-simplification-audit.md",
+      "kind": "temporary_evidence",
+      "status": "temporary",
+      "editable": true,
+      "summary": "Frontend simplification evidence and T600-T611 roadmap",
+      "lifecycle": {
+        "owner": "frontend simplification roadmap owners T600-T611",
+        "machineEvidence": "validation/t576_frontend_production_simplification_audit.json",
+        "retireWhen": "T600 through T611 are completed, superseded, or explicitly rejected; durable frontend decisions are encoded in current source, tests, and the frontend design authority; and no current reference depends on the report or JSON",
+        "retirementAction": "delete report and JSON",
+        "archiveCopyAllowed": false
+      }
+    },
+    {
+      "id": "data-trust",
+      "path": "docs/contracts/data-trust.md",
+      "kind": "canonical",
+      "status": "active",
+      "editable": true,
+      "authorityIds": [
+        "data-trust"
+      ],
+      "summary": "Cross-domain truth, source, readiness, no-advice, and protected semantics"
+    },
+    {
+      "id": "historical-market-data",
+      "path": "docs/contracts/historical-market-data.md",
+      "kind": "canonical",
+      "status": "active",
+      "editable": true,
+      "authorityIds": [
+        "historical-market-data"
+      ],
+      "summary": "Historical OHLCV foundation contract"
+    },
+    {
+      "id": "frontend-design",
+      "path": "docs/design/frontend.md",
+      "kind": "canonical",
+      "status": "active",
+      "editable": true,
+      "authorityIds": [
+        "frontend-design"
+      ],
+      "summary": "Consumer frontend design and implementation contract"
+    },
+    {
+      "id": "development-environment",
+      "path": "docs/development/environment.md",
+      "kind": "canonical",
+      "status": "active",
+      "editable": true,
+      "authorityIds": [
+        "development-environment"
+      ],
+      "summary": "Dependency, bootstrap, target, snapshot, runtime, and configuration authority"
+    },
+    {
+      "id": "validation-reference",
+      "path": "docs/development/validation.md",
+      "kind": "canonical",
+      "status": "active",
+      "editable": true,
+      "authorityIds": [
+        "validation-reference"
+      ],
+      "summary": "Validation command routing and evidence reference"
+    },
+    {
+      "id": "generated-ai-manual",
+      "path": "docs/generated/AI_PROJECT_MANUAL.md",
+      "kind": "generated",
+      "status": "generated",
+      "editable": false,
+      "generator": "scripts/build_ai_project_manual.py",
+      "summary": "Generated complete documentation catalog"
+    },
+    {
+      "id": "database-operations",
+      "path": "docs/operations/database.md",
+      "kind": "canonical",
+      "status": "active",
+      "editable": true,
+      "authorityIds": [
+        "database-operations"
+      ],
+      "summary": "Database diagnostics, baseline artifacts, Phase F, and DuckDB runbook"
+    },
+    {
+      "id": "historical-seed-operations",
+      "path": "docs/operations/historical-ohlcv-seed.md",
+      "kind": "canonical",
+      "status": "active",
+      "editable": true,
+      "authorityIds": [
+        "historical-seed-operations"
+      ],
+      "summary": "Local historical OHLCV seed and verification runbook"
+    },
+    {
+      "id": "operator-evidence",
+      "path": "docs/operations/operator-evidence.md",
+      "kind": "canonical",
+      "status": "active",
+      "editable": true,
+      "authorityIds": [
+        "operator-evidence"
+      ],
+      "summary": "Sanitized offline operator-evidence runbook"
+    },
+    {
+      "id": "release-readiness",
+      "path": "docs/operations/release.md",
+      "kind": "canonical",
+      "status": "active",
+      "editable": true,
+      "authorityIds": [
+        "release-readiness"
+      ],
+      "summary": "Production-readiness and release qualification authority"
+    }
+  ],
+  "retiredPaths": [
+    "DESIGN.md",
+    "docs/AI_PROJECT_MANUAL.md",
+    "docs/AI_PROJECT_MANUAL_SOURCES.json",
+    "docs/CHANGELOG.md",
+    "docs/DOCS_INDEX.md",
+    "docs/architecture/historical_market_data_foundation_v1.md",
+    "docs/operator/historical_ohlcv_seed_runbook.md",
+    "docs/audits/T514_BACKEND_CANONICAL_FAILURE_CENSUS.json",
+    "docs/audits/T514_BACKEND_CANONICAL_FAILURE_CENSUS.md",
+    "docs/audits/T520_LATEST_MAIN_BROWSER_REQUALIFICATION.json",
+    "docs/audits/T520_LATEST_MAIN_BROWSER_REQUALIFICATION.md"
+  ]
+}

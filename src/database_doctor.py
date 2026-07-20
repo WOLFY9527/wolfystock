@@ -631,11 +631,11 @@ def _classification_files(category: str, likely_store: str | None) -> list[str]:
         return ["src/storage.py", "src/config.py"]
     if category == "config_issue":
         if likely_store == "phase_f":
-            files.extend(["docs/architecture/phase-f/runbook.md"])
+            files.extend(["docs/operations/database.md#phase-f-configuration"])
         elif likely_store == "phase_g":
             files.extend(["src/services/system_config_service.py"])
         else:
-            files.extend(["docs/architecture/database-troubleshooting-playbook.md"])
+            files.extend(["docs/operations/database.md#troubleshooting"])
     elif category == "schema_bootstrap_issue":
         files.extend(["src/postgres_schema_bootstrap.py"])
     elif category == "pg_bridge_init_issue":

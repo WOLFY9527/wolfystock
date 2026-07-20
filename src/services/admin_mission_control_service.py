@@ -81,12 +81,12 @@ class AdminMissionControlService:
             ),
             "dataSources": ["admin_capability_flags", "route_inventory_fixtures", "security_operator_evidence_docs"],
             "evidenceRefs": [
-                _ref("doc", "Security index", "docs/audits/index-security-rbac-mfa.md"),
+                _ref("doc", "Security authority", "docs/operations/release.md#security-and-rbac"),
                 _ref("fixture", "Backend route inventory", "tests/fixtures/auth/backend_route_capability_inventory.json"),
                 _ref("fixture", "Frontend route inventory", "tests/fixtures/auth/frontend_route_capability_inventory.json"),
             ],
             "blockerRefs": [
-                _ref("doc", "Launch blocker register", "docs/audits/public-launch-gap-register.md"),
+                _ref("doc", "Release blockers", "docs/operations/release.md#highest-risk-blockers"),
             ],
             "approvalRefs": [
                 _ref("script", "Security operator acceptance", "scripts/security_operator_acceptance_check.py"),
@@ -113,10 +113,10 @@ class AdminMissionControlService:
                 _ref("api", "Ops status", "GET /api/v1/admin/ops/status"),
                 _ref("api", "Cost summary", "GET /api/v1/admin/cost/duplicate-summary"),
                 _ref("api", "Quota dry-run estimate", "POST /api/v1/admin/cost/quota-dry-run"),
-                _ref("doc", "Cost / quota index", "docs/audits/index-cost-quota-observability.md"),
+                _ref("doc", "Cost / quota authority", "docs/operations/release.md#quota-and-cost"),
             ],
             "blockerRefs": [
-                _ref("doc", "Launch blocker register", "docs/audits/public-launch-gap-register.md"),
+                _ref("doc", "Release blockers", "docs/operations/release.md#highest-risk-blockers"),
             ],
             "approvalRefs": [
                 _ref("script", "Quota operator evidence", "scripts/quota_operator_evidence_check.py"),
@@ -143,10 +143,10 @@ class AdminMissionControlService:
                 _ref("api", "Provider operations", "GET /api/v1/admin/market-providers/operations"),
                 _ref("api", "Provider SLA readiness", "GET /api/v1/admin/providers/sla-readiness"),
                 _ref("api", "Provider operations matrix", "GET /api/v1/admin/providers/operations-matrix"),
-                _ref("doc", "Provider / data index", "docs/audits/index-provider-data-options.md"),
+                _ref("doc", "Provider reliability authority", "docs/operations/release.md#provider-reliability"),
             ],
             "blockerRefs": [
-                _ref("doc", "Launch blocker register", "docs/audits/public-launch-gap-register.md"),
+                _ref("doc", "Release blockers", "docs/operations/release.md#highest-risk-blockers"),
             ],
             "approvalRefs": [
                 _ref("script", "Provider operator evidence", "scripts/provider_operator_evidence_check.py"),
@@ -171,11 +171,11 @@ class AdminMissionControlService:
             "dataSources": ["database_session_check", "restore_pitr_operator_evidence_docs"],
             "evidenceRefs": [
                 _ref("api", "Ops status", "GET /api/v1/admin/ops/status"),
-                _ref("doc", "DB / WS2 / deployment index", "docs/audits/index-db-ws2-deployment.md"),
-                _ref("doc", "Backup restore drill plan", "docs/audits/db-retention-backup-restore-drill-plan.md"),
+                _ref("doc", "Database operations", "docs/operations/database.md"),
+                _ref("doc", "Database / restore readiness", "docs/operations/release.md#database-and-restore"),
             ],
             "blockerRefs": [
-                _ref("doc", "Launch blocker register", "docs/audits/public-launch-gap-register.md"),
+                _ref("doc", "Release blockers", "docs/operations/release.md#highest-risk-blockers"),
             ],
             "approvalRefs": [
                 _ref("script", "Restore PITR operator evidence", "scripts/restore_pitr_operator_evidence_check.py"),
@@ -200,11 +200,11 @@ class AdminMissionControlService:
             "dataSources": ["task_queue_runtime_status", "ws2_operator_evidence_docs"],
             "evidenceRefs": [
                 _ref("api", "Ops status", "GET /api/v1/admin/ops/status"),
-                _ref("doc", "WS2 smoke design", "docs/audits/ws2-multi-instance-smoke-test-design.md"),
-                _ref("doc", "DB / WS2 / deployment index", "docs/audits/index-db-ws2-deployment.md"),
+                _ref("doc", "WS2 / async runtime boundary", "docs/operations/release.md#ws2-and-async-runtime"),
+                _ref("doc", "Validation evidence", "docs/development/validation.md"),
             ],
             "blockerRefs": [
-                _ref("doc", "Launch blocker register", "docs/audits/public-launch-gap-register.md"),
+                _ref("doc", "Release blockers", "docs/operations/release.md#highest-risk-blockers"),
             ],
             "approvalRefs": [
                 _ref("script", "WS2 SSE operator decision", "scripts/ws2_sse_operator_decision_check.py"),
@@ -229,13 +229,13 @@ class AdminMissionControlService:
             "evidenceRefs": [
                 _ref("api", "Notification channels", "GET /api/v1/admin/notification-channels"),
                 _ref("api", "Notification events", "GET /api/v1/admin/notifications"),
-                _ref("doc", "Launch master", "docs/audits/public-launch-readiness-master.md"),
+                _ref("doc", "Release readiness authority", "docs/operations/release.md"),
             ],
             "blockerRefs": [
-                _ref("doc", "Launch blocker register", "docs/audits/public-launch-gap-register.md"),
+                _ref("doc", "Release blockers", "docs/operations/release.md#highest-risk-blockers"),
             ],
             "approvalRefs": [
-                _ref("doc", "Operator evidence runbook", "docs/audits/operator-evidence-real-runbook.md"),
+                _ref("doc", "Operator evidence runbook", "docs/operations/operator-evidence.md"),
             ],
             "linkedAdminRoutes": ["/admin/notifications"],
             "limitations": ["notification_send_not_attempted", "delivery_rehearsal_evidence_required"],
@@ -257,10 +257,10 @@ class AdminMissionControlService:
             "evidenceRefs": [
                 _ref("api", "Admin user portfolio summary", "GET /api/v1/admin/users/{user_id}/portfolio-summary"),
                 _ref("fixture", "OOS parameter readiness", "tests/fixtures/backtest/rule_backtest_oos_parameter_readiness_export.json"),
-                _ref("doc", "Backtest portfolio safety audit", "docs/audits/backtest-portfolio-public-safety-audit.md"),
+                _ref("doc", "Portfolio / backtest boundary", "docs/operations/release.md#portfolio-and-backtest"),
             ],
             "blockerRefs": [
-                _ref("doc", "Launch blocker register", "docs/audits/public-launch-gap-register.md"),
+                _ref("doc", "Release blockers", "docs/operations/release.md#highest-risk-blockers"),
             ],
             "approvalRefs": [
                 _ref("test", "Portfolio/backtest safety tests", "tests/test_backtest_oos_parameter_readiness_contract.py"),
@@ -288,7 +288,7 @@ class AdminMissionControlService:
                 _ref("test", "Route inventory test", "tests/test_admin_rbac_route_inventory.py"),
             ],
             "blockerRefs": [
-                _ref("doc", "RBAC fallback removal plan", "docs/audits/admin-rbac-r5-coarse-fallback-removal-plan.md"),
+                _ref("doc", "Security / RBAC boundary", "docs/operations/release.md#security-and-rbac"),
             ],
             "approvalRefs": [
                 _ref("script", "Security operator acceptance", "scripts/security_operator_acceptance_check.py"),
@@ -313,10 +313,10 @@ class AdminMissionControlService:
             "evidenceRefs": [
                 _ref("test", "Readiness browser acceptance", "apps/dsa-web/e2e/readiness-browser-acceptance.smoke.spec.ts"),
                 _ref("test", "Critical route launch smoke", "apps/dsa-web/e2e/critical-route-launch-smoke.spec.ts"),
-                _ref("doc", "Launch master", "docs/audits/public-launch-readiness-master.md"),
+                _ref("doc", "Release readiness authority", "docs/operations/release.md"),
             ],
             "blockerRefs": [
-                _ref("doc", "Launch blocker register", "docs/audits/public-launch-gap-register.md"),
+                _ref("doc", "Release blockers", "docs/operations/release.md#highest-risk-blockers"),
             ],
             "approvalRefs": [
                 _ref("script", "Manual release review record", "scripts/manual_release_approval_evidence_check.py"),

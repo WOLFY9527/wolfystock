@@ -279,7 +279,7 @@ def test_related_test_inference_adds_but_does_not_replace_manifest_authority() -
 
 def test_deterministic_ordering_and_stable_output_hash() -> None:
     manifest, manifest_hash = load_manifest()
-    changes = [changed("docs/DOCS_INDEX.md"), changed("src/providers/validation.py")]
+    changes = [changed("docs/README.md"), changed("src/providers/validation.py")]
     kwargs = {
         "root": ROOT,
         "base_ref": "base",

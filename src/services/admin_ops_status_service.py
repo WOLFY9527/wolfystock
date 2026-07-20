@@ -1304,8 +1304,8 @@ class AdminOpsStatusService:
                     "tests/test_security_mfa_operator_evidence_check.py",
                 ],
                 blocker_refs=[
-                    "docs/audits/public-launch-gap-register.md#securityrbac",
-                    "docs/audits/index-security-rbac-mfa.md",
+                    "docs/operations/release.md#security-and-rbac",
+                    "docs/contracts/data-trust.md#auth-and-admin-evidence",
                 ],
                 safe_next_actions=[
                     "Review route inventory and sanitized MFA/RBAC operator evidence.",
@@ -1349,8 +1349,8 @@ class AdminOpsStatusService:
                     "tests/test_quota_reserve_release_operator_evidence_check.py",
                 ],
                 blocker_refs=[
-                    "docs/audits/public-launch-gap-register.md#costquota",
-                    "docs/audits/quota-reserve-release-operator-evidence-checklist.md",
+                    "docs/operations/release.md#quota-and-cost",
+                    "docs/operations/operator-evidence.md",
                 ],
                 safe_next_actions=[
                     "Inspect cost observability and quota evidence without creating reservations.",
@@ -1394,8 +1394,8 @@ class AdminOpsStatusService:
                     "tests/api/test_admin_provider_circuit_diagnostics.py",
                 ],
                 blocker_refs=[
-                    "docs/audits/public-launch-gap-register.md#provider-reliability",
-                    "docs/audits/index-provider-data-options.md",
+                    "docs/operations/release.md#provider-reliability",
+                    "docs/contracts/data-trust.md#provider-and-source-authority",
                 ],
                 safe_next_actions=[
                     "Review provider SLA diagnostics and licensing evidence status.",
@@ -1419,11 +1419,11 @@ class AdminOpsStatusService:
                     "scripts/storage_migration_readiness_report.py",
                     "scripts/isolated_pg_restore_smoke.py",
                     "scripts/restore_pitr_operator_evidence_check.py",
-                    "docs/audits/storage-migration-readiness.md",
+                    "docs/operations/database.md#postgresql-baseline",
                 ],
                 blocker_refs=[
-                    "docs/audits/public-launch-gap-register.md#dbdeployment",
-                    "docs/audits/index-db-ws2-deployment.md",
+                    "docs/operations/release.md#database-and-restore",
+                    "docs/operations/database.md",
                 ],
                 safe_next_actions=[
                     "Review report-only storage readiness and restore evidence requirements.",
@@ -1444,14 +1444,14 @@ class AdminOpsStatusService:
                 evidence_tooling_present=True,
                 real_operator_evidence_missing=True,
                 evidence_refs=[
-                    "docs/operations/background-job-queue-boundary.md",
+                    "docs/operations/release.md#ws2-and-async-runtime",
                     "scripts/ws2_multi_instance_smoke.py",
                     "scripts/ws2_sse_operator_decision_check.py",
                     "tests/test_ws2_durable_task_worker.py",
                 ],
                 blocker_refs=[
-                    "docs/audits/public-launch-gap-register.md#ws2multi-instance",
-                    "docs/audits/index-db-ws2-deployment.md",
+                    "docs/operations/release.md#ws2-and-async-runtime",
+                    "docs/development/validation.md#runtime-uat",
                 ],
                 safe_next_actions=[
                     "Record process-local SSE limitations and durable polling expectations.",
@@ -1477,8 +1477,8 @@ class AdminOpsStatusService:
                     "tests/test_user_notification_preferences.py",
                 ],
                 blocker_refs=[
-                    "docs/audits/public-launch-readiness-master.md#manual-release-criteria",
-                    "docs/audits/operator-evidence-real-runbook.md",
+                    "docs/operations/release.md#manual-release-criteria",
+                    "docs/operations/operator-evidence.md",
                 ],
                 safe_next_actions=[
                     "Review channel coverage and recent events without testing or sending.",
@@ -1502,11 +1502,11 @@ class AdminOpsStatusService:
                     "tests/api/test_portfolio_history.py",
                     "tests/api/test_portfolio_owner_isolation.py",
                     "tests/test_backtest_api_contract.py",
-                    "docs/backtest-system.md",
+                    "docs/contracts/data-trust.md#backtest",
                 ],
                 blocker_refs=[
-                    "docs/audits/public-launch-gap-register.md#portfoliobacktest",
-                    "docs/audits/backtest-portfolio-public-safety-audit.md",
+                    "docs/operations/release.md#portfolio-and-backtest",
+                    "docs/contracts/data-trust.md#portfolio",
                 ],
                 safe_next_actions=[
                     "Review stored-first backtest and portfolio owner-isolation evidence.",
@@ -1533,8 +1533,8 @@ class AdminOpsStatusService:
                     "tests/api/test_public_api_surface_safety.py",
                 ],
                 blocker_refs=[
-                    "docs/audits/public-launch-readiness-master.md#manual-release-criteria",
-                    "docs/AI_PROJECT_MANUAL.md#production-readiness-documentation-authority",
+                    "docs/operations/release.md#manual-release-criteria",
+                    "docs/operations/release.md#production-readiness-documentation-authority",
                 ],
                 safe_next_actions=[
                     "Compare backend route inventory against admin capability expectations.",
@@ -1558,11 +1558,11 @@ class AdminOpsStatusService:
                     "apps/dsa-web/e2e/admin-ops-launch-surfaces.spec.ts",
                     "apps/dsa-web/e2e/readiness-browser-acceptance.smoke.spec.ts",
                     "apps/dsa-web/src/__tests__/AppRoutes.test.tsx",
-                    "docs/release/small-private-beta-release-checklist.md",
+                    "docs/operations/release.md#private-beta",
                 ],
                 blocker_refs=[
-                    "docs/audits/public-launch-gap-register.md#highest-risk-blockers",
-                    "docs/audits/public-launch-readiness-master.md",
+                    "docs/operations/release.md#highest-risk-blockers",
+                    "docs/operations/release.md",
                 ],
                 safe_next_actions=[
                     "Run bounded admin cockpit smoke with mocked/safe data.",
@@ -1584,8 +1584,8 @@ class AdminOpsStatusService:
                 "approvalRequired": True,
                 "affectedDomains": [domain["domainKey"] for domain in domains],
                 "evidenceRefs": [
-                    "docs/audits/public-launch-readiness-master.md",
-                    "docs/audits/public-launch-gap-register.md",
+                    "docs/operations/release.md",
+                    "docs/operations/release.md#highest-risk-blockers",
                 ],
                 "nextAction": "Collect missing real operator evidence and complete manual release review outside cockpit.",
             },
@@ -1601,8 +1601,8 @@ class AdminOpsStatusService:
                     if domain["realOperatorEvidenceMissing"]
                 ],
                 "evidenceRefs": [
-                    "docs/audits/operator-evidence-real-runbook.md",
-                    "docs/audits/launch-acceptance-evidence-pack.md",
+                    "docs/operations/operator-evidence.md",
+                    "docs/operations/operator-evidence.md#review-package",
                 ],
                 "nextAction": "Use existing validators on sanitized operator artifacts after approval.",
             },

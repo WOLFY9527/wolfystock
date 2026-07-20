@@ -463,7 +463,7 @@
     },
     {
       "id": "canonical-docs",
-      "include": ["DESIGN.md", "LICENSE", "README.md", "docs/**"],
+      "include": ["LICENSE", "README.md", "docs/**"],
       "owners": {
         "direct_owner": ["direct.docs.whitespace"],
         "bounded_integration": ["bounded.docs.manual"],

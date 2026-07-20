@@ -28,7 +28,7 @@ const RULES = [
   {
     id: 'no-solid-gray-bg',
     severity: 'blocking',
-    hint: 'Use DESIGN.md paper tokens and shared research primitives such as Linear/Terminal surfaces, not page-local gray slabs.',
+    hint: 'Use docs/design/frontend.md paper tokens and shared research primitives such as Linear/Terminal surfaces, not page-local gray slabs.',
   },
   {
     id: 'raw-debug-copy',

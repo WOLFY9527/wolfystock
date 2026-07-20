@@ -135,7 +135,7 @@ def build_prompt(diff_content, files, truncated, pr_title, pr_body):
 3. 类型判定（Type）：fix/feat/refactor/docs/chore/test 是否匹配。
 4. 描述完整性（Description Completeness）：是否包含背景、范围、验证命令与结果、兼容性风险、回滚方案。判断验证是否充分时，必须参考上方"CI 检查状态"段落：（a）若 py_compile 和 flake8 已通过，PR 描述中可引用 auto-check 结果而不必贴对应本地输出；（b）仓库主 CI 的 `backend-gate` job 会运行 `./scripts/ci_gate.sh`，但本脚本默认未读取该 job 的实时结果；对 Python 后端改动需检查 PR 描述或可见检查列表是否说明 `backend-gate` / `ci_gate` 结果，若未说明应列为建议项并标注为"无法从本段确认"；（c）若未提供 CI 结果，则不得假设 CI 已通过，验证充分性应标注为"无法确认"。
 5. 合入判定（Merge Readiness）：给出 Ready / Not Ready，并列出阻断项。
-6. 若涉及用户可见能力，检查 README.md 与 docs/CHANGELOG.md 是否同步。
+6. 若涉及用户可见能力，检查 README.md 与 docs/README.md 路由到的 canonical 文档是否同步。
 
 ## 阻断 vs 建议的判定标准
 仅以下问题可判定为 Not Ready（阻断项/必改项）：

@@ -1,5 +1,9 @@
 # T575 Backend Production Simplification and Architectural Debt Audit
 
+> Classification: Temporary audit evidence
+> Authority: Roadmap evidence for T612-T629; not current system architecture
+> Lifecycle: Registered in [`docs/documentation-manifest.json`](../documentation-manifest.json); delete after all lanes resolve and durable decisions move to canonical owners
+
 ## Result and status
 
 **AUDIT COMPLETE; IMPLEMENTATION NOT AUTHORIZED BY THIS TASK.** The accepted

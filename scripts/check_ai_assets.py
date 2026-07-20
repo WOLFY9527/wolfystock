@@ -12,6 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import scripts.build_ai_project_manual as manual_generator
+import scripts.check_documentation as documentation_checker
 
 AGENTS = ROOT / "AGENTS.md"
 CLAUDE = ROOT / "CLAUDE.md"
@@ -124,6 +125,12 @@ def ensure_ai_project_manual_fresh() -> None:
         fail(f"generated AI project manual is stale; run python {manual_generator.GENERATOR_PATH}")
 
 
+def ensure_documentation_architecture() -> None:
+    result = documentation_checker.main()
+    if result != 0:
+        fail("documentation architecture validation failed")
+
+
 def main() -> None:
     ensure_symlink()
     ensure_copilot_entry()
@@ -132,6 +139,7 @@ def main() -> None:
     ensure_gitignore_rules()
     ensure_no_tracked_claude_artifacts()
     ensure_ai_project_manual_fresh()
+    ensure_documentation_architecture()
     print("[ai-assets] OK")
 
 

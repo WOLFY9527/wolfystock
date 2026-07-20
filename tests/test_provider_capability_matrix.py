@@ -40,7 +40,7 @@ from src.services.provider_capability_matrix import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_CONFIG_TEXT = (REPO_ROOT / "src/config.py").read_text(encoding="utf-8")
 PROVIDER_CAPABILITY_METADATA_DOC = (
-    REPO_ROOT / "docs" / "AI_PROJECT_MANUAL.md"
+    REPO_ROOT / "docs" / "contracts" / "data-trust.md"
 )
 
 EXPECTED_PROVIDER_IDS = {

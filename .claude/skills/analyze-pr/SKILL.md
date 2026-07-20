@@ -50,7 +50,8 @@ gh run view <run_id> --log-failed
 如果必须补本地验证，按改动面选择最接近的检查，例如：
 
 - 后端：`./scripts/ci_gate.sh` 或 `python -m py_compile <changed_python_files>`
-- 前端：`cd apps/dsa-web && npm ci && npm run lint && npm run build`
+- 前端：通过 `./wolfy exec --profile test --` 运行 lint/test，并使用
+  `scripts/web_build_artifact.py` 做 typecheck/build
 - 桌面端：先构建 Web，再构建 Electron
 
 ### Step 4: 评估正确性与风险

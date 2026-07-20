@@ -82,31 +82,31 @@ const localWorkspaceGuards = [
 const runbookReferences: RunbookReference[] = [
   {
     label: 'Dry-run 交接',
-    docLabel: 'docs/audits/operator-evidence-dry-run-handoff.md',
+    docLabel: 'docs/operations/operator-evidence.md#dry-run-handoff',
     stage: '合成演练材料',
     icon: Route,
   },
   {
     label: '脱敏清单',
-    docLabel: 'docs/audits/operator-evidence-redaction-checklist.md',
+    docLabel: 'docs/operations/operator-evidence.md#redaction',
     stage: '交接前检查',
     icon: ClipboardCheck,
   },
   {
     label: 'Schema 参考',
-    docLabel: 'docs/audits/operator-evidence-schema-reference-guide.md',
+    docLabel: 'docs/operations/operator-evidence.md#schema-reference',
     stage: '本地字段说明',
     icon: BookOpenCheck,
   },
   {
     label: '归档包',
-    docLabel: 'docs/audits/operator-evidence-archive-pack-guide.md',
+    docLabel: 'docs/operations/operator-evidence.md#review-package',
     stage: '复核目录索引',
     icon: Archive,
   },
   {
     label: 'CLI 合约 / 预检',
-    docLabel: 'docs/audits/operator-evidence-workflow-runner-guide.md',
+    docLabel: 'docs/operations/operator-evidence.md#cli-contract',
     stage: '离线 runner',
     icon: TerminalSquare,
   },

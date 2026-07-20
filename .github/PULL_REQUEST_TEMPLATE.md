@@ -72,4 +72,4 @@ python -m pytest -m "not network"
 - [ ] 已提供可复现的验证命令与结果 / Reproducible verification commands and results are included
 - [ ] 已评估兼容性与风险 / Compatibility and risk have been assessed
 - [ ] 已提供回滚方案 / A rollback plan is provided
-- [ ] 若涉及用户可见变更，已同步更新 `README.md`、`docs/AI_PROJECT_MANUAL.md` 的生成源或任务指定的 canonical 文档；若未更新 `README.md`，已说明原因与文档落点 / If user-visible changes are included, `README.md`, the generated-manual source, or the task-specified canonical doc is updated; if `README.md` was not updated, the reason and documentation location are explained
+- [ ] 若涉及用户可见变更，已同步更新 `README.md`、`docs/README.md` 路由到的 canonical 文档或任务指定的 authority；若未更新 `README.md`，已说明原因与文档落点 / If user-visible changes are included, `README.md`, the task-routed canonical document, or the task-specified authority is updated; if `README.md` was not updated, the reason and documentation location are explained

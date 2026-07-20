@@ -8,8 +8,9 @@ Claude-compatible workflows live in `.claude/skills/`.
 
 ## Core Rules
 
-- Use `README.md` for the human entrypoint and `docs/AI_PROJECT_MANUAL.md` for
-  the comprehensive project handbook.
+- Use `README.md` for the human entrypoint and `docs/README.md` for task-based
+  documentation routing. `docs/generated/AI_PROJECT_MANUAL.md` is a generated
+  catalog, not a second rule or domain authority.
 - Respect directory boundaries:
   - Backend: `src/`, `data_provider/`, `api/`, `bot/`
   - Web: `apps/dsa-web/`
@@ -29,8 +30,9 @@ Claude-compatible workflows live in `.claude/skills/`.
 
 - Backend: prefer `./scripts/ci_gate.sh`; otherwise run `python -m py_compile`
   on changed files plus the closest deterministic tests.
-- Web: `cd apps/dsa-web && npm ci && npm run lint && npm run build` when
-  frontend source changes.
+- Web: use `./wolfy exec --profile test -- npm --prefix apps/dsa-web ...` and
+  `scripts/web_build_artifact.py`; do not install outside the environment authority.
 - Desktop: build Web first, then desktop when feasible.
-- AI/docs governance: run `python scripts/build_ai_project_manual.py --check`
-  and `python scripts/check_ai_assets.py`.
+- AI/docs governance: run `python scripts/check_documentation.py`,
+  `python scripts/build_ai_project_manual.py --check`, and
+  `python scripts/check_ai_assets.py`.

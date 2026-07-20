@@ -31,9 +31,10 @@
 
 - 根据 issue 结论定位相关文件
 - 优先复用现有模块、配置入口、脚本和测试
-- 保持默认行为向后兼容，避免破坏 fallback / fail-open
-- 如果修复涉及用户可见行为、配置语义、CLI/API、部署、通知或报告结构，要同步更新 `README.md`、`docs/AI_PROJECT_MANUAL.md` 的生成源、任务指定的 canonical 文档和 `.env.example`（如涉及配置）
-- `README.md` 主要承载入门、运行和高层能力说明；更完整的项目知识优先落到 `docs/AI_PROJECT_MANUAL.md` 的生成源
+- 保持现有且明确授权的兼容、fallback 与 fail-closed 语义；不要新增 shim、
+  silent default 或平行 authority
+- 如果修复涉及用户可见行为、配置语义、CLI/API、部署、通知或报告结构，要同步更新 `README.md`、`docs/README.md` 路由到的 canonical 文档和 `.env.example`（如涉及配置）
+- `README.md` 主要承载入门、运行和高层能力说明；更完整的项目知识落到任务对应的 canonical owner，并通过 `docs/documentation-manifest.json` 登记
 - 如果没有更新 `README.md`，要在交付说明或 PR 描述里写清原因和实际文档落点
 
 ### Step 4: 按改动面验证
@@ -42,7 +43,8 @@
 
 - 后端优先：`./scripts/ci_gate.sh`
 - 最低后端要求：`python -m py_compile <changed_python_files>`
-- 前端：`cd apps/dsa-web && npm ci && npm run lint && npm run build`
+- 前端：通过 `./wolfy exec --profile test --` 运行 lint/test，并使用
+  `scripts/web_build_artifact.py` 做 typecheck/build
 - 桌面端：先构建 Web，再构建桌面端
 
 如无法完成完整验证，必须记录缺口、原因与潜在风险。

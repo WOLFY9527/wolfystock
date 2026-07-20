@@ -7824,7 +7824,7 @@ html[data-theme] .input-focus-glow:focus {
   box-shadow: var(--input-surface-focus-ring);
 }
 
-/* Canonical paper research workbench, sourced from DESIGN.md and
+/* Canonical paper research workbench, sourced from docs/design/frontend.md and
    docs/design/reference/wolfystock-impeccable-polish-final.html. */
 :root,
 html[data-theme-style='paper'] {

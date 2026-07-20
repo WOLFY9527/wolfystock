@@ -1,5 +1,9 @@
 # T576 Frontend Production Simplification Audit
 
+> Classification: Temporary audit evidence
+> Authority: Roadmap evidence for T600-T611; not the frontend design authority
+> Lifecycle: Registered in [`docs/documentation-manifest.json`](../documentation-manifest.json); delete after all lanes resolve and durable decisions move to canonical owners
+
 ## Status and decision
 
 **Result: audit complete; implementation not authorized or performed.** The accepted base is

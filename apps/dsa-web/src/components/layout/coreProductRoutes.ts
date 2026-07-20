@@ -61,7 +61,7 @@ export type ConsumerNavArchitectureItem =
   | { type: 'group'; groupKey: ConsumerNavGroupKey };
 
 /**
- * DESIGN.md v1.1 market domain:
+ * docs/design/frontend.md v1.1 market domain:
  * 市场总览 → 流动性监测 → 板块轮动
  */
 export const CONSUMER_NAV_GROUPS: ConsumerNavGroupDefinition[] = [
@@ -85,7 +85,7 @@ export const CONSUMER_NAV_GROUPS: ConsumerNavGroupDefinition[] = [
 ];
 
 /**
- * Shell top-level order (DESIGN.md v1.1):
+ * Shell top-level order (docs/design/frontend.md v1.1):
  * 首页 → 市场 → 研究 → 观察列表 → 验证 → 持仓
  */
 export const CONSUMER_NAV_ARCHITECTURE: ConsumerNavArchitectureItem[] = [
@@ -257,7 +257,7 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
   },
   /**
    * Specialized market synthesis surface.
-   * Reachable via deep link + contextual research handoffs (DESIGN.md §5.5).
+   * Reachable via deep link + contextual research handoffs (docs/design/frontend.md §5.5).
    * Not forced into the consumer top navigation groups.
    */
   {

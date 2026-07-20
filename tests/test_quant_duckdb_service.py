@@ -170,11 +170,13 @@ def test_schema_mismatch_read_diagnostic_returns_sanitized_unavailable(tmp_path)
 
 
 def test_concurrent_init_build_boundary_is_documented_as_not_production_ready() -> None:
-    manual = Path("docs/AI_PROJECT_MANUAL.md").read_text()
+    database_runbook = " ".join(
+        Path("docs/operations/database.md").read_text().split()
+    )
 
-    assert "Run only one DuckDB init/ingest/build action at a time during local smoke" in manual
-    assert "single-flight" in manual
-    assert "not a production readiness claim" in manual
+    assert "Run only one DuckDB init/ingest/build action at a time during local smoke" in database_runbook
+    assert "single-flight" in database_runbook
+    assert "not a production readiness claim" in database_runbook
 
 
 def test_large_payload_ingest_is_bounded_before_normalizing_or_writing_rows(tmp_path) -> None:

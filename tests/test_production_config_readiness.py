@@ -9,7 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "production_config_readiness.py"
 READY_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "release" / "production_config_readiness.ready.json"
 MISSING_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "release" / "production_config_readiness.missing.json"
-PRODUCTION_READINESS_OWNER = REPO_ROOT / "docs" / "AI_PROJECT_MANUAL.md"
+PRODUCTION_READINESS_OWNER = REPO_ROOT / "docs" / "operations" / "release.md"
 
 PUBLIC_ENV_FLAG_CLASSIFICATIONS = {
     "APP_ENV": "**GATED**",
@@ -200,10 +200,12 @@ def test_production_config_readiness_default_mode_is_safe_no_go() -> None:
 
 
 def test_public_deployment_env_flag_matrix_is_documented_and_guarded() -> None:
-    readiness_owner = PRODUCTION_READINESS_OWNER.read_text(encoding="utf-8")
+    readiness_owner = " ".join(
+        PRODUCTION_READINESS_OWNER.read_text(encoding="utf-8").split()
+    )
 
     assert "## Production Readiness Documentation Authority" in readiness_owner
-    assert "docs/audits/deployment-readiness-checklist.md`, `docs/DEPLOY.md`, and `docs/DEPLOY_EN.md`" in readiness_owner
+    assert "Canonical owner: this document" in readiness_owner
     assert "must not be recreated as compatibility shims" in readiness_owner
 
     for name, classification in PUBLIC_ENV_FLAG_CLASSIFICATIONS.items():
@@ -211,7 +213,7 @@ def test_public_deployment_env_flag_matrix_is_documented_and_guarded() -> None:
         assert classification in readiness_owner
 
     for required_phrase in (
-        "Canonical owner: this generated manual",
+        "Canonical owner: this document",
         "Production environment marker",
         "Authentication enablement",
         "Fail-closed production posture",

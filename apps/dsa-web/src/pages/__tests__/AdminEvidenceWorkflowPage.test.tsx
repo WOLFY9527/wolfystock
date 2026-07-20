@@ -46,11 +46,11 @@ const schemaReferenceGroups = [
 ];
 
 const runbookReferences = [
-  ['Dry-run 交接', 'docs/audits/operator-evidence-dry-run-handoff.md', '合成演练材料'],
-  ['脱敏清单', 'docs/audits/operator-evidence-redaction-checklist.md', '交接前检查'],
-  ['Schema 参考', 'docs/audits/operator-evidence-schema-reference-guide.md', '本地字段说明'],
-  ['归档包', 'docs/audits/operator-evidence-archive-pack-guide.md', '复核目录索引'],
-  ['CLI 合约 / 预检', 'docs/audits/operator-evidence-workflow-runner-guide.md', '离线 runner'],
+  ['Dry-run 交接', 'docs/operations/operator-evidence.md#dry-run-handoff', '合成演练材料'],
+  ['脱敏清单', 'docs/operations/operator-evidence.md#redaction', '交接前检查'],
+  ['Schema 参考', 'docs/operations/operator-evidence.md#schema-reference', '本地字段说明'],
+  ['归档包', 'docs/operations/operator-evidence.md#review-package', '复核目录索引'],
+  ['CLI 合约 / 预检', 'docs/operations/operator-evidence.md#cli-contract', '离线 runner'],
 ];
 
 const disclosureTitles = {

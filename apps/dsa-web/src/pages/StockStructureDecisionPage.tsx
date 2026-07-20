@@ -457,7 +457,7 @@ function sumExpirationMetric(
   return structure.expirationSummaries.reduce((total, row) => total + (row[key] || 0), 0);
 }
 
-/** DESIGN.md show / compact / hide for optional evidence modules. */
+/** docs/design/frontend.md show / compact / hide for optional evidence modules. */
 type ModuleDensity = 'full' | 'compact' | 'hide';
 
 function resolveModuleDensity(meaningfulFieldCount: number): ModuleDensity {

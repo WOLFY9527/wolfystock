@@ -1,15 +1,19 @@
-# WolfyStock Design System & Frontend Contract
+# Consumer Frontend Design Contract
 
 Version: 1.1
-Status: Canonical Consumer Frontend Design Contract
-Audience: Codex, frontend engineers, product engineers, reviewers
+Status: Canonical
+Scope: consumer product experience, information architecture, visual system, interaction, accessibility, and frontend implementation boundaries
+Audience: frontend engineers, product engineers, agents, and reviewers
 Visual reference: `docs/design/reference/wolfystock-impeccable-polish-final.html`
 
 ---
 
 ## 0. How to Use This Document
 
-`DESIGN.md` is the canonical design and implementation contract for the WolfyStock consumer frontend.
+This document is the canonical design and implementation contract for the
+WolfyStock consumer frontend. Repository rules remain in
+[`AGENTS.md`](../../AGENTS.md), and protected truth semantics remain in
+[`docs/contracts/data-trust.md`](../contracts/data-trust.md).
 
 It defines:
 
@@ -28,7 +32,7 @@ When implementing or reviewing frontend work, use this precedence:
 
 1. repository safety and engineering rules in `AGENTS.md`;
 2. production behavior and protected domain contracts in the existing application;
-3. this `DESIGN.md`;
+3. this design contract;
 4. the visual composition, proportions, density, and interaction intent of `docs/design/reference/wolfystock-impeccable-polish-final.html`;
 5. task-specific acceptance criteria.
 

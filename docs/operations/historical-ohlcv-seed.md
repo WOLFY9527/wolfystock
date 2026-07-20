@@ -1,5 +1,9 @@
 # Historical OHLCV Seed Operator Runbook
 
+> Status: Canonical runbook
+> Contract: [`docs/contracts/historical-market-data.md`](../contracts/historical-market-data.md)
+> Scope: explicit local starter-symbol cache seeding; no startup activation or readiness override
+
 This runbook covers the safe local path for attempting and verifying the
 starter US historical OHLCV cache seed for `SPY`, `QQQ`, `AAPL`, `MSFT`, `NVDA`, and `TSLA`.
 It does not enable providers on app startup and does not make Scanner or

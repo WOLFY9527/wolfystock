@@ -2,9 +2,7 @@
 -- Design-phase artifact only.
 -- This file is not wired into runtime and does not perform migration.
 -- Historical OHLCV / benchmark bodies remain in Parquet or NAS.
--- See also:
---   - docs/architecture/postgresql-baseline-design.md
---   - docs/architecture/postgresql-baseline-plan.md
+-- Canonical documentation: docs/operations/database.md#postgresql-baseline
 
 create table if not exists app_users (
     id text primary key,

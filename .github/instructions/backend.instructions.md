@@ -4,8 +4,8 @@ applyTo: "main.py,server.py,src/**/*.py,data_provider/**/*.py,api/**/*.py,bot/**
 
 # Backend Instructions
 
-- Follow `AGENTS.md`; use `docs/AI_PROJECT_MANUAL.md` for domain boundaries and
-  protected-surface context.
+- Follow `AGENTS.md`; use `docs/README.md` to select the applicable architecture,
+  data-trust, operations, and validation owners.
 - Preserve existing services, repositories, schemas, DTOs, provider adapters,
   cache/fallback semantics, and API compatibility unless the task explicitly
   scopes a change.
@@ -16,6 +16,5 @@ applyTo: "main.py,server.py,src/**/*.py,data_provider/**/*.py,api/**/*.py,bot/**
   timeout/retry expectations, freshness/source labels, and graceful degradation.
 - Prefer `./scripts/ci_gate.sh`; otherwise run `python -m py_compile` on changed
   Python files plus the closest deterministic tests.
-- Do not let a single provider, notification channel, optional enrichment, or
-  external dependency failure break the main analysis flow unless the requirement
-  explicitly demands fail-fast behavior.
+- Do not generalize failure or degradation behavior. Preserve the exact owner
+  source/test contract and the fail-closed distinctions routed by `docs/README.md`.

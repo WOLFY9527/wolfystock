@@ -5,7 +5,8 @@ Claude-compatible workflows.
 
 - Rule source: repository root `AGENTS.md`
 - Compatibility entry: root `CLAUDE.md`, which must be a symlink to `AGENTS.md`
-- Project handbook: `docs/AI_PROJECT_MANUAL.md`
+- Project task router: `docs/README.md`
+- Generated catalog: `docs/generated/AI_PROJECT_MANUAL.md` (navigation only)
 - Local review artifacts: `.claude/reviews/` and similar generated evidence are
   local artifacts, not rule sources
 

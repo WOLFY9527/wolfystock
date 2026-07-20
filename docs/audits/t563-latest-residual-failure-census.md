@@ -1,5 +1,9 @@
 # T563 — Latest residual-failure census from landed main
 
+> Classification: Temporary audit evidence
+> Authority: Historical snapshot for unresolved T564-T568 remediation; not current policy or release approval
+> Lifecycle: Registered in [`docs/documentation-manifest.json`](../documentation-manifest.json); delete after all residual lanes resolve and durable decisions move to canonical owners
+
 ## Release status
 
 **NO_GO.** The fresh canonical gate is not green. This report is an audit only: it changes neither production/test behavior, topology, known baselines, provider order, nor market-source decisions.

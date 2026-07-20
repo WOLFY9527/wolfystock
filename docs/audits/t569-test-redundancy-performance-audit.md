@@ -1,5 +1,9 @@
 # T569 Test Redundancy, Runtime Cost, and Engineering Workflow Audit
 
+> Classification: Temporary audit evidence
+> Authority: Roadmap evidence for T630-T643; not current validation policy
+> Lifecycle: Registered in [`docs/documentation-manifest.json`](../documentation-manifest.json) and its companion JSON; delete after T643 and all recorded migration prerequisites
+
 > Status: audit complete; the single canonical timing pass was non-green. This report does not convert failed, skipped, unavailable, static-only, or inferred evidence into a pass.
 
 ## Executive decision

@@ -1,6 +1,6 @@
 /**
  * Shared research-workbench button: preserves the existing API and loading
- * behavior while letting DESIGN.md tokens own the visual hierarchy.
+ * behavior while letting docs/design/frontend.md tokens own the visual hierarchy.
  */
 import React from 'react';
 import { useI18n } from '../../contexts/UiLanguageContext';

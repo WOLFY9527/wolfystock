@@ -1,5 +1,9 @@
 # Historical Market Data Foundation v1
 
+> Status: Canonical domain contract
+> Scope: normalized historical OHLCV rows, quality outcomes, persistence, and read interfaces
+> Operations: [`docs/operations/historical-ohlcv-seed.md`](../operations/historical-ohlcv-seed.md)
+
 WolfyStock historical market-data consumers should use the canonical foundation
 contract instead of provider-shaped payloads. The boundary is:
 

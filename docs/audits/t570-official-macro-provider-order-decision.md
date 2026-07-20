@@ -1,5 +1,9 @@
 # T570 Official Macro Provider-Order Decision Dossier
 
+> Classification: Temporary audit evidence
+> Authority: Protected provider-order decision record; not a general provider policy document
+> Lifecycle: Registered in [`docs/documentation-manifest.json`](../documentation-manifest.json); delete after the decision is encoded in canonical source/tests and no workflow depends on the dossier
+
 ## Decision status
 
 **Recommendation:** retain the current cache-first hybrid policy: use FRED for

@@ -5,7 +5,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 DOC_PATHS = (
-    REPO_ROOT / "docs" / "AI_PROJECT_MANUAL.md",
+    REPO_ROOT / "docs" / "operations" / "operator-evidence.md",
     *sorted((REPO_ROOT / "docs" / "audits").glob("operator-evidence-*.md")),
     *sorted((REPO_ROOT / "docs" / "audits").glob("evidence-*.md")),
 )
