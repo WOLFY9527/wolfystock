@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
+from scripts.architecture import module_contracts
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 API_ROOT = REPO_ROOT / "api"
@@ -29,96 +31,10 @@ INACTIVE_BACKEND_NAMESPACE_MODULES = (
     "src.platform",
     "src.domains",
 )
-ARCHITECTURE_DOMAIN_CLASSIFICATIONS = {
-    "provider-runtime / MarketCache": {
-        "data_provider",
-        "src.providers",
-        "src.services.analysis_provider_planner",
-        "src.services.market_cache",
-        "src.services.market_provider_operations_service",
-        "src.services.options_market_data_provider",
-        "src.services.provider_capability_matrix",
-        "src.services.provider_circuit_observer",
-        "src.services.provider_plan_advisor",
-        "src.services.provider_usage_ledger",
-        "src.services.quota_policy_service",
-    },
-    "scanner": {
-        "src.services.market_scanner_ops_service",
-        "src.services.market_scanner_service",
-        "src.services.scanner_ai_service",
-        "src.services.scanner_evidence_packet",
-    },
-    "backtest": {
-        "src.services.backtest_professional_readiness",
-        "src.services.backtest_service",
-        "src.services.local_data_preflight_service",
-        "src.services.rule_backtest_service",
-    },
-    "portfolio": {
-        "src.services.admin_portfolio_service",
-        "src.services.fx_rate_service",
-        "src.services.portfolio_ibkr_sync_service",
-        "src.services.portfolio_import_service",
-        "src.services.portfolio_risk_diagnostics",
-        "src.services.portfolio_risk_service",
-        "src.services.portfolio_service",
-    },
-    "AI routing / cost": {
-        "src.services.agent_model_service",
-        "src.services.ai_evidence_adapters",
-        "src.services.duplicate_cost_summary_service",
-        "src.services.image_stock_extractor",
-        "src.services.litellm_runtime",
-        "src.services.llm_cost_ledger_service",
-        "src.services.llm_instrumentation",
-        "src.services.model_pricing_policy_import_service",
-        "src.services.research_budget_profiles",
-    },
-    "auth / RBAC": {
-        "api.deps",
-        "api.middlewares.auth",
-        "api.middlewares.public_abuse_limiter",
-        "api.security_headers",
-        "api.v1.endpoints.auth",
-        "src.services.admin_governance_audit_service",
-        "src.services.admin_mfa_service",
-        "src.services.admin_security_service",
-        "src.services.admin_user_service",
-    },
-    "admin observability": {
-        "api.v1.endpoints.admin_cost",
-        "api.v1.endpoints.admin_logs",
-        "api.v1.endpoints.admin_notifications",
-        "api.v1.endpoints.admin_portfolio",
-        "api.v1.endpoints.admin_provider_circuits",
-        "api.v1.endpoints.admin_security",
-        "api.v1.endpoints.admin_users",
-        "api.v1.endpoints.market_provider_operations",
-        "api.v1.endpoints.provider_usage_ledger",
-        "src.services.admin_activity_service",
-        "src.services.admin_logs_service",
-        "src.services.execution_log_service",
-    },
-    "shared contracts": {
-        "api.v1.schemas",
-        "src.contracts",
-        "src.services.ai_evidence_packet",
-        "src.services.ai_evidence_packet_validator",
-        "src.services.data_quality_contract_validator",
-        "src.services.data_quality_contracts",
-    },
-}
-EXPECTED_ARCHITECTURE_DOMAINS = {
-    "provider-runtime / MarketCache",
-    "scanner",
-    "backtest",
-    "portfolio",
-    "AI routing / cost",
-    "auth / RBAC",
-    "admin observability",
-    "shared contracts",
-}
+MODULE_CONTRACT = module_contracts.load_manifest()
+ARCHITECTURE_DOMAIN_CLASSIFICATIONS = (
+    module_contracts.backend_domain_classifications(MODULE_CONTRACT)
+)
 EXPECTED_RUNTIME_HEAVY_DOMAIN_CLASSIFICATIONS = {
     "data_provider.akshare_fetcher": "provider-runtime / MarketCache",
     "data_provider.alpaca_fetcher": "provider-runtime / MarketCache",
@@ -516,13 +432,7 @@ def _has_loaded_prefix(loaded_modules: set[str], prefix: str) -> bool:
 
 
 def _classify_backend_module(module_name: str) -> str | None:
-    for domain_name, module_prefixes in ARCHITECTURE_DOMAIN_CLASSIFICATIONS.items():
-        if any(
-            module_name == prefix or module_name.startswith(prefix + ".")
-            for prefix in module_prefixes
-        ):
-            return domain_name
-    return None
+    return module_contracts.classify_backend_module(MODULE_CONTRACT, module_name)
 
 
 def _is_type_checking_guard(node: ast.AST) -> bool:
@@ -683,7 +593,11 @@ def test_contracts_namespace_remains_limited_to_inert_evidence_and_data_quality(
 
 
 def test_architecture_manual_domains_have_current_backend_classifications() -> None:
-    assert set(ARCHITECTURE_DOMAIN_CLASSIFICATIONS) == EXPECTED_ARCHITECTURE_DOMAINS
+    assert set(ARCHITECTURE_DOMAIN_CLASSIFICATIONS) == {
+        module["backendClassification"]
+        for module in MODULE_CONTRACT["modules"]
+        if module["backendClassification"]
+    }
     classified_prefixes = [
         module_prefix
         for module_prefixes in ARCHITECTURE_DOMAIN_CLASSIFICATIONS.values()

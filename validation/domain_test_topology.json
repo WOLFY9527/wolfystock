@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7917,
-      "sha256": "ae0f2f2a28bf4202f9e27aacdb92e7c9487f3368948b1fe1588ea9a0a74b0d14"
+      "count": 7932,
+      "sha256": "ebc59b24092aee498ff75bb8628743eb3af6725c28c8f66ebb94aabe6def70a5"
     },
     "tests": [
       {
@@ -6056,6 +6056,81 @@
       {
         "id": "tests/architecture/test_direct_storage_debt.py::test_direct_storage_guard_rejects_an_injected_consumer",
         "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_module_contracts.py::test_dependency_analysis_fails_closed_on_source_read_parse_and_analysis_errors",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_module_contracts.py::test_dependency_contract_distinguishes_existing_imports_from_approval",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_module_contracts.py::test_dependency_guard_rejects_an_injected_unauthorized_edge",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_module_contracts.py::test_frozen_debt_rejects_missing_duplicate_malformed_and_owner_drift",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_module_contracts.py::test_module_contract_manifest_is_canonical_and_matches_the_repository",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_module_contracts.py::test_module_contract_rejects_ambiguous_or_unknown_relationships",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_module_contracts.py::test_module_contract_rejects_duplicate_or_missing_ownership_selectors",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_module_contracts.py::test_module_contract_rejects_missing_unreadable_and_malformed_files",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_module_contracts.py::test_module_contract_rejects_unowned_and_multiply_owned_sources",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_module_contracts.py::test_module_contract_reuses_existing_authority_inventories",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_module_contracts.py::test_private_import_debt_is_measured_and_residual_ownership_is_reported",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_module_contracts.py::test_public_boundaries_must_be_owned_by_the_declaring_module",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_module_contracts.py::test_reviewed_dependency_debt_is_frozen_to_exact_ast_edges",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_module_contracts.py::test_selector_resolution_rejects_equal_rank_ambiguous_owner_results",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/architecture/test_module_contracts.py::test_specific_selectors_win_over_residual_umbrella_selectors",
+        "domain": "api_schema_contracts",
         "baseline": false
       },
       {

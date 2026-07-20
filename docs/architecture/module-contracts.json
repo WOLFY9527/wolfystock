@@ -1,0 +1,1108 @@
+{
+  "dependencyDebt": [
+    {
+      "edgeCount": 2,
+      "from": "auth-security",
+      "reason": "Security owners still reach configuration helpers currently owned by research services.",
+      "retireWhen": "Security configuration reads move behind an application-runtime boundary.",
+      "reviewOwner": "architecture_validation",
+      "sha256": "12bbd103e70147167b7edd2a19f5d0c493fd0daedd66a4c561b84d3dfab133c6",
+      "to": "research-services",
+      "validationOwners": [
+        "complete.auth.contracts"
+      ]
+    },
+    {
+      "edgeCount": 1,
+      "from": "persistence",
+      "reason": "Persistence code still emits through the execution-log service.",
+      "retireWhen": "Persistence emits inert events through a lower-level observability port.",
+      "reviewOwner": "architecture_validation",
+      "sha256": "ea036ea0afa4a9cbe8f610d8feab015f2d54bbd7eca4fec24fd91965ffcd974d",
+      "to": "admin-observability",
+      "validationOwners": [
+        "complete.database.contracts"
+      ]
+    },
+    {
+      "edgeCount": 1,
+      "from": "persistence",
+      "reason": "A storage owner still reaches AI cost-ledger service code.",
+      "retireWhen": "AI cost persistence depends on an inert persistence contract instead.",
+      "reviewOwner": "architecture_validation",
+      "sha256": "080842bc0a046056cca684ab3e875429098aa115830ba4ecb274e4b01cb938e9",
+      "to": "ai-routing",
+      "validationOwners": [
+        "complete.database.contracts"
+      ]
+    },
+    {
+      "edgeCount": 1,
+      "from": "persistence",
+      "reason": "Storage still calls the notification service directly.",
+      "retireWhen": "Persistence publishes an inert event without importing integrations.",
+      "reviewOwner": "architecture_validation",
+      "sha256": "a9b65fa5f97900db114358133d2020dbd0cf6303e4e3b3804f7bac2e8b86e2d3",
+      "to": "notification-integrations",
+      "validationOwners": [
+        "complete.database.contracts"
+      ]
+    },
+    {
+      "edgeCount": 6,
+      "from": "persistence",
+      "reason": "Repositories and storage bridges still import upper-layer research helpers.",
+      "retireWhen": "Persistence consumes only inert value contracts and runtime utilities.",
+      "reviewOwner": "architecture_validation",
+      "sha256": "6fd11fdc258f7ef3de62c6e30b2b217d44244ea27ddac6ebdf3fc2c99cb22b5d",
+      "to": "research-services",
+      "validationOwners": [
+        "complete.database.contracts"
+      ]
+    },
+    {
+      "edgeCount": 3,
+      "from": "provider-runtime",
+      "reason": "Provider runtime still imports consumer-layer helpers and projections.",
+      "retireWhen": "Provider runtime consumes only its ports, inert contracts, and platform utilities.",
+      "reviewOwner": "architecture_validation",
+      "sha256": "f81812100a753d2fd5666257bb4658b5448c15490536b60d43f405e42c18c119",
+      "to": "research-services",
+      "validationOwners": [
+        "complete.provider.contracts"
+      ]
+    },
+    {
+      "edgeCount": 1,
+      "from": "shared-contracts",
+      "reason": "Contract modules still import AI runtime-owned policy helpers.",
+      "retireWhen": "Shared contracts contain only inert types, constants, and validators.",
+      "reviewOwner": "architecture_validation",
+      "sha256": "41bb793db4565e3b8323b17f5ef823cbf9b7740909fa4a2294b4e0deacfece45",
+      "to": "ai-routing",
+      "validationOwners": [
+        "complete.schema_contracts"
+      ]
+    },
+    {
+      "edgeCount": 1,
+      "from": "shared-contracts",
+      "reason": "A public schema still imports a backtest service-owned response contract.",
+      "retireWhen": "The response contract moves to an inert schema or contract owner.",
+      "reviewOwner": "architecture_validation",
+      "sha256": "a7544876551594dc8292bb0c2be4aa383df447cf14566630ab1adec0b25696b3",
+      "to": "backtest",
+      "validationOwners": [
+        "complete.backtest.contracts",
+        "complete.schema_contracts"
+      ]
+    },
+    {
+      "edgeCount": 1,
+      "from": "shared-contracts",
+      "reason": "Contract modules still import provider-owned registries.",
+      "retireWhen": "Provider-facing contract data moves behind inert contract definitions.",
+      "reviewOwner": "architecture_validation",
+      "sha256": "50d0783517ef9d9dcf5f3c9187c7587dfeeab56c1c5d91a6372ebbdf8ad7a921",
+      "to": "provider-runtime",
+      "validationOwners": [
+        "complete.provider.contracts",
+        "complete.schema_contracts"
+      ]
+    },
+    {
+      "edgeCount": 5,
+      "from": "shared-contracts",
+      "reason": "Contract and schema modules still import research service helpers.",
+      "retireWhen": "Shared contracts become inert and service-independent.",
+      "reviewOwner": "architecture_validation",
+      "sha256": "7b9a09cab8d1ee50c878a12c1e10cac7f186eb9def53b13568ff38942dfca3f1",
+      "to": "research-services",
+      "validationOwners": [
+        "complete.schema_contracts"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "allowedDependencies": [
+        "ai-routing",
+        "api-transport",
+        "application-runtime",
+        "auth-security",
+        "notification-integrations",
+        "persistence",
+        "portfolio",
+        "provider-runtime",
+        "research-services",
+        "scanner",
+        "shared-contracts"
+      ],
+      "backendClassification": "admin observability",
+      "documentationAuthorities": [
+        "data-trust",
+        "system-architecture"
+      ],
+      "doesNotOwn": [
+        "domain calculations, provider policy, portfolio accounting, or authorization policy"
+      ],
+      "id": "admin-observability",
+      "kind": "backend-domain",
+      "ownership": {
+        "pathPrefixes": [],
+        "pythonModulePrefixes": [
+          "api.v1.endpoints.admin_",
+          "src.services.admin_"
+        ],
+        "pythonModules": [
+          "api.v1.endpoints.market_provider_operations",
+          "api.v1.endpoints.provider_usage_ledger",
+          "src.services.execution_log_service"
+        ],
+        "pythonPackages": []
+      },
+      "protectedSemantics": [
+        "admin-sanitization",
+        "auth-rbac-security",
+        "provider-source-authority"
+      ],
+      "publicBoundary": {
+        "pathPrefixes": [],
+        "pythonModules": [
+          "api.v1.endpoints.admin_logs",
+          "api.v1.endpoints.admin_mission_control",
+          "api.v1.endpoints.admin_ops_status",
+          "api.v1.endpoints.market_provider_operations",
+          "src.services.execution_log_service"
+        ],
+        "pythonPackages": []
+      },
+      "responsibility": "Sanitized operator diagnostics, admin read models, and explicitly authorized admin actions.",
+      "topologyDomains": [
+        "api_schema_contracts",
+        "auth_security",
+        "provider_external_network"
+      ],
+      "validationOwners": [
+        "complete.auth.contracts",
+        "complete.provider.contracts",
+        "complete.schema_contracts"
+      ]
+    },
+    {
+      "allowedDependencies": [
+        "admin-observability",
+        "api-transport",
+        "application-runtime",
+        "auth-security",
+        "backtest",
+        "notification-integrations",
+        "persistence",
+        "portfolio",
+        "provider-runtime",
+        "research-services",
+        "scanner",
+        "shared-contracts"
+      ],
+      "backendClassification": "AI routing / cost",
+      "documentationAuthorities": [
+        "data-trust",
+        "system-architecture"
+      ],
+      "doesNotOwn": [
+        "financial-domain calculations, market-data source authority, or authorization decisions"
+      ],
+      "id": "ai-routing",
+      "kind": "backend-platform",
+      "ownership": {
+        "pathPrefixes": [],
+        "pythonModulePrefixes": [
+          "src.services.agent_",
+          "src.services.llm_"
+        ],
+        "pythonModules": [
+          "api.v1.endpoints.agent",
+          "src.services.ai_evidence_adapters",
+          "src.services.duplicate_cost_summary_service",
+          "src.services.image_stock_extractor",
+          "src.services.litellm_runtime",
+          "src.services.model_pricing_policy_import_service",
+          "src.services.research_budget_profiles"
+        ],
+        "pythonPackages": [
+          "src.agent"
+        ]
+      },
+      "protectedSemantics": [
+        "ai-routing-cost",
+        "no-advice"
+      ],
+      "publicBoundary": {
+        "pathPrefixes": [],
+        "pythonModules": [
+          "api.v1.endpoints.agent",
+          "src.agent.protocols",
+          "src.services.litellm_runtime",
+          "src.services.llm_cost_ledger_service",
+          "src.services.llm_instrumentation",
+          "src.services.research_budget_profiles"
+        ],
+        "pythonPackages": []
+      },
+      "responsibility": "AI orchestration, model routing, bounded enrichment, instrumentation, and cost accounting.",
+      "topologyDomains": [
+        "residual_repository_integration",
+        "runtime_operator_tooling"
+      ],
+      "validationOwners": [
+        "bounded.backend.focused",
+        "complete.backend.non_network"
+      ]
+    },
+    {
+      "allowedDependencies": [
+        "admin-observability",
+        "ai-routing",
+        "application-runtime",
+        "auth-security",
+        "backtest",
+        "notification-integrations",
+        "persistence",
+        "portfolio",
+        "provider-runtime",
+        "research-services",
+        "scanner",
+        "shared-contracts"
+      ],
+      "backendClassification": null,
+      "documentationAuthorities": [
+        "data-trust",
+        "system-architecture"
+      ],
+      "doesNotOwn": [
+        "domain behavior, persistence meaning, provider policy, or authentication policy"
+      ],
+      "id": "api-transport",
+      "kind": "backend-platform",
+      "ownership": {
+        "pathPrefixes": [],
+        "pythonModulePrefixes": [],
+        "pythonModules": [],
+        "pythonPackages": [
+          "api"
+        ]
+      },
+      "protectedSemantics": [
+        "api-contracts",
+        "auth-rbac-security"
+      ],
+      "publicBoundary": {
+        "pathPrefixes": [],
+        "pythonModules": [
+          "api.actor_projection",
+          "api.route_inventory",
+          "api.v1.consumer_safe_response",
+          "api.v1.errors",
+          "api.v1.router"
+        ],
+        "pythonPackages": []
+      },
+      "responsibility": "HTTP translation, routing, error projection, and transport-safe response construction.",
+      "topologyDomains": [
+        "api_schema_contracts"
+      ],
+      "validationOwners": [
+        "bounded.backend.focused",
+        "complete.schema_contracts"
+      ]
+    },
+    {
+      "allowedDependencies": [
+        "admin-observability",
+        "ai-routing",
+        "api-transport",
+        "auth-security",
+        "backtest",
+        "notification-integrations",
+        "persistence",
+        "portfolio",
+        "provider-runtime",
+        "research-services",
+        "scanner",
+        "shared-contracts"
+      ],
+      "backendClassification": null,
+      "documentationAuthorities": [
+        "development-environment",
+        "system-architecture"
+      ],
+      "doesNotOwn": [
+        "domain calculations or alternate dependency, configuration, and startup authorities"
+      ],
+      "id": "application-runtime",
+      "kind": "backend-platform",
+      "ownership": {
+        "pathPrefixes": [],
+        "pythonModulePrefixes": [],
+        "pythonModules": [
+          "api.app",
+          "main",
+          "server",
+          "src.config",
+          "src.logging_config",
+          "src.scheduler",
+          "src.services.uat_provider_isolation",
+          "src.webui_frontend"
+        ],
+        "pythonPackages": [
+          "src.core",
+          "src.data",
+          "src.runtime",
+          "src.utils"
+        ]
+      },
+      "protectedSemantics": [
+        "runtime-readiness"
+      ],
+      "publicBoundary": {
+        "pathPrefixes": [],
+        "pythonModules": [
+          "api.app",
+          "main",
+          "server",
+          "src.config",
+          "src.runtime.settings",
+          "src.services.uat_provider_isolation"
+        ],
+        "pythonPackages": []
+      },
+      "responsibility": "Composition roots, startup truth, shared runtime settings, scheduling, and pure platform utilities.",
+      "topologyDomains": [
+        "runtime_operator_tooling"
+      ],
+      "validationOwners": [
+        "bounded.backend.focused",
+        "complete.repository.validation"
+      ]
+    },
+    {
+      "allowedDependencies": [
+        "admin-observability",
+        "api-transport",
+        "application-runtime",
+        "persistence",
+        "shared-contracts"
+      ],
+      "backendClassification": "auth / RBAC",
+      "documentationAuthorities": [
+        "data-trust",
+        "system-architecture"
+      ],
+      "doesNotOwn": [
+        "domain calculations, provider policy, or weaker client-side authorization authority"
+      ],
+      "id": "auth-security",
+      "kind": "backend-platform",
+      "ownership": {
+        "pathPrefixes": [],
+        "pythonModulePrefixes": [],
+        "pythonModules": [
+          "api.deps",
+          "api.middlewares.auth",
+          "api.middlewares.public_abuse_limiter",
+          "api.route_access_policy",
+          "api.security_headers",
+          "api.v1.endpoints.auth",
+          "src.admin_rbac",
+          "src.auth",
+          "src.auth_context",
+          "src.multi_user",
+          "src.services.admin_governance_audit_service",
+          "src.services.admin_mfa_service",
+          "src.services.admin_security_service",
+          "src.services.admin_user_onboarding_service",
+          "src.services.admin_user_service"
+        ],
+        "pythonPackages": []
+      },
+      "protectedSemantics": [
+        "auth-rbac-security"
+      ],
+      "publicBoundary": {
+        "pathPrefixes": [],
+        "pythonModules": [
+          "api.deps",
+          "api.route_access_policy",
+          "api.v1.endpoints.auth",
+          "src.admin_rbac",
+          "src.auth",
+          "src.auth_context"
+        ],
+        "pythonPackages": []
+      },
+      "responsibility": "Authentication, sessions, capability policy, protected routes, and security middleware.",
+      "topologyDomains": [
+        "auth_security"
+      ],
+      "validationOwners": [
+        "complete.auth.contracts"
+      ]
+    },
+    {
+      "allowedDependencies": [
+        "ai-routing",
+        "api-transport",
+        "application-runtime",
+        "auth-security",
+        "persistence",
+        "provider-runtime",
+        "research-services",
+        "shared-contracts"
+      ],
+      "backendClassification": "backtest",
+      "documentationAuthorities": [
+        "data-trust",
+        "historical-market-data",
+        "system-architecture"
+      ],
+      "doesNotOwn": [
+        "live market discovery, scanner ranking, portfolio accounting, or provider fallback policy"
+      ],
+      "id": "backtest",
+      "kind": "backend-domain",
+      "ownership": {
+        "pathPrefixes": [],
+        "pythonModulePrefixes": [
+          "src.services.backtest_",
+          "src.services.rule_backtest_"
+        ],
+        "pythonModules": [
+          "api.v1.endpoints.backtest",
+          "src.services.local_data_preflight_service"
+        ],
+        "pythonPackages": []
+      },
+      "protectedSemantics": [
+        "backtest-execution",
+        "no-advice",
+        "provider-source-authority"
+      ],
+      "publicBoundary": {
+        "pathPrefixes": [],
+        "pythonModules": [
+          "api.v1.endpoints.backtest",
+          "src.services.backtest_response_contract",
+          "src.services.backtest_service",
+          "src.services.rule_backtest_service"
+        ],
+        "pythonPackages": []
+      },
+      "responsibility": "Deterministic backtest execution, assumptions, result contracts, stored readback, and exports.",
+      "topologyDomains": [
+        "backtest"
+      ],
+      "validationOwners": [
+        "complete.backtest.contracts"
+      ]
+    },
+    {
+      "allowedDependencies": [
+        "application-runtime",
+        "web-client"
+      ],
+      "backendClassification": null,
+      "documentationAuthorities": [
+        "development-environment",
+        "system-architecture"
+      ],
+      "doesNotOwn": [
+        "a second backend, frontend product, dependency resolver, or runtime authority"
+      ],
+      "id": "desktop-shell",
+      "kind": "client",
+      "ownership": {
+        "pathPrefixes": [
+          "apps/dsa-desktop"
+        ],
+        "pythonModulePrefixes": [],
+        "pythonModules": [],
+        "pythonPackages": []
+      },
+      "protectedSemantics": [
+        "consumer-truth-projection",
+        "runtime-readiness"
+      ],
+      "publicBoundary": {
+        "pathPrefixes": [
+          "apps/dsa-desktop"
+        ],
+        "pythonModules": [],
+        "pythonPackages": []
+      },
+      "responsibility": "Electron supervision and packaging of the existing Web and backend runtime.",
+      "topologyDomains": [],
+      "validationOwners": [
+        "bounded.desktop.build",
+        "complete.desktop.domain"
+      ]
+    },
+    {
+      "allowedDependencies": [
+        "ai-routing",
+        "application-runtime",
+        "persistence",
+        "provider-runtime",
+        "research-services"
+      ],
+      "backendClassification": null,
+      "documentationAuthorities": [
+        "data-trust",
+        "system-architecture"
+      ],
+      "doesNotOwn": [
+        "analysis truth, domain calculations, provider policy, or scheduling authority"
+      ],
+      "id": "notification-integrations",
+      "kind": "integration",
+      "ownership": {
+        "pathPrefixes": [],
+        "pythonModulePrefixes": [],
+        "pythonModules": [
+          "src.notification",
+          "src.services.notification_service"
+        ],
+        "pythonPackages": [
+          "bot",
+          "src.notification_sender"
+        ]
+      },
+      "protectedSemantics": [
+        "consumer-truth-projection",
+        "no-advice"
+      ],
+      "publicBoundary": {
+        "pathPrefixes": [],
+        "pythonModules": [
+          "bot.dispatcher",
+          "src.notification",
+          "src.services.notification_service"
+        ],
+        "pythonPackages": []
+      },
+      "responsibility": "Notification transport integration and bounded delivery of already-owned domain results.",
+      "topologyDomains": [
+        "provider_external_network",
+        "runtime_operator_tooling"
+      ],
+      "validationOwners": [
+        "complete.external_network.contracts"
+      ]
+    },
+    {
+      "allowedDependencies": [
+        "application-runtime",
+        "auth-security",
+        "shared-contracts"
+      ],
+      "backendClassification": null,
+      "documentationAuthorities": [
+        "data-trust",
+        "database-operations",
+        "system-architecture"
+      ],
+      "doesNotOwn": [
+        "domain orchestration, provider clients, UI projection, or alternate storage semantics"
+      ],
+      "id": "persistence",
+      "kind": "backend-platform",
+      "ownership": {
+        "pathPrefixes": [],
+        "pythonModulePrefixes": [
+          "src.postgres_",
+          "src.storage_"
+        ],
+        "pythonModules": [
+          "src.database_doctor",
+          "src.database_doctor_smoke",
+          "src.storage"
+        ],
+        "pythonPackages": [
+          "src.repositories"
+        ]
+      },
+      "protectedSemantics": [
+        "database-transactions"
+      ],
+      "publicBoundary": {
+        "pathPrefixes": [],
+        "pythonModules": [
+          "src.storage"
+        ],
+        "pythonPackages": []
+      },
+      "responsibility": "Persistence APIs, repositories, transaction boundaries, and stored-state representation.",
+      "topologyDomains": [
+        "database_storage_migrations"
+      ],
+      "validationOwners": [
+        "complete.database.contracts"
+      ]
+    },
+    {
+      "allowedDependencies": [
+        "admin-observability",
+        "api-transport",
+        "application-runtime",
+        "auth-security",
+        "persistence",
+        "provider-runtime",
+        "research-services",
+        "shared-contracts"
+      ],
+      "backendClassification": "portfolio",
+      "documentationAuthorities": [
+        "data-trust",
+        "system-architecture"
+      ],
+      "doesNotOwn": [
+        "scanner selection, backtest math, provider policy, or client-side accounting authority"
+      ],
+      "id": "portfolio",
+      "kind": "backend-domain",
+      "ownership": {
+        "pathPrefixes": [],
+        "pythonModulePrefixes": [
+          "src.services.portfolio_"
+        ],
+        "pythonModules": [
+          "api.v1.endpoints.portfolio",
+          "src.services.admin_portfolio_service",
+          "src.services.fx_rate_service"
+        ],
+        "pythonPackages": []
+      },
+      "protectedSemantics": [
+        "no-advice",
+        "portfolio-accounting",
+        "provider-source-authority"
+      ],
+      "publicBoundary": {
+        "pathPrefixes": [],
+        "pythonModules": [
+          "api.v1.endpoints.portfolio",
+          "src.services.portfolio_ibkr_sync_service",
+          "src.services.portfolio_import_service",
+          "src.services.portfolio_risk_service",
+          "src.services.portfolio_service"
+        ],
+        "pythonPackages": []
+      },
+      "responsibility": "Portfolio accounting, cash, holdings, transactions, FX, broker import, risk, and read projections.",
+      "topologyDomains": [
+        "portfolio_broker"
+      ],
+      "validationOwners": [
+        "complete.broker.contracts",
+        "complete.portfolio.contracts"
+      ]
+    },
+    {
+      "allowedDependencies": [
+        "admin-observability",
+        "ai-routing",
+        "application-runtime",
+        "persistence",
+        "shared-contracts"
+      ],
+      "backendClassification": "provider-runtime / MarketCache",
+      "documentationAuthorities": [
+        "data-trust",
+        "historical-market-data",
+        "system-architecture"
+      ],
+      "doesNotOwn": [
+        "scanner ranking, backtest math, portfolio accounting, AI routing, or UI truth"
+      ],
+      "id": "provider-runtime",
+      "kind": "backend-platform",
+      "ownership": {
+        "pathPrefixes": [],
+        "pythonModulePrefixes": [
+          "src.services.market_cache_"
+        ],
+        "pythonModules": [
+          "src.services.analysis_provider_planner",
+          "src.services.data_source_router",
+          "src.services.data_source_router_diagnostics",
+          "src.services.macro_provider_readiness_service",
+          "src.services.market_cache",
+          "src.services.market_data_source_registry",
+          "src.services.market_provider_operations_service",
+          "src.services.options_market_data_provider",
+          "src.services.provider_capability_matrix",
+          "src.services.provider_circuit_observer",
+          "src.services.provider_plan_advisor",
+          "src.services.provider_usage_ledger",
+          "src.services.quota_policy_service"
+        ],
+        "pythonPackages": [
+          "data_provider",
+          "src.providers"
+        ]
+      },
+      "protectedSemantics": [
+        "provider-source-authority"
+      ],
+      "publicBoundary": {
+        "pathPrefixes": [],
+        "pythonModules": [
+          "src.providers.errors",
+          "src.providers.types",
+          "src.services.data_source_router",
+          "src.services.market_cache",
+          "src.services.provider_capability_matrix",
+          "src.services.provider_usage_ledger",
+          "src.services.quota_policy_service"
+        ],
+        "pythonPackages": [
+          "src.providers.ports"
+        ]
+      },
+      "responsibility": "Provider ports and adapters, source selection, cache and freshness, capability, quota, and circuit policy.",
+      "topologyDomains": [
+        "market",
+        "provider_external_network"
+      ],
+      "validationOwners": [
+        "complete.external_network.contracts",
+        "complete.provider.contracts"
+      ]
+    },
+    {
+      "allowedDependencies": [
+        "admin-observability",
+        "ai-routing",
+        "application-runtime",
+        "auth-security",
+        "backtest",
+        "notification-integrations",
+        "persistence",
+        "portfolio",
+        "provider-runtime",
+        "scanner",
+        "shared-contracts"
+      ],
+      "backendClassification": null,
+      "documentationAuthorities": [
+        "data-trust",
+        "system-architecture"
+      ],
+      "doesNotOwn": [
+        "the protected semantics delegated to scanner, backtest, portfolio, provider, auth, or persistence owners"
+      ],
+      "id": "research-services",
+      "kind": "backend-domain",
+      "ownership": {
+        "pathPrefixes": [],
+        "pythonModulePrefixes": [],
+        "pythonModules": [],
+        "pythonPackages": [
+          "src"
+        ]
+      },
+      "protectedSemantics": [
+        "consumer-truth-projection",
+        "no-advice",
+        "provider-source-authority"
+      ],
+      "publicBoundary": {
+        "pathPrefixes": [],
+        "pythonModules": [
+          "src.services.analysis_service",
+          "src.services.history_service",
+          "src.services.market_overview_service",
+          "src.services.options_lab_service",
+          "src.services.stock_service",
+          "src.services.watchlist_service"
+        ],
+        "pythonPackages": []
+      },
+      "responsibility": "Research orchestration, market and stock analysis, options, history, watchlists, reports, and read models.",
+      "topologyDomains": [
+        "market",
+        "residual_repository_integration"
+      ],
+      "validationOwners": [
+        "bounded.backend.focused",
+        "complete.backend.non_network"
+      ]
+    },
+    {
+      "allowedDependencies": [
+        "admin-observability",
+        "ai-routing",
+        "api-transport",
+        "application-runtime",
+        "auth-security",
+        "notification-integrations",
+        "persistence",
+        "provider-runtime",
+        "research-services",
+        "shared-contracts"
+      ],
+      "backendClassification": "scanner",
+      "documentationAuthorities": [
+        "data-trust",
+        "system-architecture"
+      ],
+      "doesNotOwn": [
+        "backtest execution, portfolio mutation, provider policy, or automatic trading"
+      ],
+      "id": "scanner",
+      "kind": "backend-domain",
+      "ownership": {
+        "pathPrefixes": [],
+        "pythonModulePrefixes": [
+          "src.services.market_scanner_",
+          "src.services.scanner_"
+        ],
+        "pythonModules": [
+          "api.v1.endpoints.scanner"
+        ],
+        "pythonPackages": []
+      },
+      "protectedSemantics": [
+        "no-advice",
+        "provider-source-authority",
+        "scanner-ranking"
+      ],
+      "publicBoundary": {
+        "pathPrefixes": [],
+        "pythonModules": [
+          "api.v1.endpoints.scanner",
+          "src.services.market_scanner_ops_service",
+          "src.services.market_scanner_service",
+          "src.services.scanner_evidence_packet"
+        ],
+        "pythonPackages": []
+      },
+      "responsibility": "Bounded scanner universe, deterministic filtering, scoring, ranking, diagnostics, and handoff.",
+      "topologyDomains": [
+        "scanner"
+      ],
+      "validationOwners": [
+        "complete.scanner.contracts"
+      ]
+    },
+    {
+      "allowedDependencies": [
+        "application-runtime"
+      ],
+      "backendClassification": "shared contracts",
+      "documentationAuthorities": [
+        "data-trust",
+        "system-architecture"
+      ],
+      "doesNotOwn": [
+        "runtime orchestration, provider calls, persistence, endpoint behavior, or UI rendering"
+      ],
+      "id": "shared-contracts",
+      "kind": "backend-platform",
+      "ownership": {
+        "pathPrefixes": [],
+        "pythonModulePrefixes": [],
+        "pythonModules": [
+          "src.services.ai_evidence_packet",
+          "src.services.ai_evidence_packet_validator",
+          "src.services.data_quality_contract_validator",
+          "src.services.data_quality_contracts"
+        ],
+        "pythonPackages": [
+          "api.v1.schemas",
+          "src.contracts",
+          "src.schemas"
+        ]
+      },
+      "protectedSemantics": [
+        "api-contracts",
+        "consumer-truth-projection"
+      ],
+      "publicBoundary": {
+        "pathPrefixes": [],
+        "pythonModules": [
+          "src.services.ai_evidence_packet",
+          "src.services.data_quality_contracts"
+        ],
+        "pythonPackages": [
+          "api.v1.schemas",
+          "src.contracts",
+          "src.schemas"
+        ]
+      },
+      "responsibility": "Explicit inert contracts, public API schemas, internal schemas, DTOs, and validators.",
+      "topologyDomains": [
+        "api_schema_contracts"
+      ],
+      "validationOwners": [
+        "complete.schema_contracts"
+      ]
+    },
+    {
+      "allowedDependencies": [
+        "shared-contracts"
+      ],
+      "backendClassification": null,
+      "documentationAuthorities": [
+        "data-trust",
+        "frontend-design",
+        "system-architecture"
+      ],
+      "doesNotOwn": [
+        "backend financial truth, authorization, provider behavior, or persistence semantics"
+      ],
+      "id": "web-client",
+      "kind": "client",
+      "ownership": {
+        "pathPrefixes": [
+          "apps/dsa-web"
+        ],
+        "pythonModulePrefixes": [],
+        "pythonModules": [],
+        "pythonPackages": []
+      },
+      "protectedSemantics": [
+        "consumer-truth-projection",
+        "no-advice"
+      ],
+      "publicBoundary": {
+        "pathPrefixes": [
+          "apps/dsa-web/src/api",
+          "apps/dsa-web/src/components/layout/coreProductRoutes.ts",
+          "apps/dsa-web/src/components/terminal"
+        ],
+        "pythonModules": [],
+        "pythonPackages": []
+      },
+      "responsibility": "React research terminal, API clients, route ownership, interaction, and presentation read models.",
+      "topologyDomains": [],
+      "validationOwners": [
+        "bounded.web.typecheck",
+        "complete.frontend.domain"
+      ]
+    }
+  ],
+  "privateImportDebt": {
+    "edgeCount": 404,
+    "reason": "Existing cross-module imports reach implementation paths outside declared public boundaries.",
+    "retireWhen": "All cross-module callers use a declared public boundary or a reviewed dependency contract.",
+    "reviewOwner": "architecture_validation",
+    "sha256": "2e70fab536baaed3dde9335a18b34e0d103a34bbd5a08fa692213017c4fa0847",
+    "validationOwners": [
+      "complete.repository.validation"
+    ]
+  },
+  "references": {
+    "boundaryDebt": "docs/architecture/debt-manifest.json",
+    "documentation": "docs/documentation-manifest.json",
+    "protectedSemantics": "docs/contracts/data-trust.md",
+    "testTopology": "validation/domain_test_topology.json",
+    "validationOwners": "validation/validation_owners.json"
+  },
+  "schemaVersion": "t645-module-contracts-v1",
+  "semanticTags": [
+    {
+      "authorities": [
+        "data-trust"
+      ],
+      "id": "admin-sanitization"
+    },
+    {
+      "authorities": [
+        "data-trust"
+      ],
+      "id": "ai-routing-cost"
+    },
+    {
+      "authorities": [
+        "data-trust",
+        "system-architecture"
+      ],
+      "id": "api-contracts"
+    },
+    {
+      "authorities": [
+        "data-trust"
+      ],
+      "id": "auth-rbac-security"
+    },
+    {
+      "authorities": [
+        "data-trust"
+      ],
+      "id": "backtest-execution"
+    },
+    {
+      "authorities": [
+        "data-trust",
+        "frontend-design"
+      ],
+      "id": "consumer-truth-projection"
+    },
+    {
+      "authorities": [
+        "data-trust",
+        "database-operations"
+      ],
+      "id": "database-transactions"
+    },
+    {
+      "authorities": [
+        "data-trust"
+      ],
+      "id": "no-advice"
+    },
+    {
+      "authorities": [
+        "data-trust"
+      ],
+      "id": "portfolio-accounting"
+    },
+    {
+      "authorities": [
+        "data-trust"
+      ],
+      "id": "provider-source-authority"
+    },
+    {
+      "authorities": [
+        "development-environment",
+        "system-architecture"
+      ],
+      "id": "runtime-readiness"
+    },
+    {
+      "authorities": [
+        "data-trust"
+      ],
+      "id": "scanner-ranking"
+    }
+  ],
+  "sourceSets": {
+    "pathRoots": [
+      "apps/dsa-desktop",
+      "apps/dsa-web/src"
+    ],
+    "pythonRoots": [
+      "api",
+      "bot",
+      "data_provider",
+      "main.py",
+      "server.py",
+      "src"
+    ],
+    "residualPythonOwners": [
+      "api-transport",
+      "research-services"
+    ]
+  }
+}
