@@ -1982,6 +1982,55 @@ Before creating a component:
 3. avoid parallel design systems;
 4. avoid duplicate consumer-state mappings.
 
+## 23.1 Responsibility qualification
+
+Frontend responsibility boundaries are enforced by the existing design-constitution gate, not by
+a second design system or a duplicate test inventory. The Node checker analyzes production
+TypeScript syntax and classifies route pages, controllers/hooks, presentation components,
+contexts/stores, API transports, schemas, and shared modules before applying owner-specific rules.
+Test and generated files are classified separately and are not production owners.
+
+Qualification uses semantic evidence:
+
+- state/reducer and effect ownership;
+- executed request calls, distinct from API imports, plus the subset nested in effect callbacks;
+- effect-owned cancellation or stale-response evidence with `observed`, `not-observed`, and
+  `not-applicable` states;
+- truth/readiness projection and domain-calculation calls;
+- route composition and presentation;
+- explicit cross-domain dependencies.
+
+These signals identify responsibility combinations; their raw counts do not prove correctness.
+Line count and JSX volume are not blocking thresholds. A large cohesive owner may remain valid, and
+a small component can still violate a boundary by directly orchestrating requests. Similarly,
+effect presence does not prove a sound lifecycle, an API import does not authorize orchestration,
+and `observed` stale-response syntax does not replace focused lifecycle tests.
+`Observed` additionally requires every effect that directly owns a request to contain a complete
+guard lifecycle: a guard must be checked and later invalidated, or the same `AbortController` must
+be created and aborted. A declaration alone, or protection in a different effect, is insufficient.
+
+The current-base evidence in
+`apps/dsa-web/scripts/responsibility-boundaries.json` distinguishes bounded legacy concentration
+from reviewed cohesive owners. Each entry records its accepted base, exact signal ceilings, allowed
+responsibilities and dependencies, stale-response status, rationale, and retirement condition.
+Existing values are regression ceilings, not budgets. Do not raise a ceiling or expand an allowed
+set to silence the checker. When a signal, responsibility, or dependency is removed, ratchet the
+entry down in the same refactor so the old allowance cannot be reintroduced. A responsibility
+refactor should reduce or retire the old entry and prove the surviving controller, projection, and
+presentation owners with focused tests.
+
+Unregistered production code is blocked when a presentation component orchestrates requests, an
+effect-owned request has no observable cancellation/stale-response protection, or a route page
+accumulates request lifecycle with state/effect ownership or mixes requests, truth/domain projection,
+and presentation.
+Move those responsibilities to an existing controller/hook or consumer view-model owner; do not add
+a wrapper path or parallel authority.
+
+Parsing, file reads, and manifest validation fail closed. Missing signals are reported as incomplete
+analysis rather than zero responsibility. Removing the final effect-owned request, even when an
+event-owned command remains, makes stale-response protection `not-applicable`; while an effect-owned
+request remains, `not-observed` is never equivalent to passed.
+
 ---
 
 # 24. Migration Rules for Replacing the Current Consumer UI

@@ -3,9 +3,12 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+import { scanResponsibilityProject } from './responsibility-qualification.mjs';
+
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(SCRIPT_DIR, '..');
 const SRC_DIR = path.join(ROOT_DIR, 'src');
+const RESPONSIBILITY_MANIFEST_PATH = path.join(SCRIPT_DIR, 'responsibility-boundaries.json');
 
 const SCANNED_EXTENSIONS = new Set(['.tsx', '.ts', '.css', '.js']);
 const EXTRA_SCAN_FILES = [
@@ -673,11 +676,13 @@ export function scanSourceText({ relativePath, text }) {
 }
 
 export function scanProject({ rootDir = ROOT_DIR, files = null } = {}) {
-  const scanFiles = files ?? listProjectSourceFiles(rootDir);
+  const allProjectFiles = listProjectSourceFiles(rootDir);
+  const scanFiles = files ?? allProjectFiles;
   const result = {
     filesScanned: 0,
     blocking: [],
     warnings: [],
+    responsibilityFilesScanned: 0,
   };
 
   for (const file of scanFiles) {
@@ -688,6 +693,15 @@ export function scanProject({ rootDir = ROOT_DIR, files = null } = {}) {
     result.blocking.push(...fileResult.blocking);
     result.warnings.push(...fileResult.warnings);
   }
+
+  const responsibility = scanResponsibilityProject({
+    rootDir,
+    files: scanFiles,
+    allFiles: allProjectFiles,
+    manifestPath: RESPONSIBILITY_MANIFEST_PATH,
+  });
+  result.responsibilityFilesScanned = responsibility.filesScanned;
+  result.blocking.push(...responsibility.blocking);
 
   return result;
 }
@@ -712,6 +726,8 @@ function printReport(result) {
   console.log('WolfyStock design constitution guard');
   console.log(`Rules checked: ${RULES.map((rule) => `${rule.id} (${rule.severity})`).join(', ')}`);
   console.log(`Files scanned: ${result.filesScanned}`);
+  console.log(`Responsibility owners analyzed: ${result.responsibilityFilesScanned}`);
+  console.log('Responsibility qualification: semantic owner mixes, owner-specific ceilings, dependency growth, and fail-closed analysis');
 
   printFindings('Blocking violations', result.blocking);
   printFindings('Design warnings', result.warnings);

@@ -141,7 +141,7 @@
     "docsIndex": "docs/README.md",
     "docsIndexSha256": "b9e676ba0d1699818d5cc63efb24a21980440082e3619c2ebccdd08dacb6ac6b",
     "manual": "docs/generated/AI_PROJECT_MANUAL.md",
-    "manualSha256": "02ed687cdff9c05d60e263cc617d51fdcb41f3d9e3fc65e8d80b793d2241c6c4",
+    "manualSha256": "311a14f21945f30ee5dd2fb14f5932a11d65e1992350e184b43af6f42fb5d5fb",
     "sourceManifest": "docs/generated/AI_PROJECT_MANUAL_SOURCES.json"
   },
   "registry": {
@@ -428,13 +428,13 @@
       "title": "Historical Market Data Foundation v1"
     },
     {
-      "bytes": 51544,
+      "bytes": 54795,
       "editable": true,
       "id": "frontend-design",
       "kind": "canonical",
-      "lineCount": 2287,
+      "lineCount": 2336,
       "path": "docs/design/frontend.md",
-      "sha256": "4a74cd9c85dcabdf59647f73ac657017b81b6773c1649ef5b572469aa33539e6",
+      "sha256": "7b033c9fcc31f21abacb5fdaa0236430131aca14a46338b88a65175922a14e83",
       "status": "active",
       "summary": "Consumer frontend design and implementation contract",
       "title": "Consumer Frontend Design Contract"

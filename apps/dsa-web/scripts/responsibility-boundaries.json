@@ -1,0 +1,390 @@
+{
+  "schemaVersion": 1,
+  "signalModel": "frontend-responsibility-signals-v1",
+  "acceptedBase": {
+    "commit": "9d98b940c6dd3e757043c7e7be3e8f9bcd14269e",
+    "tree": "bc5dedc4c0aa3d619605195ce5b884ceff26f8ce"
+  },
+  "owners": [
+    {
+      "path": "src/components/backtest/BacktestSupportExportsDisclosure.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 6, "effects": 2, "apiCalls": 7, "effectApiCalls": 0, "truthCalls": 2, "domainCalls": 0 },
+      "allowedResponsibilities": ["presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection"],
+      "allowedDependencies": ["backtest"],
+      "staleProtection": "not-applicable",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/components/backtest/ProBacktestWorkspace.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 7, "effects": 1, "apiCalls": 0, "effectApiCalls": 0, "truthCalls": 2, "domainCalls": 0 },
+      "allowedResponsibilities": ["presentation", "state-ownership", "effect-ownership", "truth-projection"],
+      "allowedDependencies": ["backtest"],
+      "staleProtection": "not-applicable",
+      "rationale": "The accepted tree mixes backtest workspace state, projection, and presentation behind a broad view contract.",
+      "retirementCondition": "Remove after one backtest controller owns workspace state and the view contract is qualified by focused tests."
+    },
+    {
+      "path": "src/components/evidence/AdminEvidenceDiagnosticsConsole.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 1, "effects": 1, "apiCalls": 7, "effectApiCalls": 0, "truthCalls": 5, "domainCalls": 0 },
+      "allowedResponsibilities": ["presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection", "cross-domain-dependency"],
+      "allowedDependencies": ["backtest", "market", "options", "portfolio", "scanner"],
+      "staleProtection": "not-applicable",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/components/home-bento/HomeCandlestickChart.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 4, "effects": 4, "apiCalls": 1, "effectApiCalls": 1, "truthCalls": 0, "domainCalls": 1 },
+      "allowedResponsibilities": ["presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "domain-calculation"],
+      "allowedDependencies": [],
+      "staleProtection": "observed",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/components/layout/Shell.tsx",
+      "profile": "cohesive-owner",
+      "maxSignals": { "stateCalls": 4, "effects": 11, "apiCalls": 0, "effectApiCalls": 0, "truthCalls": 0, "domainCalls": 6 },
+      "allowedResponsibilities": ["presentation", "state-ownership", "effect-ownership", "domain-calculation"],
+      "allowedDependencies": ["auth"],
+      "staleProtection": "not-applicable",
+      "rationale": "The shell coherently owns navigation, session projection, focus, keyboard, and responsive rail behavior.",
+      "retirementCondition": "Remove only if shell ownership is split without duplicating focus, session, or navigation authority."
+    },
+    {
+      "path": "src/components/market-overview/MarketOverviewWorkbench.tsx",
+      "profile": "cohesive-owner",
+      "maxSignals": { "stateCalls": 2, "effects": 0, "apiCalls": 0, "effectApiCalls": 0, "truthCalls": 27, "domainCalls": 33 },
+      "allowedResponsibilities": ["presentation", "state-ownership", "truth-projection", "domain-calculation"],
+      "allowedDependencies": ["market"],
+      "staleProtection": "not-applicable",
+      "rationale": "File size comes from market transformation and registry ownership rather than a monolithic route component.",
+      "retirementCondition": "Remove after market truth projection moves to one qualified owner and the workbench becomes presentation-only."
+    },
+    {
+      "path": "src/components/settings/AuthSettingsCard.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 2, "effects": 0, "apiCalls": 1, "effectApiCalls": 0, "truthCalls": 0, "domainCalls": 0 },
+      "allowedResponsibilities": ["presentation", "state-ownership", "request-orchestration"],
+      "allowedDependencies": ["auth"],
+      "staleProtection": "not-applicable",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/components/settings/DuckDBQuantPanel.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 11, "effects": 1, "apiCalls": 9, "effectApiCalls": 2, "truthCalls": 5, "domainCalls": 0 },
+      "allowedResponsibilities": ["presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection"],
+      "allowedDependencies": [],
+      "staleProtection": "not-observed",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/components/settings/FactorResearchReportPanel.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 6, "effects": 0, "apiCalls": 1, "effectApiCalls": 0, "truthCalls": 0, "domainCalls": 0 },
+      "allowedResponsibilities": ["presentation", "state-ownership", "request-orchestration"],
+      "allowedDependencies": [],
+      "staleProtection": "not-applicable",
+      "rationale": "The accepted report panel owns factor-report requests and local presentation state instead of consuming a controller output.",
+      "retirementCondition": "Remove after factor-report request lifecycle moves to the qualified settings controller."
+    },
+    {
+      "path": "src/components/settings/IntelligentImport.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 1, "effects": 0, "apiCalls": 2, "effectApiCalls": 0, "truthCalls": 0, "domainCalls": 1 },
+      "allowedResponsibilities": ["presentation", "state-ownership", "request-orchestration", "domain-calculation"],
+      "allowedDependencies": ["settings"],
+      "staleProtection": "not-applicable",
+      "rationale": "The accepted import component mixes parsing requests, local state, calculation, and presentation without observable stale protection.",
+      "retirementCondition": "Remove after import parsing and lifecycle state move to one qualified controller owner."
+    },
+    {
+      "path": "src/components/settings/LLMChannelEditor.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 9, "effects": 2, "apiCalls": 1, "effectApiCalls": 0, "truthCalls": 0, "domainCalls": 9 },
+      "allowedResponsibilities": ["presentation", "state-ownership", "effect-ownership", "request-orchestration", "domain-calculation"],
+      "allowedDependencies": ["settings"],
+      "staleProtection": "not-applicable",
+      "rationale": "The accepted editor owns channel test requests, draft effects, calculations, and presentation in one component.",
+      "retirementCondition": "Remove after a settings controller owns channel draft and test lifecycle state."
+    },
+    {
+      "path": "src/components/user-alerts/UserAlertsRailPanel.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 1, "effects": 1, "apiCalls": 3, "effectApiCalls": 1, "truthCalls": 0, "domainCalls": 0 },
+      "allowedResponsibilities": ["presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection"],
+      "allowedDependencies": [],
+      "staleProtection": "observed",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/contexts/AuthContext.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 8, "effects": 2, "apiCalls": 7, "effectApiCalls": 0, "truthCalls": 0, "domainCalls": 0 },
+      "allowedResponsibilities": ["presentation", "state-ownership", "effect-ownership", "request-orchestration"],
+      "allowedDependencies": ["auth"],
+      "staleProtection": "not-applicable",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/AdminCostObservabilityPage.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 7, "effects": 4, "apiCalls": 5, "effectApiCalls": 4, "truthCalls": 1, "domainCalls": 0 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "truth-projection"],
+      "allowedDependencies": ["admin"],
+      "staleProtection": "observed",
+      "rationale": "The accepted cost route owns four effect-scoped requests; each uses a checked lifecycle guard, while request and presentation ownership remain concentrated.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/AdminLaunchCockpitPage.tsx",
+      "profile": "cohesive-owner",
+      "maxSignals": { "stateCalls": 7, "effects": 2, "apiCalls": 4, "effectApiCalls": 2, "truthCalls": 2, "domainCalls": 0 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "truth-projection"],
+      "allowedDependencies": ["admin"],
+      "staleProtection": "observed",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/AdminLogsPage.tsx",
+      "profile": "cohesive-owner",
+      "maxSignals": { "stateCalls": 38, "effects": 5, "apiCalls": 11, "effectApiCalls": 0, "truthCalls": 3, "domainCalls": 8 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection", "domain-calculation"],
+      "allowedDependencies": ["admin"],
+      "staleProtection": "not-applicable",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/AdminMissionControlPage.tsx",
+      "profile": "cohesive-owner",
+      "maxSignals": { "stateCalls": 1, "effects": 1, "apiCalls": 1, "effectApiCalls": 1, "truthCalls": 0, "domainCalls": 2 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "domain-calculation"],
+      "allowedDependencies": ["admin"],
+      "staleProtection": "observed",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/AdminNotificationsPage.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 10, "effects": 1, "apiCalls": 7, "effectApiCalls": 0, "truthCalls": 4, "domainCalls": 1 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection", "domain-calculation"],
+      "allowedDependencies": ["admin"],
+      "staleProtection": "not-applicable",
+      "rationale": "The accepted tree combines notification commands, truth projection, calculation, local state, and presentation.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/AdminProviderCircuitDiagnosticsPage.tsx",
+      "profile": "cohesive-owner",
+      "maxSignals": { "stateCalls": 5, "effects": 1, "apiCalls": 1, "effectApiCalls": 1, "truthCalls": 3, "domainCalls": 3 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "truth-projection", "domain-calculation"],
+      "allowedDependencies": ["admin"],
+      "staleProtection": "observed",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/AdminUsersPage.tsx",
+      "profile": "cohesive-owner",
+      "maxSignals": { "stateCalls": 9, "effects": 4, "apiCalls": 9, "effectApiCalls": 0, "truthCalls": 1, "domainCalls": 0 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection"],
+      "allowedDependencies": ["admin"],
+      "staleProtection": "not-applicable",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/BacktestPage.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 63, "effects": 2, "apiCalls": 19, "effectApiCalls": 4, "truthCalls": 1, "domainCalls": 12 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection", "domain-calculation"],
+      "allowedDependencies": ["backtest"],
+      "staleProtection": "not-observed",
+      "rationale": "The accepted tree retains a large implicit backtest execution state machine, including an unguarded result-loading effect, in the route page.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/DeterministicBacktestResultPage.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 23, "effects": 9, "apiCalls": 8, "effectApiCalls": 4, "truthCalls": 0, "domainCalls": 9 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "domain-calculation"],
+      "allowedDependencies": ["backtest"],
+      "staleProtection": "observed",
+      "rationale": "Deterministic result normalization, request lifecycle, view state, and presentation remain mixed in the accepted route.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/HomeBentoDashboardPage.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 34, "effects": 21, "apiCalls": 6, "effectApiCalls": 5, "truthCalls": 28, "domainCalls": 59 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "truth-projection", "domain-calculation", "cross-domain-dependency"],
+      "allowedDependencies": ["market", "research"],
+      "staleProtection": "observed",
+      "rationale": "The accepted dashboard owns the highest effect concentration plus task, drawer, request, and no-advice projection state.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/LiquidityMonitorPage.tsx",
+      "profile": "cohesive-owner",
+      "maxSignals": { "stateCalls": 5, "effects": 1, "apiCalls": 1, "effectApiCalls": 1, "truthCalls": 15, "domainCalls": 21 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "truth-projection", "domain-calculation"],
+      "allowedDependencies": ["market"],
+      "staleProtection": "observed",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/MarketDecisionCockpitPage.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 6, "effects": 1, "apiCalls": 2, "effectApiCalls": 0, "truthCalls": 6, "domainCalls": 2 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection", "domain-calculation"],
+      "allowedDependencies": ["market"],
+      "staleProtection": "not-applicable",
+      "rationale": "The accepted route mixes request commands, truth projection, calculation, local state, and presentation.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/MarketOverviewPage.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 19, "effects": 11, "apiCalls": 2, "effectApiCalls": 1, "truthCalls": 20, "domainCalls": 14 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "truth-projection", "domain-calculation"],
+      "allowedDependencies": ["market"],
+      "staleProtection": "observed",
+      "rationale": "The route is the accepted last-known-good owner but also concentrates request, stream, truth, and presentation synchronization.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/MarketProviderOperationsPage.tsx",
+      "profile": "cohesive-owner",
+      "maxSignals": { "stateCalls": 26, "effects": 7, "apiCalls": 7, "effectApiCalls": 7, "truthCalls": 21, "domainCalls": 18 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "truth-projection", "domain-calculation", "cross-domain-dependency"],
+      "allowedDependencies": ["admin", "market"],
+      "staleProtection": "observed",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/MarketRotationRadarPage.tsx",
+      "profile": "cohesive-owner",
+      "maxSignals": { "stateCalls": 3, "effects": 2, "apiCalls": 1, "effectApiCalls": 0, "truthCalls": 12, "domainCalls": 23 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection", "domain-calculation"],
+      "allowedDependencies": ["market"],
+      "staleProtection": "not-applicable",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/OptionsLabPage.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 16, "effects": 4, "apiCalls": 6, "effectApiCalls": 6, "truthCalls": 11, "domainCalls": 11 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "truth-projection", "domain-calculation", "cross-domain-dependency"],
+      "allowedDependencies": ["options", "research"],
+      "staleProtection": "observed",
+      "rationale": "The accepted route retains multiple request-key effect chains and their lifecycle, truth, and presentation state.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/PersonalSettingsPage.tsx",
+      "profile": "cohesive-owner",
+      "maxSignals": { "stateCalls": 3, "effects": 1, "apiCalls": 2, "effectApiCalls": 1, "truthCalls": 0, "domainCalls": 2 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "domain-calculation", "cross-domain-dependency"],
+      "allowedDependencies": ["auth", "market", "portfolio", "settings"],
+      "staleProtection": "observed",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/PortfolioPage.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 66, "effects": 6, "apiCalls": 30, "effectApiCalls": 0, "truthCalls": 12, "domainCalls": 17 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection", "domain-calculation", "cross-domain-dependency"],
+      "allowedDependencies": ["portfolio", "research"],
+      "staleProtection": "not-applicable",
+      "rationale": "The accepted route combines account, cash, holdings, trades, import, risk, drawer, and request responsibilities.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/ResearchRadarPage.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 7, "effects": 1, "apiCalls": 2, "effectApiCalls": 0, "truthCalls": 17, "domainCalls": 17 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection", "domain-calculation"],
+      "allowedDependencies": ["research"],
+      "staleProtection": "not-applicable",
+      "rationale": "The accepted route owns research request and truth projection alongside queue handoff and presentation responsibilities.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/RuleBacktestComparePage.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 4, "effects": 2, "apiCalls": 1, "effectApiCalls": 0, "truthCalls": 0, "domainCalls": 4 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "domain-calculation"],
+      "allowedDependencies": ["backtest"],
+      "staleProtection": "not-applicable",
+      "rationale": "The accepted comparison route owns run requests, comparison state, calculation, and result presentation.",
+      "retirementCondition": "Remove after comparison requests and derived state move to the qualified backtest controller."
+    },
+    {
+      "path": "src/pages/ScenarioLabPage.tsx",
+      "profile": "cohesive-owner",
+      "maxSignals": { "stateCalls": 6, "effects": 2, "apiCalls": 2, "effectApiCalls": 0, "truthCalls": 11, "domainCalls": 1 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection", "domain-calculation", "cross-domain-dependency"],
+      "allowedDependencies": ["market", "research", "scenario"],
+      "staleProtection": "not-applicable",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/SettingsPage.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 28, "effects": 4, "apiCalls": 3, "effectApiCalls": 0, "truthCalls": 0, "domainCalls": 14 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "domain-calculation"],
+      "allowedDependencies": ["settings"],
+      "staleProtection": "not-applicable",
+      "rationale": "The accepted tree retains a large configuration state owner even though requests are delegated to hooks.",
+      "retirementCondition": "Remove after configuration state and compatibility projection have one qualified controller owner."
+    },
+    {
+      "path": "src/pages/StockStructureDecisionPage.tsx",
+      "profile": "cohesive-owner",
+      "maxSignals": { "stateCalls": 18, "effects": 1, "apiCalls": 10, "effectApiCalls": 0, "truthCalls": 43, "domainCalls": 13 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection", "domain-calculation", "cross-domain-dependency"],
+      "allowedDependencies": ["options", "research"],
+      "staleProtection": "not-applicable",
+      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/UserScannerPage.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 50, "effects": 12, "apiCalls": 12, "effectApiCalls": 4, "truthCalls": 19, "domainCalls": 44 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "truth-projection", "domain-calculation", "cross-domain-dependency"],
+      "allowedDependencies": ["research", "scanner", "watchlist"],
+      "staleProtection": "observed",
+      "rationale": "The accepted scanner route has the highest hook and fan-out concentration across requests, filters, selection, truth, and views; its direct request effects use checked lifecycle guards.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    },
+    {
+      "path": "src/pages/WatchlistPage.tsx",
+      "profile": "legacy-concentrated",
+      "maxSignals": { "stateCalls": 32, "effects": 11, "apiCalls": 13, "effectApiCalls": 3, "truthCalls": 11, "domainCalls": 29 },
+      "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "truth-projection", "domain-calculation", "cross-domain-dependency"],
+      "allowedDependencies": ["backtest", "research", "scanner", "watchlist"],
+      "staleProtection": "observed",
+      "rationale": "The accepted route combines list, queue, overlay, alert, request, and cross-domain research handoff responsibilities.",
+      "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
+    }
+  ]
+}
