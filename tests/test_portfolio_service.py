@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
-import os
+import hashlib
 import json
+import os
+import shutil
 import sqlite3
 import tempfile
 import threading
@@ -36,36 +38,106 @@ from src.storage import (
 class PortfolioServiceTestCase(unittest.TestCase):
     """Portfolio service replay tests for FIFO/AVG and corporate actions."""
 
-    def setUp(self) -> None:
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.env_path = Path(self.temp_dir.name) / ".env"
-        self.db_path = Path(self.temp_dir.name) / "portfolio_test.db"
-        self.env_path.write_text(
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._template_dir = tempfile.TemporaryDirectory()
+        cls._template_db_path = Path(cls._template_dir.name) / "portfolio_schema.db"
+        cls._template_database_sha256: str | None = None
+        cls._previous_environment = {
+            key: os.environ.get(key)
+            for key in ("ENV_FILE", "DATABASE_PATH", "ADMIN_AUTH_ENABLED")
+        }
+        cls.addClassCleanup(cls._cleanup_class_resources)
+
+    @staticmethod
+    def _write_environment_file(env_path: Path, db_path: Path) -> None:
+        env_path.write_text(
             "\n".join(
                 [
                     "STOCK_LIST=600519",
                     "GEMINI_API_KEY=test",
                     "ADMIN_AUTH_ENABLED=false",
-                    f"DATABASE_PATH={self.db_path}",
+                    f"DATABASE_PATH={db_path}",
                 ]
             )
             + "\n",
             encoding="utf-8",
         )
 
-        os.environ["ENV_FILE"] = str(self.env_path)
-        os.environ["DATABASE_PATH"] = str(self.db_path)
+    @staticmethod
+    def _activate_environment(env_path: Path, db_path: Path) -> None:
+        os.environ["ENV_FILE"] = str(env_path)
+        os.environ["DATABASE_PATH"] = str(db_path)
+        os.environ["ADMIN_AUTH_ENABLED"] = "false"
+
+    @classmethod
+    def _restore_previous_environment(cls) -> None:
+        for key, value in cls._previous_environment.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    @staticmethod
+    def _database_sha256(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    @classmethod
+    def _cleanup_class_resources(cls) -> None:
+        template_identity_error = None
+        if cls._template_database_sha256 is not None:
+            actual_sha256 = cls._database_sha256(cls._template_db_path)
+            if actual_sha256 != cls._template_database_sha256:
+                template_identity_error = (
+                    "portfolio service schema template changed: "
+                    f"expected {cls._template_database_sha256}, got {actual_sha256}"
+                )
+
+        DatabaseManager.reset_instance()
+        Config.reset_instance()
+        cls._restore_previous_environment()
+        cls._template_dir.cleanup()
+        if template_identity_error is not None:
+            raise AssertionError(template_identity_error)
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.env_path = Path(self.temp_dir.name) / ".env"
+        self.db_path = Path(self.temp_dir.name) / "portfolio_test.db"
+        self.addCleanup(self.temp_dir.cleanup)
+        self.addCleanup(self._restore_previous_environment)
+        self.addCleanup(Config.reset_instance)
+        self.addCleanup(DatabaseManager.reset_instance)
+        self._write_environment_file(self.env_path, self.db_path)
+        if self._template_database_sha256 is not None:
+            self.assertEqual(
+                self._database_sha256(self._template_db_path),
+                self._template_database_sha256,
+            )
+            shutil.copyfile(self._template_db_path, self.db_path)
+
+        self._activate_environment(self.env_path, self.db_path)
         Config.reset_instance()
         DatabaseManager.reset_instance()
 
         self.db = DatabaseManager.get_instance()
+        if self._template_database_sha256 is None:
+            self.db._engine.dispose()
+            shutil.copyfile(self.db_path, self._template_db_path)
+            type(self)._template_database_sha256 = self._database_sha256(
+                self._template_db_path
+            )
+        self.assertEqual(
+            self._database_sha256(self.db_path),
+            self._template_database_sha256,
+        )
         self.service = PortfolioService()
 
     def tearDown(self) -> None:
         DatabaseManager.reset_instance()
         Config.reset_instance()
-        os.environ.pop("ENV_FILE", None)
-        os.environ.pop("DATABASE_PATH", None)
+        self._restore_previous_environment()
         self.temp_dir.cleanup()
 
     def _save_close(self, symbol: str, on_date: date, close: float) -> None:
