@@ -18,7 +18,7 @@ def test_provider_heavy_construction_points_match_the_debt_manifest() -> None:
 
     boundary_debt.assert_family_matches(ROOT, manifest, FAMILY)
 
-    assert len(boundary_debt.collect_family(ROOT, FAMILY)) == 21
+    assert len(boundary_debt.collect_source_graph(ROOT).family_entries(FAMILY)) == 21
 
 
 def test_provider_heavy_guard_rejects_an_injected_construction_point(
@@ -68,7 +68,7 @@ def test_provider_heavy_guard_rejects_a_new_call_in_existing_debt(
     )
     manifest = boundary_debt.load_manifest()
     family = manifest["families"][FAMILY]
-    family["entries"] = boundary_debt.collect_family(tmp_path, FAMILY)
+    family["entries"] = boundary_debt.collect_source_graph(tmp_path).family_entries(FAMILY)
     boundary_debt.assert_family_matches(tmp_path, manifest, FAMILY)
 
     source.write_text(

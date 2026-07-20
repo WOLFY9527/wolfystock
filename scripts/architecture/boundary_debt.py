@@ -22,7 +22,7 @@ from scripts.architecture.boundary_debt_collectors import (
     PROVIDER_IMPORT_PREFIXES,
     PROVIDER_OWNED_SERVICE_PATHS,
     SERVICE_API_SCHEMA_FAMILY,
-    collect_family,
+    collect_source_graph,
 )
 
 
@@ -232,8 +232,9 @@ def reproduce_manifest(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
 
     validate_manifest(manifest)
     reproduced = deepcopy(manifest)
+    graph = collect_source_graph(root)
     for family in FAMILY_SPECS:
-        reproduced["families"][family]["entries"] = collect_family(root, family)
+        reproduced["families"][family]["entries"] = graph.family_entries(family)
     validate_manifest(reproduced)
     return reproduced
 
@@ -260,7 +261,7 @@ def assert_family_matches(root: Path, manifest: dict[str, Any], family: str) -> 
     if family not in FAMILY_SPECS:
         raise DebtManifestError(f"unknown debt family: {family}")
     expected = manifest["families"][family]["entries"]
-    actual = collect_family(root, family)
+    actual = collect_source_graph(root).family_entries(family)
     expected_by_key = {_entry_sort_key(entry): entry for entry in expected}
     actual_by_key = {_entry_sort_key(entry): entry for entry in actual}
     new_keys = sorted(set(actual_by_key) - set(expected_by_key))

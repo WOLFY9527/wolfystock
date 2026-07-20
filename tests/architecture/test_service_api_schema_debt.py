@@ -18,7 +18,7 @@ def test_service_to_api_schema_edges_match_the_debt_manifest() -> None:
 
     boundary_debt.assert_family_matches(ROOT, manifest, FAMILY)
 
-    assert len(boundary_debt.collect_family(ROOT, FAMILY)) == 46
+    assert len(boundary_debt.collect_source_graph(ROOT).family_entries(FAMILY)) == 46
 
 
 def test_service_to_api_schema_guard_rejects_an_injected_reverse_edge(

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import ast
+import hashlib
+import json
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -11,6 +14,13 @@ from typing import Any, Iterable, Sequence
 SERVICE_API_SCHEMA_FAMILY = "serviceToApiSchemaEdges"
 DIRECT_STORAGE_FAMILY = "directStorageConsumers"
 PROVIDER_HEAVY_FAMILY = "providerHeavyConstructionPoints"
+FAMILY_NAMES = frozenset(
+    {
+        DIRECT_STORAGE_FAMILY,
+        PROVIDER_HEAVY_FAMILY,
+        SERVICE_API_SCHEMA_FAMILY,
+    }
+)
 FAMILY_BASELINE_COUNTS = {
     DIRECT_STORAGE_FAMILY: 51,
     PROVIDER_HEAVY_FAMILY: 21,
@@ -28,6 +38,37 @@ PROVIDER_IMPORT_PREFIXES = (
 PROVIDER_OWNED_SERVICE_PATHS = frozenset(
     {"src/services/market_cache_redis_backend.py"}
 )
+COLLECTOR_VERSION = "t635-source-graph-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderConstruction:
+    callable: str
+    count: int
+    scope: str
+
+
+@dataclass(frozen=True, slots=True)
+class SourceFileGraph:
+    path: str
+    storage_imports: tuple[str, ...]
+    provider_imports: tuple[str, ...]
+    provider_constructions: tuple[ProviderConstruction, ...]
+    service_schema_imports: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SourceGraph:
+    root: str
+    input_digest: str
+    content_digest: str
+    files: tuple[SourceFileGraph, ...]
+
+    def family_entries(self, family: str) -> list[dict[str, Any]]:
+        return _family_entries(self, family)
+
+
+_SOURCE_GRAPH_CACHE: dict[tuple[str, str, str, str], SourceGraph] = {}
 
 
 def _matches_prefix(module: str, prefix: str) -> bool:
@@ -144,13 +185,12 @@ class _ProviderConstructionCollector(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def _imports_for_file(
-    path: Path,
+def _imports_for_tree(
+    tree: ast.AST,
     prefixes: Sequence[str],
     *,
     include_type_checking: bool = True,
 ) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     collector = _ImportCollector(prefixes, include_type_checking=include_type_checking)
     collector.visit(tree)
     return collector.modules
@@ -162,77 +202,175 @@ def _python_files(root: Path, relative_root: str) -> Iterable[Path]:
         yield from sorted(search_root.rglob("*.py"))
 
 
-def _collect_service_api_schema_edges(root: Path) -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
-    for path in _python_files(root, "src/services"):
-        source = path.relative_to(root).as_posix()
-        targets = _imports_for_file(path, ("api.v1.schemas",))
-        entries.extend({"source": source, "target": target} for target in sorted(targets))
-    return sorted(entries, key=lambda entry: (entry["source"], entry["target"]))
-
-
-def _collect_direct_storage_consumers(root: Path) -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
+def _source_files(root: Path) -> tuple[tuple[str, Path], ...]:
+    files: dict[str, Path] = {}
     for relative_root in PRODUCTION_ROOTS:
         for path in _python_files(root, relative_root):
             relative_path = path.relative_to(root)
             if relative_path.parts[:2] == ("src", "repositories"):
                 continue
-            if _imports_for_file(path, ("src.storage",)):
-                entries.append({"path": relative_path.as_posix()})
-    return sorted(entries, key=lambda entry: entry["path"])
+            files[relative_path.as_posix()] = path
+    return tuple(sorted(files.items()))
 
 
-def _collect_provider_heavy_construction_points(root: Path) -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
-    for path in _python_files(root, "src/services"):
-        relative_path = path.relative_to(root).as_posix()
-        if relative_path in PROVIDER_OWNED_SERVICE_PATHS:
-            continue
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        import_collector = _ProviderImportCollector()
-        import_collector.visit(tree)
-        imports = sorted(import_collector.modules)
-        if not imports:
-            continue
-        construction_collector = _ProviderConstructionCollector(import_collector.bindings)
-        construction_collector.visit(tree)
-        constructions = [
-            {"callable": callable_name, "count": count, "scope": scope}
-            for (scope, callable_name), count in sorted(construction_collector.calls.items())
-        ]
-        entries.append(
-            {
-                "constructions": constructions,
-                "imports": imports,
-                "path": relative_path,
-            }
+def _snapshot_source_inputs(
+    root: Path,
+) -> tuple[tuple[tuple[str, bytes], ...], str]:
+    digest = hashlib.sha256()
+    inputs: list[tuple[str, bytes]] = []
+    for relative_path, path in _source_files(root):
+        content = path.read_bytes()
+        digest.update(relative_path.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(content)
+        digest.update(b"\0")
+        inputs.append((relative_path, content))
+    return tuple(inputs), digest.hexdigest()
+
+
+def _canonical_digest(payload: object) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+_GRAPH_CONFIG_DIGEST = _canonical_digest(
+    {
+        "productionRoots": PRODUCTION_ROOTS,
+        "providerImportPrefixes": PROVIDER_IMPORT_PREFIXES,
+        "providerOwnedServicePaths": sorted(PROVIDER_OWNED_SERVICE_PATHS),
+        "serviceSchemaPrefix": "api.v1.schemas",
+        "storagePrefix": "src.storage",
+    }
+)
+
+
+def _build_source_graph(
+    root: Path,
+    source_inputs: tuple[tuple[str, bytes], ...],
+    input_digest: str,
+) -> SourceGraph:
+    files: list[SourceFileGraph] = []
+    for relative_path, content in source_inputs:
+        source = content.decode("utf-8")
+        path = root / relative_path
+        tree = ast.parse(source, filename=str(path))
+        storage_imports = tuple(sorted(_imports_for_tree(tree, ("src.storage",))))
+        provider_imports: tuple[str, ...] = ()
+        provider_constructions: tuple[ProviderConstruction, ...] = ()
+        service_schema_imports: tuple[str, ...] = ()
+        if relative_path.startswith("src/services/"):
+            service_schema_imports = tuple(
+                sorted(_imports_for_tree(tree, ("api.v1.schemas",)))
+            )
+            import_collector = _ProviderImportCollector()
+            import_collector.visit(tree)
+            provider_imports = tuple(sorted(import_collector.modules))
+            construction_collector = _ProviderConstructionCollector(
+                import_collector.bindings
+            )
+            construction_collector.visit(tree)
+            provider_constructions = tuple(
+                ProviderConstruction(
+                    callable=callable_name,
+                    count=count,
+                    scope=scope,
+                )
+                for (scope, callable_name), count in sorted(
+                    construction_collector.calls.items()
+                )
+            )
+        files.append(
+            SourceFileGraph(
+                path=relative_path,
+                storage_imports=storage_imports,
+                provider_imports=provider_imports,
+                provider_constructions=provider_constructions,
+                service_schema_imports=service_schema_imports,
+            )
         )
-    return sorted(
-        entries,
-        key=lambda entry: (
-            entry["path"],
-            tuple(entry["imports"]),
-            tuple(
-                (item["scope"], item["callable"], item["count"])
-                for item in entry["constructions"]
-            ),
-        ),
+    ordered_files = tuple(files)
+    content_digest = _canonical_digest(
+        [
+            {
+                "path": file.path,
+                "providerConstructions": [
+                    {
+                        "callable": item.callable,
+                        "count": item.count,
+                        "scope": item.scope,
+                    }
+                    for item in file.provider_constructions
+                ],
+                "providerImports": file.provider_imports,
+                "serviceSchemaImports": file.service_schema_imports,
+                "storageImports": file.storage_imports,
+            }
+            for file in ordered_files
+        ]
+    )
+    return SourceGraph(
+        root=root.as_posix(),
+        input_digest=input_digest,
+        content_digest=content_digest,
+        files=ordered_files,
     )
 
 
-_COLLECTORS = {
-    DIRECT_STORAGE_FAMILY: _collect_direct_storage_consumers,
-    PROVIDER_HEAVY_FAMILY: _collect_provider_heavy_construction_points,
-    SERVICE_API_SCHEMA_FAMILY: _collect_service_api_schema_edges,
-}
+def collect_source_graph(root: Path) -> SourceGraph:
+    """Collect one immutable, deterministic source graph per exact input identity."""
+
+    resolved_root = Path(root).resolve()
+    source_inputs, input_digest = _snapshot_source_inputs(resolved_root)
+    cache_key = (
+        resolved_root.as_posix(),
+        COLLECTOR_VERSION,
+        _GRAPH_CONFIG_DIGEST,
+        input_digest,
+    )
+    if cache_key not in _SOURCE_GRAPH_CACHE:
+        _SOURCE_GRAPH_CACHE[cache_key] = _build_source_graph(
+            resolved_root,
+            source_inputs,
+            input_digest,
+        )
+    return _SOURCE_GRAPH_CACHE[cache_key]
 
 
-def collect_family(root: Path, family: str) -> list[dict[str, Any]]:
-    """Collect one independently attributable debt family."""
-
-    try:
-        collector = _COLLECTORS[family]
-    except KeyError as exc:
-        raise ValueError(f"unknown debt family: {family}") from exc
-    return collector(Path(root))
+def _family_entries(graph: SourceGraph, family: str) -> list[dict[str, Any]]:
+    if family not in FAMILY_NAMES:
+        raise ValueError(f"unknown debt family: {family}")
+    if family == DIRECT_STORAGE_FAMILY:
+        return [
+            {"path": file.path}
+            for file in graph.files
+            if file.storage_imports
+        ]
+    if family == PROVIDER_HEAVY_FAMILY:
+        return [
+            {
+                "constructions": [
+                    {
+                        "callable": item.callable,
+                        "count": item.count,
+                        "scope": item.scope,
+                    }
+                    for item in file.provider_constructions
+                ],
+                "imports": list(file.provider_imports),
+                "path": file.path,
+            }
+            for file in graph.files
+            if file.path.startswith("src/services/")
+            and file.path not in PROVIDER_OWNED_SERVICE_PATHS
+            and file.provider_imports
+        ]
+    return [
+        {"source": file.path, "target": target}
+        for file in graph.files
+        for target in file.service_schema_imports
+    ]

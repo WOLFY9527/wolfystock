@@ -18,7 +18,7 @@ def test_direct_storage_consumers_match_the_debt_manifest() -> None:
 
     boundary_debt.assert_family_matches(ROOT, manifest, FAMILY)
 
-    assert len(boundary_debt.collect_family(ROOT, FAMILY)) == 51
+    assert len(boundary_debt.collect_source_graph(ROOT).family_entries(FAMILY)) == 51
 
 
 def test_direct_storage_guard_rejects_an_injected_consumer(tmp_path: Path) -> None:
