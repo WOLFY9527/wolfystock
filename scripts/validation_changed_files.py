@@ -12,10 +12,12 @@ import re
 import shlex
 import subprocess
 import sys
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable, Sequence
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 DEFAULT_BASE_REF = (
     os.environ.get("VALIDATION_BASE_REF")
     or os.environ.get("CI_GATE_BASE_REF")
@@ -25,6 +27,7 @@ DEFAULT_BASE_REF = (
 DEFAULT_DIFF_FILTER = "ACMRTUXB"
 SHADOW_DIFF_FILTER = "ACDMRTUXB"
 DEFAULT_OWNER_MANIFEST = Path("validation/validation_owners.json")
+DEFAULT_TOPOLOGY_MANIFEST = Path("validation/domain_test_topology.json")
 SHADOW_TIERS = (
     "direct_owner",
     "bounded_integration",
@@ -119,6 +122,44 @@ FULL_GATE_FILES = {
     "pnpm-lock.yaml",
     "yarn.lock",
 }
+
+RISK_CLASSES = ("R0", "R1", "R2", "R3", "R4", "R5")
+RISK_SELECTION_SCHEMA = "wolfystock.validation-selection.v1"
+RISK_SELECTOR_VERSION = "t631-r1"
+RISK_GATE_FLOORS: dict[str, tuple[str, ...]] = {
+    "R0": ("scope.diff", "security.changed"),
+    "R1": ("syntax.changed", "tests.backend.changed", "tests.frontend.changed"),
+    "R2": ("owners.affected", "consumers.affected"),
+    "R3": ("contracts.cross_owner", "topology.verify", "security.branch"),
+    "R4": ("protected.owners", "architecture.global", "backend.canonical", "browser.protected"),
+    "R5": ("frontend.full", "browser.full", "uat.runtime", "release.real_runtime"),
+}
+RISK_GATE_ORDER = tuple(
+    gate_id
+    for risk_class in RISK_CLASSES
+    for gate_id in RISK_GATE_FLOORS[risk_class]
+)
+RISK_GATE_MINIMUM = {
+    gate_id: risk_class
+    for risk_class in RISK_CLASSES
+    for gate_id in RISK_GATE_FLOORS[risk_class]
+}
+RISK_GATE_EVIDENCE = {
+    gate_id: "T630" if gate_id in {"owners.affected", "backend.canonical"} else "command"
+    for gate_id in RISK_GATE_ORDER
+}
+RISK_GATE_CHANGE_PATHS = {
+    "scripts/ci_gate.sh",
+    "scripts/ci_gate_fast.sh",
+    "scripts/validation_changed_files.py",
+    "validation/validation_owners.json",
+    "validation/domain_test_topology.json",
+    "scripts/domain_test_topology.py",
+}
+
+
+class SelectionError(ValueError):
+    """Raised when a risk plan or structured result cannot be trusted."""
 
 
 def run_git(args: list[str], *, root: Path = ROOT, check: bool = False) -> subprocess.CompletedProcess[str]:
@@ -300,6 +341,7 @@ def is_known_validation_path(path: str) -> bool:
 
 
 def classify(files: list[str], *, root: Path = ROOT) -> dict[str, object]:
+    """Return collector-only metadata; validation gates use the risk plan below."""
     protected_files = [path for path in files if is_protected_domain(path)]
     full_gate_files = [path for path in files if needs_full_gate(path)]
     unknown_files = [path for path in files if not is_known_validation_path(path)]
@@ -367,6 +409,14 @@ def canonical_json_bytes(value: object) -> bytes:
 
 def stable_hash(value: object) -> str:
     return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
+
+
+def file_hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def manifest_path(path: Path, *, root: Path) -> Path:
@@ -1074,6 +1124,766 @@ def build_shadow_plan(
     )
 
 
+def _risk_index(risk_class: str) -> int:
+    try:
+        return RISK_CLASSES.index(risk_class)
+    except ValueError as exc:
+        raise SelectionError(f"invalid risk class: {risk_class}") from exc
+
+
+def _max_risk(*risk_classes: str) -> str:
+    return max(risk_classes, key=_risk_index, default="R0")
+
+
+def _candidate_identity(root: Path, candidate_ref: str) -> dict[str, Any]:
+    commit = resolve_git_ref(candidate_ref, root=root)
+    tree = run_git(["rev-parse", f"{commit}^{{tree}}"], root=root).stdout.strip()
+    if not tree:
+        raise SelectionError(f"candidate tree identity is unavailable: {candidate_ref}")
+    status = run_git(["status", "--porcelain", "--untracked-files=all"], root=root)
+    if status.returncode:
+        raise SelectionError("candidate working-tree identity is unavailable")
+    digest = hashlib.sha256()
+    for raw_path in sorted(run_git_bytes(["ls-files", "--cached", "--others", "--exclude-standard", "-z"], root=root).split(b"\0")):
+        if not raw_path:
+            continue
+        relative = raw_path.decode("utf-8", errors="surrogateescape")
+        path = root / relative
+        digest.update(raw_path)
+        digest.update(b"\0")
+        if path.is_symlink():
+            digest.update(b"symlink\0")
+            digest.update(os.readlink(path).encode("utf-8", errors="surrogateescape"))
+        elif path.is_file():
+            digest.update(b"executable\0" if os.access(path, os.X_OK) else b"file\0")
+            digest.update(file_hash(path).encode("ascii"))
+        else:
+            digest.update(b"missing\0")
+        digest.update(b"\0")
+    return {
+        "commitSha": commit,
+        "treeSha": tree,
+        "workingTreeSha256": digest.hexdigest(),
+        "dirty": bool(status.stdout),
+    }
+
+
+def _risk_change_class(path: str, rules: list[dict[str, Any]]) -> tuple[str, list[str], list[str]]:
+    reasons: list[str] = []
+    protected_owners: set[str] = set()
+    protected_rules = [rule for rule in rules if rule.get("protected")]
+    for rule in protected_rules:
+        reasons.append(str(rule.get("reason") or rule["id"]))
+        for tier_owners in rule.get("owners", {}).values():
+            protected_owners.update(tier_owners)
+    if protected_rules or path in RISK_GATE_CHANGE_PATHS:
+        if path in RISK_GATE_CHANGE_PATHS and not protected_rules:
+            reasons.append("validation_gate_authority_change")
+        return "R4", sorted(set(reasons)), sorted(protected_owners)
+    if not rules:
+        return "R3", ["unknown_validation_relevant_path"], []
+    if is_doc_path(path):
+        return "R0", ["documentation_or_non_executable_artifact"], []
+    if path.startswith("tests/") or path == "conftest.py":
+        return "R1", ["test_only_or_mechanically_local_change"], []
+    if path.startswith("apps/dsa-web/") and re.search(r"(?:^|/)(?:__tests__/|[^/]+\.(?:test|spec)\.)", path):
+        return "R1", ["frontend_test_only_change"], []
+    if path.startswith("apps/dsa-web/src/"):
+        if path.startswith(
+            (
+                "apps/dsa-web/src/components/",
+                "apps/dsa-web/src/hooks/",
+                "apps/dsa-web/src/lib/",
+                "apps/dsa-web/src/styles/",
+                "apps/dsa-web/src/utils/",
+            )
+        ):
+            return "R3", ["shared_frontend_owner_boundary"], []
+        return "R2", ["one_bounded_frontend_owner"], []
+    if path.startswith("scripts/") or path == "test.sh":
+        return "R1", ["mechanically_local_tooling_change"], []
+    if len(rules) > 1:
+        return "R3", ["multiple_owner_rules"], []
+    return "R2", ["one_bounded_production_owner"], []
+
+
+def _topology_inventory_may_change(path: str) -> bool:
+    if path in {"validation/domain_test_topology.json", "scripts/domain_test_topology.py", "conftest.py"}:
+        return True
+    if path.startswith("tests/") and path.endswith(".py"):
+        return True
+    if path.startswith("apps/dsa-web/e2e/") and path.endswith((".spec.ts", ".spec.tsx")):
+        return True
+    return path.startswith("apps/dsa-web/src/") and bool(
+        re.search(r"(?:^|/)(?:__tests__/|[^/]+\.(?:test|spec)\.)", path)
+    )
+
+
+def _backend_domains_for_paths(paths: Sequence[str], *, root: Path = ROOT) -> list[str]:
+    from scripts import domain_test_topology
+
+    domains: set[str] = set()
+    manifest = domain_test_topology.load_manifest()
+    entries = manifest["backend"]["tests"]
+
+    def add_owned_test_file(test_path: str) -> bool:
+        owned = {
+            entry["domain"]
+            for entry in entries
+            if entry["id"].startswith(f"{test_path}::")
+        }
+        domains.update(owned)
+        return bool(owned)
+
+    for path in paths:
+        if path.startswith("tests/"):
+            if not add_owned_test_file(path):
+                domains.add(domain_test_topology.classify_backend(f"{path}::validation_placeholder"))
+        elif path.endswith(".py"):
+            for related in infer_related_pytests(path, root=root):
+                add_owned_test_file(related)
+            if path.startswith("scripts/"):
+                domains.add("runtime_operator_tooling")
+            elif path.startswith("api/"):
+                domains.add("api_schema_contracts")
+        lowered = path.lower()
+        for marker, domain in (
+            ("auth", "auth_security"),
+            ("provider", "provider_external_network"),
+            ("scanner", "scanner"),
+            ("backtest", "backtest"),
+            ("portfolio", "portfolio_broker"),
+            ("migration", "database_storage_migrations"),
+            ("schema", "api_schema_contracts"),
+        ):
+            if marker in lowered:
+                domains.add(domain)
+    return sorted(domains)
+
+
+def _backend_expected_selection(domains: Sequence[str]) -> dict[str, Any]:
+    from scripts import domain_test_topology
+
+    manifest = domain_test_topology.load_manifest()
+    ids = [entry["id"] for entry in manifest["backend"]["tests"] if entry["domain"] in domains]
+    return {"count": len(ids), "sha256": domain_test_topology.inventory_hash(ids)}
+
+
+def _structured_backend_command(domains: Sequence[str]) -> list[str]:
+    from scripts import domain_test_topology
+
+    output = "$OUTPUT"
+    command = [
+        "$PYTHON",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "-p",
+        "scripts.domain_test_topology",
+        "--domain-topology-verify-full",
+        "--test-result-evidence-output",
+        f"{output}/attempt-0.json",
+        "--test-result-evidence-context",
+        f"{output}/attempt-0-context.json",
+        f"--junitxml={output}/attempt-0.junit.xml",
+    ]
+    if tuple(domains) != tuple(domain_test_topology.BACKEND_DOMAINS):
+        command.extend(["--domain-topology-select-file", f"{output}/selection.json"])
+    return command
+
+
+def _gate_command(gate_id: str, *, base_ref: str, candidate_sha: str, changed_paths: Sequence[str], domains: Sequence[str]) -> list[str] | None:
+    if gate_id == "scope.diff":
+        return ["git", "diff", "--check"]
+    if gate_id == "security.changed":
+        return ["bash", "scripts/release_secret_scan.sh", "--files-from", "$CHANGED_FILES"]
+    if gate_id == "security.branch":
+        return ["bash", "scripts/release_secret_scan.sh", "--base-ref", base_ref]
+    if gate_id == "syntax.changed":
+        return ["$PYTHON", "-m", "py_compile", "$CHANGED_PYTHON"]
+    if gate_id == "tests.backend.changed":
+        return ["$PYTHON", "-m", "pytest", "-q", "$CHANGED_TESTS"]
+    if gate_id == "tests.frontend.changed":
+        return ["npm", "--prefix", "apps/dsa-web", "run", "test:related", "--", "$CHANGED_WEB"]
+    if gate_id == "owners.affected":
+        return [
+            "$PYTHON",
+            "scripts/domain_test_topology.py",
+            "run-backend",
+            "--domains",
+            ",".join(domains),
+            "--output-dir",
+            f"$OUTPUT/{gate_id}",
+            "--retry-failures",
+            "0",
+        ]
+    if gate_id == "consumers.affected":
+        return ["npm", "--prefix", "apps/dsa-web", "run", "test:related", "--", "$CHANGED_WEB"]
+    if gate_id == "contracts.cross_owner":
+        if any(path.startswith("apps/dsa-web/") for path in changed_paths):
+            return ["npm", "--prefix", "apps/dsa-web", "run", "test"]
+        return [
+            "$PYTHON",
+            "scripts/domain_test_topology.py",
+            "run-backend",
+            "--domains",
+            ",".join(domains),
+            "--output-dir",
+            f"$OUTPUT/{gate_id}",
+            "--retry-failures",
+            "0",
+        ]
+    if gate_id == "topology.verify":
+        return ["$PYTHON", "scripts/domain_test_topology.py", "verify-all"]
+    if gate_id == "protected.owners":
+        return ["$PYTHON", "-m", "pytest", "-m", "not network"]
+    if gate_id == "architecture.global":
+        return ["$PYTHON", "-m", "pytest", "-q", "tests/architecture"]
+    if gate_id == "backend.canonical":
+        return [
+            "$PYTHON",
+            "scripts/domain_test_topology.py",
+            "run-backend",
+            "--domains",
+            ",".join(domains),
+            "--output-dir",
+            f"$OUTPUT/{gate_id}",
+            "--retry-failures",
+            "0",
+        ]
+    if gate_id == "browser.protected":
+        from scripts import domain_test_topology
+
+        protected_specs = [
+            entry["path"].removeprefix("apps/dsa-web/")
+            for entry in domain_test_topology.load_manifest()["playwright"]["specs"]
+            if entry["owner"] == "protected_critical"
+        ]
+        if not protected_specs:
+            raise SelectionError("protected browser selection is empty")
+        return [
+            "npm",
+            "--prefix",
+            "apps/dsa-web",
+            "run",
+            "test:e2e",
+            "--",
+            "--project=chromium",
+            "--project=chromium-mobile",
+            *protected_specs,
+        ]
+    if gate_id == "frontend.full":
+        return ["npm", "--prefix", "apps/dsa-web", "run", "test"]
+    if gate_id == "browser.full":
+        return [
+            "npm",
+            "--prefix",
+            "apps/dsa-web",
+            "run",
+            "test:e2e",
+            "--",
+            "--project=chromium",
+            "--project=chromium-mobile",
+        ]
+    if gate_id == "uat.runtime":
+        return ["$PYTHON", "scripts/uat_runtime_harness.py", "--expected-sha", candidate_sha]
+    if gate_id == "release.real_runtime":
+        return ["npm", "--prefix", "apps/dsa-web", "run", "test:e2e", "--", "--project=release-real-runtime"]
+    return None
+
+
+def _validation_config(*, manifest_hash: str) -> dict[str, Any]:
+    return {"selectorVersion": RISK_SELECTOR_VERSION, "ownerManifestHash": manifest_hash}
+
+
+def _selection_binding(plan: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "changedFiles": plan["changedFiles"],
+        "riskClass": plan["risk"]["class"],
+        "affectedOwners": plan["affectedOwners"],
+        "protectedOwners": plan["risk"]["protectedOwners"],
+        "requestedGates": plan["requested"]["gates"],
+        "gateIds": [gate["id"] for gate in plan["gates"]],
+    }
+
+
+def _seal_plan(plan: dict[str, Any]) -> dict[str, Any]:
+    plan["identity"]["configSha256"] = stable_hash(plan["config"])
+    plan["identity"]["selectionSha256"] = stable_hash(plan["selection"])
+    plan["planHash"] = stable_hash({key: value for key, value in plan.items() if key != "planHash"})
+    return plan
+
+
+def build_validation_plan_from_changes(
+    changes: list[dict[str, Any]],
+    manifest: dict[str, Any],
+    *,
+    root: Path = ROOT,
+    base_ref: str,
+    base_sha: str,
+    candidate_ref: str,
+    candidate_sha: str,
+    change_source: str,
+    manifest_hash: str,
+    candidate_identity: dict[str, Any] | None = None,
+    requested_risk: str | None = None,
+    requested_gates: Sequence[str] = (),
+    frozen_release: bool = False,
+    accepted_integration: bool = False,
+    user_facing: bool = False,
+    release_runtime: bool = False,
+) -> dict[str, Any]:
+    requested_risk = requested_risk or "R0"
+    _risk_index(requested_risk)
+    requested_gates = tuple(sorted(set(requested_gates)))
+    unknown_requested = sorted(set(requested_gates) - set(RISK_GATE_ORDER))
+    if unknown_requested:
+        raise SelectionError(f"unknown requested gate: {unknown_requested}")
+    planned_changes: list[dict[str, Any]] = []
+    risk_reasons: set[str] = set()
+    protected_owners: set[str] = set()
+    affected_owners: set[str] = set()
+    unknown_paths: list[str] = []
+    for raw_change in sorted(changes, key=lambda item: item["path"]):
+        path = raw_change["path"]
+        rules = matching_rules(path, manifest)
+        risk_class, reasons, owners = _risk_change_class(path, rules)
+        if not rules:
+            unknown_paths.append(path)
+            owner_ids = list(manifest["unknownEscalation"]["owners"])
+        else:
+            owner_ids = owner_ids_for_rules(rules)
+        inferred_targets = infer_related_pytests(path, root=root)
+        if inferred_targets:
+            owner_ids = sorted(set(owner_ids) | {"direct.pytest.related_inference"})
+        affected_owners.update(owner_ids)
+        risk_reasons.update(reasons)
+        protected_owners.update(owners)
+        item = dict(raw_change)
+        item.update(
+            {
+                "matchedRules": [rule["id"] for rule in rules],
+                "riskClass": risk_class,
+                "riskReasons": reasons,
+                "ownerIds": owner_ids,
+                "protectedOwners": owners,
+                "authoritySource": "manifest_rule" if rules else "explicit_unknown_escalation",
+            }
+        )
+        if inferred_targets:
+            item["inferredOwnerTargets"] = inferred_targets
+        planned_changes.append(item)
+
+    classified_risk = _max_risk(
+        requested_risk,
+        *(item["riskClass"] for item in planned_changes),
+        "R5" if frozen_release else "R0",
+    )
+    changed_paths = [item["path"] for item in planned_changes]
+    topology_may_change = any(_topology_inventory_may_change(item["path"]) for item in planned_changes)
+    frontend_changed = any(path.startswith("apps/dsa-web/") for path in changed_paths)
+    backend_related = any(
+        path.endswith(".py")
+        and path.startswith(("api/", "bot/", "data_provider/", "scripts/", "src/", "tests/"))
+        for path in changed_paths
+    )
+    changed_backend_tests = [path for path in changed_paths if path.startswith("tests/") and path.endswith(".py")]
+    changed_frontend_tests = [
+        path
+        for path in changed_paths
+        if path.startswith("apps/dsa-web/")
+        and re.search(r"(?:^|/)(?:__tests__/|[^/]+\.(?:test|spec)\.)", path)
+    ]
+    requested_floor = requested_risk
+    domains = _backend_domains_for_paths(changed_paths, root=root)
+    if not domains:
+        domains = ["residual_repository_integration"]
+    full_domains = list(__import__("scripts.domain_test_topology", fromlist=["BACKEND_DOMAINS"]).BACKEND_DOMAINS)
+    gate_ids: list[str] = []
+    for risk_class in RISK_CLASSES:
+        if _risk_index(risk_class) <= _risk_index(classified_risk):
+            gate_ids.extend(RISK_GATE_FLOORS[risk_class])
+    if accepted_integration and _risk_index(classified_risk) >= _risk_index("R3"):
+        gate_ids.append("backend.canonical")
+    if unknown_paths:
+        gate_ids.append("backend.canonical")
+    if topology_may_change:
+        gate_ids.append("topology.verify")
+    if frontend_changed and _risk_index(classified_risk) >= _risk_index("R3"):
+        gate_ids.append("browser.protected")
+    if user_facing and _risk_index(classified_risk) >= _risk_index("R3"):
+        gate_ids.append("uat.runtime")
+    if release_runtime and _risk_index(classified_risk) >= _risk_index("R4"):
+        gate_ids.append("release.real_runtime")
+    for gate_id in requested_gates:
+        if gate_id not in gate_ids:
+            gate_ids.append(gate_id)
+    gate_ids = [gate_id for gate_id in RISK_GATE_ORDER if gate_id in set(gate_ids)]
+
+    actual_candidate = candidate_identity or _candidate_identity(root, candidate_ref)
+    if candidate_sha != actual_candidate.get("commitSha"):
+        raise SelectionError("candidate commit identity mismatch while building validation plan")
+    config = _validation_config(manifest_hash=manifest_hash)
+    plan: dict[str, Any] = {
+        "schemaVersion": RISK_SELECTION_SCHEMA,
+        "kind": "validation-plan",
+        "state": "complete",
+        "authority": "risk-selection",
+        "identity": {
+            "baseRef": base_ref,
+            "baseSha": base_sha,
+            "candidateRef": candidate_ref,
+            "candidateSha": candidate_sha,
+            "candidate": dict(actual_candidate),
+            "changeSource": change_source,
+        },
+        "config": config,
+        "changedFiles": changed_paths,
+        "affectedOwners": sorted(affected_owners),
+        "changes": planned_changes,
+        "requested": {
+            "riskClass": requested_floor,
+            "gates": list(requested_gates),
+            "frozenRelease": frozen_release,
+            "acceptedIntegration": accepted_integration,
+            "userFacing": user_facing,
+            "releaseRuntime": release_runtime,
+        },
+        "risk": {
+            "class": classified_risk,
+            "reasons": sorted(risk_reasons),
+            "protectedOwners": sorted(protected_owners),
+            "unknownPaths": sorted(unknown_paths),
+            "topologyMayChange": topology_may_change,
+        },
+        "selection": {},
+        "gates": [],
+    }
+    plan["selection"] = _selection_binding(plan)
+    for gate_id in gate_ids:
+        gate_domains = full_domains if gate_id == "backend.canonical" else domains
+        command = _gate_command(
+            gate_id,
+            base_ref=base_ref,
+            candidate_sha=actual_candidate["commitSha"],
+            changed_paths=changed_paths,
+            domains=gate_domains,
+        )
+        applicable = True
+        if gate_id == "syntax.changed":
+            applicable = any(path.endswith(".py") for path in changed_paths)
+        elif gate_id == "tests.backend.changed":
+            applicable = bool(changed_backend_tests)
+        elif gate_id == "tests.frontend.changed":
+            applicable = bool(changed_frontend_tests)
+        elif gate_id == "owners.affected":
+            applicable = backend_related
+        elif gate_id == "contracts.cross_owner":
+            applicable = backend_related or frontend_changed
+        elif gate_id == "topology.verify":
+            applicable = topology_may_change
+        elif gate_id == "architecture.global":
+            applicable = classified_risk in {"R4", "R5"}
+        elif gate_id == "consumers.affected":
+            applicable = frontend_changed
+        elif gate_id in {"frontend.full", "browser.full"}:
+            applicable = frontend_changed or classified_risk == "R5"
+        elif gate_id == "browser.protected":
+            applicable = frontend_changed or classified_risk == "R5"
+        elif gate_id == "uat.runtime":
+            applicable = user_facing or classified_risk == "R5"
+        elif gate_id == "release.real_runtime":
+            applicable = release_runtime or classified_risk == "R5"
+        if gate_id in requested_gates:
+            applicable = True
+        reason = "cumulative_tier_requirement"
+        if gate_id in requested_gates:
+            reason = "explicit_task_gate"
+        elif gate_id == "backend.canonical" and accepted_integration:
+            reason = "accepted_integration_batch"
+        elif gate_id == "backend.canonical" and unknown_paths:
+            reason = "unknown_change_fail_closed"
+        elif gate_id == "topology.verify" and topology_may_change:
+            reason = "topology_inventory_may_change"
+        elif gate_id == "browser.protected" and frontend_changed:
+            reason = "frontend_critical_route_trigger"
+        gate: dict[str, Any] = {
+            "id": gate_id,
+            "minimumRisk": RISK_GATE_MINIMUM[gate_id],
+            "required": applicable,
+            "command": command,
+            "retryCount": 0,
+            "selectionReason": reason,
+            "evidence": {"kind": RISK_GATE_EVIDENCE[gate_id], "inferenceAllowed": False},
+        }
+        backend_covered = "backend.canonical" in gate_ids and (
+            gate_id in {"tests.backend.changed", "owners.affected", "protected.owners", "architecture.global"}
+            or (gate_id == "contracts.cross_owner" and not frontend_changed)
+        )
+        owner_covered = (
+            gate_id == "contracts.cross_owner"
+            and backend_related
+            and not frontend_changed
+            and "owners.affected" in gate_ids
+        )
+        if backend_covered or owner_covered:
+            gate["command"] = None
+            gate["satisfiedBy"] = "backend.canonical" if backend_covered else "owners.affected"
+            gate["evidence"]["kind"] = "T630-covered-selection"
+            source_domains = full_domains if backend_covered else domains
+            gate["coverageRequirement"] = {
+                "kind": "backend-domain-superset",
+                "requiredDomains": gate_domains,
+                "sourceDomains": source_domains,
+            }
+        if gate_id in {"owners.affected", "backend.canonical"}:
+            gate["domains"] = gate_domains
+            gate["expectedSelection"] = _backend_expected_selection(gate_domains)
+            gate["structuredCommand"] = _structured_backend_command(gate_domains)
+            gate["structuredEvidence"] = "T630"
+        plan["gates"].append(gate)
+    plan["selection"] = _selection_binding(plan)
+    return _seal_plan(plan)
+
+
+def _validate_plan(plan: dict[str, Any]) -> None:
+    if plan.get("schemaVersion") != RISK_SELECTION_SCHEMA or plan.get("kind") != "validation-plan":
+        raise SelectionError("validation plan schema or kind is invalid")
+    if plan.get("state") != "complete" or plan.get("authority") != "risk-selection":
+        raise SelectionError("validation plan is incomplete or has the wrong authority")
+    if plan.get("identity", {}).get("configSha256") != stable_hash(plan.get("config")):
+        raise SelectionError("validation plan config identity mismatch")
+    if plan.get("identity", {}).get("selectionSha256") != stable_hash(plan.get("selection")):
+        raise SelectionError("validation plan selection identity mismatch")
+    if plan.get("planHash") != stable_hash({key: value for key, value in plan.items() if key != "planHash"}):
+        raise SelectionError("validation plan hash mismatch")
+
+
+def consume_structured_backend_result(
+    plan: dict[str, Any],
+    result_path: Path,
+    *,
+    gate_id: str,
+    topology_manifest_path: Path = DEFAULT_TOPOLOGY_MANIFEST,
+) -> dict[str, Any]:
+    _validate_plan(plan)
+    gate = next((gate for gate in plan["gates"] if gate["id"] == gate_id), None)
+    if gate is None or gate.get("structuredEvidence") != "T630":
+        raise SelectionError(f"gate does not consume T630 evidence: {gate_id}")
+    try:
+        raw = json.loads(result_path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise SelectionError(f"missing structured result: {result_path}") from exc
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise SelectionError(f"malformed structured result: {result_path}") from exc
+    if raw.get("state") != "completed":
+        raise SelectionError("structured result is incomplete")
+    if raw.get("retries"):
+        raise SelectionError("structured result contains an unauthorized retry")
+    first = raw.get("firstAttempt")
+    if not isinstance(first, dict) or first.get("state") != "completed":
+        raise SelectionError("first attempt evidence is incomplete")
+    if first.get("counts", {}).get("parents", {}).get("skipped", 0) or first.get("counts", {}).get("children", {}).get("skipped", 0):
+        raise SelectionError("skipped structured evidence is not a pass")
+    try:
+        from scripts import domain_test_topology
+
+        manifest = domain_test_topology.load_manifest(topology_manifest_path)
+        validated = domain_test_topology.reclassify_backend_result(manifest, result_path)
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, KeyError, json.JSONDecodeError, domain_test_topology.TopologyError) as exc:
+        raise SelectionError(f"structured result validation failed: {exc}") from exc
+    if result.get("status") != "passed":
+        raise SelectionError(f"selected structured check failed: {result.get('status')}")
+    evidence_identity = result.get("identity", {})
+    candidate = plan["identity"]["candidate"]
+    if evidence_identity.get("candidate") != candidate:
+        raise SelectionError("candidate identity mismatch")
+    expected_selection = gate["expectedSelection"]
+    if evidence_identity.get("selection") != expected_selection:
+        raise SelectionError("selection identity mismatch")
+    if evidence_identity.get("topology") != manifest["backend"]["currentInventory"]:
+        raise SelectionError("topology identity mismatch")
+    if gate.get("structuredCommand") and evidence_identity.get("command", {}).get("argv") != gate["structuredCommand"]:
+        raise SelectionError("structured command identity mismatch")
+    if result.get("selectedCount") != expected_selection["count"]:
+        raise SelectionError("structured selected-count identity mismatch")
+    return {"gateId": gate_id, "status": "passed", "result": validated}
+
+
+def _render_validation_command(command: Sequence[str], *, plan: dict[str, Any], output_dir: Path, root: Path) -> list[str]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    changed = output_dir / "changed-files.txt"
+    changed.write_text("\n".join(plan["changedFiles"]) + ("\n" if plan["changedFiles"] else ""), encoding="utf-8")
+    python_paths = [path for path in plan["changedFiles"] if path.endswith(".py") and (root / path).is_file()]
+    test_paths = [path for path in plan["changedFiles"] if path.startswith("tests/") and (root / path).is_file()]
+    web_paths = [
+        path.removeprefix("apps/dsa-web/")
+        for path in plan["changedFiles"]
+        if path.startswith("apps/dsa-web/") and (root / path).is_file()
+    ]
+    expansions = {
+        "$CHANGED_FILES": [str(changed)],
+        "$CHANGED_PYTHON": python_paths,
+        "$CHANGED_TESTS": test_paths,
+        "$CHANGED_WEB": web_paths,
+    }
+    rendered: list[str] = []
+    for token in command:
+        if token in expansions:
+            if not expansions[token]:
+                raise SelectionError(f"required command input unavailable: {token}")
+            rendered.extend(expansions[token])
+            continue
+        value = token.replace("$PYTHON", sys.executable).replace("$CANDIDATE_SHA", plan["identity"]["candidate"]["commitSha"])
+        value = value.replace("$OUTPUT", str(output_dir))
+        rendered.append(value)
+    return rendered
+
+
+def execute_validation_plan(
+    plan: dict[str, Any],
+    *,
+    output_dir: Path,
+    root: Path = ROOT,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    candidate_identity: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    _validate_plan(plan)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    actual_candidate = candidate_identity or _candidate_identity(root, plan["identity"]["candidateRef"])
+    if actual_candidate != plan["identity"]["candidate"]:
+        payload = {
+            "schemaVersion": RISK_SELECTION_SCHEMA,
+            "status": "failed",
+            "exitCode": 2,
+            "reason": "validation plan candidate identity is stale or mismatched",
+            "gates": [],
+        }
+        (output_dir / "execution-result.json").write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        return payload
+    results: list[dict[str, Any]] = []
+    results_by_gate: dict[str, dict[str, Any]] = {}
+    for gate in plan["gates"]:
+        if not gate["required"]:
+            gate_result = {"gateId": gate["id"], "status": "not_applicable", "retries": []}
+            results.append(gate_result)
+            results_by_gate[gate["id"]] = gate_result
+            continue
+        if gate.get("satisfiedBy"):
+            gate_result = {
+                "gateId": gate["id"],
+                "status": "pending_evidence",
+                "evidenceFrom": gate["satisfiedBy"],
+                "retries": [],
+            }
+            results.append(gate_result)
+            results_by_gate[gate["id"]] = gate_result
+            continue
+        command = gate.get("command")
+        if not command:
+            gate_result = {"gateId": gate["id"], "status": "not_run", "retries": []}
+            results.append(gate_result)
+            results_by_gate[gate["id"]] = gate_result
+            payload = {"schemaVersion": RISK_SELECTION_SCHEMA, "status": "failed", "exitCode": 2, "gates": results}
+            (output_dir / "execution-result.json").write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+            return payload
+        try:
+            rendered = _render_validation_command(command, plan=plan, output_dir=output_dir, root=root)
+        except SelectionError as exc:
+            gate_result = {
+                "gateId": gate["id"],
+                "status": "failed",
+                "exitCode": 2,
+                "command": command,
+                "reason": str(exc),
+                "retries": [],
+            }
+            results.append(gate_result)
+            results_by_gate[gate["id"]] = gate_result
+            payload = {"schemaVersion": RISK_SELECTION_SCHEMA, "status": "failed", "exitCode": 2, "gates": results}
+            (output_dir / "execution-result.json").write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+            return payload
+        try:
+            completed = runner(rendered, cwd=root, text=True, encoding="utf-8", errors="replace")
+        except OSError as exc:
+            gate_result = {
+                "gateId": gate["id"],
+                "status": "failed",
+                "exitCode": 127,
+                "command": command,
+                "reason": f"command launch failed: {exc}",
+                "retries": [],
+            }
+            results.append(gate_result)
+            results_by_gate[gate["id"]] = gate_result
+            payload = {"schemaVersion": RISK_SELECTION_SCHEMA, "status": "failed", "exitCode": 127, "gates": results}
+            (output_dir / "execution-result.json").write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+            return payload
+        gate_result = {
+            "gateId": gate["id"],
+            "status": "passed" if completed.returncode == 0 else "failed",
+            "exitCode": completed.returncode,
+            "command": command,
+            "retries": [],
+        }
+        results.append(gate_result)
+        results_by_gate[gate["id"]] = gate_result
+        if completed.returncode:
+            payload = {"schemaVersion": RISK_SELECTION_SCHEMA, "status": "failed", "exitCode": completed.returncode, "gates": results}
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / "execution-result.json").write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+            return payload
+        if gate.get("structuredEvidence") == "T630":
+            result_path = output_dir / gate["id"] / "result.json"
+            try:
+                evidence_result = consume_structured_backend_result(plan, result_path, gate_id=gate["id"])
+            except SelectionError as exc:
+                gate_result["status"] = "failed"
+                gate_result["reason"] = str(exc)
+                payload = {"schemaVersion": RISK_SELECTION_SCHEMA, "status": "failed", "exitCode": 2, "gates": results}
+                (output_dir / "execution-result.json").write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+                return payload
+            gate_result["structuredEvidence"] = evidence_result["status"]
+
+    gates_by_id = {gate["id"]: gate for gate in plan["gates"]}
+    for gate_result in results:
+        if gate_result["status"] != "pending_evidence":
+            continue
+        gate = gates_by_id[gate_result["gateId"]]
+        source_id = gate["satisfiedBy"]
+        source = results_by_gate.get(source_id)
+        source_gate = gates_by_id.get(source_id)
+        coverage = gate.get("coverageRequirement", {})
+        valid_coverage = (
+            coverage.get("kind") == "backend-domain-superset"
+            and source is not None
+            and source.get("status") == "passed"
+            and source.get("structuredEvidence") == "passed"
+            and source_gate is not None
+            and source_gate.get("structuredEvidence") == "T630"
+            and set(source_gate.get("domains", [])) == set(coverage.get("sourceDomains", []))
+            and set(coverage.get("requiredDomains", [])).issubset(set(source_gate.get("domains", [])))
+        )
+        if not valid_coverage:
+            gate_result["status"] = "failed"
+            gate_result["reason"] = f"required coverage evidence was not established by {source_id}"
+            payload = {
+                "schemaVersion": RISK_SELECTION_SCHEMA,
+                "status": "failed",
+                "exitCode": 2,
+                "gates": results,
+            }
+            (output_dir / "execution-result.json").write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+            return payload
+        gate_result["status"] = "passed"
+        gate_result["coverage"] = "validated_structured_domain_superset"
+    payload = {"schemaVersion": RISK_SELECTION_SCHEMA, "status": "passed", "exitCode": 0, "gates": results}
+    (output_dir / "execution-result.json").write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    return payload
+
+
 def tracked_path_inventory(
     manifest: dict[str, Any],
     *,
@@ -1235,6 +2045,23 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_OWNER_MANIFEST,
         help="JSON owner manifest for shadow planning",
     )
+    parser.add_argument(
+        "--risk-plan",
+        action="store_true",
+        help="emit the deterministic cumulative R0-R5 validation selection plan",
+    )
+    parser.add_argument(
+        "--execute-validation-plan",
+        type=Path,
+        help="execute a previously emitted validation plan and consume structured evidence",
+    )
+    parser.add_argument("--requested-risk", choices=RISK_CLASSES, default=None)
+    parser.add_argument("--requested-gate", action="append", default=[])
+    parser.add_argument("--frozen-release", action="store_true")
+    parser.add_argument("--accepted-integration", action="store_true")
+    parser.add_argument("--user-facing", action="store_true")
+    parser.add_argument("--release-runtime", action="store_true")
+    parser.add_argument("--execution-output-dir", type=Path)
     return parser
 
 
@@ -1242,6 +2069,53 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     args.root = args.root.resolve()
+
+    if args.execute_validation_plan is not None:
+        try:
+            plan = json.loads(args.execute_validation_plan.read_text(encoding="utf-8"))
+            if args.execution_output_dir is None:
+                raise SelectionError("--execution-output-dir is required for validation-plan execution")
+            output_dir = args.execution_output_dir
+            payload = execute_validation_plan(plan, output_dir=output_dir, root=args.root)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, SelectionError) as exc:
+            print(json.dumps({"status": "error", "reason": str(exc)}, ensure_ascii=False), file=sys.stderr)
+            return 2
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+        return int(payload.get("exitCode", 2))
+
+    if args.risk_plan:
+        try:
+            manifest, manifest_hash = load_owner_manifest(args.owner_manifest, root=args.root)
+            validate_owner_manifest(manifest, root=args.root, manifest_hash=manifest_hash)
+            observations, base_sha, candidate_sha = collect_shadow_observations(
+                args.base_ref,
+                args.candidate,
+                root=args.root,
+                change_source=args.shadow_change_source,
+            )
+            plan = build_validation_plan_from_changes(
+                aggregate_observations(observations),
+                manifest,
+                root=args.root,
+                base_ref=args.base_ref,
+                base_sha=base_sha,
+                candidate_ref=args.candidate,
+                candidate_sha=candidate_sha,
+                change_source=args.shadow_change_source,
+                manifest_hash=manifest_hash,
+                candidate_identity=_candidate_identity(args.root, args.candidate),
+                requested_risk=args.requested_risk,
+                requested_gates=args.requested_gate,
+                frozen_release=args.frozen_release,
+                accepted_integration=args.accepted_integration,
+                user_facing=args.user_facing,
+                release_runtime=args.release_runtime,
+            )
+            print(json.dumps(plan, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0
+        except (OSError, ValueError, KeyError, json.JSONDecodeError, OwnerManifestError, SelectionError) as exc:
+            print(json.dumps({"status": "error", "reason": str(exc)}, ensure_ascii=False), file=sys.stderr)
+            return 2
 
     if args.shadow_plan or args.validate_owner_manifest or args.inventory_owner_coverage:
         try:
@@ -1305,7 +2179,7 @@ def main(argv: list[str] | None = None) -> int:
             "selectedFiles": raw["selectedFiles"],
             "files": files,
             "skippedGeneratedStaticBinaryOrCache": skipped,
-            "classification": classification,
+            "collectorMetadata": classification,
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
         return 0

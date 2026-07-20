@@ -8,14 +8,61 @@ import pytest
 from _pytest.unittest import SubtestContext, SubtestReport
 
 from scripts import domain_test_topology as topology
+from scripts import validation_changed_files as planner
 
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = ROOT / "validation" / "domain_test_topology.json"
+OWNER_MANIFEST_PATH = ROOT / "validation" / "validation_owners.json"
 
 
 def load_manifest() -> dict:
     return topology.load_manifest(MANIFEST_PATH)
+
+
+def selector_plan_for(path: str) -> dict:
+    manifest, manifest_hash = planner.load_owner_manifest(OWNER_MANIFEST_PATH, root=ROOT)
+    change = {
+        "path": path,
+        "changeTypes": ["modified"],
+        "sources": ["committed"],
+        "ownershipTrees": ["base_and_candidate"],
+        "observations": [],
+    }
+    candidate = {
+        "commitSha": "2" * 40,
+        "treeSha": "3" * 40,
+        "workingTreeSha256": "4" * 64,
+        "dirty": False,
+    }
+    return planner.build_validation_plan_from_changes(
+        [change],
+        manifest,
+        root=ROOT,
+        base_ref="base",
+        base_sha="1" * 40,
+        candidate_ref="candidate",
+        candidate_sha="2" * 40,
+        change_source="committed",
+        manifest_hash=manifest_hash,
+        candidate_identity=candidate,
+    )
+
+
+def selector_diagnostic(
+    scenario: str,
+    changed_file: str,
+    expected_tier: str,
+    expected_gates: set[str],
+    plan: dict,
+    reason: str = "",
+) -> str:
+    return (
+        f"scenario={scenario}; changed_file={changed_file}; expected_tier={expected_tier}; "
+        f"expected_gates={sorted(expected_gates)}; actual_tier={plan['risk']['class']}; "
+        f"actual_gates={[gate['id'] for gate in plan['gates']]}; "
+        f"rejection_reason={reason or '<none>'}"
+    )
 
 
 def test_manifest_schema_preserves_baseline_and_complete_surface_counts() -> None:
@@ -25,7 +72,7 @@ def test_manifest_schema_preserves_baseline_and_complete_surface_counts() -> Non
 
     assert result["status"] == "valid"
     assert result["baselineBackendTests"] == 7_609
-    assert result["backendTests"] >= result["baselineBackendTests"]
+    assert result["backendTests"] == 7_932
     assert result["vitestFiles"] == 176
     assert result["playwrightSpecs"] == 64
     assert result["playwrightProjectCases"] == 718
@@ -65,6 +112,29 @@ def test_backend_ownership_is_unique_sorted_and_represents_every_domain() -> Non
     assert len(nodeids) == len(set(nodeids))
     assert {entry["domain"] for entry in entries} == set(topology.BACKEND_DOMAINS)
     assert topology.inventory_hash(nodeids) == manifest["backend"]["currentInventory"]["sha256"]
+
+    for scenario, changed_file, expected_tier, expected_required in (
+        ("topology-trigger-test-change", "tests/test_local_helper.py", "R1", True),
+        ("topology-trigger-shared-source", "apps/dsa-web/src/components/SharedWidget.tsx", "R3", False),
+    ):
+        plan = selector_plan_for(changed_file)
+        topology_gate = next(gate for gate in plan["gates"] if gate["id"] == "topology.verify")
+        expected_gates = {
+            gate_id
+            for level in planner.RISK_CLASSES[: planner.RISK_CLASSES.index(expected_tier) + 1]
+            for gate_id in planner.RISK_GATE_FLOORS[level]
+        }
+        if expected_tier == "R1":
+            expected_gates.add("topology.verify")
+        if expected_tier == "R3":
+            expected_gates.add("browser.protected")
+        diagnostic = selector_diagnostic(scenario, changed_file, expected_tier, expected_gates, plan)
+        assert plan["risk"]["class"] == expected_tier, diagnostic
+        assert {gate["id"] for gate in plan["gates"]} == expected_gates, diagnostic
+        assert plan["risk"]["topologyMayChange"] is expected_required, diagnostic
+        assert topology_gate["required"] is expected_required, diagnostic
+        if expected_required:
+            assert topology_gate["selectionReason"] == "topology_inventory_may_change", diagnostic
 
 
 def test_inventory_comparison_fails_closed_for_add_delete_rename_and_duplicates() -> None:
@@ -167,6 +237,7 @@ def test_first_attempts_and_retries_are_never_coalesced(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    original_active_config = topology._ACTIVE_TEST_RESULT_CONFIG
     records = [
         {"id": "case-a", "retry": 0, "status": "failed"},
         {"id": "case-a", "retry": 1, "status": "passed"},
@@ -393,8 +464,63 @@ def test_first_attempts_and_retries_are_never_coalesced(
     with pytest.raises(topology.TopologyError, match="identity mismatch"):
         topology.validate_test_result_evidence(evidence, expected_identity=mismatched_identity)
 
+    monkeypatch.setattr(topology, "_ACTIVE_TEST_RESULT_CONFIG", original_active_config)
+    selector_plan = selector_plan_for("tests/scripts/test_domain_test_topology.py")
+    for scenario, field, value in (
+        ("candidate-commit-identity-mismatch", "commitSha", "8" * 40),
+        ("candidate-tree-identity-mismatch", "treeSha", "9" * 40),
+        ("candidate-worktree-identity-mismatch", "workingTreeSha256", "a" * 64),
+    ):
+        mismatched = deepcopy(identity)
+        mismatched["candidate"][field] = value
+        diagnostic = selector_diagnostic(
+            scenario,
+            "tests/scripts/test_domain_test_topology.py",
+            "R1",
+            {
+                "scope.diff",
+                "security.changed",
+                "syntax.changed",
+                "tests.backend.changed",
+                "tests.frontend.changed",
+                "topology.verify",
+            },
+            selector_plan,
+        )
+        try:
+            topology.validate_test_result_evidence(evidence, expected_identity=mismatched)
+        except topology.TopologyError as exc:
+            assert "identity mismatch" in str(exc), f"{diagnostic}; actual={exc}"
+        else:
+            pytest.fail(f"{diagnostic}; actual=accepted")
+
+    topology_mismatch = deepcopy(identity)
+    topology_mismatch["topology"]["sha256"] = "b" * 64
+    diagnostic = selector_diagnostic(
+        "topology-identity-mismatch",
+        "tests/scripts/test_domain_test_topology.py",
+        "R1",
+        {
+            "scope.diff",
+            "security.changed",
+            "syntax.changed",
+            "tests.backend.changed",
+            "tests.frontend.changed",
+            "topology.verify",
+        },
+        selector_plan,
+    )
+    try:
+        topology.validate_test_result_evidence(evidence, expected_identity=topology_mismatch)
+    except topology.TopologyError as exc:
+        assert "identity mismatch" in str(exc), f"{diagnostic}; actual={exc}"
+    else:
+        pytest.fail(f"{diagnostic}; actual=accepted")
+
     gate = (ROOT / "scripts" / "ci_gate.sh").read_text(encoding="utf-8")
     assert "domain_test_topology.py" in gate
     assert "run-backend" in gate
     assert "--retry-failures 0" in gate
     assert '"${PYTHON_BIN}" -m pytest --domain-topology-verify-full' not in gate
+    fast_gate = (ROOT / "scripts" / "ci_gate_fast.sh").read_text(encoding="utf-8")
+    assert 'mktemp -d "${ROOT_DIR}/output/ci_gate_fast.XXXXXX"' in fast_gate

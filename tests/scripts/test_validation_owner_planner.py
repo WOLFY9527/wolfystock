@@ -1,17 +1,23 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
 from pathlib import Path
 import subprocess
 
 import pytest
 
+from scripts import domain_test_topology as topology
 from scripts import validation_changed_files as planner
 
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = ROOT / "validation" / "validation_owners.json"
+TOPOLOGY_PATH = ROOT / "validation" / "domain_test_topology.json"
 DUMMY_SHA = "1" * 40
+DUMMY_CANDIDATE_SHA = "2" * 40
+DUMMY_TREE = "3" * 40
+DUMMY_WORKTREE = "4" * 64
 
 
 def git(repo: Path, *args: str) -> str:
@@ -84,6 +90,217 @@ def change_by_path(plan: dict, path: str) -> dict:
     return next(change for change in plan["changes"] if change["path"] == path)
 
 
+def candidate_identity() -> dict:
+    return {
+        "commitSha": DUMMY_CANDIDATE_SHA,
+        "treeSha": DUMMY_TREE,
+        "workingTreeSha256": DUMMY_WORKTREE,
+        "dirty": False,
+    }
+
+
+def risk_change(path: str, *change_types: str) -> dict:
+    return changed(path, change_types[0] if change_types else "modified")
+
+
+def risk_plan_for(
+    paths: list[str],
+    *,
+    changes: list[dict] | None = None,
+    requested_risk: str | None = None,
+    requested_gates: tuple[str, ...] = (),
+    frozen_release: bool = False,
+    accepted_integration: bool = False,
+    user_facing: bool = False,
+    release_runtime: bool = False,
+) -> dict:
+    manifest, manifest_hash = load_manifest()
+    raw_changes = changes if changes is not None else [risk_change(path) for path in paths]
+    return planner.build_validation_plan_from_changes(
+        raw_changes,
+        manifest,
+        root=ROOT,
+        base_ref="base",
+        base_sha=DUMMY_SHA,
+        candidate_ref="candidate",
+        candidate_sha=DUMMY_CANDIDATE_SHA,
+        change_source="committed",
+        manifest_hash=manifest_hash,
+        candidate_identity=candidate_identity(),
+        requested_risk=requested_risk,
+        requested_gates=requested_gates,
+        frozen_release=frozen_release,
+        accepted_integration=accepted_integration,
+        user_facing=user_facing,
+        release_runtime=release_runtime,
+    )
+
+
+def scenario_diagnostic(
+    scenario: str,
+    changed_file: str,
+    expected_tier: str,
+    expected_gates: set[str],
+    plan: dict,
+    *,
+    reason: str = "",
+) -> str:
+    actual_gates = {gate["id"] for gate in plan.get("gates", [])}
+    return (
+        f"scenario={scenario}; changed_file={changed_file}; expected_tier={expected_tier}; "
+        f"expected_gates={sorted(expected_gates)}; actual_tier={plan.get('risk', {}).get('class')}; "
+        f"actual_gates={sorted(actual_gates)}; rejection_reason={reason or '<none>'}"
+    )
+
+
+def cumulative_gate_ids(risk_class: str) -> set[str]:
+    index = planner.RISK_CLASSES.index(risk_class)
+    return {
+        gate_id
+        for level in planner.RISK_CLASSES[: index + 1]
+        for gate_id in planner.RISK_GATE_FLOORS[level]
+    }
+
+
+def _write_aggregate(
+    tmp_path: Path,
+    plan: dict,
+    *,
+    gate_id: str = "backend.canonical",
+    outcome: str = "passed",
+    retry: bool = False,
+) -> Path:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    gate = next(gate for gate in plan["gates"] if gate["id"] == gate_id)
+    manifest = topology.load_manifest(TOPOLOGY_PATH)
+    selected_ids = [
+        entry["id"] for entry in manifest["backend"]["tests"] if entry["domain"] in gate["domains"]
+    ]
+    attempt_identity = {
+        "candidate": plan["identity"]["candidate"],
+        "environment": {"fingerprint": "5" * 64},
+        "dependencyLock": {
+            "contentHash": "6" * 64,
+            "selectedLock": "requirements-python311-dev.lock",
+            "selectedProjection": "darwin-arm64-cpython311-development",
+            "selectedProjectionHash": "7" * 64,
+        },
+        "command": {
+            "argv": gate["structuredCommand"],
+            "sha256": topology.canonical_json_hash(gate["structuredCommand"]),
+        },
+        "selection": {"count": len(selected_ids), "sha256": topology.inventory_hash(selected_ids)},
+        "topology": manifest["backend"]["currentInventory"],
+    }
+    exit_code = {"passed": 0, "skipped": 0, "cancelled": 2, "missing": 3, "unknown": 3}[outcome]
+    owners = {entry["id"]: entry["domain"] for entry in manifest["backend"]["tests"]}
+    parents = [
+        {
+            "id": node_id,
+            "kind": "parent",
+            "owner": owners[node_id],
+            "outcome": outcome,
+            "failureFamily": None,
+            "durationSeconds": 0.0,
+        }
+        for node_id in selected_ids
+    ]
+    attempt = {
+        "schemaVersion": topology.TEST_RESULT_SCHEMA_VERSION,
+        "kind": "attempt",
+        "state": "completed",
+        "surface": "backend",
+        "identity": attempt_identity,
+        "attempt": {"index": 0, "kind": "first"},
+        "timing": {
+            "startedAtUtc": "2026-07-19T12:00:00Z",
+            "endedAtUtc": "2026-07-19T12:00:01Z",
+            "wallSeconds": 1.0,
+        },
+        "exitCode": exit_code,
+        "status": outcome,
+        "counts": {
+            "parents": {
+                candidate: len(selected_ids) if candidate == outcome else 0
+                for candidate in topology.TEST_OUTCOMES
+            },
+            "children": {candidate: 0 for candidate in topology.TEST_OUTCOMES},
+        },
+        "parents": parents,
+        "children": [],
+        "artifacts": [],
+    }
+    log = tmp_path / "attempt-0.log"
+    junit = tmp_path / "attempt-0.junit.xml"
+    log.write_text("fixture\n", encoding="utf-8")
+    junit.write_text("<testsuite/>\n", encoding="utf-8")
+    attempt["artifacts"] = [
+        {"kind": "junit", "path": junit.name, "sha256": planner.file_hash(junit)},
+        {"kind": "log", "path": log.name, "sha256": planner.file_hash(log)},
+    ]
+    topology.validate_test_result_evidence(attempt, expected_identity=attempt_identity)
+    attempt_path = tmp_path / "attempt-0.json"
+    attempt_path.write_text(json.dumps(attempt, sort_keys=True), encoding="utf-8")
+    summary = {
+        "path": attempt_path.name,
+        "sha256": planner.file_hash(attempt_path),
+        "state": "completed",
+        "attemptIndex": 0,
+        "startedAtUtc": attempt["timing"]["startedAtUtc"],
+        "endedAtUtc": attempt["timing"]["endedAtUtc"],
+        "durationSeconds": 1.0,
+        "exitCode": exit_code,
+        "status": outcome,
+        "counts": attempt["counts"],
+        "failures": [],
+        "identity": attempt_identity,
+    }
+    aggregate = {
+        "schemaVersion": topology.TEST_RESULT_SCHEMA_VERSION,
+        "kind": "aggregate",
+        "state": "completed",
+        "surface": "backend-domain-aggregate",
+        "authority": "structured-test-result",
+        "createdAt": "2026-07-19T12:00:01Z",
+        "identity": attempt_identity,
+        "domains": gate["domains"],
+        "selectedCount": len(selected_ids),
+        "durationSeconds": 1.0,
+        "firstAttempt": summary,
+        "retries": [summary] if retry else [],
+        "establishedBaselineFailures": [],
+        "unknownFirstAttemptFailures": [],
+        "remainingFailuresAfterRetries": [],
+        "status": outcome if outcome in {"passed", "skipped"} else f"{outcome}_first_attempt",
+    }
+    result_path = tmp_path / "result.json"
+    result_path.write_text(json.dumps(aggregate, sort_keys=True), encoding="utf-8")
+    return result_path
+
+
+def assert_rejected(
+    scenario: str,
+    changed_file: str,
+    plan: dict,
+    result_path: Path,
+    expected_message: str,
+) -> None:
+    expected_tier = plan["risk"]["class"]
+    expected_gates = {gate["id"] for gate in plan["gates"]}
+    try:
+        planner.consume_structured_backend_result(plan, result_path, gate_id="backend.canonical")
+    except planner.SelectionError as exc:
+        assert expected_message in str(exc), scenario_diagnostic(
+            scenario, changed_file, expected_tier, expected_gates, plan, reason=str(exc)
+        )
+        return
+    pytest.fail(
+        scenario_diagnostic(
+            scenario, changed_file, expected_tier, expected_gates, plan, reason="evidence accepted"
+        )
+    )
+
+
 def test_clean_base_and_branch_ahead_commit_are_collected(tmp_path: Path) -> None:
     base_sha = init_repo(tmp_path)
     clean_observations, _, _ = planner.collect_shadow_observations(base_sha, "HEAD", root=tmp_path)
@@ -105,6 +322,16 @@ def test_clean_base_and_branch_ahead_commit_are_collected(tmp_path: Path) -> Non
     assert [change["path"] for change in changes] == ["scripts/tool.py"]
     assert changes[0]["sources"] == ["committed"]
     assert changes[0]["changeTypes"] == ["added"]
+
+    empty_plan = risk_plan_for([])
+    expected_gates = cumulative_gate_ids("R0")
+    diagnostic = scenario_diagnostic("empty-changed-input", "<empty>", "R0", expected_gates, empty_plan)
+    assert empty_plan["risk"]["class"] == "R0", diagnostic
+    assert {gate["id"] for gate in empty_plan["gates"]} == expected_gates, diagnostic
+    assert all(
+        gate["command"] != [planner.sys.executable, "-m", "pytest", "-q"]
+        for gate in empty_plan["gates"]
+    ), diagnostic
 
 
 def test_branch_staged_unstaged_and_untracked_are_a_lossless_union(tmp_path: Path) -> None:
@@ -163,6 +390,35 @@ def test_rename_deletion_and_copy_include_source_and_destination_ownership(tmp_p
     assert "copy_source" in changes["src/copy_source.py"]["changeTypes"]
     assert "copy_destination" in changes["src/copy_destination.py"]["changeTypes"]
 
+    deleted_path = "tests/removed_validation.py"
+    deleted_plan = risk_plan_for([], changes=[risk_change(deleted_path, "deleted")])
+    calls: list[list[str]] = []
+
+    def runner(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    execution = planner.execute_validation_plan(
+        deleted_plan,
+        output_dir=tmp_path / "deleted-plan",
+        root=ROOT,
+        runner=runner,
+        candidate_identity=candidate_identity(),
+    )
+    expected_gates = cumulative_gate_ids("R1") | {"topology.verify"}
+    diagnostic = scenario_diagnostic(
+        "deleted-input-empty-suite-fail-closed",
+        deleted_path,
+        "R1",
+        expected_gates,
+        deleted_plan,
+        reason=execution["gates"][-1].get("reason", ""),
+    )
+    assert deleted_plan["changes"][0]["changeTypes"] == ["deleted"], diagnostic
+    assert execution["status"] == "failed" and execution["exitCode"] == 2, diagnostic
+    assert "required command input unavailable" in execution["gates"][-1]["reason"], diagnostic
+    assert all(command != [planner.sys.executable, "-m", "pytest", "-q"] for command in calls), diagnostic
+
 
 def test_overlapping_rules_union_all_owners_and_tiers() -> None:
     path = "src/services/market_scanner_service.py"
@@ -179,8 +435,48 @@ def test_overlapping_rules_union_all_owners_and_tiers() -> None:
         item["selectedTiers"]
     )
 
+    previous: set[str] = set()
+    for level in planner.RISK_CLASSES:
+        cumulative = risk_plan_for(
+            ["docs/audit-note.md"],
+            requested_risk=level,
+            accepted_integration=level in {"R3", "R4", "R5"},
+            frozen_release=level == "R5",
+        )
+        expected = cumulative_gate_ids(level)
+        if level in {"R3", "R4", "R5"}:
+            expected.add("backend.canonical")
+        actual = {gate["id"] for gate in cumulative["gates"]}
+        diagnostic = scenario_diagnostic(
+            f"cumulative-{level}", "docs/audit-note.md", level, expected, cumulative
+        )
+        assert cumulative["risk"]["class"] == level, diagnostic
+        assert actual == expected, diagnostic
+        assert previous.issubset(actual), diagnostic
+        previous = actual
 
-def test_large_owner_union_is_retained_and_escalates_instead_of_truncating() -> None:
+    override = risk_plan_for(
+        ["tests/test_local_helper.py"],
+        requested_risk="R2",
+        requested_gates=("release.real_runtime",),
+    )
+    expected_override = cumulative_gate_ids("R2") | {"topology.verify", "release.real_runtime"}
+    override_gate = next(gate for gate in override["gates"] if gate["id"] == "release.real_runtime")
+    diagnostic = scenario_diagnostic(
+        "explicit-risk-and-gate-override",
+        "tests/test_local_helper.py",
+        "R2",
+        expected_override,
+        override,
+    )
+    assert override["risk"]["class"] == "R2", diagnostic
+    assert {gate["id"] for gate in override["gates"]} == expected_override, diagnostic
+    assert override_gate["required"] is True, diagnostic
+    assert override_gate["selectionReason"] == "explicit_task_gate", diagnostic
+    assert override_gate["evidence"]["inferenceAllowed"] is False, diagnostic
+
+
+def test_large_owner_union_is_retained_and_escalates_instead_of_truncating(tmp_path: Path) -> None:
     manifest, _ = load_manifest()
     expanded = deepcopy(manifest)
     synthetic_owner_ids = []
@@ -209,6 +505,104 @@ def test_large_owner_union_is_retained_and_escalates_instead_of_truncating() -> 
     assert "bounded.repository.integration" in selected_owner_ids
     assert "complete.repository.validation" in selected_owner_ids
 
+    changed_file = "src/services/watchlist_service.py"
+    canonical_plan = risk_plan_for([changed_file])
+    canonical_gate = next(gate for gate in canonical_plan["gates"] if gate["id"] == "backend.canonical")
+    expected_gates = cumulative_gate_ids("R4")
+    diagnostic = scenario_diagnostic(
+        "canonical-backend-zero-retry",
+        changed_file,
+        "R4",
+        expected_gates,
+        canonical_plan,
+    )
+    assert canonical_gate["command"][-2:] == ["--retry-failures", "0"], diagnostic
+    assert canonical_gate["retryCount"] == 0, diagnostic
+    assert canonical_gate["structuredEvidence"] == "T630", diagnostic
+    assert set(canonical_gate["domains"]) == set(topology.BACKEND_DOMAINS), diagnostic
+
+    missing = tmp_path / "missing" / "result.json"
+    assert_rejected("missing-t630-result", changed_file, canonical_plan, missing, "missing")
+
+    malformed = tmp_path / "malformed" / "result.json"
+    malformed.parent.mkdir(parents=True)
+    malformed.write_text("{", encoding="utf-8")
+    assert_rejected("malformed-t630-result", changed_file, canonical_plan, malformed, "malformed")
+
+    incomplete = _write_aggregate(tmp_path / "incomplete", canonical_plan)
+    incomplete_payload = json.loads(incomplete.read_text(encoding="utf-8"))
+    incomplete_payload["firstAttempt"]["state"] = "incomplete"
+    incomplete.write_text(json.dumps(incomplete_payload, sort_keys=True), encoding="utf-8")
+    assert_rejected("incomplete-first-attempt", changed_file, canonical_plan, incomplete, "incomplete")
+
+    for outcome in ("skipped", "cancelled", "missing", "unknown"):
+        terminal = _write_aggregate(tmp_path / outcome, canonical_plan, outcome=outcome)
+        assert_rejected(
+            f"{outcome}-is-not-passed",
+            changed_file,
+            canonical_plan,
+            terminal,
+            outcome,
+        )
+
+    retry = _write_aggregate(tmp_path / "retry", canonical_plan, retry=True)
+    assert_rejected("retry-is-not-first-attempt", changed_file, canonical_plan, retry, "retry")
+
+    for scenario, identity_field, expected_message in (
+        ("config-identity-mismatch", "configSha256", "config"),
+        ("selection-identity-mismatch", "selectionSha256", "selection"),
+    ):
+        mismatched_plan = risk_plan_for([changed_file])
+        result_path = _write_aggregate(tmp_path / scenario, mismatched_plan)
+        mismatched_plan["identity"][identity_field] = "9" * 64
+        assert_rejected(scenario, changed_file, mismatched_plan, result_path, expected_message)
+
+    command_plan = risk_plan_for([changed_file])
+    command_path = _write_aggregate(tmp_path / "command-identity", command_plan)
+    command_payload = json.loads(command_path.read_text(encoding="utf-8"))
+    mismatched_command = ["python", "-m", "pytest", "unexpected"]
+    mismatched_command_identity = {
+        "argv": mismatched_command,
+        "sha256": topology.canonical_json_hash(mismatched_command),
+    }
+    attempt_path = command_path.parent / "attempt-0.json"
+    attempt_payload = json.loads(attempt_path.read_text(encoding="utf-8"))
+    attempt_payload["identity"]["command"] = mismatched_command_identity
+    attempt_path.write_text(json.dumps(attempt_payload, sort_keys=True), encoding="utf-8")
+    command_payload["identity"]["command"] = mismatched_command_identity
+    command_payload["firstAttempt"]["identity"]["command"] = mismatched_command_identity
+    command_payload["firstAttempt"]["sha256"] = planner.file_hash(attempt_path)
+    command_path.write_text(json.dumps(command_payload, sort_keys=True), encoding="utf-8")
+    assert_rejected("command-identity-mismatch", changed_file, command_plan, command_path, "command")
+
+    def canonical_runner(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        if "run-backend" in command:
+            _write_aggregate(tmp_path / "canonical-success" / "backend.canonical", canonical_plan)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    canonical_result = planner.execute_validation_plan(
+        canonical_plan,
+        output_dir=tmp_path / "canonical-success",
+        root=ROOT,
+        runner=canonical_runner,
+        candidate_identity=candidate_identity(),
+    )
+    by_id = {gate["gateId"]: gate for gate in canonical_result["gates"]}
+    diagnostic = scenario_diagnostic(
+        "canonical-evidence-declared-gates-only",
+        changed_file,
+        "R4",
+        expected_gates,
+        canonical_plan,
+        reason=canonical_result.get("reason", ""),
+    )
+    assert canonical_result["status"] == "passed", diagnostic
+    assert by_id["backend.canonical"]["structuredEvidence"] == "passed", diagnostic
+    for gate_id in ("owners.affected", "contracts.cross_owner", "protected.owners", "architecture.global"):
+        assert by_id[gate_id]["status"] == "passed", diagnostic
+        assert by_id[gate_id]["evidenceFrom"] == "backend.canonical", diagnostic
+        assert by_id[gate_id]["coverage"] == "validated_structured_domain_superset", diagnostic
+
 
 def test_unknown_path_has_explicit_fail_closed_escalation() -> None:
     path = "unknown-zone/new-validation-input.xyz"
@@ -221,6 +615,15 @@ def test_unknown_path_has_explicit_fail_closed_escalation() -> None:
     assert item["escalationReasons"] == ["unknown_validation_relevant_path"]
     assert path in plan["unknownPaths"]
     assert {"protected_baseline_comparison", "milestone", "release"}.issubset(item["selectedTiers"])
+
+    risk_plan = risk_plan_for([path])
+    canonical = next(gate for gate in risk_plan["gates"] if gate["id"] == "backend.canonical")
+    expected_gates = cumulative_gate_ids("R3") | {"backend.canonical"}
+    diagnostic = scenario_diagnostic("unknown-change-fail-closed", path, "R3", expected_gates, risk_plan)
+    assert risk_plan["risk"]["class"] == "R3", diagnostic
+    assert risk_plan["risk"]["unknownPaths"] == [path], diagnostic
+    assert canonical["required"] is True, diagnostic
+    assert canonical["selectionReason"] == "unknown_change_fail_closed", diagnostic
 
 
 @pytest.mark.parametrize(
@@ -245,6 +648,14 @@ def test_every_agents_protected_domain_escalates(path: str, rule_id: str) -> Non
     assert path in plan["protectedPaths"]
     assert {"protected_baseline_comparison", "milestone", "release"}.issubset(item["selectedTiers"])
 
+    risk_plan = risk_plan_for([path])
+    expected_gates = cumulative_gate_ids("R4")
+    diagnostic = scenario_diagnostic(
+        f"protected-owner-{rule_id}", path, "R4", expected_gates, risk_plan
+    )
+    assert risk_plan["risk"]["class"] == "R4", diagnostic
+    assert risk_plan["risk"]["protectedOwners"], diagnostic
+
 
 @pytest.mark.parametrize(
     ("path", "rule_id"),
@@ -265,7 +676,7 @@ def test_root_config_lock_schema_workflow_migration_and_global_setup_escalate(pa
     assert {"protected_baseline_comparison", "milestone", "release"}.issubset(item["selectedTiers"])
 
 
-def test_related_test_inference_adds_but_does_not_replace_manifest_authority() -> None:
+def test_related_test_inference_adds_but_does_not_replace_manifest_authority(tmp_path: Path) -> None:
     path = "src/providers/validation.py"
 
     plan = plan_for([path])
@@ -276,8 +687,46 @@ def test_related_test_inference_adds_but_does_not_replace_manifest_authority() -
     assert item["inferredOwners"] == ["direct.pytest.related_inference"]
     assert "tests/test_provider_validation.py" in item["inferredOwnerTargets"]
 
+    risk_plan = risk_plan_for([path])
+    assert risk_plan["affectedOwners"] == sorted(owner["id"] for owner in plan["owners"])
+    assert risk_plan["selection"]["affectedOwners"] == risk_plan["affectedOwners"]
 
-def test_deterministic_ordering_and_stable_output_hash() -> None:
+    evidence_path = "scripts/check_ai_assets.py"
+    evidence_plan = risk_plan_for([evidence_path], requested_risk="R3")
+    owners_gate = next(gate for gate in evidence_plan["gates"] if gate["id"] == "owners.affected")
+    contracts_gate = next(gate for gate in evidence_plan["gates"] if gate["id"] == "contracts.cross_owner")
+
+    def runner(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        if "run-backend" in command:
+            _write_aggregate(tmp_path / "owners.affected", evidence_plan, gate_id="owners.affected")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    result = planner.execute_validation_plan(
+        evidence_plan,
+        output_dir=tmp_path,
+        root=ROOT,
+        runner=runner,
+        candidate_identity=candidate_identity(),
+    )
+    by_id = {gate["gateId"]: gate for gate in result["gates"]}
+    expected_gates = cumulative_gate_ids("R3")
+    diagnostic = scenario_diagnostic(
+        "affected-owner-t630-cross-owner-coverage",
+        evidence_path,
+        "R3",
+        expected_gates,
+        evidence_plan,
+        reason=result.get("reason", ""),
+    )
+    assert "backend.canonical" not in {gate["id"] for gate in evidence_plan["gates"]}, diagnostic
+    assert owners_gate["structuredEvidence"] == "T630", diagnostic
+    assert contracts_gate["satisfiedBy"] == "owners.affected", diagnostic
+    assert result["status"] == "passed", diagnostic
+    assert by_id["owners.affected"]["structuredEvidence"] == "passed", diagnostic
+    assert by_id["contracts.cross_owner"]["coverage"] == "validated_structured_domain_superset", diagnostic
+
+
+def test_deterministic_ordering_and_stable_output_hash(tmp_path: Path) -> None:
     manifest, manifest_hash = load_manifest()
     changes = [changed("docs/README.md"), changed("src/providers/validation.py")]
     kwargs = {
@@ -298,6 +747,59 @@ def test_deterministic_ordering_and_stable_output_hash() -> None:
     assert first["planHash"] == planner.stable_hash(
         {key: value for key, value in first.items() if key != "planHash"}
     )
+
+    risk_cases = (
+        ("r0-docs", "docs/audit-note.md", "R0", set()),
+        ("r1-backend-test", "tests/test_local_helper.py", "R1", {"topology.verify"}),
+        ("r2-frontend-owner", "apps/dsa-web/src/pages/MarketPage.tsx", "R2", set()),
+        (
+            "r3-shared-frontend-owner",
+            "apps/dsa-web/src/components/SharedWidget.tsx",
+            "R3",
+            {"browser.protected"},
+        ),
+        ("r4-protected-owner", "src/services/watchlist_service.py", "R4", set()),
+    )
+    for scenario, changed_file, expected_tier, extra_gates in risk_cases:
+        expected_gates = cumulative_gate_ids(expected_tier) | extra_gates
+        first_risk = risk_plan_for([changed_file])
+        second_risk = risk_plan_for([changed_file])
+        diagnostic = scenario_diagnostic(
+            scenario, changed_file, expected_tier, expected_gates, second_risk
+        )
+        assert first_risk == second_risk, diagnostic
+        assert second_risk["risk"]["class"] == expected_tier, diagnostic
+        assert {gate["id"] for gate in second_risk["gates"]} == expected_gates, diagnostic
+        assert second_risk["authority"] == "risk-selection", diagnostic
+        assert second_risk["planHash"] == planner.stable_hash(
+            {key: value for key, value in second_risk.items() if key != "planHash"}
+        ), diagnostic
+
+    failure_plan = risk_plan_for(["docs/audit-note.md"])
+    calls: list[list[str]] = []
+
+    def failing_runner(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 7, "", "selected failure")
+
+    failure_result = planner.execute_validation_plan(
+        failure_plan,
+        output_dir=tmp_path / "selected-failure",
+        root=ROOT,
+        runner=failing_runner,
+        candidate_identity=candidate_identity(),
+    )
+    diagnostic = scenario_diagnostic(
+        "selected-command-failure-propagates",
+        "docs/audit-note.md",
+        "R0",
+        cumulative_gate_ids("R0"),
+        failure_plan,
+        reason="selected failure",
+    )
+    assert failure_result["status"] == "failed" and failure_result["exitCode"] == 7, diagnostic
+    assert calls == [["git", "diff", "--check"]], diagnostic
+    assert failure_result["gates"][0]["retries"] == [], diagnostic
 
 
 def test_t437_t438_locale_corpus_adds_bounded_and_browser_owners_to_current_classification() -> None:
@@ -325,3 +827,24 @@ def test_t437_t438_locale_corpus_adds_bounded_and_browser_owners_to_current_clas
     assert "browser.changed.specs" in owner_ids
     assert shadow["unknownPaths"] == []
     assert shadow["ownerListsTruncated"] is False
+
+    changed_file = "apps/dsa-web/src/pages/MarketPage.tsx"
+    release_plan = risk_plan_for([changed_file], frozen_release=True)
+    gates = {gate["id"]: gate for gate in release_plan["gates"]}
+    expected_gates = cumulative_gate_ids("R5") | {"browser.protected"}
+    diagnostic = scenario_diagnostic(
+        "r5-frozen-release-explicit-browser-uat-runtime",
+        changed_file,
+        "R5",
+        expected_gates,
+        release_plan,
+    )
+    assert release_plan["risk"]["class"] == "R5", diagnostic
+    assert set(gates) == expected_gates, diagnostic
+    for gate_id in ("browser.protected", "browser.full", "uat.runtime", "release.real_runtime"):
+        assert gates[gate_id]["required"] is True, diagnostic
+        assert gates[gate_id]["command"], diagnostic
+        assert gates[gate_id]["evidence"]["inferenceAllowed"] is False, diagnostic
+    assert "--project=release-real-runtime" not in gates["browser.protected"]["command"], diagnostic
+    assert "--project=release-real-runtime" not in gates["browser.full"]["command"], diagnostic
+    assert "--project=release-real-runtime" in gates["release.real_runtime"]["command"], diagnostic
