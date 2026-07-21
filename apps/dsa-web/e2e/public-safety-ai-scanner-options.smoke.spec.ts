@@ -335,20 +335,18 @@ async function installOptionsRoute(page: Page): Promise<OptionsHarness> {
   return { requests };
 }
 
-async function signIn(page: Page, redirectPath: string) {
+async function signIn(page: Page, redirectPath: string, productIdentity: ReturnType<Page['getByTestId']>) {
   await page.goto(`/login?redirect=${encodeURIComponent(redirectPath)}`);
   const username = page.locator('#username');
-  if (await username.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true).catch(() => false)) {
-    await username.fill('wolfy-user');
-    await page.locator('#password').fill('mock-password');
-    await Promise.all([
-      page.waitForResponse((response) => response.url().includes('/api/v1/auth/login') && response.status() === 200),
-      page.getByRole('button', { name: /sign in|登录继续|授权进入工作台|完成设置并登录/i }).click(),
-    ]);
-    await page.waitForURL(/\/$/);
-  }
-  await page.goto(redirectPath);
-  await page.waitForLoadState('domcontentloaded');
+  await username.waitFor({ state: 'visible', timeout: 10_000 });
+  await username.fill('wolfy-user');
+  await page.locator('#password').fill('mock-password');
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes('/api/v1/auth/login') && response.status() === 200),
+    page.getByRole('button', { name: /sign in|登录继续|授权进入工作台|完成设置并登录/i }).click(),
+  ]);
+  await page.waitForURL((url) => url.pathname === redirectPath);
+  await expect(productIdentity).toBeVisible({ timeout: 15_000 });
 }
 
 async function expectNoHorizontalOverflow(page: Page) {
@@ -389,7 +387,7 @@ appTest.describe('AI and scanner public safety surfaces', () => {
 
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
-      await signIn(page, '/zh/scanner');
+      await signIn(page, '/zh/scanner', page.getByTestId('user-scanner-workspace'));
 
       await expect(page.getByTestId('user-scanner-workspace')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('scanner-result-row-NVDA')).toBeVisible();
@@ -407,7 +405,7 @@ appTest.describe('options public safety surface', () => {
 
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
-      await signIn(page, '/zh/options-lab');
+      await signIn(page, '/zh/options-lab', page.getByRole('heading', { name: '期权实验室' }));
 
       await expect(page.getByRole('heading', { name: '期权实验室' })).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('options-lab-consumer-availability')).toBeVisible();
