@@ -126,3 +126,37 @@ and result. Preserve first attempts and retries when a protected gate requires
 them. `skipped != passed`, `not evaluated != passed`, and `task accepted !=
 analysis completed`. Do not turn unavailable runtime, platform, browser,
 provider, broker, database, or release evidence into a success claim.
+
+## Promotion Evidence
+
+Task promotion consumes one explicit sealed manifest with schema
+`wolfystock.task-promotion-validation.v1`. The manifest uses contained relative
+paths and SHA-256 identities for the existing risk plan, backend stage plan,
+shard plan, resume plan, reconciled shard result, and validation execution
+result. It also binds the accepted base, attached branch, candidate commit,
+tree, parent, subject, binary patch, sorted changed-file inventory, remote URL
+and target ref. The manifest's `evidenceHash` is the canonical JSON SHA-256 of
+all other fields.
+
+Promotion revalidates rather than reinterprets these authorities:
+
+- T631 owns risk and required-gate selection;
+- T630 owns structured first-attempt test results;
+- T633 owns shard inventory, command, selection, and reconciliation identity;
+- T637 owns canonical and release-stage inventory;
+- T638 owns explicit resume identity and accepted shard reuse;
+- `./wolfy env verify` owns current environment and dependency-lock identity;
+- T642 lifecycle owns post-LAND worktree and branch cleanup.
+
+Every required gate must be successful, complete, first-attempt, and unretried.
+The selected stage and shard inventory must be complete for its tier. Candidate,
+environment, dependency lock, command, topology, risk, selection, stage, shard,
+and resume identities must agree. Candidate validation retains
+`releaseReady=false`; a successful candidate validation is not release
+qualification.
+
+Automation should consume `--json`, whose canonical schema is
+`wolfystock.task-promotion.v1`. It includes plan, promotion, local-main, and
+cleanup states separately, plus bounded refusal detail and a canonical
+`resultHash`. Human output is only a convenience view and is not the automation
+authority.

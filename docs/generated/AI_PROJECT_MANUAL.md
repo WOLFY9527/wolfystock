@@ -75,8 +75,8 @@ This manual is a generated navigation and integrity catalog. It does not copy do
 | [docs/contracts/data-trust.md](../contracts/data-trust.md) | canonical | active | yes | Cross-domain truth, source, readiness, no-advice, and protected semantics | 976c004be4f6 |
 | [docs/contracts/historical-market-data.md](../contracts/historical-market-data.md) | canonical | active | yes | Historical OHLCV foundation contract | be8438c651f5 |
 | [docs/design/frontend.md](../design/frontend.md) | canonical | active | yes | Consumer frontend design and implementation contract | 7b033c9fcc31 |
-| [docs/development/environment.md](../development/environment.md) | canonical | active | yes | Dependency, bootstrap, target, snapshot, runtime, and configuration authority | 5e07212d571b |
-| [docs/development/validation.md](../development/validation.md) | canonical | active | yes | Validation command routing and evidence reference | f1f4f1d6949d |
+| [docs/development/environment.md](../development/environment.md) | canonical | active | yes | Dependency, bootstrap, target, snapshot, runtime, and configuration authority | 8f1cc32526f2 |
+| [docs/development/validation.md](../development/validation.md) | canonical | active | yes | Validation command routing and evidence reference | 5ca0c1561025 |
 | [docs/generated/AI_PROJECT_MANUAL.md](AI_PROJECT_MANUAL.md) | generated | generated | no | Generated complete documentation catalog | generated |
 | [docs/operations/database.md](../operations/database.md) | canonical | active | yes | Database diagnostics, baseline artifacts, Phase F, and DuckDB runbook | 96c9087a86be |
 | [docs/operations/historical-ohlcv-seed.md](../operations/historical-ohlcv-seed.md) | canonical | active | yes | Local historical OHLCV seed and verification runbook | d4d4706d3d51 |

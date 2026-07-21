@@ -102,6 +102,48 @@ Run a command inside that profile with:
 ./wolfy exec --profile test -- npm --prefix apps/dsa-web run lint
 ```
 
+## Task Promotion
+
+`scripts/task_promotion.py` is the repository-owned Git promotion authority for
+an already-qualified task candidate. It does not install an environment, run
+tests, select validation, interpret release readiness, or own worktree setup and
+cleanup. Environment identity comes from `./wolfy env verify`; cleanup delegates
+to `scripts/worktree_preflight.py lifecycle`.
+
+From any checkout that shares the candidate's Git common directory, inspect the
+sealed plan before LAND:
+
+```bash
+python3 scripts/task_promotion.py plan \
+  --worktree /absolute/task/worktree \
+  --validation-evidence relative/evidence.json \
+  --json
+```
+
+`plan` is read-only. It requires a clean registered task worktree, a clean
+canonical `main` worktree, exact candidate and evidence identities, the current
+environment fingerprint and dependency-lock identity, and equality between
+local `main` and the explicitly observed remote target ref.
+
+After reviewing the same plan, promote the unchanged candidate with:
+
+```bash
+python3 scripts/task_promotion.py land \
+  --worktree /absolute/task/worktree \
+  --validation-evidence relative/evidence.json \
+  --json
+```
+
+LAND performs a final fetch, an atomic non-forced fast-forward push of the exact
+candidate, fetches and verifies the result, fast-forwards canonical local
+`main`, then delegates worktree and compare-and-delete branch cleanup to the
+verified lifecycle authority. It never changes the candidate or automatically
+replays it onto a newer base. A moved remote or rejected push preserves the
+candidate and performs no cleanup. Once remote promotion succeeds, a later
+local-main or cleanup failure is reported as partial completion and is not
+automatically undone; cleanup refusal is stated as `LAND succeeded, cleanup
+incomplete`.
+
 ## Environment Qualification
 
 `./wolfy qualify-env` emits redacted environment evidence with a non-null
