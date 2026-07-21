@@ -98,9 +98,28 @@ run_step "test.sh code" ./test.sh code
 run_step "test.sh yfinance" ./test.sh yfinance
 
 TEST_EVIDENCE_DIR="output/domain-test-topology/${WOLFYSTOCK_TEST_RUN_ID}"
-run_step "offline test suite (outbound denied + domain parity)" \
-  "${PYTHON_BIN}" "${SCRIPT_DIR}/domain_test_topology.py" run-backend \
-  --output-dir "${TEST_EVIDENCE_DIR}" --retry-failures 0
+BASE_REF="${CI_GATE_BASE_REF:-origin/main}"
+RISK_PLAN="${TEST_EVIDENCE_DIR}/t631-risk-plan.json"
+FULL_PLAN="${TEST_EVIDENCE_DIR}/t633-full-plan.json"
+SHARDED_DIR="${TEST_EVIDENCE_DIR}/sharded"
+mkdir -p "${TEST_EVIDENCE_DIR}"
+
+write_risk_plan() {
+  "${PYTHON_BIN}" "${SCRIPT_DIR}/validation_changed_files.py" \
+    --risk-plan --base-ref "${BASE_REF}" --candidate HEAD --shadow-change-source union \
+    --requested-risk R3 --accepted-integration > "${RISK_PLAN}"
+}
+
+run_step "T631 risk selection plan" write_risk_plan
+run_step "T633 deterministic full shard plan" \
+  "${PYTHON_BIN}" -m tests.conftest build-backend-shard-plan \
+  --risk-plan "${RISK_PLAN}" --scope full --output "${FULL_PLAN}"
+
+# Task-local serial equivalence remains available outside this canonical gate via
+# domain_test_topology.py run-backend --retry-failures 0.
+run_step "offline canonical backend shard suite (outbound denied + structured reconciliation)" \
+  "${PYTHON_BIN}" -m tests.conftest run-backend-shard-suite \
+  --plan "${FULL_PLAN}" --output-dir "${SHARDED_DIR}" --timeout-seconds 900
 
 print_step "summary"
 echo "[PASS] backend-gate completed successfully"
