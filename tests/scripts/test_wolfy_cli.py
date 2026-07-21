@@ -7,7 +7,9 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+from scripts.environment import cli as environment_cli
 from scripts.environment.cli import _execute, _format_development_result, _parser
+from scripts.environment.errors import EnvironmentFailure
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -35,7 +37,7 @@ def test_root_launchers_select_supported_bootstrap_without_using_mutable_worktre
     assert "scripts/wolfy.py" in powershell.replace("\\", "/")
 
 
-def test_cli_help_exposes_single_canonical_command_surface() -> None:
+def test_cli_help_exposes_single_canonical_command_surface(monkeypatch, capsys) -> None:
     result = subprocess.run(
         [sys.executable, str(CLI), "--help"],
         cwd=ROOT,
@@ -79,6 +81,21 @@ def test_cli_help_exposes_single_canonical_command_surface() -> None:
     assert _format_development_result(
         {"status": "already_stopped"}, launcher=Path("/repo/wolfy")
     ) == "WolfyStock stopped"
+
+    monkeypatch.setattr(environment_cli, "_root", lambda: ROOT)
+    monkeypatch.setattr(environment_cli, "require_managed_python", lambda _root: None)
+    monkeypatch.setattr(environment_cli, "_managed_reexec", lambda _root, _argv: None)
+    monkeypatch.setattr(environment_cli, "EnvironmentManager", lambda _root: SimpleNamespace())
+
+    def transform_failure(_root, _manager, *, isolated: bool):
+        assert isolated is False
+        raise EnvironmentFailure("development_frontend_transform_failed", "frontend entrypoint transform failed")
+
+    monkeypatch.setattr("scripts.environment.services.run_development_services", transform_failure)
+    assert environment_cli.main(["dev"]) == 1
+    output = capsys.readouterr()
+    assert "WolfyStock could not start: frontend entrypoint transform failed" in output.err
+    assert "WolfyStock is ready" not in output.out + output.err
 
 
 def test_lock_command_has_one_bounded_python_check_and_update_surface() -> None:

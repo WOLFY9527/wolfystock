@@ -30,6 +30,13 @@ if TYPE_CHECKING:
 DEFAULT_FRONTEND_PORT = 5173
 DEFAULT_BACKEND_PORT = 8000
 _RUN_ID = re.compile(r"dev-[a-z0-9-]{1,64}")
+_RECOVERABLE_PROJECTION_FAILURE_CODES = frozenset(
+    {
+        "worktree_pointer_invalid",
+        "worktree_pointer_mismatch",
+        "worktree_dependency_link_broken",
+    }
+)
 
 
 def reserve_backend_socket() -> tuple[socket.socket, int]:
@@ -158,6 +165,7 @@ def _wait_for_http(
     processes: list[subprocess.Popen[Any]],
     *,
     expected_run_id: str | None = None,
+    failure_code: str | None = None,
     timeout: float = 45.0,
 ) -> None:
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -181,12 +189,27 @@ def _wait_for_http(
                             continue
                     return
                 last_status = f"http_{response.status}"
+        except urllib.error.HTTPError as exc:
+            last_status = f"http_{exc.code}"
+            if failure_code is not None and exc.code >= 500:
+                raise EnvironmentFailure(
+                    failure_code, f"frontend application transform failed with HTTP {exc.code}"
+                ) from exc
         except (OSError, urllib.error.URLError):
             last_status = "connection_pending"
         time.sleep(0.1)
     if last_status in {"identity_mismatch", "identity_response_invalid"}:
         raise EnvironmentFailure("development_service_identity_mismatch", "development service run identity did not match")
     raise EnvironmentFailure("development_service_not_ready", f"development service readiness timed out: {last_status}")
+
+
+def _verify_development_environment(manager: "EnvironmentManager", *, run_id: str) -> Any:
+    try:
+        return manager.verify(run_id=run_id)
+    except EnvironmentFailure as exc:
+        if exc.code not in _RECOVERABLE_PROJECTION_FAILURE_CODES:
+            raise
+    return manager.ensure(offline=False, run_id=run_id)
 
 
 def _state_path(cache_root: Path, run_id: str) -> Path:
@@ -343,6 +366,7 @@ def _running_local_payload(cache_root: Path) -> dict[str, Any] | None:
         )
         and _http_is_ready(f"http://127.0.0.1:{DEFAULT_BACKEND_PORT}/api/health/live")
         and _http_is_ready(f"http://127.0.0.1:{DEFAULT_FRONTEND_PORT}/")
+        and _http_is_ready(f"http://127.0.0.1:{DEFAULT_FRONTEND_PORT}/src/main.tsx")
     )
     if not healthy:
         stop_development_services(cache_root, run_id)
@@ -369,7 +393,7 @@ def run_development_services(
     run_id = "dev-" + os.urandom(8).hex()
     context = create_run_context(manager.cache_root, run_id=run_id)
     try:
-        verified = manager.verify(run_id=run_id)
+        verified = _verify_development_environment(manager, run_id=run_id)
         write_run_json(context, "environment-evidence.json", verified.evidence)
     except (EnvironmentFailure, OSError, ValueError):
         cleanup_run(context, success=False)
@@ -461,10 +485,11 @@ def run_development_services(
         vite = verified.web.path / "node_modules" / ".bin" / "vite"
         if not vite.is_file():
             raise EnvironmentFailure("vite_executable_missing", "verified Web snapshot has no Vite executable")
+        web_root = (root / "apps" / "dsa-web").resolve(strict=True)
         frontend_command = [
             node,
             str(vite.resolve(strict=True)),
-            str(root / "apps" / "dsa-web"),
+            str(web_root),
             "--config",
             str(config),
             "--host",
@@ -480,7 +505,7 @@ def run_development_services(
             frontend_socket = None
         frontend = subprocess.Popen(
             frontend_command,
-            cwd=root,
+            cwd=web_root,
             env=environment,
             stdout=frontend_handle,
             stderr=subprocess.STDOUT,
@@ -506,6 +531,11 @@ def run_development_services(
             expected_run_id=run_id,
         )
         _wait_for_http(f"http://127.0.0.1:{frontend_port}/", [backend, frontend])
+        _wait_for_http(
+            f"http://127.0.0.1:{frontend_port}/src/main.tsx",
+            [backend, frontend],
+            failure_code="development_frontend_transform_failed",
+        )
         if isolated:
             write_run_json(context, "dev.json", state)
         return {
