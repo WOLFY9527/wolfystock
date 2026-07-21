@@ -57,7 +57,8 @@ export type PasswordResetRequestResponse = {
 
 export const authApi = {
   async getStatus(): Promise<AuthStatusResponse> {
-    const { data } = await apiClient.get<AuthStatusResponse>('/api/v1/auth/status');
+    // Session identity must reflect the cookie set by login, never a shared pre-login response.
+    const { data } = await apiClient.get<AuthStatusResponse>('/api/v1/auth/status', { dedupe: false });
     return data;
   },
 

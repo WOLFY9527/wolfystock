@@ -1,5 +1,5 @@
 import type React from 'react';
-import { createContext, use, useCallback, useEffect, useState } from 'react';
+import { createContext, use, useCallback, useEffect, useRef, useState } from 'react';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import { invalidateApiShortWindowCache } from '../api';
 import type { CurrentUser } from '../api/auth';
@@ -118,7 +118,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<ParsedApiError | null>(null);
+  const authStatusRequestIdRef = useRef(0);
   const clearSessionState = useCallback(() => {
+    authStatusRequestIdRef.current += 1;
     setLoggedIn(false);
     setPasswordSet(false);
     setPasswordChangeable(false);
@@ -130,12 +132,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loadAuthStatus = useCallback(async ({ primeLoading }: { primeLoading: boolean }) => {
+    const requestId = ++authStatusRequestIdRef.current;
     if (primeLoading) {
       setIsLoading(true);
       setLoadError(null);
     }
     try {
       const status = await authApi.getStatus();
+      if (requestId !== authStatusRequestIdRef.current) {
+        return null;
+      }
       const nextCurrentUser = status.currentUser ?? null;
       const nextLoggedIn = Boolean(nextCurrentUser?.isAuthenticated ?? status.loggedIn);
       setAuthEnabled(status.authEnabled);
@@ -149,6 +155,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       return status;
     } catch (err) {
+      if (requestId !== authStatusRequestIdRef.current) {
+        return null;
+      }
       setLoadError(getParsedApiError(err));
       setAuthEnabled(false);
       setLoggedIn(false);
@@ -159,7 +168,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       useStockPoolStore.getState().resetDashboardState();
       return null;
     } finally {
-      setIsLoading(false);
+      if (requestId === authStatusRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 

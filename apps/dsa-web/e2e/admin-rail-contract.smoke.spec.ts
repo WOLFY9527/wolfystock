@@ -1,5 +1,7 @@
 import type { Page, Route } from '@playwright/test';
 import { expect, expectNoHorizontalOverflow, installAdminAuthHarness, test } from './fixtures/adminAuth';
+import { createMockAdminUser, createMockAuthStatus } from '../src/test-utils/adminAuthHarness';
+import type { CurrentUser } from '../src/api/auth';
 
 const timestamp = '2026-06-06T10:30:00+08:00';
 
@@ -518,7 +520,7 @@ async function expectAdminRailContract(page: Page, viewportWidth: number) {
 
 test.describe('admin system-control rail contract', () => {
   for (const route of adminRailRoutes) {
-    test(`${route.path} keeps the 1600px admin rail`, async ({ page }) => {
+    test(`${route.path} keeps the 1600px admin rail`, async ({ page }, testInfo) => {
         await installAdminRailMocks(page);
         await page.goto(route.path);
         await page.waitForLoadState('domcontentloaded');
@@ -527,6 +529,324 @@ test.describe('admin system-control rail contract', () => {
         await expect(page.getByTestId(route.readyTestId)).toBeVisible({ timeout: 15_000 });
         await expectNoHorizontalOverflow(page);
       await expectAdminRailContract(page, page.viewportSize()!.width);
+      if (route.path === '/zh/settings/system') {
+        if (testInfo.project.name === 'chromium-mobile') {
+          await runRecoveryMobileContract(page);
+        } else {
+          await runRecoveryDesktopContract(page);
+        }
+      }
     });
   }
 });
+
+type RecoverySessionKind = 'guest' | 'user' | 'admin';
+
+const recoveryConsumerDirectLinks = [
+  { label: '首页', path: '/' },
+  { label: '观察列表', path: '/watchlist' },
+  { label: '持仓', path: '/portfolio' },
+] as const;
+
+const recoveryConsumerGroups = [
+  {
+    key: 'market',
+    children: [
+      { label: '市场总览', path: '/market-overview' },
+      { label: '流动性监测', path: '/market/liquidity-monitor' },
+      { label: '板块轮动', path: '/market/rotation-radar' },
+    ],
+  },
+  {
+    key: 'research',
+    children: [
+      { label: '研究雷达', path: '/research/radar' },
+      { label: '个股研究', path: '/stocks/structure-decision' },
+      { label: '扫描器', path: '/scanner' },
+    ],
+  },
+  {
+    key: 'validate',
+    children: [
+      { label: '回测', path: '/backtest' },
+      { label: '情景实验室', path: '/scenario-lab' },
+      { label: '期权实验室', path: '/options-lab' },
+    ],
+  },
+] as const;
+
+const recoveryAdminDestinations = [
+  { label: '运维总览/系统设置', path: '/settings/system' },
+  { label: 'Launch Cockpit', path: '/admin/launch-cockpit' },
+  { label: '系统日志', path: '/admin/logs' },
+  { label: '证据复核', path: '/admin/evidence-workflow' },
+  { label: '通知通道', path: '/admin/notifications' },
+  { label: '数据源与就绪度', path: '/admin/market-providers' },
+  { label: '熔断诊断', path: '/admin/provider-circuits' },
+  { label: '用户治理', path: '/admin/users' },
+  { label: '成本观测', path: '/admin/cost-observability' },
+] as const;
+
+const recoveryDesktopViewports = [
+  { width: 1440, height: 900 },
+  { width: 1920, height: 1080 },
+] as const;
+
+function recoveryUserSession(): CurrentUser {
+  return {
+    id: 'shell-recovery-user',
+    username: 'shell-user',
+    displayName: 'Shell User',
+    role: 'user',
+    isAdmin: false,
+    isAuthenticated: true,
+    transitional: false,
+    authEnabled: true,
+  };
+}
+
+function recoverySessionStatus(session: RecoverySessionKind) {
+  if (session === 'guest') return createMockAuthStatus(null);
+  return createMockAuthStatus(session === 'admin' ? createMockAdminUser() : recoveryUserSession());
+}
+
+function recoveryUnavailableDashboardOverview() {
+  const metric = { label: 'Unavailable', value: '--', change: '--', status: 'unavailable' };
+  return {
+    status: 'unavailable',
+    as_of: '',
+    market_pulse: {
+      sp500: metric,
+      nasdaq: metric,
+      russell2000: metric,
+      vix: metric,
+      ten_year_yield: metric,
+      dollar_index: metric,
+      market_breadth: { summary: 'Unavailable', status: 'unavailable' },
+      liquidity_state: 'unavailable',
+    },
+    market_brief: { headline: 'Unavailable', summary: 'Unavailable', status: 'unavailable' },
+    money_flow: {
+      top_inflows: [],
+      top_outflows: [],
+      style_bias: 'unavailable',
+      offensive_defensive_bias: 'unavailable',
+      source_status: 'unavailable',
+      status: 'unavailable',
+    },
+    liquidity_risk: {
+      summary: 'Unavailable',
+      volatility_tone: 'unavailable',
+      funding_stress: 'unavailable',
+      dollar_rate_pressure: 'unavailable',
+      status: 'unavailable',
+    },
+    sector_theme_rotation: {
+      leading_themes: [],
+      lagging_themes: [],
+      diffusion: 'unavailable',
+      summary: 'Unavailable',
+      status: 'unavailable',
+    },
+    research_queue: { status: 'unavailable', items: [] },
+    data_quality: { state: 'unavailable', label: 'Unavailable', summary: 'Unavailable', sections: {} },
+    no_advice_disclosure: 'Unavailable',
+  };
+}
+
+async function installRecoverySessionHarness(page: Page, initialSession: RecoverySessionKind): Promise<void> {
+  let session = initialSession;
+
+  await page.addInitScript(() => {
+    class TestEventSource {
+      onopen: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+
+      addEventListener() {}
+      removeEventListener() {}
+      close() {}
+    }
+    Object.defineProperty(window, 'EventSource', {
+      value: TestEventSource,
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  await page.route('**/api/v1/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+
+    if (request.method() === 'GET' && path === '/api/v1/auth/status') {
+      return fulfillJson(route, recoverySessionStatus(session));
+    }
+    if (request.method() === 'GET' && path === '/api/v1/auth/me') {
+      const currentUser = session === 'guest'
+        ? null
+        : session === 'admin'
+          ? createMockAdminUser()
+          : recoveryUserSession();
+      return currentUser
+        ? fulfillJson(route, currentUser)
+        : fulfillJson(route, { error: 'not_authenticated' }, 401);
+    }
+    if (request.method() === 'GET' && path === '/api/v1/dashboard/market-intelligence-overview') {
+      return fulfillJson(route, recoveryUnavailableDashboardOverview());
+    }
+    if (request.method() === 'POST' && path === '/api/v1/auth/login') {
+      session = 'user';
+      return fulfillJson(route, { ok: true });
+    }
+    if (request.method() === 'POST' && path === '/api/v1/auth/logout') {
+      session = 'guest';
+      return fulfillJson(route, { ok: true });
+    }
+
+    return fulfillJson(route, { detail: `fixture response for ${request.method()} ${path}` });
+  });
+}
+
+async function expectRecoveryMenuPointerReachable(page: Page, testId: string) {
+  const menu = page.getByTestId(testId);
+  await expect(menu).toBeVisible();
+  const metrics = await menu.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    const pointX = rect.left + Math.min(12, Math.max(1, rect.width / 2));
+    const pointY = rect.top + Math.min(12, Math.max(1, rect.height / 2));
+    const hit = document.elementFromPoint(pointX, pointY);
+    return {
+      width: rect.width,
+      height: rect.height,
+      top: rect.top,
+      bottom: rect.bottom,
+      viewportHeight: window.innerHeight,
+      display: style.display,
+      visibility: style.visibility,
+      pointerEvents: style.pointerEvents,
+      hitInsideMenu: Boolean(hit && element.contains(hit)),
+    };
+  });
+
+  expect(metrics.width).toBeGreaterThan(0);
+  expect(metrics.height).toBeGreaterThan(0);
+  expect(metrics.top).toBeGreaterThanOrEqual(0);
+  expect(metrics.bottom).toBeLessThanOrEqual(metrics.viewportHeight);
+  expect(metrics.display).not.toBe('none');
+  expect(metrics.visibility).not.toBe('hidden');
+  expect(metrics.pointerEvents).not.toBe('none');
+  expect(metrics.hitInsideMenu).toBe(true);
+}
+
+async function openRecoveryConsumerHome(page: Page) {
+  await page.goto('/');
+  await expect(page.getByTestId('shell-consumer-primary-nav')).toBeVisible({ timeout: 15_000 });
+}
+
+async function recoveryDocumentNavigationCount(page: Page) {
+  return page.evaluate(() => performance.getEntriesByType('navigation').length);
+}
+
+async function runRecoveryDesktopContract(page: Page) {
+  await page.unroute('**/api/v1/**');
+  await installRecoverySessionHarness(page, 'user');
+  for (const viewport of recoveryDesktopViewports) {
+    await page.setViewportSize(viewport);
+    await openRecoveryConsumerHome(page);
+    for (const directLink of recoveryConsumerDirectLinks) {
+      const navigationCount = await recoveryDocumentNavigationCount(page);
+      await page.getByTestId('shell-consumer-primary-nav').getByRole('link', { name: directLink.label }).click();
+      await expect(page).toHaveURL(new RegExp(`${directLink.path === '/' ? '\\/$' : `${directLink.path.replaceAll('/', '\\/')}$`}`));
+      await expect(page.getByTestId('shell-consumer-primary-nav')).toBeVisible();
+      expect(await recoveryDocumentNavigationCount(page)).toBe(navigationCount);
+    }
+
+    for (const group of recoveryConsumerGroups) {
+      await openRecoveryConsumerHome(page);
+      const trigger = page.getByTestId(`shell-nav-group-trigger-${group.key}`);
+      await trigger.click();
+      const menuTestId = `shell-nav-group-menu-${group.key}`;
+      await expectRecoveryMenuPointerReachable(page, menuTestId);
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId(menuTestId)).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+      await trigger.click();
+      await expectRecoveryMenuPointerReachable(page, menuTestId);
+      await page.mouse.click(4, 200);
+      await expect(page.getByTestId(menuTestId)).toHaveCount(0);
+
+      for (const child of group.children) {
+        await openRecoveryConsumerHome(page);
+        await page.getByTestId(`shell-nav-group-trigger-${group.key}`).click();
+        await expectRecoveryMenuPointerReachable(page, menuTestId);
+        const navigationCount = await recoveryDocumentNavigationCount(page);
+        await page.getByTestId(menuTestId).getByRole('link', { name: child.label }).click();
+        await expect(page).toHaveURL(new RegExp(`${child.path.replaceAll('/', '\\/')}$`));
+        await expect(page.getByTestId(menuTestId)).toHaveCount(0);
+        expect(await recoveryDocumentNavigationCount(page)).toBe(navigationCount);
+      }
+    }
+  }
+
+  await page.unroute('**/api/v1/**');
+  await installRecoverySessionHarness(page, 'guest');
+  await page.goto('/login?redirect=/');
+  await page.locator('#username').fill('shell-user');
+  await page.locator('#password').fill('fixture-password');
+  await page.getByRole('button', { name: /登录继续|sign in/i }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByTestId('shell-account-center-entry')).toContainText('Shell User');
+  await expect(page.getByRole('link', { name: '登录' })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByTestId('shell-account-center-entry')).toContainText('Shell User');
+  await page.goto('/portfolio');
+  await expect(page.getByTestId('shell-account-center-entry')).toContainText('Shell User');
+  await page.getByTestId('shell-account-center-entry').getByRole('button', { name: '账户中心' }).click();
+  await page.getByTestId('shell-account-center-menu').getByRole('menuitem', { name: '退出登录' }).click();
+  await page.getByRole('dialog', { name: '退出登录' }).getByRole('button', { name: '确认退出' }).click();
+  await expect(page).toHaveURL(/\/guest$/);
+  await expect(page.getByRole('link', { name: '登录' })).toBeVisible();
+
+  await page.unroute('**/api/v1/**');
+  await installRecoverySessionHarness(page, 'admin');
+  for (const destination of recoveryAdminDestinations) {
+    await openRecoveryConsumerHome(page);
+    await page.getByRole('button', { name: '系统' }).click();
+    const menu = page.getByTestId('shell-admin-utility-menu');
+    await expect(menu).toBeVisible();
+    const link = menu.getByRole('link', { name: destination.label });
+    await expect(link).toHaveAttribute('href', destination.path);
+    await link.click();
+    await expect(page).toHaveURL(new RegExp(`${destination.path.replaceAll('/', '\\/')}$`));
+  }
+
+  await page.unroute('**/api/v1/**');
+  await installRecoverySessionHarness(page, 'user');
+  await openRecoveryConsumerHome(page);
+  await expect(page.getByRole('button', { name: '系统' })).toHaveCount(0);
+  await page.goto('/settings/system');
+  await expect(page.getByRole('heading', { name: '这个页面需要管理员账户' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('shell-admin-primary-nav')).toHaveCount(0);
+}
+
+async function runRecoveryMobileContract(page: Page) {
+  await page.unroute('**/api/v1/**');
+  await installRecoverySessionHarness(page, 'user');
+  await page.goto('/');
+  await expect(page.locator('#shell-mobile-navigation-trigger')).toBeVisible({ timeout: 15_000 });
+  await page.locator('#shell-mobile-navigation-trigger').click();
+  const drawer = page.getByTestId('shell-mobile-navigation-menu');
+  await expect(drawer).toBeVisible();
+  for (const directLink of recoveryConsumerDirectLinks) {
+    await expect(drawer.getByRole('link', { name: directLink.label })).toHaveAttribute('href', directLink.path);
+  }
+  for (const group of recoveryConsumerGroups) {
+    for (const child of group.children) {
+      await expect(drawer.getByRole('link', { name: child.label })).toHaveAttribute('href', child.path);
+    }
+  }
+  await drawer.getByRole('link', { name: '市场总览' }).click();
+  await expect(page).toHaveURL(/\/market-overview$/);
+  await expect(drawer).toHaveCount(0);
+}
