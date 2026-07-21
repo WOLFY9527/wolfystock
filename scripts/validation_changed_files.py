@@ -156,6 +156,47 @@ RISK_GATE_CHANGE_PATHS = {
     "validation/domain_test_topology.json",
     "scripts/domain_test_topology.py",
 }
+BACKEND_STAGE_SCHEMA = "wolfystock.backend-validation-stages.v1"
+BACKEND_VALIDATION_TIERS = ("canonical", "release")
+BACKEND_RELEASE_ONLY_NODE_IDS = (
+    "tests/test_operator_evidence_preflight.py::test_artifact_dir_mode_adds_local_workflow_check_without_approving_launch",
+    "tests/test_operator_evidence_preflight.py::test_preflight_failure_summary_is_bounded_and_does_not_echo_command_output",
+    "tests/test_operator_evidence_preflight.py::test_preflight_requires_synthetic_acknowledgement",
+    "tests/test_operator_evidence_preflight.py::test_synthetic_preflight_passes_with_review_required_non_approval_summary",
+    "tests/test_release_secret_scan.py::test_release_secret_scan_allows_checked_in_admin_auth_fixture",
+    "tests/test_release_secret_scan.py::test_release_secret_scan_allows_env_example_placeholders",
+    "tests/test_release_secret_scan.py::test_release_secret_scan_allows_frontend_e2e_state_placeholders",
+    "tests/test_release_secret_scan.py::test_release_secret_scan_files_from_scans_only_listed_files",
+    "tests/test_release_secret_scan.py::test_release_secret_scan_files_from_skips_generated_static_paths",
+    "tests/test_release_secret_scan.py::test_release_secret_scan_flags_committed_branch_bearer_token",
+    "tests/test_release_secret_scan.py::test_release_secret_scan_flags_frontend_e2e_api_key_assignment",
+    "tests/test_release_secret_scan.py::test_release_secret_scan_flags_frontend_e2e_password_assignment",
+    "tests/test_release_secret_scan.py::test_release_secret_scan_flags_staged_password_assignment",
+    "tests/test_release_secret_scan.py::test_release_secret_scan_flags_worktree_api_key",
+    "tests/test_release_secret_scan.py::test_release_secret_scan_local_only_skips_committed_branch_changes",
+    "tests/test_release_secret_scan.py::test_release_secret_scan_rejects_credentials_inside_candidate_archive",
+    "tests/test_release_secret_scan.py::test_release_secret_scan_rejects_private_paths_in_generated_evidence",
+    "tests/test_release_secret_scan.py::test_release_secret_scan_treats_only_topology_test_ids_as_reviewed_fixture_data",
+)
+BACKEND_RELEASE_STAGE_EXACT_TRIGGERS = {
+    ".github/workflows/release.yml",
+    "scripts/ci_gate.sh",
+    "scripts/ci_gate_fast.sh",
+    "scripts/domain_test_topology.py",
+    "scripts/validation_changed_files.py",
+    "tests/conftest.py",
+    "tests/scripts/test_domain_test_topology.py",
+    "tests/scripts/test_validation_owner_planner.py",
+    "validation/domain_test_topology.json",
+    "validation/validation_owners.json",
+}
+BACKEND_RELEASE_STAGE_PREFIX_TRIGGERS = (
+    "scripts/operator_evidence_",
+    "scripts/release_",
+    "src/runtime/",
+    "tests/test_operator_evidence_",
+    "tests/test_release_",
+)
 
 
 class SelectionError(ValueError):
@@ -1660,6 +1701,202 @@ def _validate_plan(plan: dict[str, Any]) -> None:
         raise SelectionError("validation plan hash mismatch")
 
 
+def _stage_inventory(node_ids: Iterable[str]) -> dict[str, Any]:
+    from scripts import domain_test_topology
+
+    ordered = sorted(node_ids)
+    if len(ordered) != len(set(ordered)):
+        raise SelectionError("backend stage plan contains duplicate node IDs")
+    return {
+        "count": len(ordered),
+        "sha256": domain_test_topology.inventory_hash(ordered),
+        "nodeIds": ordered,
+    }
+
+
+def _release_stage_trigger_reasons(risk_plan: dict[str, Any], tier: str) -> list[str]:
+    reasons: list[str] = []
+    if tier == "release":
+        reasons.append("explicit_release_tier")
+    risk = risk_plan["risk"]
+    requested = risk_plan["requested"]
+    if risk["class"] == "R5":
+        reasons.append("r5_release_risk")
+    if risk["unknownPaths"]:
+        reasons.append("unknown_change_fail_closed")
+    if risk["protectedOwners"]:
+        reasons.append("protected_owner_fail_closed")
+    if requested["userFacing"]:
+        reasons.append("user_facing_qualification")
+    if requested["releaseRuntime"]:
+        reasons.append("release_runtime_qualification")
+    for path in risk_plan["changedFiles"]:
+        if path in BACKEND_RELEASE_STAGE_EXACT_TRIGGERS or path.startswith(BACKEND_RELEASE_STAGE_PREFIX_TRIGGERS):
+            reasons.append(f"release_or_validation_authority:{path}")
+    return sorted(set(reasons))
+
+
+def build_backend_stage_plan(
+    risk_plan: dict[str, Any],
+    *,
+    tier: str,
+    topology_manifest_path: Path = DEFAULT_TOPOLOGY_MANIFEST,
+) -> dict[str, Any]:
+    """Partition the backend topology into one canonical and one release-owned stage."""
+
+    if tier not in BACKEND_VALIDATION_TIERS:
+        raise SelectionError(f"unknown backend validation tier: {tier}")
+    _validate_plan(risk_plan)
+    from scripts import domain_test_topology
+
+    manifest = domain_test_topology.load_manifest(topology_manifest_path)
+    domain_test_topology.validate_manifest(manifest)
+    all_ids = sorted(entry["id"] for entry in manifest["backend"]["tests"])
+    release_only = sorted(BACKEND_RELEASE_ONLY_NODE_IDS)
+    missing = sorted(set(release_only) - set(all_ids))
+    if missing:
+        raise SelectionError(f"release-only backend nodes are missing from topology: {missing}")
+    canonical_ids = sorted(set(all_ids) - set(release_only))
+    trigger_reasons = _release_stage_trigger_reasons(risk_plan, tier)
+    release_required = bool(trigger_reasons)
+    stages = [
+        {
+            "id": "backend.canonical",
+            "tierOwnership": "canonical",
+            "required": True,
+            **_stage_inventory(canonical_ids),
+        },
+        {
+            "id": "backend.release-only",
+            "tierOwnership": "release",
+            "purpose": (
+                "release packaging, operator evidence, candidate distribution, and final release secret validation; "
+                "canonical changed-file and branch secret gates remain mandatory"
+            ),
+            "required": release_required,
+            "selectionReasons": trigger_reasons,
+            **_stage_inventory(release_only),
+        },
+    ]
+    execution_ids = [node_id for stage in stages if stage["required"] for node_id in stage["nodeIds"]]
+    plan = {
+        "schemaVersion": BACKEND_STAGE_SCHEMA,
+        "authority": "tiered-backend-stage-selection",
+        "tier": tier,
+        "riskPlanHash": risk_plan["planHash"],
+        "topology": manifest["backend"]["currentInventory"],
+        "stages": stages,
+        "execution": _stage_inventory(execution_ids),
+        "releaseInventory": _stage_inventory(all_ids),
+        "releaseQualificationRequired": tier == "release",
+        "releaseReady": False,
+    }
+    plan["planHash"] = stable_hash(plan)
+    validate_backend_stage_plan(plan, topology_manifest_path=topology_manifest_path)
+    return plan
+
+
+def validate_backend_stage_plan(
+    plan: dict[str, Any],
+    *,
+    topology_manifest_path: Path = DEFAULT_TOPOLOGY_MANIFEST,
+) -> None:
+    from scripts import domain_test_topology
+
+    if plan.get("schemaVersion") != BACKEND_STAGE_SCHEMA or plan.get("authority") != "tiered-backend-stage-selection":
+        raise SelectionError("backend stage plan schema or authority is invalid")
+    if plan.get("tier") not in BACKEND_VALIDATION_TIERS or plan.get("releaseReady") is not False:
+        raise SelectionError("backend stage plan tier or release-ready state is invalid")
+    if plan.get("planHash") != stable_hash({key: value for key, value in plan.items() if key != "planHash"}):
+        raise SelectionError("backend stage plan hash mismatch")
+    manifest = domain_test_topology.load_manifest(topology_manifest_path)
+    domain_test_topology.validate_manifest(manifest)
+    if plan.get("topology") != manifest["backend"]["currentInventory"]:
+        raise SelectionError("backend stage plan topology identity mismatch")
+    stages = plan.get("stages")
+    if not isinstance(stages, list) or [stage.get("id") for stage in stages] != [
+        "backend.canonical",
+        "backend.release-only",
+    ]:
+        raise SelectionError("backend stage plan inventory is malformed")
+    if [stage.get("tierOwnership") for stage in stages] != ["canonical", "release"]:
+        raise SelectionError("backend stage plan tier ownership is malformed")
+    for stage in stages:
+        node_ids = stage.get("nodeIds")
+        if not isinstance(node_ids, list) or stage.get("required") not in {True, False}:
+            raise SelectionError("backend stage plan stage is malformed")
+        if _stage_inventory(node_ids) != {key: stage.get(key) for key in ("count", "sha256", "nodeIds")}:
+            raise SelectionError("backend stage plan stage identity mismatch")
+    canonical_ids = set(stages[0]["nodeIds"])
+    release_only_ids = set(stages[1]["nodeIds"])
+    if release_only_ids != set(BACKEND_RELEASE_ONLY_NODE_IDS) or canonical_ids & release_only_ids:
+        raise SelectionError("backend stage plan ownership is incomplete or overlapping")
+    expected_release = _stage_inventory(entry["id"] for entry in manifest["backend"]["tests"])
+    if plan.get("releaseInventory") != expected_release or canonical_ids | release_only_ids != set(expected_release["nodeIds"]):
+        raise SelectionError("backend stage plan release inventory is incomplete")
+    execution_ids = [node_id for stage in stages if stage["required"] for node_id in stage["nodeIds"]]
+    if plan.get("execution") != _stage_inventory(execution_ids):
+        raise SelectionError("backend stage plan execution identity mismatch")
+    if plan["tier"] == "release" and (not stages[1]["required"] or not plan.get("releaseQualificationRequired")):
+        raise SelectionError("backend stage plan release tier is incomplete")
+
+
+def project_backend_shard_plan(
+    risk_plan: dict[str, Any],
+    shard_plan: dict[str, Any],
+    *,
+    tier: str,
+) -> dict[str, Any]:
+    """Project a T633 full plan onto the selected T637 backend stages."""
+
+    from scripts import domain_test_topology
+
+    _validate_plan(risk_plan)
+    stages = build_backend_stage_plan(risk_plan, tier=tier)
+    if shard_plan.get("schemaVersion") != "wolfystock.backend-shard-plan.v1":
+        raise SelectionError("backend shard plan schema is invalid")
+    if shard_plan.get("planHash") != stable_hash(
+        {key: value for key, value in shard_plan.items() if key != "planHash"}
+    ):
+        raise SelectionError("backend shard plan hash mismatch")
+    if shard_plan.get("riskPlanHash") != risk_plan["planHash"]:
+        raise SelectionError("backend shard plan risk identity mismatch")
+    expected_full = {key: stages["releaseInventory"][key] for key in ("count", "sha256")}
+    if shard_plan.get("selection") != expected_full:
+        raise SelectionError("backend shard plan is not the complete release inventory")
+    source_shards = shard_plan.get("shards")
+    if (
+        not isinstance(source_shards, list)
+        or len(source_shards) != 2
+        or not all(isinstance(shard, dict) and isinstance(shard.get("nodeIds"), list) for shard in source_shards)
+        or len({shard.get("id") for shard in source_shards}) != 2
+    ):
+        raise SelectionError("backend shard plan shard inventory is malformed")
+    source_ids = [node_id for shard in source_shards for node_id in shard["nodeIds"]]
+    if _stage_inventory(source_ids) != stages["releaseInventory"]:
+        raise SelectionError("backend shard plan source inventory is incomplete or duplicated")
+    selected = set(stages["execution"]["nodeIds"])
+    projected = dict(shard_plan)
+    projected_shards = []
+    for shard in source_shards:
+        node_ids = sorted(selected & set(shard["nodeIds"]))
+        if not node_ids:
+            raise SelectionError(f"backend shard plan projection emptied shard: {shard.get('id')}")
+        selection = {
+            key: value
+            for key, value in _stage_inventory(node_ids).items()
+            if key != "nodeIds"
+        }
+        projected_shards.append({**shard, "nodeIds": node_ids, "selection": selection})
+    projected["authority"] = f"{shard_plan['authority']}+T637-tiering"
+    projected["structuredResultAuthority"] = domain_test_topology.TEST_RESULT_SCHEMA_VERSION
+    projected["validationStages"] = stages
+    projected["selection"] = {key: stages["execution"][key] for key in ("count", "sha256")}
+    projected["shards"] = projected_shards
+    projected["planHash"] = stable_hash({key: value for key, value in projected.items() if key != "planHash"})
+    return projected
+
+
 def consume_structured_backend_result(
     plan: dict[str, Any],
     result_path: Path,
@@ -2055,6 +2292,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="execute a previously emitted validation plan and consume structured evidence",
     )
+    parser.add_argument("--backend-stage-plan", type=Path, help="emit tier stages for a sealed risk plan")
+    parser.add_argument(
+        "--project-backend-shard-plan",
+        type=Path,
+        help="project a sealed T633 full shard plan onto explicit backend tier stages",
+    )
+    parser.add_argument("--risk-plan-input", type=Path, help="sealed T631 plan used by backend stage operations")
+    parser.add_argument("--validation-tier", choices=BACKEND_VALIDATION_TIERS)
     parser.add_argument("--requested-risk", choices=RISK_CLASSES, default=None)
     parser.add_argument("--requested-gate", action="append", default=[])
     parser.add_argument("--frozen-release", action="store_true")
@@ -2069,6 +2314,32 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     args.root = args.root.resolve()
+
+    if args.backend_stage_plan is not None or args.project_backend_shard_plan is not None:
+        try:
+            if args.backend_stage_plan is not None and args.project_backend_shard_plan is not None:
+                raise SelectionError("backend stage plan and shard projection operations are mutually exclusive")
+            if args.validation_tier is None:
+                raise SelectionError("--validation-tier is required for backend stage operations")
+            if args.project_backend_shard_plan is not None and args.risk_plan_input is None:
+                raise SelectionError("--risk-plan-input is required for shard plan projection")
+            risk_path = args.backend_stage_plan or args.risk_plan_input
+            assert risk_path is not None
+            risk_plan = json.loads(risk_path.read_text(encoding="utf-8"))
+            if args.project_backend_shard_plan is None:
+                payload = build_backend_stage_plan(risk_plan, tier=args.validation_tier)
+            else:
+                shard_plan = json.loads(args.project_backend_shard_plan.read_text(encoding="utf-8"))
+                payload = project_backend_shard_plan(
+                    risk_plan,
+                    shard_plan,
+                    tier=args.validation_tier,
+                )
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, SelectionError) as exc:
+            print(json.dumps({"status": "error", "reason": str(exc)}, ensure_ascii=False), file=sys.stderr)
+            return 2
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
 
     if args.execute_validation_plan is not None:
         try:

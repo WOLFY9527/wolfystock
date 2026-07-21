@@ -11,6 +11,41 @@ fi
 
 cd "${ROOT_DIR}"
 
+VALIDATION_TIER="canonical"
+TIER_EXPLICIT=0
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --tier)
+      [[ "$#" -ge 2 ]] || { echo "[backend-gate] --tier requires canonical or release" >&2; exit 2; }
+      VALIDATION_TIER="$2"
+      TIER_EXPLICIT=1
+      shift 2
+      ;;
+    -h|--help)
+      echo "Usage: scripts/ci_gate.sh [--tier canonical|release]"
+      exit 0
+      ;;
+    *)
+      echo "[backend-gate] unknown argument: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+if [[ "${VALIDATION_TIER}" != "canonical" && "${VALIDATION_TIER}" != "release" ]]; then
+  echo "[backend-gate] unknown validation tier: ${VALIDATION_TIER}" >&2
+  exit 2
+fi
+
+RELEASE_CANDIDATE="output/release/candidate/release-candidate.json"
+if [[ -f "${RELEASE_CANDIDATE}" ]]; then
+  if [[ "${TIER_EXPLICIT}" -eq 1 && "${VALIDATION_TIER}" != "release" ]]; then
+    echo "[backend-gate] release candidate evidence requires --tier release" >&2
+    exit 2
+  fi
+  VALIDATION_TIER="release"
+  echo "[backend-gate] release candidate evidence selected the release tier"
+fi
+
 PYTHON_BIN="${PYTHON_BIN:-}"
 if [[ -z "${PYTHON_BIN}" ]]; then
   if command -v python >/dev/null 2>&1; then
@@ -100,26 +135,56 @@ run_step "test.sh yfinance" ./test.sh yfinance
 TEST_EVIDENCE_DIR="output/domain-test-topology/${WOLFYSTOCK_TEST_RUN_ID}"
 BASE_REF="${CI_GATE_BASE_REF:-origin/main}"
 RISK_PLAN="${TEST_EVIDENCE_DIR}/t631-risk-plan.json"
+RAW_FULL_PLAN="${TEST_EVIDENCE_DIR}/t633-full-plan.raw.json"
 FULL_PLAN="${TEST_EVIDENCE_DIR}/t633-full-plan.json"
+STAGE_PLAN="${TEST_EVIDENCE_DIR}/t637-${VALIDATION_TIER}-stage-plan.json"
 SHARDED_DIR="${TEST_EVIDENCE_DIR}/sharded"
 mkdir -p "${TEST_EVIDENCE_DIR}"
 
 write_risk_plan() {
+  local risk="R3"
+  local plan_args=(
+    --risk-plan --base-ref "${BASE_REF}" --candidate HEAD --shadow-change-source union
+    --requested-risk "${risk}" --accepted-integration
+  )
+  if [[ "${VALIDATION_TIER}" == "release" ]]; then
+    risk="R5"
+    plan_args=(
+      --risk-plan --base-ref "${BASE_REF}" --candidate HEAD --shadow-change-source union
+      --requested-risk "${risk}" --accepted-integration
+      --frozen-release --user-facing --release-runtime
+    )
+  fi
+  "${PYTHON_BIN}" "${SCRIPT_DIR}/validation_changed_files.py" "${plan_args[@]}" > "${RISK_PLAN}"
+}
+
+write_stage_plan() {
   "${PYTHON_BIN}" "${SCRIPT_DIR}/validation_changed_files.py" \
-    --risk-plan --base-ref "${BASE_REF}" --candidate HEAD --shadow-change-source union \
-    --requested-risk R3 --accepted-integration > "${RISK_PLAN}"
+    --backend-stage-plan "${RISK_PLAN}" --validation-tier "${VALIDATION_TIER}" > "${STAGE_PLAN}"
+}
+
+build_full_shard_plan() {
+  "${PYTHON_BIN}" -m tests.conftest build-backend-shard-plan \
+    --risk-plan "${RISK_PLAN}" --scope full --output "${RAW_FULL_PLAN}" >/dev/null
+}
+
+project_shard_plan() {
+  "${PYTHON_BIN}" "${SCRIPT_DIR}/validation_changed_files.py" \
+    --project-backend-shard-plan "${RAW_FULL_PLAN}" \
+    --risk-plan-input "${RISK_PLAN}" --validation-tier "${VALIDATION_TIER}" > "${FULL_PLAN}"
 }
 
 run_step "T631 risk selection plan" write_risk_plan
-run_step "T633 deterministic full shard plan" \
-  "${PYTHON_BIN}" -m tests.conftest build-backend-shard-plan \
-  --risk-plan "${RISK_PLAN}" --scope full --output "${FULL_PLAN}"
+run_step "T637 deterministic ${VALIDATION_TIER} stage plan" write_stage_plan
+run_step "T633 deterministic full shard plan" build_full_shard_plan
+run_step "T637 project T633 plan onto ${VALIDATION_TIER} stages" project_shard_plan
 
 # Task-local serial equivalence remains available outside this canonical gate via
 # domain_test_topology.py run-backend --retry-failures 0.
-run_step "offline canonical backend shard suite (outbound denied + structured reconciliation)" \
+run_step "offline ${VALIDATION_TIER} backend shard suite (outbound denied + structured reconciliation)" \
   "${PYTHON_BIN}" -m tests.conftest run-backend-shard-suite \
   --plan "${FULL_PLAN}" --output-dir "${SHARDED_DIR}" --timeout-seconds 900
 
 print_step "summary"
-echo "[PASS] backend-gate completed successfully"
+echo "[PASS] backend-gate ${VALIDATION_TIER} tier completed successfully"
+echo "[INFO] release-ready=false; repository release qualification remains a separate stricter authority"

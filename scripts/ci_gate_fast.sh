@@ -107,6 +107,7 @@ TMP_DIR="$(mktemp -d "${ROOT_DIR}/output/ci_gate_fast.XXXXXX")"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 PLAN_PATH="${TMP_DIR}/validation-plan.json"
 EXECUTION_DIR="${TMP_DIR}/validation-execution"
+BACKEND_STAGE_PATH="${TMP_DIR}/backend-stage-plan.json"
 
 PLAN_ARGS=(
   --risk-plan
@@ -137,6 +138,12 @@ fi
 
 echo "==> fast-gate: build cumulative validation plan"
 "${PYTHON_BIN}" "${COLLECTOR}" "${PLAN_ARGS[@]}" >"${PLAN_PATH}"
+VALIDATION_TIER="canonical"
+if [[ "${FROZEN_RELEASE}" -eq 1 ]]; then
+  VALIDATION_TIER="release"
+fi
+"${PYTHON_BIN}" "${COLLECTOR}" \
+  --backend-stage-plan "${PLAN_PATH}" --validation-tier "${VALIDATION_TIER}" >"${BACKEND_STAGE_PATH}"
 cat "${PLAN_PATH}"
 
 if [[ "${PLAN_ONLY}" -eq 1 ]]; then

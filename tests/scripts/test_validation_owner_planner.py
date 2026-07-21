@@ -848,3 +848,72 @@ def test_t437_t438_locale_corpus_adds_bounded_and_browser_owners_to_current_clas
     assert "--project=release-real-runtime" not in gates["browser.protected"]["command"], diagnostic
     assert "--project=release-real-runtime" not in gates["browser.full"]["command"], diagnostic
     assert "--project=release-real-runtime" in gates["release.real_runtime"]["command"], diagnostic
+    risk_plan = risk_plan_for(
+        ["docs/audit-note.md"],
+        requested_risk="R3",
+        accepted_integration=True,
+    )
+
+    canonical = planner.build_backend_stage_plan(risk_plan, tier="canonical")
+    canonical_again = planner.build_backend_stage_plan(risk_plan, tier="canonical")
+    release = planner.build_backend_stage_plan(risk_plan, tier="release")
+
+    assert canonical == canonical_again
+    assert canonical["schemaVersion"] == "wolfystock.backend-validation-stages.v1"
+    assert canonical["planHash"] == planner.stable_hash(
+        {key: value for key, value in canonical.items() if key != "planHash"}
+    )
+    assert canonical["releaseReady"] is False
+    assert release["releaseReady"] is False
+
+    canonical_stage, release_stage = canonical["stages"]
+    assert canonical_stage["id"] == "backend.canonical"
+    assert canonical_stage["tierOwnership"] == "canonical"
+    assert canonical_stage["required"] is True
+    assert release_stage["id"] == "backend.release-only"
+    assert release_stage["tierOwnership"] == "release"
+    assert release_stage["required"] is False
+    assert len(release_stage["nodeIds"]) == 18
+    audit = json.loads(
+        (ROOT / "validation" / "t569_test_redundancy_performance_audit.json").read_text(encoding="utf-8")
+    )
+    task = next(item for item in audit["roadmap"] if item["taskId"] == "T637")
+    assert release_stage["nodeIds"] == sorted(task["candidateNodeIds"])
+    assert "canonical changed-file and branch secret gates remain mandatory" in release_stage["purpose"]
+
+    canonical_ids = set(canonical_stage["nodeIds"])
+    release_only_ids = set(release_stage["nodeIds"])
+    release_ids = set(release["execution"]["nodeIds"])
+    assert canonical_ids.isdisjoint(release_only_ids)
+    assert canonical_ids | release_only_ids == release_ids
+    assert len(canonical_ids) == 7_914
+    assert len(release_ids) == 7_932
+    assert set(canonical["execution"]["nodeIds"]) < release_ids
+    assert release["stages"][1]["required"] is True
+    assert release["releaseQualificationRequired"] is True
+    scenarios = (
+        ("release-tool", ["scripts/release_secret_scan.sh"], {}),
+        ("validation-authority", ["scripts/validation_changed_files.py"], {}),
+        ("unknown", ["unknown-zone/new-validation-input.xyz"], {}),
+        ("protected-runtime", ["src/runtime/settings.py"], {}),
+        ("user-facing", ["docs/audit-note.md"], {"user_facing": True, "requested_risk": "R3"}),
+    )
+    for scenario, paths, kwargs in scenarios:
+        risk_plan = risk_plan_for(paths, accepted_integration=True, **kwargs)
+        stage_plan = planner.build_backend_stage_plan(risk_plan, tier="canonical")
+        release_stage = next(stage for stage in stage_plan["stages"] if stage["id"] == "backend.release-only")
+        assert release_stage["required"] is True, scenario
+        assert stage_plan["execution"] == stage_plan["releaseInventory"], scenario
+        assert stage_plan["releaseReady"] is False, scenario
+    risk_plan = risk_plan_for(
+        ["docs/audit-note.md"],
+        requested_risk="R3",
+        accepted_integration=True,
+    )
+    with pytest.raises(planner.SelectionError, match="unknown backend validation tier"):
+        planner.build_backend_stage_plan(risk_plan, tier="preview")
+
+    malformed = planner.build_backend_stage_plan(risk_plan, tier="canonical")
+    malformed["execution"]["count"] += 1
+    with pytest.raises(planner.SelectionError, match="stage plan"):
+        planner.validate_backend_stage_plan(malformed)

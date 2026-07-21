@@ -524,3 +524,71 @@ def test_first_attempts_and_retries_are_never_coalesced(
     assert '"${PYTHON_BIN}" -m pytest --domain-topology-verify-full' not in gate
     fast_gate = (ROOT / "scripts" / "ci_gate_fast.sh").read_text(encoding="utf-8")
     assert 'mktemp -d "${ROOT_DIR}/output/ci_gate_fast.XXXXXX"' in fast_gate
+    assert '--project-backend-shard-plan "${RAW_FULL_PLAN}"' in gate
+    assert 'VALIDATION_TIER="canonical"' in gate
+    assert 'RELEASE_CANDIDATE="output/release/candidate/release-candidate.json"' in gate
+    assert "release candidate evidence requires --tier release" in gate
+    assert 'VALIDATION_TIER="release"' in gate
+    assert 'local plan_args=(' in gate
+    assert '"${plan_args[@]}"' in gate
+    assert "release_args" not in gate
+    assert "release-ready=false" in gate
+    assert "--backend-stage-plan" in fast_gate
+    assert "--validation-tier" in fast_gate
+    assert "--deselect" not in gate + fast_gate
+    assert "--ignore" not in gate + fast_gate
+    from tests import conftest as shard
+
+    manifest, manifest_hash = planner.load_owner_manifest(OWNER_MANIFEST_PATH, root=ROOT)
+    risk_plan = planner.build_validation_plan_from_changes(
+        [
+            {
+                "path": "docs/audit-note.md",
+                "changeTypes": ["modified"],
+                "sources": ["committed"],
+                "ownershipTrees": ["base_and_candidate"],
+                "observations": [],
+            }
+        ],
+        manifest,
+        root=ROOT,
+        base_ref="base",
+        base_sha="1" * 40,
+        candidate_ref="candidate",
+        candidate_sha="2" * 40,
+        change_source="committed",
+        manifest_hash=manifest_hash,
+        candidate_identity={
+            "commitSha": "2" * 40,
+            "treeSha": "3" * 40,
+            "workingTreeSha256": "4" * 64,
+            "dirty": False,
+        },
+        requested_risk="R3",
+        accepted_integration=True,
+    )
+    risk_path = tmp_path / "risk-plan.json"
+    risk_path.write_bytes(planner.canonical_json_bytes(risk_plan) + b"\n")
+    full = shard.build_backend_shard_plan(risk_path, scope="full")
+
+    canonical = planner.project_backend_shard_plan(risk_plan, full, tier="canonical")
+    release = planner.project_backend_shard_plan(risk_plan, full, tier="release")
+
+    assert canonical["schemaVersion"] == full["schemaVersion"]
+    assert canonical["structuredResultAuthority"] == topology.TEST_RESULT_SCHEMA_VERSION
+    assert canonical["topology"] == load_manifest()["backend"]["currentInventory"]
+    assert canonical["selection"]["count"] == 7_914
+    assert release["selection"]["count"] == 7_932
+    assert release["selection"] == full["selection"]
+    assert set(canonical["validationStages"]["execution"]["nodeIds"]) == {
+        node_id for item in canonical["shards"] for node_id in item["nodeIds"]
+    }
+    assert len(canonical["shards"]) == len(release["shards"]) == 2
+    assert all(item["nodeIds"] for item in canonical["shards"])
+    assert shard._validate_backend_shard_plan(canonical) == canonical
+    assert shard._validate_backend_shard_plan(release) == release
+
+    malformed = deepcopy(full)
+    malformed["planHash"] = "0" * 64
+    with pytest.raises(planner.SelectionError, match="shard plan"):
+        planner.project_backend_shard_plan(risk_plan, malformed, tier="canonical")
