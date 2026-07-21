@@ -13,6 +13,7 @@ cd "${ROOT_DIR}"
 
 VALIDATION_TIER="canonical"
 TIER_EXPLICIT=0
+RESUME_EVIDENCE=""
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --tier)
@@ -21,8 +22,13 @@ while [[ "$#" -gt 0 ]]; do
       TIER_EXPLICIT=1
       shift 2
       ;;
+    --resume-evidence)
+      [[ "$#" -ge 2 ]] || { echo "[backend-gate] --resume-evidence requires an explicit resume-source.json path" >&2; exit 2; }
+      RESUME_EVIDENCE="$2"
+      shift 2
+      ;;
     -h|--help)
-      echo "Usage: scripts/ci_gate.sh [--tier canonical|release]"
+      echo "Usage: scripts/ci_gate.sh [--tier canonical|release] [--resume-evidence PATH]"
       exit 0
       ;;
     *)
@@ -139,6 +145,9 @@ RAW_FULL_PLAN="${TEST_EVIDENCE_DIR}/t633-full-plan.raw.json"
 FULL_PLAN="${TEST_EVIDENCE_DIR}/t633-full-plan.json"
 STAGE_PLAN="${TEST_EVIDENCE_DIR}/t637-${VALIDATION_TIER}-stage-plan.json"
 SHARDED_DIR="${TEST_EVIDENCE_DIR}/sharded"
+RESUME_SOURCE="${TEST_EVIDENCE_DIR}/t638-resume-source.json"
+RESUME_PLAN="${TEST_EVIDENCE_DIR}/t638-resume-plan.json"
+RESUME_RESULT="${SHARDED_DIR}/suite-result.json"
 mkdir -p "${TEST_EVIDENCE_DIR}"
 
 write_risk_plan() {
@@ -178,12 +187,43 @@ run_step "T631 risk selection plan" write_risk_plan
 run_step "T637 deterministic ${VALIDATION_TIER} stage plan" write_stage_plan
 run_step "T633 deterministic full shard plan" build_full_shard_plan
 run_step "T637 project T633 plan onto ${VALIDATION_TIER} stages" project_shard_plan
+run_step "T638 explicit resume source" \
+  "${PYTHON_BIN}" "${SCRIPT_DIR}/validation_resume.py" create-source \
+  --risk-plan "${RISK_PLAN}" --stage-plan "${STAGE_PLAN}" --shard-plan "${FULL_PLAN}" \
+  --output "${RESUME_SOURCE}"
+
+resume_args=(
+  plan --risk-plan "${RISK_PLAN}" --stage-plan "${STAGE_PLAN}" --shard-plan "${FULL_PLAN}"
+  --output "${RESUME_PLAN}"
+)
+if [[ -n "${RESUME_EVIDENCE}" ]]; then
+  resume_args+=(--resume-evidence "${RESUME_EVIDENCE}")
+fi
+run_step "T638 deterministic resume plan" \
+  "${PYTHON_BIN}" "${SCRIPT_DIR}/validation_resume.py" "${resume_args[@]}"
+
+REUSABLE_SHARDS="$("${PYTHON_BIN}" "${SCRIPT_DIR}/validation_resume.py" reusable-shards --resume-plan "${RESUME_PLAN}")"
 
 # Task-local serial equivalence remains available outside this canonical gate via
 # domain_test_topology.py run-backend --retry-failures 0.
-run_step "offline ${VALIDATION_TIER} backend shard suite (outbound denied + structured reconciliation)" \
-  "${PYTHON_BIN}" -m tests.conftest run-backend-shard-suite \
-  --plan "${FULL_PLAN}" --output-dir "${SHARDED_DIR}" --timeout-seconds 900
+if [[ -z "${RESUME_EVIDENCE}" || -z "${REUSABLE_SHARDS}" ]]; then
+  run_step "offline ${VALIDATION_TIER} backend shard suite (outbound denied + structured reconciliation)" \
+    "${PYTHON_BIN}" -m tests.conftest run-backend-shard-suite \
+    --plan "${FULL_PLAN}" --output-dir "${SHARDED_DIR}" --timeout-seconds 900
+else
+  run_step "T638 materialize verified reusable shards" \
+    "${PYTHON_BIN}" "${SCRIPT_DIR}/validation_resume.py" materialize \
+    --resume-plan "${RESUME_PLAN}" --resume-evidence "${RESUME_EVIDENCE}" --output-dir "${SHARDED_DIR}"
+  while IFS= read -r shard_id; do
+    [[ -n "${shard_id}" ]] || continue
+    run_step "T638 execute remaining ${shard_id} shard" \
+      "${PYTHON_BIN}" -m tests.conftest run-backend-shard \
+      --plan "${FULL_PLAN}" --shard "${shard_id}" --output-dir "${SHARDED_DIR}/${shard_id}"
+  done < <("${PYTHON_BIN}" "${SCRIPT_DIR}/validation_resume.py" remaining-shards --resume-plan "${RESUME_PLAN}")
+  run_step "T633 reconcile resumed backend shard suite" \
+    "${PYTHON_BIN}" "${SCRIPT_DIR}/validation_resume.py" reconcile \
+    --shard-plan "${FULL_PLAN}" --output-dir "${SHARDED_DIR}" --output "${RESUME_RESULT}"
+fi
 
 print_step "summary"
 echo "[PASS] backend-gate ${VALIDATION_TIER} tier completed successfully"

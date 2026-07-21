@@ -9,6 +9,7 @@ import pytest
 
 from scripts import domain_test_topology as topology
 from scripts import validation_changed_files as planner
+from scripts import validation_resume as resume
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -726,7 +727,208 @@ def test_related_test_inference_adds_but_does_not_replace_manifest_authority(tmp
     assert by_id["contracts.cross_owner"]["coverage"] == "validated_structured_domain_superset", diagnostic
 
 
-def test_deterministic_ordering_and_stable_output_hash(tmp_path: Path) -> None:
+def test_deterministic_ordering_and_stable_output_hash(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resume_current = {
+        "tier": "canonical",
+        "riskPlanHash": "1" * 64,
+        "stagePlanHash": "2" * 64,
+        "shardPlanHash": "3" * 64,
+        "candidate": candidate_identity(),
+        "topology": {"count": 2, "sha256": "4" * 64},
+        "shards": [
+            {
+                "id": "serialized-backend",
+                "selection": {"count": 1, "sha256": "5" * 64},
+                "stageIds": ["backend.canonical"],
+            },
+            {
+                "id": "isolated-portfolio",
+                "selection": {"count": 1, "sha256": "6" * 64},
+                "stageIds": ["backend.canonical"],
+            },
+        ],
+    }
+    first_resume = resume.build_resume_plan(resume_current, prior=None)
+    second_resume = resume.build_resume_plan(resume_current, prior=None)
+    assert first_resume == second_resume
+    assert first_resume["reusableShards"] == []
+    assert first_resume["remainingShards"] == ["isolated-portfolio", "serialized-backend"]
+    assert first_resume["planHash"] == resume.canonical_hash(
+        {key: value for key, value in first_resume.items() if key != "planHash"}
+    )
+
+    canonical_source = resume.build_resume_source(resume_current)
+    matching_resume = resume.build_resume_plan(resume_current, canonical_source)
+    assert matching_resume["candidateShards"] == ["isolated-portfolio", "serialized-backend"]
+    assert matching_resume["reusableShards"] == []
+    assert matching_resume["remainingShards"] == ["isolated-portfolio", "serialized-backend"]
+
+    mismatch_cases = {
+        "candidate": {**candidate_identity(), "commitSha": "9" * 40},
+        "topology": {"count": 2, "sha256": "9" * 64},
+        "riskPlanHash": "9" * 64,
+        "stagePlanHash": "9" * 64,
+        "shardPlanHash": "9" * 64,
+    }
+    for field, value in mismatch_cases.items():
+        mismatched = deepcopy(resume_current)
+        mismatched[field] = value
+        rejected = resume.build_resume_plan(mismatched, canonical_source)
+        assert rejected["reusableShards"] == []
+        assert rejected["remainingShards"] == ["isolated-portfolio", "serialized-backend"]
+        assert rejected["rejectionReasons"] == [f"identity mismatch: {field}"]
+
+    malformed = deepcopy(canonical_source)
+    malformed["sourceHash"] = "0" * 64
+    malformed_resume = resume.build_resume_plan(resume_current, malformed)
+    assert malformed_resume["reusableShards"] == []
+    assert malformed_resume["rejectionReasons"] == ["resume evidence hash mismatch"]
+
+    duplicate = deepcopy(canonical_source)
+    duplicate["shards"].append(deepcopy(duplicate["shards"][0]))
+    duplicate["sourceHash"] = resume.canonical_hash({key: value for key, value in duplicate.items() if key != "sourceHash"})
+    duplicate_resume = resume.build_resume_plan(resume_current, duplicate)
+    assert duplicate_resume["reusableShards"] == []
+    assert duplicate_resume["rejectionReasons"] == ["resume evidence contains duplicate shard records"]
+
+    contradictory = deepcopy(canonical_source)
+    contradictory["shards"][0]["stageIds"] = ["backend.release-only"]
+    contradictory["sourceHash"] = resume.canonical_hash(
+        {key: value for key, value in contradictory.items() if key != "sourceHash"}
+    )
+    contradictory_resume = resume.build_resume_plan(resume_current, contradictory)
+    assert contradictory_resume["reusableShards"] == []
+    assert contradictory_resume["rejectionReasons"] == [
+        "resume evidence shard identity mismatch: serialized-backend"
+    ]
+
+    release_current = deepcopy(resume_current)
+    release_current.update(
+        {
+            "tier": "release",
+            "riskPlanHash": "7" * 64,
+            "stagePlanHash": "8" * 64,
+            "shardPlanHash": "9" * 64,
+        }
+    )
+    release_current["shards"][0]["stageIds"] = ["backend.canonical", "backend.release-only"]
+    release_source = resume.build_resume_source(release_current)
+    release_resume = resume.build_resume_plan(release_current, release_source)
+    assert release_resume["candidateShards"] == ["isolated-portfolio", "serialized-backend"]
+    assert release_resume["reusableShards"] == []
+    assert release_current["shards"][1]["stageIds"] == ["backend.canonical"]
+    canonical_to_release = resume.build_resume_plan(release_current, canonical_source)
+    assert canonical_to_release["reusableShards"] == []
+    assert "identity mismatch: tier" in canonical_to_release["rejectionReasons"]
+
+    for status in ("failed", "error", "cancelled", "incomplete", "missing", "unknown", "skipped"):
+        with pytest.raises(resume.ResumeError, match="successful|incomplete"):
+            resume.successful_terminal_result(
+                {"state": "completed" if status != "incomplete" else "incomplete", "status": status, "exitCode": 1}
+            )
+    with pytest.raises(resume.ResumeError, match="first attempt"):
+        resume.successful_terminal_result(
+            {"state": "completed", "status": "passed", "exitCode": 0, "attempt": {"index": 1, "kind": "retry"}}
+        )
+
+    artifact_context = {
+        **resume_current,
+        "_shardPlan": {"shards": deepcopy(resume_current["shards"])},
+    }
+    artifact_source = resume.build_resume_source(artifact_context)
+    artifact_path = tmp_path / "resume-source.json"
+    artifact_path.write_bytes(resume.canonical_bytes(artifact_source) + b"\n")
+    for shard in artifact_source["shards"]:
+        directory = artifact_path.parent / shard["directory"]
+        directory.mkdir(parents=True)
+        (directory / "attempt-0.json").write_text("{}\n", encoding="utf-8")
+    structured_identity = {
+        "candidate": candidate_identity(),
+        "environment": {"fingerprint": "7" * 64},
+        "dependencyLock": {
+            "contentHash": "8" * 64,
+            "selectedLock": "requirements-python311-dev.lock",
+            "selectedProjection": "darwin-arm64-cpython311-development",
+            "selectedProjectionHash": "9" * 64,
+        },
+        "command": {"argv": ["$PYTHON", "-m", "pytest"], "sha256": "a" * 64},
+        "selection": {"count": 1, "sha256": "b" * 64},
+        "topology": {"count": 2, "sha256": "4" * 64},
+    }
+    attempts = {
+        shard["id"]: {
+            "state": "completed",
+            "status": "passed",
+            "exitCode": 0,
+            "attempt": {"index": 0, "kind": "first"},
+            "identity": structured_identity,
+        }
+        for shard in artifact_source["shards"]
+    }
+
+    def load_attempt(_: Path, *, shard: dict, **__: object) -> tuple[dict, dict]:
+        outcome = attempts[shard["id"]]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome, {}
+
+    from tests import conftest as shard_authority
+
+    monkeypatch.setattr(shard_authority, "_load_backend_shard_attempt", load_attempt)
+    monkeypatch.setattr(resume, "_current_result_identity", lambda *_: structured_identity)
+
+    fully_reused, _ = resume.plan_from_evidence(artifact_context, artifact_path)
+    assert fully_reused["reusableShards"] == ["isolated-portfolio", "serialized-backend"]
+    assert fully_reused["remainingShards"] == []
+    assert len(fully_reused["acceptedPriorResultIdentities"]) == 2
+
+    attempts["isolated-portfolio"] = {
+        **attempts["isolated-portfolio"],
+        "state": "incomplete",
+        "status": "incomplete",
+        "exitCode": 2,
+    }
+    interrupted, _ = resume.plan_from_evidence(artifact_context, artifact_path)
+    assert interrupted["reusableShards"] == ["serialized-backend"]
+    assert interrupted["remainingShards"] == ["isolated-portfolio"]
+    assert interrupted["rejectionReasons"] == ["isolated-portfolio: structured result is incomplete"]
+
+    attempts["isolated-portfolio"] = {
+        **attempts["isolated-portfolio"],
+        "state": "completed",
+        "status": "failed",
+        "exitCode": 1,
+    }
+    failed, _ = resume.plan_from_evidence(artifact_context, artifact_path)
+    assert failed["reusableShards"] == ["serialized-backend"]
+    assert failed["remainingShards"] == ["isolated-portfolio"]
+    assert failed["rejectionReasons"] == ["isolated-portfolio: terminal outcome is not successful: failed"]
+
+    attempts["isolated-portfolio"] = ValueError("missing or malformed structured result")
+    malformed_result, _ = resume.plan_from_evidence(artifact_context, artifact_path)
+    assert malformed_result["reusableShards"] == ["serialized-backend"]
+    assert malformed_result["remainingShards"] == ["isolated-portfolio"]
+    assert malformed_result["rejectionReasons"] == [
+        "isolated-portfolio: missing or malformed structured result"
+    ]
+
+    attempts["isolated-portfolio"] = {
+        "state": "completed",
+        "status": "passed",
+        "exitCode": 0,
+        "attempt": {"index": 0, "kind": "first"},
+        "identity": {**structured_identity, "command": {"argv": ["unexpected"], "sha256": "c" * 64}},
+    }
+    command_mismatch, _ = resume.plan_from_evidence(artifact_context, artifact_path)
+    assert command_mismatch["reusableShards"] == ["serialized-backend"]
+    assert command_mismatch["remainingShards"] == ["isolated-portfolio"]
+    assert command_mismatch["rejectionReasons"] == [
+        "isolated-portfolio: environment, dependency-lock, or command identity mismatch"
+    ]
+
     manifest, manifest_hash = load_manifest()
     changes = [changed("docs/README.md"), changed("src/providers/validation.py")]
     kwargs = {
@@ -802,7 +1004,9 @@ def test_deterministic_ordering_and_stable_output_hash(tmp_path: Path) -> None:
     assert failure_result["gates"][0]["retries"] == [], diagnostic
 
 
-def test_t437_t438_locale_corpus_adds_bounded_and_browser_owners_to_current_classification() -> None:
+def test_t437_t438_locale_corpus_adds_bounded_and_browser_owners_to_current_classification(tmp_path: Path) -> None:
+    from tests import conftest as shard_authority
+
     locale_paths = [
         "apps/dsa-web/e2e/locale-route-switch.spec.ts",
         "apps/dsa-web/src/App.tsx",
@@ -852,6 +1056,30 @@ def test_t437_t438_locale_corpus_adds_bounded_and_browser_owners_to_current_clas
         ["docs/audit-note.md"],
         requested_risk="R3",
         accepted_integration=True,
+    )
+    risk_path = tmp_path / "t638-risk-plan.json"
+    risk_path.write_bytes(planner.canonical_json_bytes(risk_plan) + b"\n")
+    raw_shard_plan = shard_authority.build_backend_shard_plan(risk_path, scope="full")
+    projected_shard_plan = planner.project_backend_shard_plan(risk_plan, raw_shard_plan, tier="canonical")
+    t638_context = resume.build_resume_context(
+        risk_plan,
+        planner.build_backend_stage_plan(risk_plan, tier="canonical"),
+        projected_shard_plan,
+    )
+    t638_source = resume.build_resume_source(t638_context)
+    assert t638_context["tier"] == "canonical"
+    assert t638_context["topology"] == topology.load_manifest(TOPOLOGY_PATH)["backend"]["currentInventory"]
+    assert t638_context["shards"] == [
+        {
+            "id": item["id"],
+            "selection": item["selection"],
+            "stageIds": ["backend.canonical"],
+        }
+        for item in sorted(projected_shard_plan["shards"], key=lambda item: item["id"])
+    ]
+    assert all(not Path(item["directory"]).is_absolute() for item in t638_source["shards"])
+    assert t638_source["sourceHash"] == resume.canonical_hash(
+        {key: value for key, value in t638_source.items() if key != "sourceHash"}
     )
 
     canonical = planner.build_backend_stage_plan(risk_plan, tier="canonical")
