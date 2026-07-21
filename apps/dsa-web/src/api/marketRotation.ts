@@ -2,6 +2,7 @@ import apiClient from './index';
 import { toCamelCase } from './utils';
 import type { MarketDataFreshness } from './marketOverview';
 import type { InvestorSignalContract } from '../types/scanner';
+import { projectMarketTruth } from '../utils/consumerDataQualityViewModel';
 
 export type MarketRotationStage =
   | 'early_watch'
@@ -637,17 +638,18 @@ function normalizeRotationConsumerEvidenceSnapshot(
   }
   return {
     market: snapshot.market,
-    generatedAt: snapshot.generatedAt || null,
-    asOf: snapshot.asOf || null,
+    generatedAt: snapshot.generatedAt,
+    asOf: snapshot.asOf,
     freshness: snapshot.freshness,
-    isFallback: snapshot.isFallback === true,
-    isStale: snapshot.isStale === true,
-    isPartial: snapshot.isPartial === true,
+    ...(typeof snapshot.isFallback === 'boolean' ? { isFallback: snapshot.isFallback } : {}),
+    ...(typeof snapshot.isStale === 'boolean' ? { isStale: snapshot.isStale } : {}),
+    ...(typeof snapshot.isPartial === 'boolean' ? { isPartial: snapshot.isPartial } : {}),
     ...(typeof snapshot.authorityGrant === 'boolean' ? { authorityGrant: snapshot.authorityGrant } : {}),
     headlineEligibleThemeCount: snapshot.headlineEligibleThemeCount,
     observationThemeCount: snapshot.observationThemeCount,
     taxonomyThemeCount: snapshot.taxonomyThemeCount,
-    scoreContributionAllowed: snapshot.scoreContributionAllowed === true,
+    ...(typeof snapshot.scoreContributionAllowed === 'boolean'
+      ? { scoreContributionAllowed: snapshot.scoreContributionAllowed } : {}),
     reasonCodes: Array.isArray(snapshot.reasonCodes) ? snapshot.reasonCodes.filter(Boolean) : [],
     providerState: snapshot.providerState
       ? {
@@ -718,13 +720,14 @@ function normalizeAlpacaQuoteAuthorityReadiness(
     observationOnlySymbols: Array.isArray(readiness.observationOnlySymbols)
       ? readiness.observationOnlySymbols.filter(Boolean)
       : [],
-    freshestAsOf: readiness.freshestAsOf || null,
+    freshestAsOf: readiness.freshestAsOf,
     sourceAuthority: readiness.sourceAuthority || 'unknown',
-    fallbackUsed: readiness.fallbackUsed === true,
-    blockerBucket: readiness.blockerBucket || null,
-    consumerSummary: readiness.consumerSummary || null,
-    nextDataAction: readiness.nextDataAction || null,
-    scoreContributionAllowed: readiness.scoreContributionAllowed,
+    ...(typeof readiness.fallbackUsed === 'boolean' ? { fallbackUsed: readiness.fallbackUsed } : {}),
+    blockerBucket: readiness.blockerBucket,
+    consumerSummary: readiness.consumerSummary,
+    nextDataAction: readiness.nextDataAction,
+    ...(typeof readiness.scoreContributionAllowed === 'boolean'
+      ? { scoreContributionAllowed: readiness.scoreContributionAllowed } : {}),
   };
 }
 
@@ -798,20 +801,29 @@ function quoteCoverageFamilyLabel(family?: MarketRotationQuoteCoverageFamily | n
 function quoteCoverageFamilyStatus(
   family: MarketRotationQuoteCoverageFamily,
 ): { label: string; variant: MarketRotationQuoteReadinessVariant } {
-  const configuredCount = safeCount(family.configuredCount, countSymbols(family.configuredSymbols));
-  const availableCount = safeCount(family.availableCount, countSymbols(family.availableSymbols));
-  const missingCount = safeCount(family.missingCount, countSymbols(family.missingSymbols));
-  const staleCount = safeCount(family.staleCount, countSymbols(family.staleSymbols));
-  const scoreCount = safeCount(family.scoreAuthorityAllowedCount, countSymbols(family.scoreAuthorityAllowedSymbols));
-  const observationCount = safeCount(family.observationOnlyCount, countSymbols(family.observationOnlySymbols));
-  const limited = missingCount > 0 || staleCount > 0 || observationCount > 0 || scoreCount < configuredCount;
-  if (configuredCount <= 0 || availableCount <= 0 || missingCount >= configuredCount) {
+  const countsAvailable = [family.configuredCount, family.availableCount, family.missingCount]
+    .every((count) => typeof count === 'number' && Number.isFinite(count));
+  const truth = projectMarketTruth({
+    availability: !countsAvailable ? undefined
+      : family.configuredCount! <= 0 || family.availableCount! <= 0 || family.missingCount! >= family.configuredCount!
+        ? 'unavailable' : family.missingCount! > 0 ? 'partial' : 'available',
+    freshness: typeof family.staleCount === 'number' && family.staleCount > 0 ? 'stale' : undefined,
+    scoreContributionAllowed: typeof family.configuredCount === 'number' && typeof family.scoreAuthorityAllowedCount === 'number'
+      ? family.configuredCount > 0 && family.scoreAuthorityAllowedCount === family.configuredCount : undefined,
+    observationOnly: typeof family.observationOnlyCount === 'number' && family.observationOnlyCount > 0 ? true : undefined,
+    isFallback: family.fallbackOrLimitedSampleUsed,
+  });
+  const limited = truth.availability === 'partial'
+    || truth.freshness === 'stale'
+    || truth.scoreContribution !== 'eligible'
+    || truth.observationOnly === true;
+  if (truth.availability === 'unavailable') {
     return { label: '报价待补', variant: 'caution' };
   }
   if (family.familyId === 'sector_etfs') {
     return limited ? { label: 'ETF引用部分可用', variant: 'info' } : { label: 'ETF引用可用', variant: 'success' };
   }
-  if (limited || scoreCount < configuredCount) {
+  if (limited) {
     return { label: '代理覆盖有限', variant: 'caution' };
   }
   return { label: '代理覆盖可用', variant: 'success' };
@@ -884,7 +896,15 @@ export function buildAlpacaQuoteAuthorityReadinessView(
   }
 
   const state = readiness.sourceAuthority;
-  const primary = state === 'authorized' && readiness.providerConfigured !== false
+  const truth = projectMarketTruth({
+    source: readiness.dataFeed,
+    sourceAuthority: state,
+    scoreContributionAllowed: readiness.scoreContributionAllowed,
+    isFallback: readiness.fallbackUsed,
+  });
+  const primary = state === 'authorized'
+    && truth.source.authority === 'allowed'
+    && readiness.providerConfigured !== false
     ? { label: 'ETF引用可用', variant: 'success' as const }
     : state === 'partial'
       ? { label: 'ETF引用部分可用', variant: 'info' as const }
@@ -892,9 +912,11 @@ export function buildAlpacaQuoteAuthorityReadinessView(
         ? { label: 'ETF引用待补', variant: 'caution' as const }
         : { label: 'ETF引用待补', variant: 'neutral' as const };
 
-  const limited = readiness.scoreContributionAllowed === false
+  const limited = truth.source.authority !== 'allowed'
+    || truth.scoreContribution === 'ineligible'
     || coverage.observationOnlyCount > 0
-    || familyRows.some((family) => family.statusLabel === '代理覆盖有限');
+    || coverage.missingCount > 0
+    || coverage.staleCount > 0;
   const chips = uniqueReadinessChips([
     { key: 'readiness', label: primary.label, variant: primary.variant },
     ...(limited ? [{ key: 'limitedCoverage', label: '代理覆盖有限', variant: 'caution' as const }] : []),
@@ -902,10 +924,10 @@ export function buildAlpacaQuoteAuthorityReadinessView(
     ...(limited ? [{ key: 'limited', label: '仅观察', variant: 'neutral' as const }] : []),
     {
       key: 'score',
-      label: coverage.scoreAuthorityAllowedCount > 0 && readiness.scoreContributionAllowed !== false
+      label: coverage.scoreAuthorityAllowedCount > 0 && truth.scoreContribution === 'eligible'
         ? '评分可用'
         : '评分待确认',
-      variant: coverage.scoreAuthorityAllowedCount > 0 && readiness.scoreContributionAllowed !== false ? 'success' as const : 'neutral' as const,
+      variant: coverage.scoreAuthorityAllowedCount > 0 && truth.scoreContribution === 'eligible' ? 'success' as const : 'neutral' as const,
     },
   ]);
 
@@ -933,17 +955,6 @@ export type MarketRotationEvidenceBoundaryView = {
   note?: string;
 };
 
-const ROTATION_BOUNDARY_SAMPLE_TOKENS = ['demo', 'sample', 'fixture', 'synthetic', 'mock', 'static'];
-
-function normalizeRotationBoundaryToken(value?: string | null): string {
-  return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
-}
-
-function rotationBoundaryHasSampleToken(value?: string | null): boolean {
-  const normalized = normalizeRotationBoundaryToken(value);
-  return ROTATION_BOUNDARY_SAMPLE_TOKENS.some((token) => normalized.includes(token));
-}
-
 function rotationBoundaryLabel(
   readiness: MarketRotationAlpacaQuoteAuthorityReadinessView,
   payload?: MarketRotationRadarResponse | null,
@@ -965,35 +976,47 @@ function rotationBoundaryLabel(
 
   const snapshot = payload?.consumerEvidenceSnapshot;
   const providerState = snapshot?.providerState;
-  const sampleLike = [
-    payload?.source,
-    payload?.sourceLabel,
-    providerState?.quoteMode,
-    providerState?.status,
-    providerState?.sourceType,
-    providerState?.sourceTier,
-    providerState?.providerTier,
-    snapshot?.etfProxySummary?.label,
-    ...(Array.isArray(snapshot?.reasonCodes) ? snapshot.reasonCodes : []),
-  ].some((value) => rotationBoundaryHasSampleToken(value));
+  const quoteReadiness = payload.alpacaQuoteAuthorityReadiness;
+  const quoteCoverage = summarizeQuoteCoverage(quoteReadiness);
+  const truth = projectMarketTruth({
+    source: payload.source,
+    sourceLabel: payload.sourceLabel,
+    sourceType: providerState?.sourceType,
+    sourceTier: providerState?.sourceTier,
+    providerTier: providerState?.providerTier,
+    quoteMode: providerState?.quoteMode,
+    availability: providerState?.status,
+    freshness: snapshot?.freshness
+      ?? providerState?.freshness
+      ?? payload.freshness
+      ?? (quoteCoverage.staleCount > 0 ? 'stale' : undefined),
+    isFallback: payload.isFallback ?? snapshot?.isFallback ?? quoteReadiness?.fallbackUsed,
+    isStale: payload.isStale ?? snapshot?.isStale,
+    isPartial: snapshot?.isPartial,
+    sourceAuthorityAllowed: providerState?.sourceAuthorityAllowed ?? snapshot?.authorityGrant,
+    sourceAuthority: quoteReadiness?.sourceAuthority,
+    scoreContributionAllowed: snapshot?.scoreContributionAllowed
+      ?? providerState?.scoreContributionAllowed
+      ?? quoteReadiness?.scoreContributionAllowed,
+    observationOnly: quoteCoverage.observationOnlyCount > 0 ? true : undefined,
+    evidenceLabels: snapshot?.reasonCodes,
+    generatedAt: snapshot?.generatedAt ?? payload.generatedAt,
+    asOf: snapshot?.asOf ?? providerState?.asOf,
+  });
+  const sampleLike = truth.source.class === 'fixture' || truth.source.class === 'synthetic';
+  const stale = ['stale', 'expired'].includes(truth.freshness);
+  const fallback = truth.source.class === 'fallback' || truth.freshness === 'fallback';
+  const limited = truth.source.authority !== 'allowed'
+    || truth.scoreContribution !== 'eligible'
+    || truth.observationOnly === true
+    || truth.availability !== 'available';
+  const missing = ['unavailable', 'missing', 'blocked'].includes(truth.availability);
+  const partial = truth.availability === 'partial'
+    || truth.scoreContribution === 'ineligible';
 
-  const stale = payload?.isStale === true
-    || snapshot?.isStale === true
-    || payload?.freshness === 'stale'
-    || readiness.familyRows.some((row) => row.statusLabel.includes('待更新'));
-  const fallback = payload?.isFallback === true
-    || snapshot?.isFallback === true
-    || payload?.freshness === 'fallback';
-  const limited = readiness.label !== 'ETF引用可用'
-    || readiness.chips.some((chip) => chip.label === '仅观察' || chip.label === '代理覆盖有限' || chip.label === '报价可能延迟');
-  const missing = readiness.label === 'ETF引用待补';
-  const partial = snapshot?.isPartial === true
-    || snapshot?.scoreContributionAllowed === false
-    || readiness.label === 'ETF引用部分可用';
-
-  const broadRow = readiness.familyRows.find((row) => row.label === '大盘代理覆盖');
-  const sectorRow = readiness.familyRows.find((row) => row.label === '行业ETF覆盖');
-  const riskRow = readiness.familyRows.find((row) => row.label === '风险代理覆盖');
+  const broadRow = readiness.familyRows.find((row) => row.key === 'broad_us_market');
+  const sectorRow = readiness.familyRows.find((row) => row.key === 'sector_etfs');
+  const riskRow = readiness.familyRows.find((row) => row.key === 'volatility_risk');
   const broadChipLabel = `${broadRow?.label || '广度覆盖'} · ${broadRow?.statusLabel || '待补'}`;
   const sectorChipLabel = `${sectorRow?.label || '板块轮动'} · ${sectorRow?.statusLabel || '待补'}`;
   const riskChipLabel = `${riskRow?.label || '风险状态'} · ${riskRow?.statusLabel || '待补'}`;
@@ -1024,7 +1047,7 @@ function rotationBoundaryLabel(
         { key: 'risk', label: riskChipLabel, variant: 'caution' },
       ],
       nextEvidence: '下一步：更新广度、轮动和风险代理覆盖。',
-      note: payload?.freshness === 'stale' ? '当前数据已过时，继续观察新快照。' : readiness.detail,
+      note: truth.freshness === 'stale' ? '当前数据已过时，继续观察新快照。' : readiness.detail,
     };
   }
 
@@ -1037,10 +1060,14 @@ function rotationBoundaryLabel(
       { key: 'sector', label: sectorChipLabel, variant: 'neutral' },
       { key: 'risk', label: riskChipLabel, variant: 'neutral' },
     ];
-    if (payload?.isFallback || snapshot?.isFallback) {
+    if (fallback) {
       chips.push({ key: 'freshness', label: '最近一次可用', variant: 'info' });
     }
-    if (readiness.chips.some((chip) => chip.label === '仅观察')) {
+    if (
+      truth.observationOnly === true
+      || truth.source.authority !== 'allowed'
+      || truth.scoreContribution !== 'eligible'
+    ) {
       chips.push({ key: 'observe', label: '仅观察', variant: 'neutral' });
     }
     return {
@@ -1059,9 +1086,9 @@ function rotationBoundaryLabel(
     variant: 'success',
     chips: [
       { key: 'boundary', label: '证据可用', variant: 'success' },
-      { key: 'broad', label: broadChipLabel.replace('待补', '可用'), variant: 'success' },
-      { key: 'sector', label: sectorChipLabel.replace('待补', '可用'), variant: 'success' },
-      { key: 'risk', label: riskChipLabel.replace('待补', '可用'), variant: 'success' },
+      { key: 'broad', label: broadChipLabel, variant: 'success' },
+      { key: 'sector', label: sectorChipLabel, variant: 'success' },
+      { key: 'risk', label: riskChipLabel, variant: 'success' },
     ],
     nextEvidence: '继续观察广度、轮动和风险代理变化。',
     note: readiness.detail,

@@ -1,4 +1,5 @@
 import type { ProductReadModel, ProductReadModelState } from '../types/productReadModel';
+import { projectMarketTruth } from './consumerDataQualityViewModel';
 import {
   getConsumerDataStateEntry,
   getConsumerDataStateLabel,
@@ -35,23 +36,28 @@ export function productReadStateLabel(state: string | null | undefined, language
   return language === 'en' ? 'Not ready' : '暂未就绪';
 }
 
+function projectProductReadModel(model: ProductReadModel) {
+  return projectMarketTruth({
+    availability: model.state,
+    readiness: model.evidence?.readinessState,
+    domainReady: model.ready,
+    observationOnly: model.observationOnly,
+    decisionGrade: model.decisionGrade,
+    freshness: model.freshness?.state ?? model.provenance?.freshness,
+    asOf: model.freshness?.asOf ?? model.provenance?.asOf,
+    blocked: model.blockingChildren?.length ? true : undefined,
+  });
+}
+
 export function productReadModelIsBlocking(model?: ProductReadModel | null): boolean {
   if (!model) return false;
-  const state = normalizeProductReadState(model?.state);
+  const state = normalizeProductReadState(model.state);
   if (model?.blockingChildren?.length) return true;
-  if (
-    state === 'blocked'
-    || state === 'unavailable'
-    || state === 'insufficient'
-    || state === 'no_evidence'
-    || state === 'rejected'
-    || state === 'error'
-    || state === 'failed_closed'
-  ) {
-    return true;
-  }
   if (state === 'pending' || state === 'initializing') return false;
-  return model?.ready === false;
+  const truth = projectProductReadModel(model);
+  return ['blocked', 'unavailable', 'malformed', 'missing'].includes(truth.availability)
+    || truth.availability === 'incomplete'
+    || ['blocked', 'unavailable', 'malformed', 'missing', 'insufficient', 'not_ready'].includes(truth.readiness);
 }
 
 function productReadEvidenceLabel(value: string, language: 'zh' | 'en'): string {
@@ -102,11 +108,10 @@ export function productReadBlockingSummary(model: ProductReadModel | null | unde
 
 export function productReadFreshnessLabel(model: ProductReadModel | null | undefined, language: 'zh' | 'en'): string | null {
   if (!model) return null;
-  const rawFreshness = model.freshness?.state || model.provenance?.freshness || null;
-  const freshness = rawFreshness ? normalizeProductReadState(rawFreshness) : null;
-  const asOf = model?.freshness?.asOf || model?.provenance?.asOf || null;
-  if (!freshness && !asOf) return null;
-  const status = productReadStateLabel(freshness || model?.state, language);
+  const truth = projectProductReadModel(model);
+  const asOf = truth.timestamps.asOf;
+  if (truth.freshness === 'unknown' && !asOf) return null;
+  const status = productReadStateLabel(truth.freshness, language);
   if (!asOf) return language === 'en' ? `Freshness: ${status}` : `新鲜度：${status}`;
   return language === 'en' ? `Freshness: ${status} · as of ${asOf}` : `新鲜度：${status} · 截至 ${asOf}`;
 }
@@ -139,10 +144,14 @@ export function productReadSourceClassLabel(sourceClass: string | null | undefin
 
 export function productReadProvenanceLine(model: ProductReadModel | null | undefined, language: 'zh' | 'en'): string | null {
   if (!model?.provenance) return null;
+  const truth = projectMarketTruth({
+    freshness: model.provenance.freshness ?? model.freshness?.state,
+    asOf: model.provenance.asOf ?? model.freshness?.asOf,
+  });
   const source = productReadSourceClassLabel(model.provenance.sourceClass, language);
-  const freshness = productReadStateLabel(model.provenance.freshness || model.freshness?.state || model.state, language);
+  const freshness = productReadStateLabel(truth.freshness, language);
   const quality = model.provenance.quality ? productReadStateLabel(String(model.provenance.quality), language) : null;
-  const asOf = model.provenance.asOf || model.freshness?.asOf || null;
+  const asOf = truth.timestamps.asOf;
   const parts = [source, freshness, quality, asOf ? (language === 'en' ? `as of ${asOf}` : `截至 ${asOf}`) : null].filter(Boolean);
   return parts.join(' · ');
 }
@@ -152,6 +161,12 @@ export function productReadClassificationDisplayState(model: ProductReadModel | 
 }
 
 export function productReadStrongConclusionAllowed(model: ProductReadModel | null | undefined): boolean {
-  return model?.classification?.strongConclusionAllowed !== false
-    && model?.confidence?.strongConclusionAllowed !== false;
+  const explicitlyAllowed = model?.classification?.strongConclusionAllowed === true
+    && model.confidence?.strongConclusionAllowed === true
+    && model.decisionGrade === true;
+  if (!explicitlyAllowed) return false;
+  const truth = projectProductReadModel(model);
+  return truth.availability === 'available'
+    && truth.readiness === 'ready'
+    && !['stale', 'expired', 'delayed', 'fallback', 'synthetic', 'fixture', 'malformed', 'unavailable'].includes(truth.freshness);
 }

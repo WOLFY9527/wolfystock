@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MarketDataMeta, MarketOverviewPanel } from '../api/marketOverview';
+import type { MarketOverviewPanel } from '../api/marketOverview';
 import { isMarketOverviewPanelContract, marketOverviewApi } from '../api/marketOverview';
 import type {
+  ConsumerEvidenceBoundaryView,
   ConsumerEvidenceReadinessMatrix,
   CrossAssetDriverReadiness,
   CnShortSentimentResponse,
+  MarketOverviewFamilyReadinessState,
+  MarketOverviewReadinessFamily,
   ProfessionalDataCapabilityRegistryView,
-  ProfessionalDataCapabilityViewItem,
   MarketBriefingResponse,
   MarketFuturesResponse,
+  MarketRegimeReadinessStatus,
   MarketRegimeReadModelResponse,
   MarketTemperatureResponse,
   OfficialRiskSourceReadiness,
@@ -16,11 +19,13 @@ import type {
 import {
   buildCrossAssetDriverReadinessView,
   buildConsumerEvidenceBoundaryView,
+  buildMarketRegimeReadinessItems,
   buildOfficialRiskSourceReadinessView,
   buildProfessionalDataCapabilityRegistryView,
   isCnShortSentimentContract,
   isMarketBriefingContract,
   isMarketFuturesContract,
+  isMarketObservationPersistable,
   isMarketRegimeReadModelContract,
   isMarketTemperatureContract,
   marketApi,
@@ -29,6 +34,7 @@ import {
   normalizeMarketFuturesConsumerCopy,
   normalizeMarketOverviewPanelConsumerCopy,
   normalizeMarketTemperatureResponse,
+  shouldRevalidateMarketObservation,
 } from '../api/market';
 import {
   MarketOverviewWorkbench,
@@ -218,36 +224,6 @@ function readLocalMarketOverviewSnapshot(): LocalSnapshotEnvelope | null {
   }
 }
 
-function hasPersistablePanelValue(panelKey: PanelKey, value: unknown): boolean {
-  if (!isPanelValueContract(panelKey, value)) {
-    return false;
-  }
-  if (panelKey === 'temperature') {
-    const temperature = value as MarketTemperatureResponse;
-    return temperature.source !== 'unavailable'
-      && temperature.source !== 'error'
-      && Object.values(temperature.scores).some((score) => typeof score.value === 'number' && Number.isFinite(score.value));
-  }
-  if (panelKey === 'briefing' || panelKey === 'futures' || panelKey === 'cnShortSentiment') {
-    const payload = value as MarketBriefingResponse | MarketFuturesResponse | CnShortSentimentResponse;
-    return payload.source !== 'unavailable'
-      && payload.source !== 'error'
-      && payload.freshness !== 'unavailable'
-      && payload.freshness !== 'error';
-  }
-  const panel = value as MarketOverviewPanel;
-  if (panel.status === 'success') {
-    return true;
-  }
-  if (panel.status === 'partial') {
-    return panel.items.length > 0;
-  }
-  if (panel.items.length === 0) {
-    return false;
-  }
-  return panel.items.some((item) => typeof item.value === 'number' && Number.isFinite(item.value));
-}
-
 function buildInitialPanelsFromLocalSnapshot(): { panels: PanelState; source: 'local' | 'empty'; savedAt?: string } {
   const localSnapshot = readLocalMarketOverviewSnapshot();
   if (!localSnapshot) {
@@ -292,7 +268,7 @@ function writeLocalMarketOverviewSnapshot(panels: PanelState): string | null {
   const payload: Partial<PanelState> = {};
   (Object.keys(panels) as PanelKey[]).forEach((panelKey) => {
     const value = panels[panelKey];
-    if (hasPersistablePanelValue(panelKey, value)) {
+    if (isPanelValueContract(panelKey, value) && isMarketObservationPersistable(value)) {
       payload[panelKey] = value as never;
     }
   });
@@ -361,29 +337,6 @@ function withPanelTimeout<T>(promise: Promise<T>, panelKey: PanelKey): Promise<T
       },
     );
   });
-}
-
-type AutoRevalidateMeta = Partial<MarketDataMeta> & {
-  source?: string;
-  sourceType?: string | null;
-};
-
-function shouldAutoRevalidatePanelValue(value: PanelState[PanelKey] | undefined): boolean {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  const meta = value as AutoRevalidateMeta;
-  const providerStatus = meta.providerHealth?.status;
-  if (meta.isRefreshing || meta.providerHealth?.isRefreshing) {
-    return true;
-  }
-  if (providerStatus === 'refreshing' || providerStatus === 'partial' || providerStatus === 'fallback') {
-    return true;
-  }
-  if (meta.freshness === 'fallback' || meta.freshness === 'stale') {
-    return true;
-  }
-  return false;
 }
 
 function getPanelLoader(panelKey: PanelKey): (() => Promise<PanelState[PanelKey]>) | null {
@@ -482,13 +435,12 @@ const OfficialRiskSourceReadinessStrip = ({
 };
 
 const MarketOverviewEvidenceBoundaryStrip = ({
-  matrix,
+  view,
 }: {
-  matrix?: ConsumerEvidenceReadinessMatrix | null;
+  view: ConsumerEvidenceBoundaryView;
 }) => {
   const { language } = useI18n();
   const isEnglish = language === 'en';
-  const view = buildConsumerEvidenceBoundaryView(matrix);
   const label = isEnglish ? marketOverviewReadinessCopy(view.label, 'Evidence boundary pending') : view.label;
 
   return (
@@ -563,266 +515,16 @@ const CrossAssetDriverReadinessStrip = ({
   );
 };
 
-type MarketRegimeReadinessStatus =
-  | 'available'
-  | 'missing provider'
-  | 'entitlement required'
-  | 'degraded'
-  | 'stale'
-  | 'not available';
-
-type MarketRegimeReadinessCategory = {
-  key: string;
-  label: string;
-  capabilityCategory?: string;
-  match: RegExp;
-  fallbackDetail: string;
-};
-
-type MarketRegimeReadinessItem = {
-  key: string;
-  label: string;
-  status: MarketRegimeReadinessStatus;
-  variant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
-  detail: string;
-  freshnessLabel: string;
-  asOfLabel?: string;
-};
-
-const MARKET_REGIME_READINESS_CATEGORIES: MarketRegimeReadinessCategory[] = [
-  {
-    key: 'breadth',
-    label: 'breadth',
-    capabilityCategory: 'market_breadth_flows',
-    match: /\bbreadth\b|advance|decline|new highs?|new lows?/i,
-    fallbackDetail: 'Breadth inputs are not returned by the readiness registry.',
-  },
-  {
-    key: 'sector-leadership',
-    label: 'sector/industry leadership',
-    capabilityCategory: 'sector_rotation',
-    match: /sector|industry|rotation|leadership/i,
-    fallbackDetail: 'Sector and industry leadership inputs are not returned by the readiness registry.',
-  },
-  {
-    key: 'volatility-risk',
-    label: 'volatility/risk regime',
-    capabilityCategory: 'macro_cross_asset_regime',
-    match: /volatility|risk|regime|vix|stress/i,
-    fallbackDetail: 'Volatility and risk regime inputs are not returned by the readiness registry.',
-  },
-  {
-    key: 'options-structure',
-    label: 'options structure / gamma inputs',
-    capabilityCategory: 'options_structure',
-    match: /option|chain|greek|gamma|structure/i,
-    fallbackDetail: 'Options structure inputs are not returned by the readiness registry.',
-  },
-  {
-    key: 'flows-positioning',
-    label: 'flows/positioning',
-    capabilityCategory: 'market_breadth_flows',
-    match: /flow|positioning|fund|liquidity|pressure/i,
-    fallbackDetail: 'Flows and positioning inputs are not returned by the readiness registry.',
-  },
-  {
-    key: 'macro-cross-asset',
-    label: 'macro/cross-asset inputs',
-    capabilityCategory: 'macro_cross_asset_regime',
-    match: /macro|cross.?asset|rates?|fx|credit|liquidity/i,
-    fallbackDetail: 'Macro and cross-asset inputs are not returned by the readiness registry.',
-  },
-];
-
-const MARKET_REGIME_DIAGNOSTIC_TOKEN_PATTERN =
-  /providerClass|providerName|providerAttempted|requiredProviderClass|sourceAuthorityRouter|apiKeyPresent|endpointHost|requestId|traceId|cacheKey|rawPayload|exceptionClass|exceptionChain|credential|token|env/gi;
-
-function sanitizeMarketRegimeReadinessText(value?: string | null, fallback = 'freshness pending'): string {
-  const trimmed = String(value || '').replace(/\s+/g, ' ').trim();
-  if (!trimmed) {
-    return fallback;
-  }
-  return trimmed
-    .replace(MARKET_REGIME_DIAGNOSTIC_TOKEN_PATTERN, 'diagnostic hidden')
-    .replace(/\bprovider\b/gi, 'data source')
-    .replace(/\braw\b/gi, 'source')
-    .replace(/\bdebug\b/gi, 'diagnostic')
-    .replace(/\bcache\s*key\b/gi, 'stored reference');
-}
-
-function marketRegimeReadinessStatusVariant(
-  status: MarketRegimeReadinessStatus,
-): MarketRegimeReadinessItem['variant'] {
-  if (status === 'available') return 'success';
-  if (status === 'entitlement required') return 'danger';
-  if (status === 'degraded' || status === 'stale' || status === 'missing provider') return 'caution';
-  return 'neutral';
-}
-
-function marketRegimeReadinessStatusFromCapability(
-  item?: ProfessionalDataCapabilityViewItem,
-): MarketRegimeReadinessStatus {
-  if (!item) {
-    return 'missing provider';
-  }
-  const status = item.status.key;
-  const freshness = String(item.freshness || item.detail || '').toLowerCase();
-  if (freshness.includes('stale') || freshness.includes('expired')) {
-    return 'stale';
-  }
-  if (status === 'live') return 'available';
-  if (status === 'entitlement_required') return 'entitlement required';
-  if (status === 'configured_missing') return 'missing provider';
-  if (status === 'not_implemented') return 'not available';
-  if (status === 'degraded') return 'degraded';
-  return 'not available';
-}
-
-function marketRegimeReadinessSeverity(status: MarketRegimeReadinessStatus): number {
-  const order: Record<MarketRegimeReadinessStatus, number> = {
-    'entitlement required': 6,
-    'not available': 5,
-    'missing provider': 4,
-    stale: 3,
-    degraded: 2,
-    available: 1,
-  };
-  return order[status];
-}
-
-function formatMarketRegimeReadinessDate(value?: string | null): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-  const trimmed = String(value).trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  const parsed = new Date(trimmed);
-  if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10);
-  }
-  return trimmed.slice(0, 10);
-}
-
-function capabilityMatchesMarketRegimeCategory(
-  item: ProfessionalDataCapabilityViewItem,
-  category: MarketRegimeReadinessCategory,
-): boolean {
-  const haystack = [
-    item.capabilityId,
-    item.label,
-    item.detail,
-  ].join(' ');
-  return category.match.test(haystack);
-}
-
-function pickMarketRegimeCapability(
-  category: MarketRegimeReadinessCategory,
-  items: ProfessionalDataCapabilityViewItem[],
-): ProfessionalDataCapabilityViewItem | undefined {
-  const exactMatches = items.filter((item) => capabilityMatchesMarketRegimeCategory(item, category));
-  const categoryMatches = category.capabilityCategory
-    ? items.filter((item) => item.categoryKey === category.capabilityCategory)
-    : [];
-  const candidates = exactMatches.length ? exactMatches : categoryMatches;
-  return candidates
-    .map((item) => ({
-      item,
-      status: marketRegimeReadinessStatusFromCapability(item),
-    }))
-    .sort((left, right) => marketRegimeReadinessSeverity(right.status) - marketRegimeReadinessSeverity(left.status))[0]?.item;
-}
-
-function buildVolatilityRiskReadinessFromOfficialRisk(
-  readiness?: OfficialRiskSourceReadiness | null,
-): MarketRegimeReadinessItem | null {
-  if (!readiness) {
-    return null;
-  }
-  const pillars = [readiness.vix, readiness.rates, readiness.fedLiquidity].filter(Boolean);
-  if (!pillars.length) {
-    return null;
-  }
-  const isStale = pillars.some((pillar) => pillar?.state === 'stale' || pillar?.freshness === 'stale' || pillar?.freshness === 'fallback');
-  const isBlocked = pillars.every((pillar) => pillar?.state === 'blocked' || pillar?.state === 'missing' || pillar?.freshness === 'unavailable');
-  const hasReady = pillars.some((pillar) => pillar?.state === 'ready');
-  const status: MarketRegimeReadinessStatus = isStale
-    ? 'stale'
-    : isBlocked
-      ? 'not available'
-      : hasReady
-        ? 'available'
-        : 'degraded';
-  const asOfLabel = formatMarketRegimeReadinessDate(
-    readiness.vix?.asOf || readiness.vix?.latestDate || readiness.rates?.asOf || readiness.rates?.latestDate || readiness.fedLiquidity?.asOf || readiness.fedLiquidity?.latestDate,
-  );
-  return {
-    key: 'volatility-risk',
-    label: 'volatility/risk regime',
-    status,
-    variant: marketRegimeReadinessStatusVariant(status),
-    detail: sanitizeMarketRegimeReadinessText(readiness.consumerSummary || readiness.nextDataAction, 'Official risk inputs are partially returned.'),
-    freshnessLabel: asOfLabel ? `freshness ${asOfLabel}` : 'freshness pending',
-    asOfLabel,
-  };
-}
-
-function buildMarketRegimeReadinessItems(
-  view: ProfessionalDataCapabilityRegistryView | null,
-  riskReadiness?: OfficialRiskSourceReadiness | null,
-): MarketRegimeReadinessItem[] {
-  const capabilityItems = (view?.categories || []).flatMap((category) => category.items);
-  const officialRiskItem = buildVolatilityRiskReadinessFromOfficialRisk(riskReadiness);
-  return MARKET_REGIME_READINESS_CATEGORIES.map((category) => {
-    if (category.key === 'volatility-risk' && officialRiskItem) {
-      const capability = pickMarketRegimeCapability(category, capabilityItems);
-      if (capability) {
-        const capabilityStatus = marketRegimeReadinessStatusFromCapability(capability);
-        if (marketRegimeReadinessSeverity(capabilityStatus) >= marketRegimeReadinessSeverity(officialRiskItem.status)) {
-          const capabilityAsOf = formatMarketRegimeReadinessDate(capability.asOf || capability.updatedAt);
-          return {
-            key: category.key,
-            label: category.label,
-            status: capabilityStatus,
-            variant: marketRegimeReadinessStatusVariant(capabilityStatus),
-            detail: sanitizeMarketRegimeReadinessText(capability.detail, category.fallbackDetail),
-            freshnessLabel: sanitizeMarketRegimeReadinessText(capability.freshness, capabilityAsOf ? `freshness ${capabilityAsOf}` : 'freshness pending'),
-            asOfLabel: capabilityAsOf,
-          };
-        }
-      }
-      return officialRiskItem;
-    }
-
-    const capability = pickMarketRegimeCapability(category, capabilityItems);
-    const status = marketRegimeReadinessStatusFromCapability(capability);
-    const asOfLabel = formatMarketRegimeReadinessDate(capability?.asOf || capability?.updatedAt);
-    return {
-      key: category.key,
-      label: category.label,
-      status,
-      variant: marketRegimeReadinessStatusVariant(status),
-      detail: sanitizeMarketRegimeReadinessText(capability?.detail, category.fallbackDetail),
-      freshnessLabel: sanitizeMarketRegimeReadinessText(capability?.freshness, asOfLabel ? `freshness ${asOfLabel}` : 'freshness pending'),
-      asOfLabel,
-    };
-  });
-}
-
-type MarketOverviewFamilyReadinessState =
-  | 'available'
-  | 'missing'
-  | 'stale'
-  | 'not_configured'
-  | 'insufficient_coverage'
-  | 'unavailable';
-
-type MarketOverviewReadinessFamily = {
-  key: string;
-  label: string;
-  state: MarketOverviewFamilyReadinessState;
-  detail: string;
+const MARKET_REGIME_READINESS_STATUS_LABEL: Record<
+  MarketRegimeReadinessStatus,
+  { zh: string; en: string }
+> = {
+  available: { zh: '可用', en: 'Available' },
+  degraded: { zh: '部分可用', en: 'Partially available' },
+  stale: { zh: '待更新', en: 'Stale' },
+  'missing provider': { zh: '数据源待补', en: 'Source pending' },
+  'not available': { zh: '暂不可用', en: 'Unavailable' },
+  'entitlement required': { zh: '需要数据权限', en: 'Data access required' },
 };
 
 const MARKET_OVERVIEW_FAMILY_STATE_VARIANT: Record<MarketOverviewFamilyReadinessState, 'neutral' | 'success' | 'caution' | 'danger' | 'info'> = {
@@ -842,162 +544,6 @@ const MARKET_OVERVIEW_FAMILY_STATE_LABEL: Record<MarketOverviewFamilyReadinessSt
   insufficient_coverage: { zh: '覆盖不足', en: 'Insufficient coverage' },
   unavailable: { zh: '暂不可用', en: 'Unavailable' },
 };
-
-function panelHasCurrentItems(panel?: MarketOverviewPanel | null): boolean {
-  return Boolean(
-    isMarketOverviewPanelContract(panel)
-      && (panel.status === 'success' || panel.status === 'partial')
-      && panel.source !== 'error'
-      && panel.source !== 'unavailable'
-      && panel.freshness !== 'error'
-      && panel.freshness !== 'unavailable'
-      && panel.isUnavailable !== true
-      && Array.isArray(panel.items)
-      && panel.items.some((item) => item.isUnavailable !== true && item.value != null),
-  );
-}
-
-function futuresHasCurrentItems(futures?: MarketFuturesResponse | null): boolean {
-  return Boolean(
-    isMarketFuturesContract(futures)
-      && futures.source !== 'error'
-      && futures.source !== 'unavailable'
-      && futures.freshness !== 'error'
-      && futures.freshness !== 'unavailable'
-      && Array.isArray(futures.items)
-      && futures.items.some((item) => item.value != null),
-  );
-}
-
-function panelFamilyState(panels: Array<MarketOverviewPanel | undefined | null>): MarketOverviewFamilyReadinessState {
-  if (panels.some((panel) => panelHasCurrentItems(panel) && (panel?.isStale || panel?.freshness === 'stale'))) {
-    return 'stale';
-  }
-  if (panels.some(panelHasCurrentItems)) {
-    return 'available';
-  }
-  if (panels.some((panel) => panel?.source === 'error' || panel?.freshness === 'error')) {
-    return 'unavailable';
-  }
-  return 'missing';
-}
-
-function capabilityFamilyState(
-  view: ProfessionalDataCapabilityRegistryView | null,
-  categoryKey: string,
-  match: RegExp,
-): MarketOverviewFamilyReadinessState {
-  const items = (view?.categories || []).flatMap((category) => category.items);
-  const candidates = items.filter((item) => item.categoryKey === categoryKey || match.test(`${item.capabilityId} ${item.label} ${item.detail}`));
-  if (!candidates.length) {
-    return 'not_configured';
-  }
-  if (candidates.some((item) => item.status.key === 'live')) {
-    return 'available';
-  }
-  if (candidates.some((item) => item.status.key === 'degraded')) {
-    return 'insufficient_coverage';
-  }
-  if (candidates.some((item) => String(item.freshness || '').toLowerCase().includes('stale'))) {
-    return 'stale';
-  }
-  if (candidates.some((item) => item.status.key === 'configured_missing' || item.status.key === 'entitlement_required')) {
-    return 'not_configured';
-  }
-  return 'unavailable';
-}
-
-function evidenceFamilyState(
-  matrix: ConsumerEvidenceReadinessMatrix | null,
-  match: RegExp,
-): MarketOverviewFamilyReadinessState | null {
-  const items = (matrix?.items || []).filter((item) => (
-    String(item.surface || '').trim().toLowerCase().replace(/[\s-]+/g, '_') === 'market_overview'
-    && match.test(`${item.evidenceFamily} ${item.requiredInputs.join(' ')}`)
-  ));
-  if (!items.length) {
-    return null;
-  }
-  if (items.some((item) => item.readinessState === 'score_grade')) {
-    return 'available';
-  }
-  if (items.some((item) => item.staleInputs.length > 0)) {
-    return 'stale';
-  }
-  if (items.some((item) => item.readinessState === 'observation_only')) {
-    return 'insufficient_coverage';
-  }
-  if (items.some((item) => item.blockedInputs.length > 0 || item.readinessState === 'blocked')) {
-    return 'unavailable';
-  }
-  return 'missing';
-}
-
-function crossAssetFamilyState(readiness: CrossAssetDriverReadiness | null): MarketOverviewFamilyReadinessState {
-  const drivers = readiness?.drivers || [];
-  if (!drivers.length) {
-    return 'not_configured';
-  }
-  if (drivers.some((driver) => driver.state === 'available')) {
-    return drivers.every((driver) => driver.state === 'available') ? 'available' : 'insufficient_coverage';
-  }
-  if (drivers.some((driver) => driver.state === 'stale')) {
-    return 'stale';
-  }
-  if (drivers.some((driver) => driver.state === 'insufficient_history')) {
-    return 'insufficient_coverage';
-  }
-  if (drivers.every((driver) => driver.state === 'not_configured')) {
-    return 'not_configured';
-  }
-  return 'missing';
-}
-
-function buildMarketOverviewReadinessFamilies(params: {
-  panels: PanelState;
-  consumerEvidenceReadinessMatrix: ConsumerEvidenceReadinessMatrix | null;
-  crossAssetDriverReadiness: CrossAssetDriverReadiness | null;
-  professionalDataCapabilities: ProfessionalDataCapabilityRegistryView | null;
-}): MarketOverviewReadinessFamily[] {
-  const { panels, consumerEvidenceReadinessMatrix, crossAssetDriverReadiness, professionalDataCapabilities } = params;
-  const marketIndexState = evidenceFamilyState(consumerEvidenceReadinessMatrix, /market[_-]?index|index|quote/i)
-    || (futuresHasCurrentItems(panels.futures) ? 'available' : panelFamilyState([panels.indices, panels.cnIndices]));
-  const sectorState = evidenceFamilyState(consumerEvidenceReadinessMatrix, /sector|industry|rotation/i)
-    || capabilityFamilyState(professionalDataCapabilities, 'sector_rotation', /sector|industry|rotation/i);
-  const breadthState = evidenceFamilyState(consumerEvidenceReadinessMatrix, /breadth|advance|decline/i)
-    || panelFamilyState([panels.cnBreadth, panels.usBreadth]);
-  const macroState = evidenceFamilyState(consumerEvidenceReadinessMatrix, /macro|regime|rates|volatility/i)
-    || capabilityFamilyState(professionalDataCapabilities, 'macro_cross_asset_regime', /macro|regime|rates|volatility/i);
-  const crossAssetState = crossAssetFamilyState(crossAssetDriverReadiness);
-  const newsState = evidenceFamilyState(consumerEvidenceReadinessMatrix, /news|catalyst|regime/i)
-    || capabilityFamilyState(professionalDataCapabilities, 'stock_research_data', /news|catalyst|regime/i);
-  const historicalState = crossAssetDriverReadiness?.drivers.some((driver) => (
-    driver.state === 'available'
-    && driver.cachedOhlcv?.requiredBars > 0
-    && driver.cachedOhlcv.usableBars >= driver.cachedOhlcv.requiredBars
-    && driver.cachedOhlcv.cacheState === 'cache_hit'
-    && ['fresh', 'live', 'cached'].includes(driver.cachedOhlcv.freshnessState)
-  ))
-    ? 'available'
-    : crossAssetDriverReadiness?.drivers.some((driver) => (
-      driver.state === 'stale'
-      || driver.cachedOhlcv?.freshnessState === 'stale'
-    ))
-      ? 'stale'
-      : crossAssetDriverReadiness?.drivers.some((driver) => driver.state === 'insufficient_history')
-      ? 'insufficient_coverage'
-      : 'missing';
-
-  return [
-    { key: 'market-index', label: 'market/index', state: marketIndexState, detail: '指数、区域市场和期货输入。' },
-    { key: 'sector-rotation', label: 'sector/industry rotation', state: sectorState, detail: '行业、主题和轮动输入。' },
-    { key: 'market-breadth', label: 'market breadth', state: breadthState, detail: '上涨/下跌、新高/新低和市场宽度输入。' },
-    { key: 'macro-regime', label: 'macro/regime', state: macroState, detail: '宏观、利率、波动率和 regime 输入。' },
-    { key: 'cross-asset', label: 'cross-asset drivers', state: crossAssetState, detail: '美元、利率、商品、信用或其他跨资产驱动。' },
-    { key: 'news-catalyst', label: 'news/catalyst/regime evidence', state: newsState, detail: '新闻、催化和 regime 证据边界。' },
-    { key: 'historical-ohlcv', label: 'historical OHLCV', state: historicalState, detail: '页面依赖的历史 OHLCV 和缓存覆盖。' },
-  ];
-}
 
 const MarketOverviewReadinessEmptyPanel = ({
   families,
@@ -1130,15 +676,6 @@ const MarketRegimeReadinessSurface = ({
     'flows-positioning': '资金流与持仓输入的可用性边界。',
     'macro-cross-asset': '宏观与跨资产输入的可用性边界。',
   };
-  const statusLabels: Record<MarketRegimeReadinessStatus, { zh: string; en: string }> = {
-    available: { zh: '可用', en: 'Available' },
-    'missing provider': { zh: '数据源待补', en: 'Source pending' },
-    'entitlement required': { zh: '需要数据权限', en: 'Data access required' },
-    degraded: { zh: '部分可用', en: 'Partially available' },
-    stale: { zh: '待更新', en: 'Stale' },
-    'not available': { zh: '暂不可用', en: 'Unavailable' },
-  };
-
   return (
     <section
       data-testid="market-regime-readiness-surface"
@@ -1191,9 +728,9 @@ const MarketRegimeReadinessSurface = ({
               <div className="flex min-w-0 items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{isEnglish ? item.label : (zhLabels[item.key] || '市场输入')}</p>
-                  <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">{statusLabels[item.status][language]}</p>
+                  <p className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-secondary)]">{MARKET_REGIME_READINESS_STATUS_LABEL[item.status][language]}</p>
                 </div>
-                <TerminalChip variant={item.variant}>{statusLabels[item.status][language]}</TerminalChip>
+                <TerminalChip variant={item.variant}>{MARKET_REGIME_READINESS_STATUS_LABEL[item.status][language]}</TerminalChip>
               </div>
               <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                 {isEnglish
@@ -1601,7 +1138,7 @@ const MarketOverviewPage = () => {
 
   const scheduleAutoRevalidate = useCallback((panelKey: PanelKey) => {
     const panelValue = latestPanelsRef.current[panelKey];
-    if (!shouldAutoRevalidatePanelValue(panelValue)) {
+    if (!shouldRevalidateMarketObservation(panelValue)) {
       resetAutoRevalidatePanel(panelKey);
       return;
     }
@@ -1625,7 +1162,7 @@ const MarketOverviewPage = () => {
       if (latestRefreshingPanelRef.current === panelKey || autoRevalidateInFlightRef.current[panelKey]) {
         return;
       }
-      if (!shouldAutoRevalidatePanelValue(latestPanelsRef.current[panelKey])) {
+      if (!shouldRevalidateMarketObservation(latestPanelsRef.current[panelKey])) {
         delete autoRevalidateAttemptsRef.current[panelKey];
         return;
       }
@@ -1833,12 +1370,8 @@ const MarketOverviewPage = () => {
     void refreshPanel(panelKey, loadPanel);
   }, [refreshPanel, resetAutoRevalidatePanel]);
 
-  const marketOverviewReadinessFamilies = buildMarketOverviewReadinessFamilies({
-    panels,
-    consumerEvidenceReadinessMatrix,
-    crossAssetDriverReadiness,
-    professionalDataCapabilities,
-  });
+  const consumerEvidenceBoundaryView = buildConsumerEvidenceBoundaryView(consumerEvidenceReadinessMatrix);
+  const marketOverviewReadinessFamilies = consumerEvidenceBoundaryView.marketOverviewFamilies;
   const hasUnavailableMarketOverviewFamily = marketOverviewReadinessFamilies.some((family) => family.state !== 'available');
   return (
     <ConsumerWorkspaceScope className="min-h-0 flex-1">
@@ -1884,7 +1417,7 @@ const MarketOverviewPage = () => {
           ) : null}
           <div className="mt-3 grid gap-3">
             <OfficialRiskSourceReadinessStrip readiness={officialRiskSourceReadiness} />
-            <MarketOverviewEvidenceBoundaryStrip matrix={consumerEvidenceReadinessMatrix} />
+            <MarketOverviewEvidenceBoundaryStrip view={consumerEvidenceBoundaryView} />
             <CrossAssetDriverReadinessStrip readiness={crossAssetDriverReadiness} />
             <MarketRegimeReadinessSurface
               view={professionalDataCapabilities}

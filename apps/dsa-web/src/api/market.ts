@@ -6,6 +6,9 @@ import { API_BASE_URL } from '../utils/constants';
 import { buildAbsoluteApiUrl, joinApiPath } from './path';
 import { normalizeMarketIntelligenceEvidenceItem } from './marketIntelligenceEvidence';
 import type { ResearchReadinessV1 } from '../types/researchReadiness';
+import {
+  projectMarketTruth,
+} from '../utils/consumerDataQualityViewModel';
 
 function isMarketContractRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -156,6 +159,42 @@ export function normalizeMarketOverviewPanelConsumerCopy<T extends MarketOvervie
   } as T;
 }
 
+export function isMarketObservationPersistable(input: unknown): boolean {
+  if (!isMarketContractRecord(input)) {
+    return false;
+  }
+  const observation = input as Partial<MarketDataMeta> & { temperatureAvailable?: boolean };
+  const temperatureAvailable = typeof observation.temperatureAvailable === 'boolean'
+    ? observation.temperatureAvailable
+    : undefined;
+  const truth = projectMarketTruth({
+    ...observation,
+    availability: observation.status ?? temperatureAvailable,
+  });
+  return truth.availability !== 'unavailable'
+    && truth.availability !== 'malformed'
+    && truth.freshness !== 'unavailable'
+    && truth.freshness !== 'error'
+    && (truth.availability !== 'unknown' || truth.freshness !== 'unknown');
+}
+
+export function shouldRevalidateMarketObservation(input: unknown): boolean {
+  if (!isMarketContractRecord(input)) {
+    return false;
+  }
+  const observation = input as Partial<MarketDataMeta>;
+  const providerStatus = observation.providerHealth?.status;
+  if (observation.isRefreshing || observation.providerHealth?.isRefreshing) {
+    return true;
+  }
+  if (providerStatus === 'refreshing' || providerStatus === 'partial' || providerStatus === 'fallback') {
+    return true;
+  }
+  const truth = projectMarketTruth(observation);
+  return truth.availability === 'partial'
+    || ['fallback', 'stale', 'aging', 'not_checked'].includes(truth.freshness);
+}
+
 export function normalizeMarketBriefingConsumerCopy<T extends MarketBriefingResponse | null | undefined>(response: T): T {
   if (!response) {
     return response;
@@ -208,7 +247,7 @@ export function normalizeCnShortSentimentConsumerCopy<T extends CnShortSentiment
   } as T;
 }
 
-type MarketSnapshotItem = {
+type MarketSnapshotItem = Partial<MarketDataMeta> & {
   symbol?: string;
   name?: string;
   label?: string;
@@ -220,58 +259,13 @@ type MarketSnapshotItem = {
   trend?: number[];
   sparkline?: number[];
   unit?: string | null;
-  source?: string | null;
-  sourceLabel?: string | null;
-  sourceType?: string | null;
-  providerHealth?: MarketProviderHealth;
-  providerFreshness?: MarketDataMeta['providerFreshness'];
-  dataQuality?: MarketDataMeta['dataQuality'];
-  updatedAt?: string;
-  asOf?: string;
-  freshness?: MarketDataMeta['freshness'];
-  isProxy?: boolean;
-  isFallback?: boolean;
-  isStale?: boolean;
-  isPartial?: boolean;
-  isUnavailable?: boolean;
-  isRefreshing?: boolean;
-  isFromSnapshot?: boolean;
-  lastSuccessfulAt?: string;
-  refreshError?: string | null;
-  lastError?: string | null;
-  delayMinutes?: number;
-  sourceTier?: string | null;
-  trustLevel?: string | null;
-  sourceConfidence?: string | null;
-  observationOnly?: boolean;
-  sourceAuthorityAllowed?: boolean;
-  scoreContributionAllowed?: boolean;
-  sourceAuthorityReason?: string | null;
-  sourceAuthorityRouteRejected?: boolean;
-  routeRejectedReasonCodes?: string[];
-  reasonCodes?: string[];
-  breadthClaimType?: string | null;
-  officialExchangePublishedBreadth?: boolean;
-  fulfilledMetrics?: string[];
-  missingMetrics?: string[];
-  metricCoverageRatio?: number | null;
-  broadMarketClaimAllowed?: boolean;
-  proxyFor?: string | null;
-  proxySymbol?: string | null;
-  proxyLabel?: string | null;
-  officialSeriesId?: string | null;
-  officialObservationDate?: string | null;
-  officialAsOf?: string | null;
-  degradationReason?: string | null;
-  degradationReasons?: string[];
-  warning?: string | null;
   market?: string | null;
   explanation?: string | null;
   hoverDetails?: string[] | null;
   riskDirection?: 'increasing' | 'decreasing' | 'neutral';
 };
 
-type MarketSnapshotPayload = {
+type MarketSnapshotPayload = Partial<MarketDataMeta> & {
   items?: MarketSnapshotItem[];
   lastUpdate?: string;
   updatedAt?: string;
@@ -279,50 +273,6 @@ type MarketSnapshotPayload = {
   fallbackUsed?: boolean;
   /** Explicit panel status when backend already projects one (Market Overview-style). */
   status?: MarketOverviewPanel['status'] | string | null;
-  source?: string | null;
-  sourceLabel?: string | null;
-  sourceType?: string | null;
-  providerHealth?: MarketProviderHealth;
-  providerFreshness?: MarketDataMeta['providerFreshness'];
-  dataQuality?: MarketDataMeta['dataQuality'];
-  asOf?: string;
-  freshness?: MarketDataMeta['freshness'];
-  isProxy?: boolean;
-  isFallback?: boolean;
-  isStale?: boolean;
-  isPartial?: boolean;
-  isUnavailable?: boolean;
-  isRefreshing?: boolean;
-  isFromSnapshot?: boolean;
-  lastSuccessfulAt?: string;
-  refreshError?: string | null;
-  lastError?: string | null;
-  delayMinutes?: number;
-  sourceTier?: string | null;
-  trustLevel?: string | null;
-  sourceConfidence?: string | null;
-  observationOnly?: boolean;
-  sourceAuthorityAllowed?: boolean;
-  scoreContributionAllowed?: boolean;
-  sourceAuthorityReason?: string | null;
-  sourceAuthorityRouteRejected?: boolean;
-  routeRejectedReasonCodes?: string[];
-  reasonCodes?: string[];
-  breadthClaimType?: string | null;
-  officialExchangePublishedBreadth?: boolean;
-  fulfilledMetrics?: string[];
-  missingMetrics?: string[];
-  metricCoverageRatio?: number | null;
-  broadMarketClaimAllowed?: boolean;
-  proxyFor?: string | null;
-  proxySymbol?: string | null;
-  proxyLabel?: string | null;
-  officialSeriesId?: string | null;
-  officialObservationDate?: string | null;
-  officialAsOf?: string | null;
-  degradationReason?: string | null;
-  degradationReasons?: string[];
-  warning?: string | null;
   logSessionId?: string | null;
 };
 
@@ -337,20 +287,8 @@ function isExplicitPanelStatus(value: unknown): value is MarketOverviewPanel['st
   return typeof value === 'string' && EXPLICIT_PANEL_STATUSES.has(value as MarketOverviewPanel['status']);
 }
 
-/** Preserve backend evidence timestamps; never invent client wall-clock time. */
-function resolveSnapshotEvidenceTimestamp(
-  ...candidates: Array<string | null | undefined>
-): string | undefined {
-  for (const candidate of candidates) {
-    const text = String(candidate || '').trim();
-    if (text) {
-      return text;
-    }
-  }
-  return undefined;
-}
-
 function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
+  const truth = projectMarketTruth(item);
   const hoverDetails = Array.isArray(item.hoverDetails) ? [...item.hoverDetails] : [];
   if (item.market) {
     hoverDetails.push(`Market ${item.market}`);
@@ -377,11 +315,19 @@ function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
     providerHealth: item.providerHealth,
     providerFreshness: item.providerFreshness,
     dataQuality: item.dataQuality,
-    updatedAt: resolveSnapshotEvidenceTimestamp(item.updatedAt),
-    asOf: resolveSnapshotEvidenceTimestamp(item.asOf),
+    updatedAt: truth.timestamps.updatedAt,
+    observedAt: truth.timestamps.observedAt,
+    marketTime: truth.timestamps.marketTime,
+    providerTime: truth.timestamps.providerTime,
+    receivedAt: truth.timestamps.receivedAt,
+    generatedAt: truth.timestamps.generatedAt,
+    asOf: truth.timestamps.asOf,
+    expiresAt: truth.timestamps.expiresAt,
     freshness: item.freshness,
     isProxy: item.isProxy,
     isFallback: item.isFallback,
+    isSynthetic: item.isSynthetic,
+    isFixture: item.isFixture,
     isStale: item.isStale,
     isPartial: item.isPartial,
     isUnavailable: item.isUnavailable,
@@ -392,9 +338,15 @@ function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
     lastError: item.lastError,
     delayMinutes: item.delayMinutes,
     sourceTier: item.sourceTier || undefined,
+    sourceClass: item.sourceClass,
     trustLevel: item.trustLevel || undefined,
     sourceConfidence: item.sourceConfidence,
     observationOnly: item.observationOnly,
+    decisionGrade: item.decisionGrade,
+    readiness: item.readiness,
+    readinessState: item.readinessState,
+    domainReady: item.domainReady,
+    runtimeAvailable: item.runtimeAvailable,
     sourceAuthorityAllowed: item.sourceAuthorityAllowed,
     scoreContributionAllowed: item.scoreContributionAllowed,
     sourceAuthorityReason: item.sourceAuthorityReason,
@@ -420,25 +372,6 @@ function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
   };
 }
 
-function hasUsableSnapshotValue(payload: MarketSnapshotPayload): boolean {
-  return Boolean(
-    Array.isArray(payload.items)
-    && payload.items.some((item) => {
-      if (!item) {
-        return false;
-      }
-      // Observed zero is usable evidence; null/undefined is not.
-      if (typeof item.price === 'number' && Number.isFinite(item.price)) {
-        return true;
-      }
-      if (typeof item.value === 'number' && Number.isFinite(item.value)) {
-        return true;
-      }
-      return false;
-    })
-  );
-}
-
 function isMarketSnapshotItemContract(value: unknown): value is MarketSnapshotItem {
   if (!isMarketContractRecord(value) || !hasMarketContractText(value.symbol)) {
     return false;
@@ -459,94 +392,66 @@ function isMarketSnapshotItemContract(value: unknown): value is MarketSnapshotIt
   return value.freshness === undefined || isMarketDataFreshnessValue(value.freshness);
 }
 
-function hasMarketSnapshotAuthority(payload: MarketSnapshotPayload): boolean {
-  return hasMarketContractText(payload.source)
-    && !['unknown', 'unavailable', 'error'].includes(payload.source.trim().toLowerCase())
+function hasMarketSnapshotObservationContract(
+  payload: MarketSnapshotPayload,
+  truth: ReturnType<typeof projectMarketTruth>,
+): boolean {
+  return hasMarketContractText(truth.source.identity)
+    && !['unknown', 'unavailable', 'error'].includes(truth.source.identity.trim().toLowerCase())
     && isMarketDataFreshnessValue(payload.freshness)
-    && !['unknown', 'unavailable', 'error'].includes(payload.freshness);
+    && !['unknown', 'unavailable', 'error'].includes(truth.freshness);
 }
 
-function isExplicitlyUnavailableSnapshot(payload: MarketSnapshotPayload): boolean {
-  const freshness = String(payload.freshness || '').trim().toLowerCase();
-  const source = String(payload.source || '').trim().toLowerCase();
-  const providerStatus = String(payload.providerHealth?.status || '').trim().toLowerCase();
-  const providerFreshnessState = String(payload.providerFreshness?.state || '').trim().toLowerCase();
-  return Boolean(
-    payload.isUnavailable
-    || payload.providerFreshness?.isUnavailable
-    || providerStatus === 'unavailable'
-    || freshness === 'unavailable'
-    || freshness === 'error'
-    || providerFreshnessState === 'unavailable'
-    || providerFreshnessState === 'error'
-    || source === 'unavailable'
-  );
-}
-
-function deriveSnapshotPanelStatus(payload: MarketSnapshotPayload): MarketOverviewPanel['status'] {
+function deriveSnapshotPanelStatus(
+  payload: MarketSnapshotPayload,
+  truth: ReturnType<typeof projectMarketTruth>,
+): MarketOverviewPanel['status'] {
   // Prefer explicit backend panel status when present (Market Overview contract).
   if (isExplicitPanelStatus(payload.status)) {
     return payload.status;
   }
 
-  const hasUsableValue = hasUsableSnapshotValue(payload);
-  const freshness = String(payload.freshness || '').trim().toLowerCase();
-  const source = String(payload.source || '').trim().toLowerCase();
-  const providerStatus = String(payload.providerHealth?.status || '').trim().toLowerCase();
-  const providerFreshnessState = String(payload.providerFreshness?.state || '').trim().toLowerCase();
-  const explicitlyUnavailable = isExplicitlyUnavailableSnapshot(payload);
-  const hasDegradedValue = Boolean(
-    payload.isPartial
-    || payload.isStale
-    || payload.isFallback
-    || payload.fallbackUsed
-    || payload.isFromSnapshot
-    || payload.isProxy
-    || payload.refreshError
-    || providerStatus === 'partial'
-    || providerStatus === 'stale'
-    || providerStatus === 'fallback'
-    || freshness === 'partial'
-    || freshness === 'stale'
-    || freshness === 'fallback'
-    || freshness === 'proxy'
-    || freshness === 'delayed'
-    || freshness === 'cached'
-    || providerFreshnessState === 'partial'
-    || providerFreshnessState === 'stale'
-    || providerFreshnessState === 'fallback'
-    || providerFreshnessState === 'proxy'
-    || providerFreshnessState === 'delayed'
-    || providerFreshnessState === 'cached'
-    || payload.providerFreshness?.isProxy
-    || payload.providerFreshness?.isStale
-  );
+  const hasObservationContract = hasMarketSnapshotObservationContract(payload, truth);
+  const explicitlyUnavailable = truth.availability === 'unavailable'
+    || truth.availability === 'malformed'
+    || truth.freshness === 'unavailable'
+    || truth.freshness === 'error';
+  const hasDegradedValue = truth.availability === 'partial'
+    || truth.observationOnly === true
+    || truth.scoreContribution === 'ineligible'
+    || ['proxy', 'fallback', 'synthetic', 'fixture'].includes(truth.source.class)
+    || ['aging', 'delayed', 'cached', 'stale', 'expired', 'partial', 'fallback', 'mock', 'synthetic', 'fixture', 'proxy'].includes(truth.freshness)
+    || payload.isFromSnapshot === true
+    || Boolean(payload.refreshError);
 
-  // Explicit unavailability must not be promoted to success by numeric presence alone.
   if (explicitlyUnavailable) {
-    return hasUsableValue ? 'partial' : 'unavailable';
-  }
-
-  if (hasUsableValue) {
-    return hasDegradedValue ? 'partial' : 'success';
+    return 'unavailable';
   }
 
   if (
-    payload.isFallback
-    || payload.fallbackUsed
-    || freshness === 'fallback'
-    || source === 'fallback'
-    || providerStatus === 'fallback'
+    (truth.source.class === 'fallback' || truth.freshness === 'fallback')
+    && Boolean(payload.error)
+    && payload.isPartial !== true
   ) {
     return 'unavailable';
   }
 
-  if (payload.error || payload.refreshError || payload.lastError) {
+  if (!hasObservationContract) {
+    if (payload.error || payload.refreshError || payload.lastError) {
+      return 'failure';
+    }
+    return 'unavailable';
+  }
+
+  if (hasDegradedValue) {
+    return 'partial';
+  }
+
+  if (payload.error || payload.lastError) {
     return 'failure';
   }
 
-  // Missing usable evidence without explicit success signals is unavailable, not success.
-  return 'unavailable';
+  return 'success';
 }
 
 function deriveSnapshotPanelErrorMessage(
@@ -570,21 +475,17 @@ function normalizeMarketSnapshotPayload(rawPayload: unknown, panelName: string):
   if (payload.status != null && !isExplicitPanelStatus(payload.status)) {
     throw new Error('invalid_market_snapshot_contract');
   }
+  const truth = projectMarketTruth(payload);
   if (
-    (hasUsableSnapshotValue(payload) || payload.status === 'success' || payload.status === 'partial')
-    && !hasMarketSnapshotAuthority(payload)
+    (payload.status === 'success' || payload.status === 'partial')
+    && !hasMarketSnapshotObservationContract(payload, truth)
   ) {
     throw new Error('invalid_market_snapshot_contract');
   }
-  const status = deriveSnapshotPanelStatus(payload);
-  const evidenceUpdatedAt = resolveSnapshotEvidenceTimestamp(
-    payload.updatedAt,
-    payload.lastUpdate,
-  );
-  const evidenceLastRefreshAt = resolveSnapshotEvidenceTimestamp(
-    payload.lastUpdate,
-    payload.updatedAt,
-  );
+  const status = deriveSnapshotPanelStatus(payload, truth);
+  const evidenceLastRefreshAt = typeof payload.lastUpdate === 'string' && payload.lastUpdate.trim()
+    ? payload.lastUpdate
+    : undefined;
   // lastRefreshAt is required by MarketOverviewPanel; preserve missing as empty string (not client now).
   const lastRefreshAt = evidenceLastRefreshAt || '';
   return {
@@ -599,11 +500,19 @@ function normalizeMarketSnapshotPayload(rawPayload: unknown, panelName: string):
     providerHealth: payload.providerHealth,
     providerFreshness: payload.providerFreshness,
     dataQuality: payload.dataQuality,
-    updatedAt: evidenceUpdatedAt,
-    asOf: resolveSnapshotEvidenceTimestamp(payload.asOf),
+    updatedAt: truth.timestamps.updatedAt,
+    observedAt: truth.timestamps.observedAt,
+    marketTime: truth.timestamps.marketTime,
+    providerTime: truth.timestamps.providerTime,
+    receivedAt: truth.timestamps.receivedAt,
+    generatedAt: truth.timestamps.generatedAt,
+    asOf: truth.timestamps.asOf,
+    expiresAt: truth.timestamps.expiresAt,
     freshness: payload.freshness,
     isProxy: payload.isProxy,
     isFallback: payload.isFallback ?? payload.fallbackUsed,
+    isSynthetic: payload.isSynthetic,
+    isFixture: payload.isFixture,
     isStale: payload.isStale,
     isPartial: payload.isPartial,
     isUnavailable: payload.isUnavailable,
@@ -614,9 +523,15 @@ function normalizeMarketSnapshotPayload(rawPayload: unknown, panelName: string):
     lastError: payload.lastError,
     delayMinutes: payload.delayMinutes,
     sourceTier: payload.sourceTier || undefined,
+    sourceClass: payload.sourceClass,
     trustLevel: payload.trustLevel || undefined,
     sourceConfidence: payload.sourceConfidence,
     observationOnly: payload.observationOnly,
+    decisionGrade: payload.decisionGrade,
+    readiness: payload.readiness,
+    readinessState: payload.readinessState,
+    domainReady: payload.domainReady,
+    runtimeAvailable: payload.runtimeAvailable,
     sourceAuthorityAllowed: payload.sourceAuthorityAllowed,
     scoreContributionAllowed: payload.scoreContributionAllowed,
     sourceAuthorityReason: payload.sourceAuthorityReason,
@@ -805,6 +720,22 @@ export type ConsumerEvidenceBoundaryView = {
   chips: ConsumerEvidenceBoundaryChip[];
   nextEvidence: string;
   note?: string;
+  marketOverviewFamilies: MarketOverviewReadinessFamily[];
+};
+
+export type MarketOverviewFamilyReadinessState =
+  | 'available'
+  | 'missing'
+  | 'stale'
+  | 'not_configured'
+  | 'insufficient_coverage'
+  | 'unavailable';
+
+export type MarketOverviewReadinessFamily = {
+  key: string;
+  label: string;
+  state: MarketOverviewFamilyReadinessState;
+  detail: string;
 };
 
 export type MarketDataReadinessResponse = {
@@ -1235,6 +1166,24 @@ export type ProfessionalDataCapabilityRegistryView = {
   crossAssetDriverReadiness?: CrossAssetDriverReadiness;
 };
 
+export type MarketRegimeReadinessStatus =
+  | 'available'
+  | 'missing provider'
+  | 'entitlement required'
+  | 'degraded'
+  | 'stale'
+  | 'not available';
+
+export type MarketRegimeReadinessItem = {
+  key: string;
+  label: string;
+  status: MarketRegimeReadinessStatus;
+  variant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+  detail: string;
+  freshnessLabel: string;
+  asOfLabel?: string;
+};
+
 function normalizeReadinessSymbols(symbols?: string[] | string | null): string | undefined {
   if (Array.isArray(symbols)) {
     const sanitized = symbols.flatMap((symbol) => {
@@ -1585,6 +1534,15 @@ const DATA_SOURCE_ACQUISITION_BLOCKER_TYPE_KEYS = [
   'unknown',
 ] as const;
 const DATA_SOURCE_ACQUISITION_PRIORITY_KEYS = ['critical', 'high', 'medium', 'low'] as const;
+const DATA_SOURCE_GAP_ACTION_TYPE_KEYS = [
+  'provider-entitlement',
+  'provider-integration',
+  'evidence-validation',
+  'schema-contract',
+  'frontend-consumption',
+  'manual-review',
+  'blocked',
+] as const;
 const DATA_SOURCE_ACQUISITION_PRIORITY_WEIGHT: Record<string, number> = {
   critical: 0,
   high: 1,
@@ -1597,125 +1555,111 @@ function normalizeGapToken(value?: string | null): string {
   return String(value || '').trim().toLowerCase();
 }
 
-function normalizeDataSourceAcquisitionBlockerTypeKey(value?: string | null): string {
+function normalizeGapChoice(
+  value: string | null | undefined,
+  choices: readonly string[],
+  fallback: string,
+): string {
   const normalized = normalizeGapToken(value);
-  return DATA_SOURCE_ACQUISITION_BLOCKER_TYPE_KEYS.includes(
-    normalized as (typeof DATA_SOURCE_ACQUISITION_BLOCKER_TYPE_KEYS)[number],
-  )
-    ? normalized
-    : 'unknown';
+  return choices.includes(normalized) ? normalized : fallback;
 }
 
-function normalizeDataSourceAcquisitionPriorityKey(value?: string | null): string {
-  const normalized = normalizeGapToken(value);
-  return DATA_SOURCE_ACQUISITION_PRIORITY_KEYS.includes(
-    normalized as (typeof DATA_SOURCE_ACQUISITION_PRIORITY_KEYS)[number],
-  )
-    ? normalized
-    : 'unknown';
-}
-
-function normalizeDataSourceGapActionTypeKey(value?: string | null): string {
-  const normalized = normalizeGapToken(value);
-  return [
-    'provider-entitlement',
-    'provider-integration',
-    'evidence-validation',
-    'schema-contract',
-    'frontend-consumption',
-    'manual-review',
-    'blocked',
-  ].includes(normalized)
-    ? normalized
-    : 'manual-review';
-}
+const normalizeDataSourceAcquisitionBlockerTypeKey = (value?: string | null) => (
+  normalizeGapChoice(value, DATA_SOURCE_ACQUISITION_BLOCKER_TYPE_KEYS, 'unknown')
+);
+const normalizeDataSourceAcquisitionPriorityKey = (value?: string | null) => (
+  normalizeGapChoice(value, DATA_SOURCE_ACQUISITION_PRIORITY_KEYS, 'unknown')
+);
+const normalizeDataSourceGapActionTypeKey = (value?: string | null) => (
+  normalizeGapChoice(value, DATA_SOURCE_GAP_ACTION_TYPE_KEYS, 'manual-review')
+);
 
 function dataSourceGapStatusView(status?: string | null): DataSourceGapRegistryStatusView {
   const normalized = normalizeGapToken(status);
-  if (normalized === 'ready') return { label: '已就绪', variant: 'success' };
-  if (normalized === 'partial') return { label: '部分可用', variant: 'info' };
-  if (normalized === 'blocked') return { label: '阻断', variant: 'danger' };
+  const truth = projectMarketTruth({
+    readiness: status,
+    freshness: ['stale', 'expired'].includes(normalized) ? normalized : undefined,
+    observationOnly: ['observation-only', 'observation_only'].includes(normalized),
+    blocked: ['blocked', 'unauthorized'].includes(normalized),
+    evidencePosture: status,
+  });
+  if (truth.readiness === 'ready') return { label: '已就绪', variant: 'success' };
+  if (truth.mode === 'observation_only') return { label: '仅观察', variant: 'neutral' };
+  if (truth.readiness === 'partial') return { label: '部分可用', variant: 'info' };
   if (normalized === 'unauthorized') return { label: '未授权', variant: 'danger' };
-  if (normalized === 'observation-only') return { label: '仅观察', variant: 'neutral' };
+  if (truth.readiness === 'blocked') return { label: '阻断', variant: 'danger' };
   if (normalized === 'planned') return { label: '计划中', variant: 'neutral' };
-  if (normalized === 'stale') return { label: '待更新', variant: 'caution' };
-  if (normalized === 'missing') return { label: '待补证', variant: 'caution' };
+  if (['stale', 'expired'].includes(truth.freshness)) return { label: '待更新', variant: 'caution' };
   return { label: '待补证', variant: 'caution' };
 }
 
 function dataSourceGapAuthorityView(state?: string | null): DataSourceGapRegistryStatusView {
   const normalized = normalizeGapToken(state);
-  if (normalized === 'allowed') return { label: '可用', variant: 'success' };
+  const truth = projectMarketTruth({ sourceAuthority: state, evidencePosture: state });
+  if (truth.source.authority === 'allowed') return { label: '可用', variant: 'success' };
   if (normalized === 'blocked') return { label: '阻断', variant: 'danger' };
   if (normalized === 'unauthorized') return { label: '未授权', variant: 'danger' };
-  if (normalized === 'observation-only') return { label: '仅观察', variant: 'neutral' };
+  if (truth.mode === 'observation_only') return { label: '仅观察', variant: 'neutral' };
   if (normalized === 'planned') return { label: '计划中', variant: 'neutral' };
   return { label: '待补证', variant: 'caution' };
 }
 
 function dataSourceGapFreshnessView(state?: string | null): DataSourceGapRegistryStatusView {
-  const normalized = normalizeGapToken(state);
-  if (normalized === 'fresh' || normalized === 'live') return { label: '新鲜', variant: 'success' };
-  if (normalized === 'delayed') return { label: '延迟', variant: 'info' };
-  if (normalized === 'cached') return { label: '缓存', variant: 'info' };
-  if (normalized === 'partial') return { label: '部分', variant: 'info' };
-  if (normalized === 'stale') return { label: '待更新', variant: 'caution' };
-  if (normalized === 'fallback' || normalized === 'synthetic') return { label: '待补证', variant: 'caution' };
-  if (normalized === 'unavailable') return { label: '不可用', variant: 'danger' };
+  const truth = projectMarketTruth({ freshness: state });
+  if (truth.freshness === 'fresh' || truth.freshness === 'live') return { label: '新鲜', variant: 'success' };
+  if (truth.freshness === 'delayed') return { label: '延迟', variant: 'info' };
+  if (truth.freshness === 'cached') return { label: '缓存', variant: 'info' };
+  if (truth.freshness === 'partial') return { label: '部分', variant: 'info' };
+  if (['stale', 'expired'].includes(truth.freshness)) return { label: '待更新', variant: 'caution' };
+  if (['unavailable', 'error', 'malformed'].includes(truth.freshness)) return { label: '不可用', variant: 'danger' };
   return { label: '待补证', variant: 'caution' };
 }
 
-function dataSourceGapImpactStateView(state?: string | null): DataSourceGapRegistryStatusView {
-  const normalized = normalizeGapToken(state);
-  if (normalized === 'unlocked') return { label: '已解锁', variant: 'success' };
-  if (normalized === 'degraded') return { label: '降级', variant: 'caution' };
-  if (normalized === 'observation-only') return { label: '仅观察', variant: 'neutral' };
-  if (normalized === 'blocked') return { label: '阻断', variant: 'danger' };
-  if (normalized === 'planned') return { label: '计划中', variant: 'neutral' };
-  return { label: '待补证', variant: 'caution' };
-}
+const DATA_SOURCE_GAP_IMPACT_VIEWS: Record<string, DataSourceGapRegistryStatusView> = {
+  unlocked: { label: '已解锁', variant: 'success' },
+  degraded: { label: '降级', variant: 'caution' },
+  'observation-only': { label: '仅观察', variant: 'neutral' },
+  blocked: { label: '阻断', variant: 'danger' },
+  planned: { label: '计划中', variant: 'neutral' },
+};
+const DATA_SOURCE_GAP_ACTION_TYPE_VIEWS: Record<string, DataSourceGapRegistryStatusView> = {
+  'provider-entitlement': { label: 'Provider entitlement', variant: 'danger' },
+  'provider-integration': { label: 'Provider integration', variant: 'info' },
+  'evidence-validation': { label: 'Evidence validation', variant: 'info' },
+  'schema-contract': { label: 'Schema contract', variant: 'caution' },
+  'frontend-consumption': { label: 'Frontend consumption', variant: 'info' },
+  'manual-review': { label: 'Manual review', variant: 'neutral' },
+  blocked: { label: 'Blocked', variant: 'danger' },
+};
+const DATA_SOURCE_GAP_PRIORITY_VIEWS: Record<string, DataSourceGapRegistryStatusView> = {
+  critical: { label: '关键', variant: 'danger' },
+  high: { label: '高', variant: 'caution' },
+  medium: { label: '中', variant: 'info' },
+  low: { label: '低', variant: 'neutral' },
+};
+const DATA_SOURCE_GAP_ACTION_STATUS_VIEWS: Record<string, DataSourceGapRegistryStatusView> = {
+  'ready-to-start': { label: '可开始', variant: 'info' },
+  blocked: { label: '阻断', variant: 'danger' },
+  'waiting-entitlement': { label: '等待授权', variant: 'danger' },
+  'waiting-evidence': { label: '等待证据', variant: 'caution' },
+  planned: { label: '计划中', variant: 'neutral' },
+  'not-required': { label: '暂不需要', variant: 'neutral' },
+};
+const DATA_SOURCE_ACQUISITION_BLOCKER_VIEWS: Record<string, DataSourceGapRegistryStatusView> = {
+  entitlement: { label: '授权阻断', variant: 'danger' },
+  'provider-integration': { label: '数据接入', variant: 'info' },
+  'evidence-validation': { label: '证据验证', variant: 'info' },
+  'schema-contract': { label: '契约补齐', variant: 'caution' },
+  'frontend-consumption': { label: '前端消费', variant: 'info' },
+  'protected-review': { label: '保护域复核', variant: 'caution' },
+};
 
-function dataSourceGapActionTypeView(actionType?: string | null): DataSourceGapRegistryStatusView {
-  const normalized = normalizeGapToken(actionType);
-  if (normalized === 'provider-entitlement') return { label: 'Provider entitlement', variant: 'danger' };
-  if (normalized === 'provider-integration') return { label: 'Provider integration', variant: 'info' };
-  if (normalized === 'evidence-validation') return { label: 'Evidence validation', variant: 'info' };
-  if (normalized === 'schema-contract') return { label: 'Schema contract', variant: 'caution' };
-  if (normalized === 'frontend-consumption') return { label: 'Frontend consumption', variant: 'info' };
-  if (normalized === 'manual-review') return { label: 'Manual review', variant: 'neutral' };
-  if (normalized === 'blocked') return { label: 'Blocked', variant: 'danger' };
-  return { label: 'Manual review', variant: 'neutral' };
-}
-
-function dataSourceGapActionPriorityView(priority?: string | null): DataSourceGapRegistryStatusView {
-  const normalized = normalizeGapToken(priority);
-  if (normalized === 'critical') return { label: '关键', variant: 'danger' };
-  if (normalized === 'high') return { label: '高', variant: 'caution' };
-  if (normalized === 'medium') return { label: '中', variant: 'info' };
-  if (normalized === 'low') return { label: '低', variant: 'neutral' };
-  return { label: '中', variant: 'info' };
-}
-
-function dataSourceGapActionStatusView(status?: string | null): DataSourceGapRegistryStatusView {
-  const normalized = normalizeGapToken(status);
-  if (normalized === 'ready-to-start') return { label: '可开始', variant: 'info' };
-  if (normalized === 'blocked') return { label: '阻断', variant: 'danger' };
-  if (normalized === 'waiting-entitlement') return { label: '等待授权', variant: 'danger' };
-  if (normalized === 'waiting-evidence') return { label: '等待证据', variant: 'caution' };
-  if (normalized === 'planned') return { label: '计划中', variant: 'neutral' };
-  if (normalized === 'not-required') return { label: '暂不需要', variant: 'neutral' };
-  return { label: '计划中', variant: 'neutral' };
-}
-
-function dataSourceAcquisitionBlockerTypeView(blockerType?: string | null): DataSourceGapRegistryStatusView {
-  const normalized = normalizeGapToken(blockerType);
-  if (normalized === 'entitlement') return { label: '授权阻断', variant: 'danger' };
-  if (normalized === 'provider-integration') return { label: '数据接入', variant: 'info' };
-  if (normalized === 'evidence-validation') return { label: '证据验证', variant: 'info' };
-  if (normalized === 'schema-contract') return { label: '契约补齐', variant: 'caution' };
-  if (normalized === 'frontend-consumption') return { label: '前端消费', variant: 'info' };
-  if (normalized === 'protected-review') return { label: '保护域复核', variant: 'caution' };
-  return { label: '阻断待确认', variant: 'neutral' };
+function dataSourceGapView(
+  value: string | null | undefined,
+  views: Record<string, DataSourceGapRegistryStatusView>,
+  fallback: DataSourceGapRegistryStatusView,
+): DataSourceGapRegistryStatusView {
+  return views[normalizeGapToken(value)] ?? fallback;
 }
 
 function dataSourceGapSafeCount(value: number | undefined): number {
@@ -1744,64 +1688,27 @@ function dataSourceGapSafeList(values?: string[] | null, fallback = '证据待�
   return safeValues.length ? safeValues.slice(0, 4) : [fallback];
 }
 
-function dataSourceGapBooleanView(value: boolean | undefined): Pick<DataSourceGapRegistryFamilyView, 'dataHydrationAllowed' | 'dataHydrationVariant'> {
-  if (value === true) return { dataHydrationAllowed: '允许', dataHydrationVariant: 'success' };
-  if (value === false) return { dataHydrationAllowed: '不允许', dataHydrationVariant: 'caution' };
-  return { dataHydrationAllowed: '待补证', dataHydrationVariant: 'neutral' };
-}
+type BooleanStatusKey = 'true' | 'false' | 'unknown';
+const DATA_SOURCE_BOOLEAN_VIEWS = {
+  permission: {
+    true: { label: '允许', variant: 'success' }, false: { label: '不允许', variant: 'caution' }, unknown: { label: '待补证', variant: 'neutral' },
+  },
+  externalLicenseWork: {
+    true: { label: '需要外部授权', variant: 'danger' }, false: { label: '不需要外部授权', variant: 'neutral' }, unknown: { label: '外部授权待确认', variant: 'caution' },
+  },
+  externalEntitlement: {
+    true: { label: '需要外部授权', variant: 'danger' }, false: { label: '无需外部授权', variant: 'neutral' }, unknown: { label: '外部授权待确认', variant: 'caution' },
+  },
+  protectedReview: {
+    true: { label: '需要保护域复核', variant: 'caution' }, false: { label: '无需保护域复核', variant: 'neutral' }, unknown: { label: '保护域复核待确认', variant: 'caution' },
+  },
+} satisfies Record<string, Record<BooleanStatusKey, DataSourceGapRegistryStatusView>>;
 
-function dataSourceGapScoreAuthorityView(value: boolean | undefined): Pick<DataSourceGapRegistryFamilyView, 'scoreTradingAuthorityAllowed' | 'scoreTradingAuthorityVariant'> {
-  if (value === true) return { scoreTradingAuthorityAllowed: '允许', scoreTradingAuthorityVariant: 'success' };
-  if (value === false) return { scoreTradingAuthorityAllowed: '不允许', scoreTradingAuthorityVariant: 'caution' };
-  return { scoreTradingAuthorityAllowed: '待补证', scoreTradingAuthorityVariant: 'neutral' };
-}
-
-function dataSourceGapExternalLicenseView(
+function dataSourceBooleanView(
   value: boolean | undefined,
-): Pick<DataSourceGapRegistryActionPlanItemView, 'externalProviderLicenseWork' | 'externalProviderLicenseWorkVariant'> {
-  if (value === true) {
-    return { externalProviderLicenseWork: '需要外部授权', externalProviderLicenseWorkVariant: 'danger' };
-  }
-  if (value === false) {
-    return { externalProviderLicenseWork: '不需要外部授权', externalProviderLicenseWorkVariant: 'neutral' };
-  }
-  return { externalProviderLicenseWork: '外部授权待确认', externalProviderLicenseWorkVariant: 'caution' };
-}
-
-function dataSourceGapProtectedReviewView(
-  value: boolean | undefined,
-): Pick<DataSourceGapRegistryActionPlanItemView, 'protectedDomainReview' | 'protectedDomainReviewVariant'> {
-  if (value === true) {
-    return { protectedDomainReview: '需要保护域复核', protectedDomainReviewVariant: 'caution' };
-  }
-  if (value === false) {
-    return { protectedDomainReview: '无需保护域复核', protectedDomainReviewVariant: 'neutral' };
-  }
-  return { protectedDomainReview: '保护域复核待确认', protectedDomainReviewVariant: 'caution' };
-}
-
-function dataSourceAcquisitionEntitlementView(
-  value: boolean | undefined,
-): Pick<DataSourceAcquisitionPriorityQueueItemView, 'externalEntitlementRequired' | 'externalEntitlementVariant'> {
-  if (value === true) {
-    return { externalEntitlementRequired: '需要外部授权', externalEntitlementVariant: 'danger' };
-  }
-  if (value === false) {
-    return { externalEntitlementRequired: '无需外部授权', externalEntitlementVariant: 'neutral' };
-  }
-  return { externalEntitlementRequired: '外部授权待确认', externalEntitlementVariant: 'caution' };
-}
-
-function dataSourceAcquisitionProtectedReviewView(
-  value: boolean | undefined,
-): Pick<DataSourceAcquisitionPriorityQueueItemView, 'protectedDomainReviewRequired' | 'protectedDomainReviewVariant'> {
-  if (value === true) {
-    return { protectedDomainReviewRequired: '需要保护域复核', protectedDomainReviewVariant: 'caution' };
-  }
-  if (value === false) {
-    return { protectedDomainReviewRequired: '无需保护域复核', protectedDomainReviewVariant: 'neutral' };
-  }
-  return { protectedDomainReviewRequired: '保护域复核待确认', protectedDomainReviewVariant: 'caution' };
+  views: Record<BooleanStatusKey, DataSourceGapRegistryStatusView>,
+): DataSourceGapRegistryStatusView {
+  return views[value === true ? 'true' : value === false ? 'false' : 'unknown'];
 }
 
 function dataSourceGapFallbackActionPlan(familyKey: string): DataSourceGapRegistryActionPlanItemView[] {
@@ -1810,10 +1717,10 @@ function dataSourceGapFallbackActionPlan(familyKey: string): DataSourceGapRegist
       actionKey: `${familyKey || 'unknown_family'}.manual_review`,
       actionLabel: '行动项待复核',
       actionTypeKey: 'manual-review',
-      actionType: dataSourceGapActionTypeView('manual-review'),
+      actionType: dataSourceGapView('manual-review', DATA_SOURCE_GAP_ACTION_TYPE_VIEWS, { label: 'Manual review', variant: 'neutral' }),
       priorityKey: 'medium',
-      priority: dataSourceGapActionPriorityView('medium'),
-      status: dataSourceGapActionStatusView('planned'),
+      priority: dataSourceGapView('medium', DATA_SOURCE_GAP_PRIORITY_VIEWS, { label: '中', variant: 'info' }),
+      status: dataSourceGapView('planned', DATA_SOURCE_GAP_ACTION_STATUS_VIEWS, { label: '计划中', variant: 'neutral' }),
       reason: '原因待补证。',
       requiredEvidence: ['证据待补证'],
       blockedBy: ['阻断项待补证'],
@@ -1843,24 +1750,26 @@ function buildDataSourceGapActionPlanView(
     if (!actionKey || !actionLabel || !reason || !nextConcreteStep) {
       return dataSourceGapFallbackActionPlan(familyKey);
     }
-    const externalLicense = dataSourceGapExternalLicenseView(
+    const externalLicense = dataSourceBooleanView(
       typeof action.requiresExternalProviderLicenseWork === 'boolean'
         ? action.requiresExternalProviderLicenseWork
         : undefined,
+      DATA_SOURCE_BOOLEAN_VIEWS.externalLicenseWork,
     );
-    const protectedReview = dataSourceGapProtectedReviewView(
+    const protectedReview = dataSourceBooleanView(
       typeof action.requiresProtectedDomainReview === 'boolean'
         ? action.requiresProtectedDomainReview
         : undefined,
+      DATA_SOURCE_BOOLEAN_VIEWS.protectedReview,
     );
     return [{
       actionKey,
       actionLabel,
       actionTypeKey: normalizeDataSourceGapActionTypeKey(action.actionType),
-      actionType: dataSourceGapActionTypeView(action.actionType),
+      actionType: dataSourceGapView(action.actionType, DATA_SOURCE_GAP_ACTION_TYPE_VIEWS, { label: 'Manual review', variant: 'neutral' }),
       priorityKey: normalizeDataSourceAcquisitionPriorityKey(action.priority),
-      priority: dataSourceGapActionPriorityView(action.priority),
-      status: dataSourceGapActionStatusView(action.status),
+      priority: dataSourceGapView(action.priority, DATA_SOURCE_GAP_PRIORITY_VIEWS, { label: '中', variant: 'info' }),
+      status: dataSourceGapView(action.status, DATA_SOURCE_GAP_ACTION_STATUS_VIEWS, { label: '计划中', variant: 'neutral' }),
       reason,
       requiredEvidence: dataSourceGapSafeList(action.requiredEvidence, '证据待补证'),
       blockedBy: dataSourceGapSafeList(action.blockedBy, '阻断项待补证'),
@@ -1869,8 +1778,10 @@ function buildDataSourceGapActionPlanView(
         '影响面待补证',
       ),
       nextConcreteStep,
-      ...externalLicense,
-      ...protectedReview,
+      externalProviderLicenseWork: externalLicense.label,
+      externalProviderLicenseWorkVariant: externalLicense.variant,
+      protectedDomainReview: protectedReview.label,
+      protectedDomainReviewVariant: protectedReview.variant,
     }];
   });
 
@@ -1889,30 +1800,34 @@ function buildDataSourceAcquisitionPriorityQueueView(
     const priorityKey = normalizeDataSourceAcquisitionPriorityKey(item.priority);
     const readinessStateKey = normalizeGapToken(item.readinessState) || 'missing';
     const primaryBlockerTypeKey = normalizeDataSourceAcquisitionBlockerTypeKey(item.primaryBlockerType);
-    const entitlement = dataSourceAcquisitionEntitlementView(
+    const entitlement = dataSourceBooleanView(
       typeof item.externalEntitlementRequired === 'boolean'
         ? item.externalEntitlementRequired
         : undefined,
+      DATA_SOURCE_BOOLEAN_VIEWS.externalEntitlement,
     );
-    const protectedReview = dataSourceAcquisitionProtectedReviewView(
+    const protectedReview = dataSourceBooleanView(
       typeof item.protectedDomainReviewRequired === 'boolean'
         ? item.protectedDomainReviewRequired
         : undefined,
+      DATA_SOURCE_BOOLEAN_VIEWS.protectedReview,
     );
     return [{
       familyKey,
       familyLabel: DATA_SOURCE_GAP_FAMILY_LABELS[familyKey] || familyLabel,
       priorityKey,
-      priority: dataSourceGapActionPriorityView(item.priority),
+      priority: dataSourceGapView(item.priority, DATA_SOURCE_GAP_PRIORITY_VIEWS, { label: '中', variant: 'info' }),
       priorityReason: dataSourceGapSafeText(item.priorityReason, '排序原因待补证。'),
       readinessStateKey,
       readinessState: dataSourceGapStatusView(item.readinessState),
       primaryBlockerTypeKey,
-      primaryBlockerType: dataSourceAcquisitionBlockerTypeView(item.primaryBlockerType),
+      primaryBlockerType: dataSourceGapView(item.primaryBlockerType, DATA_SOURCE_ACQUISITION_BLOCKER_VIEWS, { label: '阻断待确认', variant: 'neutral' }),
       affectedSurfaceCount: dataSourceGapSafeCount(item.affectedSurfaceCount),
       blockedOrDegradedCapabilityCount: dataSourceGapSafeCount(item.blockedOrDegradedCapabilityCount),
-      ...entitlement,
-      ...protectedReview,
+      externalEntitlementRequired: entitlement.label,
+      externalEntitlementVariant: entitlement.variant,
+      protectedDomainReviewRequired: protectedReview.label,
+      protectedDomainReviewVariant: protectedReview.variant,
       nextConcreteStep: dataSourceGapSafeText(item.nextConcreteStep, '下一步待补证。'),
       requiredEvidence: dataSourceGapSafeList(item.requiredEvidence, '证据待补证'),
       consumerSafeWarning: dataSourceGapSafeText(
@@ -2012,7 +1927,7 @@ function buildDataSourceAcquisitionWorkbenchView(
           : 'neutral';
     return {
       key,
-      label: dataSourceAcquisitionBlockerTypeView(key).label,
+      label: dataSourceGapView(key, DATA_SOURCE_ACQUISITION_BLOCKER_VIEWS, { label: '阻断待确认', variant: 'neutral' }).label,
       count,
       variant,
     };
@@ -2029,7 +1944,7 @@ function buildDataSourceAcquisitionWorkbenchView(
           : 'neutral';
     return {
       key,
-      label: dataSourceGapActionPriorityView(key).label,
+      label: dataSourceGapView(key, DATA_SOURCE_GAP_PRIORITY_VIEWS, { label: '中', variant: 'info' }).label,
       count,
       variant,
     };
@@ -2237,13 +2152,7 @@ const PROFESSIONAL_DATA_CAPABILITY_CATEGORY_META: Record<string, { label: string
 
 function normalizeProfessionalDataCapabilityStatus(status?: string | null): ProfessionalDataCapabilityStatus {
   const normalized = normalizeGapToken(status);
-  if ([
-    'live',
-    'degraded',
-    'entitlement_required',
-    'configured_missing',
-    'not_implemented',
-  ].includes(normalized)) {
+  if (['live', 'degraded', 'entitlement_required', 'configured_missing', 'not_implemented'].includes(normalized)) {
     return normalized;
   }
   return 'unavailable';
@@ -2251,20 +2160,13 @@ function normalizeProfessionalDataCapabilityStatus(status?: string | null): Prof
 
 function professionalDataCapabilityStatusView(status?: string | null): ProfessionalDataCapabilityStatusView {
   const normalized = normalizeProfessionalDataCapabilityStatus(status);
-  if (normalized === 'live') return { key: normalized, label: '可用', variant: 'success' };
-  if (normalized === 'degraded') return { key: normalized, label: '降级', variant: 'caution' };
-  if (normalized === 'entitlement_required') return { key: normalized, label: '需授权', variant: 'danger' };
+  const truth = projectMarketTruth({ availability: normalized });
+  if (truth.availability === 'available') return { key: normalized, label: '可用', variant: 'success' };
+  if (truth.availability === 'partial') return { key: normalized, label: '降级', variant: 'caution' };
+  if (truth.availability === 'blocked') return { key: normalized, label: '需授权', variant: 'danger' };
   if (normalized === 'configured_missing') return { key: normalized, label: '配置待补', variant: 'caution' };
   if (normalized === 'not_implemented') return { key: normalized, label: '未实现', variant: 'neutral' };
   return { key: 'unavailable', label: '暂不可用', variant: 'danger' };
-}
-
-function professionalCapabilityReadinessStateLabel(state?: string | null): string {
-  const normalized = normalizeGapToken(state);
-  if (normalized === 'available') return '可用';
-  if (normalized === 'stale') return '待更新';
-  if (normalized === 'disabled_by_flag') return '已停用';
-  return '待补';
 }
 
 function normalizeProfessionalCapabilityReadiness(
@@ -2346,7 +2248,7 @@ function professionalCapabilityReadinessSummary(
   const marketSummaries = (readiness.markets || []).slice(0, 2).map((market) => {
     const supported = market.supportedMeasures.join('/') || '无';
     const missing = market.missingMeasures.join('/') || '无';
-    return `${market.market}: ${supported} ${professionalCapabilityReadinessStateLabel('available')}；${missing} 待补`;
+    return `${market.market}: ${supported} 可用；${missing} 待补`;
   });
   return [...measureSummaries, ...marketSummaries].filter(Boolean);
 }
@@ -2419,8 +2321,8 @@ export function buildDataSourceGapRegistryView(
   const familyViews = families.map((family) => {
     const familyKey = family.familyKey || 'unknown_family';
     const blockerCopy = DATA_SOURCE_GAP_BLOCKERS[familyKey] || {};
-    const hydration = dataSourceGapBooleanView(family.providerHydrationAllowed);
-    const scoreAuthority = dataSourceGapScoreAuthorityView(family.scoreTradingAuthorityAllowed);
+    const hydration = dataSourceBooleanView(family.providerHydrationAllowed, DATA_SOURCE_BOOLEAN_VIEWS.permission);
+    const scoreAuthority = dataSourceBooleanView(family.scoreTradingAuthorityAllowed, DATA_SOURCE_BOOLEAN_VIEWS.permission);
     const groupId = DATA_SOURCE_GAP_FAMILY_GROUP[familyKey] || 'other';
     const groupLabel = DATA_SOURCE_GAP_GROUPS.find((group) => group.id === groupId)?.label || '其他待补证';
     const surfaceImpactMatrix = (family.surfaceImpactMatrix || []).map((impact) => {
@@ -2432,7 +2334,7 @@ export function buildDataSourceGapRegistryView(
       return {
         surfaceKey,
         surfaceLabel: DATA_SOURCE_IMPACT_SURFACE_LABELS[surfaceKey] || dataSourceGapSafeText(impact.consumerLabel, '影响面待补证'),
-        impactState: dataSourceGapImpactStateView(impactState),
+        impactState: dataSourceGapView(impactState, DATA_SOURCE_GAP_IMPACT_VIEWS, { label: '待补证', variant: 'caution' }),
         impactReason: dataSourceGapSafeText(impact.impactReason, '影响原因待补证。'),
         affectedCapability: dataSourceGapSafeText(impact.affectedCapability, '影响能力待补证。'),
         nextEvidenceStep: dataSourceGapSafeText(impact.nextEvidenceStep, '下一证据步骤待补证。'),
@@ -2454,10 +2356,10 @@ export function buildDataSourceGapRegistryView(
       integrationBlocker: blockerCopy.integration || (family.integrationBlocker ? '集成阻断待复核。' : '暂无'),
       sourceEvidenceState: blockerCopy.sourceEvidence || '待补证',
       nextIntegrationStep: DATA_SOURCE_GAP_NEXT_STEPS[familyKey] || (family.nextIntegrationStep ? '按既有集成路径补证后再展示。' : '待补证'),
-      dataHydrationAllowed: hydration.dataHydrationAllowed,
-      dataHydrationVariant: hydration.dataHydrationVariant,
-      scoreTradingAuthorityAllowed: scoreAuthority.scoreTradingAuthorityAllowed,
-      scoreTradingAuthorityVariant: scoreAuthority.scoreTradingAuthorityVariant,
+      dataHydrationAllowed: hydration.label,
+      dataHydrationVariant: hydration.variant,
+      scoreTradingAuthorityAllowed: scoreAuthority.label,
+      scoreTradingAuthorityVariant: scoreAuthority.variant,
       consumerSafeDescription: DATA_SOURCE_GAP_DESCRIPTIONS[familyKey] || (family.consumerSafeDescription ? '已返回说明，需人工复核后展示。' : '数据说明待补证。'),
       capabilityMap: (family.capabilityMap || []).map((item) => ({
         capabilityKey: dataSourceGapSafeText(item.capabilityKey, 'unknown_capability'),
@@ -2504,6 +2406,237 @@ export function buildDataSourceGapRegistryView(
     families: familyViews,
     groups,
   };
+}
+
+type MarketRegimeReadinessCategory = {
+  key: string;
+  label: string;
+  capabilityCategory?: ProfessionalDataCapabilityCategory;
+  match: RegExp;
+  fallbackDetail: string;
+};
+
+const MARKET_REGIME_READINESS_CATEGORIES: MarketRegimeReadinessCategory[] = [
+  {
+    key: 'breadth',
+    label: 'breadth',
+    capabilityCategory: 'market_breadth_flows',
+    match: /\bbreadth\b|advance|decline|new highs?|new lows?/i,
+    fallbackDetail: 'Breadth inputs are not returned by the readiness registry.',
+  },
+  {
+    key: 'sector-leadership',
+    label: 'sector/industry leadership',
+    capabilityCategory: 'sector_rotation',
+    match: /sector|industry|rotation|leadership/i,
+    fallbackDetail: 'Sector and industry leadership inputs are not returned by the readiness registry.',
+  },
+  {
+    key: 'volatility-risk',
+    label: 'volatility/risk regime',
+    capabilityCategory: 'macro_cross_asset_regime',
+    match: /volatility|risk|regime|vix|stress/i,
+    fallbackDetail: 'Volatility and risk regime inputs are not returned by the readiness registry.',
+  },
+  {
+    key: 'options-structure',
+    label: 'options structure / gamma inputs',
+    capabilityCategory: 'options_structure',
+    match: /option|chain|greek|gamma|structure/i,
+    fallbackDetail: 'Options structure inputs are not returned by the readiness registry.',
+  },
+  {
+    key: 'flows-positioning',
+    label: 'flows/positioning',
+    capabilityCategory: 'market_breadth_flows',
+    match: /flow|positioning|fund|liquidity|pressure/i,
+    fallbackDetail: 'Flows and positioning inputs are not returned by the readiness registry.',
+  },
+  {
+    key: 'macro-cross-asset',
+    label: 'macro/cross-asset inputs',
+    capabilityCategory: 'macro_cross_asset_regime',
+    match: /macro|cross.?asset|rates?|fx|credit|liquidity/i,
+    fallbackDetail: 'Macro and cross-asset inputs are not returned by the readiness registry.',
+  },
+];
+
+const MARKET_REGIME_DIAGNOSTIC_TOKEN_PATTERN =
+  /providerClass|providerName|providerAttempted|requiredProviderClass|sourceAuthorityRouter|apiKeyPresent|endpointHost|requestId|traceId|cacheKey|rawPayload|exceptionClass|exceptionChain|credential|token|env/gi;
+
+const MARKET_REGIME_READINESS_STATUS_META: Record<
+  MarketRegimeReadinessStatus,
+  { variant: MarketRegimeReadinessItem['variant']; severity: number }
+> = {
+  available: { variant: 'success', severity: 1 },
+  degraded: { variant: 'caution', severity: 2 },
+  stale: { variant: 'caution', severity: 3 },
+  'missing provider': { variant: 'caution', severity: 4 },
+  'not available': { variant: 'neutral', severity: 5 },
+  'entitlement required': { variant: 'danger', severity: 6 },
+};
+
+function sanitizeMarketRegimeReadinessText(value?: string | null, fallback = 'freshness pending'): string {
+  const trimmed = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!trimmed) {
+    return fallback;
+  }
+  return trimmed
+    .replace(MARKET_REGIME_DIAGNOSTIC_TOKEN_PATTERN, 'diagnostic hidden')
+    .replace(/\bprovider\b/gi, 'data source')
+    .replace(/\braw\b/gi, 'source')
+    .replace(/\bdebug\b/gi, 'diagnostic')
+    .replace(/\bcache\s*key\b/gi, 'stored reference');
+}
+
+function marketRegimeReadinessStatusFromCapability(
+  item?: ProfessionalDataCapabilityViewItem,
+): MarketRegimeReadinessStatus {
+  if (!item) {
+    return 'missing provider';
+  }
+  const status = item.status.key;
+  const truth = projectMarketTruth({
+    sourceLabel: item.sourceLabel,
+    status,
+    freshness: item.freshness,
+    asOf: item.asOf,
+    updatedAt: item.updatedAt,
+  });
+  if (truth.freshness === 'stale' || truth.freshness === 'expired') return 'stale';
+  if (truth.availability === 'available') return 'available';
+  if (status === 'entitlement_required') return 'entitlement required';
+  if (status === 'configured_missing') return 'missing provider';
+  if (status === 'not_implemented') return 'not available';
+  if (truth.availability === 'partial') return 'degraded';
+  return 'not available';
+}
+
+function formatMarketRegimeReadinessDate(value?: string | null): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = String(value).trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return trimmed.slice(0, 10);
+}
+
+function capabilityMatchesMarketRegimeCategory(
+  item: ProfessionalDataCapabilityViewItem,
+  category: MarketRegimeReadinessCategory,
+): boolean {
+  const haystack = [item.capabilityId, item.label, item.detail].join(' ');
+  return category.match.test(haystack);
+}
+
+function pickMarketRegimeCapability(
+  category: MarketRegimeReadinessCategory,
+  items: ProfessionalDataCapabilityViewItem[],
+): ProfessionalDataCapabilityViewItem | undefined {
+  const exactMatches = items.filter((item) => capabilityMatchesMarketRegimeCategory(item, category));
+  const categoryMatches = category.capabilityCategory
+    ? items.filter((item) => item.categoryKey === category.capabilityCategory)
+    : [];
+  const candidates = exactMatches.length ? exactMatches : categoryMatches;
+  return candidates
+    .map((item) => ({ item, status: marketRegimeReadinessStatusFromCapability(item) }))
+    .sort((left, right) => (
+      MARKET_REGIME_READINESS_STATUS_META[right.status].severity
+      - MARKET_REGIME_READINESS_STATUS_META[left.status].severity
+    ))[0]?.item;
+}
+
+function buildVolatilityRiskReadinessFromOfficialRisk(
+  readiness?: OfficialRiskSourceReadiness | null,
+): MarketRegimeReadinessItem | null {
+  if (!readiness) {
+    return null;
+  }
+  const pillars = [readiness.vix, readiness.rates, readiness.fedLiquidity].filter(Boolean);
+  if (!pillars.length) {
+    return null;
+  }
+  const bundleTruth = projectMarketTruth({ readiness: readiness.bundleState });
+  const isStale = pillars.some((pillar) => ['stale', 'expired', 'fallback'].includes(
+    projectMarketTruth({ freshness: pillar?.freshness ?? pillar?.state }).freshness,
+  ));
+  const status: MarketRegimeReadinessStatus = isStale
+    ? 'stale'
+    : bundleTruth.readiness === 'ready' ? 'available'
+      : bundleTruth.readiness === 'partial' ? 'degraded'
+        : bundleTruth.readiness === 'blocked' ? 'not available' : 'missing provider';
+  const asOfLabel = formatMarketRegimeReadinessDate(
+    readiness.vix?.asOf || readiness.vix?.latestDate || readiness.rates?.asOf || readiness.rates?.latestDate || readiness.fedLiquidity?.asOf || readiness.fedLiquidity?.latestDate,
+  );
+  return {
+    key: 'volatility-risk',
+    label: 'volatility/risk regime',
+    status,
+    variant: MARKET_REGIME_READINESS_STATUS_META[status].variant,
+    detail: sanitizeMarketRegimeReadinessText(
+      readiness.consumerSummary || readiness.nextDataAction,
+      'Official risk inputs are partially returned.',
+    ),
+    freshnessLabel: asOfLabel ? `freshness ${asOfLabel}` : 'freshness pending',
+    asOfLabel,
+  };
+}
+
+export function buildMarketRegimeReadinessItems(
+  view: ProfessionalDataCapabilityRegistryView | null,
+  riskReadiness?: OfficialRiskSourceReadiness | null,
+): MarketRegimeReadinessItem[] {
+  const capabilityItems = (view?.categories || []).flatMap((category) => category.items);
+  const officialRiskItem = buildVolatilityRiskReadinessFromOfficialRisk(riskReadiness);
+  return MARKET_REGIME_READINESS_CATEGORIES.map((category) => {
+    if (category.key === 'volatility-risk' && officialRiskItem) {
+      const capability = pickMarketRegimeCapability(category, capabilityItems);
+      if (capability) {
+        const capabilityStatus = marketRegimeReadinessStatusFromCapability(capability);
+        if (
+          MARKET_REGIME_READINESS_STATUS_META[capabilityStatus].severity
+          >= MARKET_REGIME_READINESS_STATUS_META[officialRiskItem.status].severity
+        ) {
+          const capabilityAsOf = formatMarketRegimeReadinessDate(capability.asOf || capability.updatedAt);
+          return {
+            key: category.key,
+            label: category.label,
+            status: capabilityStatus,
+            variant: MARKET_REGIME_READINESS_STATUS_META[capabilityStatus].variant,
+            detail: sanitizeMarketRegimeReadinessText(capability.detail, category.fallbackDetail),
+            freshnessLabel: sanitizeMarketRegimeReadinessText(
+              capability.freshness,
+              capabilityAsOf ? `freshness ${capabilityAsOf}` : 'freshness pending',
+            ),
+            asOfLabel: capabilityAsOf,
+          };
+        }
+      }
+      return officialRiskItem;
+    }
+
+    const capability = pickMarketRegimeCapability(category, capabilityItems);
+    const status = marketRegimeReadinessStatusFromCapability(capability);
+    const asOfLabel = formatMarketRegimeReadinessDate(capability?.asOf || capability?.updatedAt);
+    return {
+      key: category.key,
+      label: category.label,
+      status,
+      variant: MARKET_REGIME_READINESS_STATUS_META[status].variant,
+      detail: sanitizeMarketRegimeReadinessText(capability?.detail, category.fallbackDetail),
+      freshnessLabel: sanitizeMarketRegimeReadinessText(
+        capability?.freshness,
+        asOfLabel ? `freshness ${asOfLabel}` : 'freshness pending',
+      ),
+      asOfLabel,
+    };
+  });
 }
 
 export function buildProfessionalDataCapabilityRegistryView(
@@ -2566,38 +2699,6 @@ export function buildProfessionalDataCapabilityRegistryView(
   };
 }
 
-function officialRiskSourceBundleLabel(state?: OfficialRiskSourceReadinessState): OfficialRiskSourceReadinessView['bundleLabel'] {
-  if (state === 'ready') return '官方风险源可用';
-  if (state === 'partial') return '官方风险源部分可用';
-  if (state === 'blocked') return '官方风险源待补';
-  return '来源待确认';
-}
-
-function officialRiskSourceBundleVariant(state?: OfficialRiskSourceReadinessState): OfficialRiskSourceReadinessView['bundleVariant'] {
-  if (state === 'ready') return 'success';
-  if (state === 'partial') return 'info';
-  if (state === 'blocked') return 'caution';
-  return 'neutral';
-}
-
-function officialRiskSourcePillarLabel(
-  title: string,
-  pillar?: OfficialRiskSourceReadinessPillar | null,
-): OfficialRiskSourceReadinessChip {
-  const state = pillar?.state;
-  const freshness = pillar?.freshness;
-  if (state === 'ready') {
-    return { key: title, label: `${title}可用`, variant: 'success' };
-  }
-  if (state === 'partial') {
-    return { key: title, label: `${title}部分可用`, variant: 'info' };
-  }
-  if (state === 'stale' || freshness === 'stale' || freshness === 'fallback') {
-    return { key: title, label: `${title}待更新`, variant: 'caution' };
-  }
-  return { key: title, label: `${title}待补`, variant: 'neutral' };
-}
-
 export function buildOfficialRiskSourceReadinessView(
   readiness?: OfficialRiskSourceReadiness | null,
 ): OfficialRiskSourceReadinessView {
@@ -2609,43 +2710,39 @@ export function buildOfficialRiskSourceReadinessView(
     };
   }
 
-  const chips = [
-    officialRiskSourcePillarLabel('VIX', readiness.vix),
-    officialRiskSourcePillarLabel('利率', readiness.rates),
-    officialRiskSourcePillarLabel('Fed流动性', readiness.fedLiquidity),
-  ];
+  const bundleTruth = projectMarketTruth({ readiness: readiness.bundleState });
+  const chips = ([
+    ['VIX', readiness.vix],
+    ['利率', readiness.rates],
+    ['Fed流动性', readiness.fedLiquidity],
+  ] as const).map(([title, pillar]): OfficialRiskSourceReadinessChip => {
+    const truth = projectMarketTruth({
+      readiness: pillar?.state,
+      freshness: pillar?.freshness ?? (pillar?.state === 'stale' ? 'stale' : undefined),
+      asOf: pillar?.asOf,
+    });
+    if (truth.readiness === 'ready') return { key: title, label: `${title}可用`, variant: 'success' };
+    if (truth.readiness === 'partial') return { key: title, label: `${title}部分可用`, variant: 'info' };
+    if (['stale', 'expired', 'fallback'].includes(truth.freshness)) {
+      return { key: title, label: `${title}待更新`, variant: 'caution' };
+    }
+    return { key: title, label: `${title}待补`, variant: 'neutral' };
+  });
   const note = readiness.consumerSummary || readiness.nextDataAction || undefined;
   return {
-    bundleLabel: officialRiskSourceBundleLabel(readiness.bundleState),
-    bundleVariant: officialRiskSourceBundleVariant(readiness.bundleState),
+    bundleLabel: bundleTruth.readiness === 'ready'
+      ? '官方风险源可用'
+      : bundleTruth.readiness === 'partial'
+        ? '官方风险源部分可用'
+        : bundleTruth.readiness === 'blocked' ? '官方风险源待补' : '来源待确认',
+    bundleVariant: bundleTruth.readiness === 'ready'
+      ? 'success'
+      : bundleTruth.readiness === 'partial'
+        ? 'info'
+        : bundleTruth.readiness === 'blocked' ? 'caution' : 'neutral',
     chips,
     ...(note ? { note } : {}),
   };
-}
-
-function crossAssetDriverStateVariant(state?: CrossAssetDriverReadinessState): CrossAssetDriverReadinessChip['variant'] {
-  if (state === 'available') return 'success';
-  if (state === 'stale' || state === 'insufficient_history') return 'caution';
-  if (state === 'missing') return 'neutral';
-  if (state === 'not_configured') return 'neutral';
-  return 'neutral';
-}
-
-function crossAssetDriverStateLabel(state?: CrossAssetDriverReadinessState): string {
-  if (state === 'available') return '可用';
-  if (state === 'stale') return '待更新';
-  if (state === 'insufficient_history') return '历史不足';
-  if (state === 'not_configured') return '未配置';
-  return '待补';
-}
-
-function crossAssetDriverLabel(item: CrossAssetDriverReadinessItem): string {
-  const identifierText = item.configuredIdentifiers
-    .map((identifier) => identifier.value)
-    .filter(Boolean)
-    .slice(0, 3)
-    .join('/');
-  return `${item.label}: ${crossAssetDriverStateLabel(item.state)}${identifierText ? ` (${identifierText})` : ''}`;
 }
 
 export function buildCrossAssetDriverReadinessView(
@@ -2660,10 +2757,18 @@ export function buildCrossAssetDriverReadinessView(
       note: '仅展示已配置的驱动输入；未返回的数据不做推断。',
     };
   }
-  const availableCount = drivers.filter((driver) => driver.state === 'available').length;
-  const staleCount = drivers.filter((driver) => driver.state === 'stale').length;
-  const insufficientCount = drivers.filter((driver) => driver.state === 'insufficient_history').length;
-  const missingCount = drivers.filter((driver) => driver.state === 'missing' || driver.state === 'not_configured').length;
+  const projectedDrivers = drivers.map((driver) => ({
+    driver,
+    truth: projectMarketTruth({
+      availability: driver.state,
+      freshness: driver.state === 'stale' ? 'stale' : driver.cachedOhlcv?.freshnessState,
+      asOf: driver.cachedOhlcv?.latestBarDate,
+    }),
+  }));
+  const availableCount = projectedDrivers.filter(({ truth }) => truth.availability === 'available').length;
+  const staleCount = projectedDrivers.filter(({ truth }) => ['stale', 'expired'].includes(truth.freshness)).length;
+  const insufficientCount = projectedDrivers.filter(({ truth }) => truth.availability === 'partial').length;
+  const missingCount = projectedDrivers.filter(({ truth }) => truth.availability === 'missing').length;
   const variant: CrossAssetDriverReadinessView['variant'] = availableCount === drivers.length
     ? 'success'
     : availableCount > 0
@@ -2679,11 +2784,23 @@ export function buildCrossAssetDriverReadinessView(
   return {
     label,
     variant,
-    chips: drivers.slice(0, 9).map((driver) => ({
-      key: driver.category,
-      label: crossAssetDriverLabel(driver),
-      variant: crossAssetDriverStateVariant(driver.state),
-    })),
+    chips: projectedDrivers.slice(0, 9).map(({ driver, truth }) => {
+      const identifierText = driver.configuredIdentifiers.map((identifier) => identifier.value).filter(Boolean).slice(0, 3).join('/');
+      const stateLabel = truth.availability === 'available'
+        ? '可用'
+        : ['stale', 'expired'].includes(truth.freshness) ? '待更新'
+          : truth.availability === 'partial' ? '历史不足'
+            : driver.state === 'not_configured' ? '未配置' : '待补';
+      return {
+        key: driver.category,
+        label: `${driver.label}: ${stateLabel}${identifierText ? ` (${identifierText})` : ''}`,
+        variant: truth.availability === 'available'
+          ? 'success' as const
+          : truth.availability === 'partial' || ['stale', 'expired'].includes(truth.freshness)
+            ? 'caution' as const
+            : 'neutral' as const,
+      };
+    }),
     note: `可用 ${availableCount} · 待更新 ${staleCount} · 历史不足 ${insufficientCount} · 待补/未配置 ${missingCount}`,
   };
 }
@@ -2717,20 +2834,20 @@ function consumerEvidenceInputLabel(value?: string | null): string {
 }
 
 function consumerEvidenceStateLabel(state?: string | null): { label: string; variant: ConsumerEvidenceBoundaryView['variant'] } {
-  const normalized = normalizeConsumerEvidenceToken(state);
-  if (normalized === 'score_grade' || normalized === 'ready') {
+  const truth = projectMarketTruth({ readinessState: state, freshness: state });
+  if (truth.readiness === 'ready') {
     return { label: '证据可用', variant: 'success' };
   }
-  if (normalized === 'partial') {
-    return { label: '部分可用', variant: 'info' };
-  }
-  if (normalized === 'observation_only') {
+  if (truth.mode === 'observation_only') {
     return { label: '仅观察', variant: 'neutral' };
   }
-  if (normalized === 'stale') {
+  if (truth.readiness === 'partial') {
+    return { label: '部分可用', variant: 'info' };
+  }
+  if (['stale', 'expired'].includes(truth.freshness)) {
     return { label: '待更新', variant: 'caution' };
   }
-  if (normalized === 'blocked' || normalized === 'missing' || normalized === 'unavailable') {
+  if (['blocked', 'missing', 'unavailable', 'malformed'].includes(truth.readiness)) {
     return { label: '待补', variant: 'caution' };
   }
   return { label: '证据待确认', variant: 'neutral' };
@@ -2746,19 +2863,28 @@ function consumerEvidenceInputState(
   const isBlocked = item.blockedInputs.some((value) => normalizeConsumerEvidenceToken(value) === normalizedInput);
   const isStale = item.staleInputs.some((value) => normalizeConsumerEvidenceToken(value) === normalizedInput);
   const isObservationOnly = item.observationOnlyInputs.some((value) => normalizeConsumerEvidenceToken(value) === normalizedInput);
-  const isReady = item.fulfilledInputs.some((value) => normalizeConsumerEvidenceToken(value) === normalizedInput)
-    || item.scoreGradeInputs.some((value) => normalizeConsumerEvidenceToken(value) === normalizedInput);
+  const isScoreGrade = item.scoreGradeInputs.some((value) => normalizeConsumerEvidenceToken(value) === normalizedInput);
+  const isFulfilled = item.fulfilledInputs.some((value) => normalizeConsumerEvidenceToken(value) === normalizedInput);
+  const truth = projectMarketTruth({
+    availability: isBlocked
+      ? 'blocked'
+      : isMissing ? 'missing' : isStale || isObservationOnly ? 'partial' : isFulfilled ? 'available' : undefined,
+    readinessState: isBlocked ? 'blocked' : isMissing ? 'missing' : isStale ? 'partial' : isObservationOnly ? 'observation_only' : isScoreGrade ? 'score_grade' : undefined,
+    freshness: isStale ? 'stale' : undefined,
+    observationOnly: isObservationOnly ? true : undefined,
+    blocked: isBlocked ? true : undefined,
+  });
 
-  if (isMissing || isBlocked) {
+  if (truth.availability === 'missing' || truth.availability === 'blocked') {
     return { label: `${categoryName}待补`, variant: 'caution' };
   }
-  if (isStale) {
+  if (['stale', 'expired'].includes(truth.freshness)) {
     return { label: `${categoryName}待更新`, variant: 'caution' };
   }
-  if (isObservationOnly) {
+  if (truth.mode === 'observation_only') {
     return { label: `${categoryName}仅观察`, variant: 'neutral' };
   }
-  if (isReady) {
+  if (truth.readiness === 'ready' && truth.availability === 'available') {
     return { label: `${categoryName}可用`, variant: 'success' };
   }
   return { label: `${categoryName}待确认`, variant: 'neutral' };
@@ -2788,10 +2914,64 @@ function selectConsumerEvidenceBoundaryItem(
   return items.find((item) => normalizeConsumerEvidenceToken(item.surface) === 'market_overview');
 }
 
+const MARKET_OVERVIEW_READINESS_FAMILY_DEFINITIONS: Array<{
+  key: string;
+  label: string;
+  match: RegExp;
+  detail: string;
+}> = [
+  { key: 'market-index', label: 'market/index', match: /market[_-]?index|index|quote/i, detail: '指数、区域市场和期货输入。' },
+  { key: 'sector-rotation', label: 'sector/industry rotation', match: /sector|industry|rotation/i, detail: '行业、主题和轮动输入。' },
+  { key: 'market-breadth', label: 'market breadth', match: /breadth|advance|decline/i, detail: '上涨/下跌、新高/新低和市场宽度输入。' },
+  { key: 'macro-regime', label: 'macro/regime', match: /macro|regime|rates|volatility/i, detail: '宏观、利率、波动率和 regime 输入。' },
+  { key: 'cross-asset', label: 'cross-asset drivers', match: /cross[_-]?asset|driver|intermarket/i, detail: '美元、利率、商品、信用或其他跨资产驱动。' },
+  { key: 'news-catalyst', label: 'news/catalyst/regime evidence', match: /news|catalyst|regime/i, detail: '新闻、催化和 regime 证据边界。' },
+  { key: 'historical-ohlcv', label: 'historical OHLCV', match: /historical|ohlcv|price[_-]?history|cache[_-]?coverage/i, detail: '页面依赖的历史 OHLCV 和缓存覆盖。' },
+];
+
+function marketOverviewEvidenceFamilyState(
+  matrix: ConsumerEvidenceReadinessMatrix | null | undefined,
+  match: RegExp,
+): MarketOverviewFamilyReadinessState {
+  const items = (matrix?.items || []).filter((item) => (
+    String(item.surface || '').trim().toLowerCase().replace(/[\s-]+/g, '_') === 'market_overview'
+    && match.test(`${item.evidenceFamily} ${item.requiredInputs.join(' ')}`)
+  ));
+  if (!items.length) {
+    return 'missing';
+  }
+  const truths = items.map(projectMarketTruth);
+  if (truths.some((truth) => ['stale', 'expired'].includes(truth.freshness))) {
+    return 'stale';
+  }
+  if (truths.some((truth) => truth.readiness === 'ready')) {
+    return 'available';
+  }
+  if (truths.some((truth) => truth.readiness === 'partial' || truth.mode === 'observation_only')) {
+    return 'insufficient_coverage';
+  }
+  if (truths.some((truth) => ['blocked', 'unavailable', 'malformed'].includes(truth.readiness))) {
+    return 'unavailable';
+  }
+  return 'missing';
+}
+
+function buildMarketOverviewReadinessFamilies(
+  matrix?: ConsumerEvidenceReadinessMatrix | null,
+): MarketOverviewReadinessFamily[] {
+  return MARKET_OVERVIEW_READINESS_FAMILY_DEFINITIONS.map((family) => ({
+    key: family.key,
+    label: family.label,
+    state: marketOverviewEvidenceFamilyState(matrix, family.match),
+    detail: family.detail,
+  }));
+}
+
 export function buildConsumerEvidenceBoundaryView(
   matrix?: ConsumerEvidenceReadinessMatrix | null,
 ): ConsumerEvidenceBoundaryView {
   const item = selectConsumerEvidenceBoundaryItem(matrix);
+  const marketOverviewFamilies = buildMarketOverviewReadinessFamilies(matrix);
   if (!matrix || !item) {
     return {
       label: '证据边界待确认',
@@ -2805,26 +2985,29 @@ export function buildConsumerEvidenceBoundaryView(
       ],
       nextEvidence: '继续观察现有证据。',
       note: '当前未返回市场总览证据矩阵，保持观察。',
+      marketOverviewFamilies,
     };
   }
 
   const overallState = consumerEvidenceStateLabel(item.readinessState);
+  const overviewState = consumerEvidenceInputState(item, 'market overview read model');
   const breadthState = consumerEvidenceInputState(item, 'market breadth context');
   const rotationState = consumerEvidenceInputState(item, 'rotation context');
-  const riskState = item.observationOnlyInputs.length > 0 || item.readinessState === 'observation_only'
+  const riskTruth = projectMarketTruth(item);
+  const riskState = riskTruth.mode === 'observation_only'
     ? { label: '风险状态仅观察', variant: 'neutral' as const }
-    : item.missingInputs.length > 0 || item.blockedInputs.length > 0
+    : ['missing', 'blocked'].includes(riskTruth.availability)
+      || ['missing', 'blocked', 'unavailable', 'malformed'].includes(riskTruth.readiness)
       ? { label: '风险状态待补', variant: 'caution' as const }
-      : item.staleInputs.length > 0
+      : ['stale', 'expired'].includes(riskTruth.freshness)
         ? { label: '风险状态待更新', variant: 'caution' as const }
-        : item.readinessState === 'score_grade'
-          && item.scoreGradeInputs.some((input) => item.fulfilledInputs.includes(input))
+        : riskTruth.readiness === 'ready' && riskTruth.availability === 'available'
           ? { label: '风险状态可用', variant: 'success' as const }
           : { label: '风险状态待补', variant: 'caution' as const };
 
   const chips: ConsumerEvidenceBoundaryChip[] = [
     { key: 'boundary', label: overallState.label, variant: overallState.variant },
-    { key: 'overview', label: consumerEvidenceInputState(item, 'market overview read model').label, variant: consumerEvidenceInputState(item, 'market overview read model').variant },
+    { key: 'overview', label: overviewState.label, variant: overviewState.variant },
     { key: 'breadth', label: breadthState.label, variant: breadthState.variant },
     { key: 'rotation', label: rotationState.label, variant: rotationState.variant },
     { key: 'risk', label: riskState.label, variant: riskState.variant },
@@ -2836,6 +3019,7 @@ export function buildConsumerEvidenceBoundaryView(
     chips,
     nextEvidence: consumerEvidenceNextLine(item),
     note: matrix.diagnosticOnly ? '当前仅用于观察，不代表可形成结论。' : undefined,
+    marketOverviewFamilies,
   };
 }
 
@@ -2922,20 +3106,19 @@ export type MarketRegimeReadModelResponse = {
   providerCallsEnabled: boolean;
 };
 
-function hasMarketAuxiliaryAuthority(value: Record<string, unknown>): boolean {
-  if (!hasMarketContractText(value.source) || !isMarketDataFreshnessValue(value.freshness)) {
+function hasMarketAuxiliaryObservationContract(value: Record<string, unknown>): boolean {
+  const truth = projectMarketTruth(value);
+  if (!truth.source.identity || !isMarketDataFreshnessValue(value.freshness)) {
     return false;
   }
-  const explicitlyUnavailable = value.source === 'unavailable'
-    || value.source === 'error'
-    || value.freshness === 'unavailable'
-    || value.freshness === 'error';
+  const explicitlyUnavailable = truth.availability === 'unavailable'
+    || ['unavailable', 'error'].includes(truth.freshness);
   return explicitlyUnavailable
-    || (value.freshness !== 'unknown' && (hasMarketContractText(value.updatedAt) || hasMarketContractText(value.asOf)));
+    || (truth.freshness !== 'unknown' && Boolean(truth.timestamps.updatedAt || truth.timestamps.asOf));
 }
 
 export function isMarketBriefingContract(value: unknown): value is MarketBriefingResponse {
-  if (!isMarketContractRecord(value) || !hasMarketAuxiliaryAuthority(value) || !Array.isArray(value.items)) {
+  if (!isMarketContractRecord(value) || !hasMarketAuxiliaryObservationContract(value) || !Array.isArray(value.items)) {
     return false;
   }
   return value.items.every((item) => isMarketContractRecord(item)
@@ -2947,7 +3130,7 @@ export function isMarketBriefingContract(value: unknown): value is MarketBriefin
 }
 
 export function isMarketFuturesContract(value: unknown): value is MarketFuturesResponse {
-  if (!isMarketContractRecord(value) || !hasMarketAuxiliaryAuthority(value) || !Array.isArray(value.items)) {
+  if (!isMarketContractRecord(value) || !hasMarketAuxiliaryObservationContract(value) || !Array.isArray(value.items)) {
     return false;
   }
   return value.items.every((item) => {
@@ -2983,7 +3166,7 @@ const CN_SHORT_SENTIMENT_METRIC_KEYS = [
 export function isCnShortSentimentContract(value: unknown): value is CnShortSentimentResponse {
   if (
     !isMarketContractRecord(value)
-    || !hasMarketAuxiliaryAuthority(value)
+    || !hasMarketAuxiliaryObservationContract(value)
     || typeof value.sentimentScore !== 'number'
     || !Number.isFinite(value.sentimentScore)
     || !hasMarketContractText(value.summary)
@@ -3006,7 +3189,7 @@ const MARKET_TEMPERATURE_SCORE_KEYS = [
 ] as const;
 
 export function isMarketTemperatureContract(value: unknown): value is MarketTemperatureResponse {
-  if (!isMarketContractRecord(value) || !hasMarketAuxiliaryAuthority(value) || !isMarketContractRecord(value.scores)) {
+  if (!isMarketContractRecord(value) || !hasMarketAuxiliaryObservationContract(value) || !isMarketContractRecord(value.scores)) {
     return false;
   }
   const scores = value.scores;
@@ -3671,9 +3854,9 @@ export function isMarketTemperatureReliable(data: Pick<
   | 'requiredReliableInputCount'
 >): boolean {
   if (
-    data.temperatureAvailable === false
-    || data.conclusionAllowed === false
-    || data.isReliable === false
+    data.temperatureAvailable !== true
+    || data.conclusionAllowed !== true
+    || data.isReliable !== true
   ) {
     return false;
   }
@@ -4029,40 +4212,29 @@ export function normalizeMarketTemperatureResponse(
   payload?: Partial<MarketTemperatureResponse> | null,
 ): MarketTemperatureResponse {
   const scores: Partial<MarketTemperatureResponse['scores']> = payload?.scores || {};
-  const hasCompleteScores = Boolean(
-    scores.overall
-    && scores.usRiskAppetite
-    && scores.cnMoneyEffect
-    && scores.macroPressure
-    && scores.liquidity,
-  );
-  // Fail closed: missing confidence or sample coverage is not sufficient reliability evidence.
-  const requiredReliableInputCount = payload?.requiredReliableInputCount ?? 3;
-  const inferredReliable = typeof payload?.confidence === 'number'
-    && Number.isFinite(payload.confidence)
-    && payload.confidence >= 0.45
-    && typeof payload?.reliableInputCount === 'number'
-    && Number.isFinite(payload.reliableInputCount)
-    && payload.reliableInputCount >= requiredReliableInputCount;
-  const temperatureAvailable = payload?.temperatureAvailable ?? payload?.isReliable ?? inferredReliable;
-  const conclusionAllowed = payload?.conclusionAllowed ?? temperatureAvailable;
-  const isReliable = (
-    payload?.isReliable === false
-    || temperatureAvailable === false
-    || conclusionAllowed === false
-  )
-    ? false
-    : hasCompleteScores
-      ? payload?.isReliable ?? inferredReliable
-      : false;
+  const hasCompleteScores = MARKET_TEMPERATURE_SCORE_KEYS.every((key) => {
+    const value = scores[key]?.value;
+    return typeof value === 'number' && Number.isFinite(value);
+  });
+  const temperatureAvailable = payload?.temperatureAvailable === true;
+  const conclusionAllowed = payload?.conclusionAllowed === true;
+  const isReliable = payload?.isReliable === true
+    && temperatureAvailable
+    && conclusionAllowed
+    && hasCompleteScores;
+  const truth = projectMarketTruth({
+    ...(payload || {}),
+    availability: payload?.temperatureAvailable,
+    decisionGrade: payload?.conclusionAllowed,
+  });
 
   return {
-    source: payload?.source || 'fallback',
+    source: payload?.source || 'unknown',
     sourceLabel: normalizeMarketConsumerSourceLabel(payload?.sourceLabel, payload?.source),
     providerHealth: normalizeMarketProviderHealth(payload?.providerHealth),
     // Backend as-of/update only; never substitute client render time as evidence observation time.
-    updatedAt: resolveSnapshotEvidenceTimestamp(payload?.updatedAt) || '',
-    asOf: resolveSnapshotEvidenceTimestamp(payload?.asOf),
+    updatedAt: truth.timestamps.updatedAt || '',
+    asOf: truth.timestamps.asOf,
     freshness: payload?.freshness,
     isFallback: payload?.isFallback,
     isStale: payload?.isStale,

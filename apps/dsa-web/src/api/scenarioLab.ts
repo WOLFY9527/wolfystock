@@ -1,5 +1,6 @@
 import apiClient from './index';
 import { toCamelCase } from './utils';
+import { projectMarketTruth } from '../utils/consumerDataQualityViewModel';
 
 export type ScenarioLabRegime = {
   regime?: string | null;
@@ -259,10 +260,13 @@ function normalizeBaselineReadiness(value: ScenarioLabBaselineReadiness | null |
   };
 }
 
-function baselineSnapshotSummaryLabel(readiness: ScenarioLabBaselineReadiness, state: string | null): string {
+function baselineSnapshotSummaryLabel(
+  state: string | null,
+  truth: ReturnType<typeof projectMarketTruth>,
+): string {
   switch (state) {
     case 'available':
-      return readiness.status === 'ready' && readiness.scoreAuthority === 'authoritative'
+      return truth.readiness === 'ready' && truth.scoreContribution === 'eligible'
         ? SAFE_READINESS_LABELS.baselineReady
         : SAFE_READINESS_LABELS.baselinePending;
     case 'partial':
@@ -302,8 +306,11 @@ function driverInputsSummaryLabel(state: string | null): string {
   }
 }
 
-function buildBaselineReadinessSummary(readiness: ScenarioLabBaselineReadiness | null): ScenarioLabBaselineReadinessSummary {
-  if (!readiness) {
+function buildBaselineReadinessSummary(
+  readiness: ScenarioLabBaselineReadiness | null,
+  truth: ReturnType<typeof projectMarketTruth> | null,
+): ScenarioLabBaselineReadinessSummary {
+  if (!readiness || !truth) {
     return SAFE_BASELINE_READINESS_SUMMARY;
   }
 
@@ -311,12 +318,12 @@ function buildBaselineReadinessSummary(readiness: ScenarioLabBaselineReadiness |
   const marketFrameState = readiness.marketFrame?.state ?? null;
   const driverInputsState = readiness.driverInputs?.state ?? null;
 
-  const boundary = readiness.observationOnly === false && readiness.scoreAuthority === 'authoritative' && readiness.status === 'ready'
+  const boundary = truth.mode === 'decision_grade' && truth.readiness === 'ready'
     ? '可复用基线'
     : SAFE_BASELINE_READINESS_SUMMARY.boundary;
 
   return {
-    baselineSnapshot: baselineSnapshotSummaryLabel(readiness, baselineSnapshotState),
+    baselineSnapshot: baselineSnapshotSummaryLabel(baselineSnapshotState, truth),
     marketFrame: marketFrameSummaryLabel(marketFrameState),
     driverInputs: driverInputsSummaryLabel(driverInputsState),
     boundary,
@@ -329,8 +336,11 @@ function pushUnique(labels: string[], label: string) {
   }
 }
 
-function buildReadinessLabels(readiness: ScenarioLabBaselineReadiness | null): string[] {
-  if (!readiness) {
+function buildReadinessLabels(
+  readiness: ScenarioLabBaselineReadiness | null,
+  truth: ReturnType<typeof projectMarketTruth> | null,
+): string[] {
+  if (!readiness || !truth) {
     return [
       SAFE_READINESS_LABELS.baselineEvidenceMissing,
       SAFE_READINESS_LABELS.observationOnly,
@@ -343,7 +353,7 @@ function buildReadinessLabels(readiness: ScenarioLabBaselineReadiness | null): s
   const evidenceState = readiness.evidenceCompleteness?.state;
   const sampleState = readiness.sampleState;
 
-  if (readiness.status === 'ready' && readiness.scoreAuthority === 'authoritative') {
+  if (truth.readiness === 'ready' && truth.scoreContribution === 'eligible') {
     pushUnique(labels, SAFE_READINESS_LABELS.baselineReady);
   } else if (baselineState === 'partial' || baselineState === 'stale') {
     pushUnique(labels, SAFE_READINESS_LABELS.baselinePartial);
@@ -366,7 +376,7 @@ function buildReadinessLabels(readiness: ScenarioLabBaselineReadiness | null): s
   } else if (driverState !== 'available') {
     pushUnique(labels, SAFE_READINESS_LABELS.driversPending);
   }
-  if (evidenceState !== 'ready' || readiness.scoreAuthority !== 'authoritative') {
+  if (evidenceState !== 'ready' || truth.scoreContribution !== 'eligible') {
     pushUnique(labels, SAFE_READINESS_LABELS.evidenceBoundary);
   }
   if (readiness.status === 'blocked') {
@@ -375,7 +385,7 @@ function buildReadinessLabels(readiness: ScenarioLabBaselineReadiness | null): s
   if (readiness.dataState === 'demo_static_sample' || (sampleState && sampleState !== 'none')) {
     pushUnique(labels, SAFE_READINESS_LABELS.demoSample);
   }
-  if (readiness.observationOnly !== false || readiness.scoreAuthority !== 'authoritative') {
+  if (truth.mode !== 'decision_grade' || truth.scoreContribution !== 'eligible') {
     pushUnique(labels, SAFE_READINESS_LABELS.observationOnly);
   }
   if (readiness.status !== 'blocked') {
@@ -387,6 +397,13 @@ function buildReadinessLabels(readiness: ScenarioLabBaselineReadiness | null): s
 function normalizeScenarioLabResponse(payload: unknown): ScenarioLabResponse {
   const normalized = toCamelCase<ScenarioLabResponse>(payload);
   const baselineReadiness = normalizeBaselineReadiness(normalized.baselineReadiness);
+  const baselineTruth = baselineReadiness ? projectMarketTruth({
+    ...baselineReadiness,
+    readiness: baselineReadiness.status,
+    scoreAuthority: baselineReadiness.scoreAuthority,
+    decisionGrade: baselineReadiness.authoritative,
+    isFixture: baselineReadiness.dataState === 'demo_static_sample' || baselineReadiness.sampleState === 'sample',
+  }) : null;
   return {
     schemaVersion: normalized.schemaVersion,
     contractStatus: normalizeContractStatus(normalized.contractStatus),
@@ -405,8 +422,8 @@ function normalizeScenarioLabResponse(payload: unknown): ScenarioLabResponse {
       status: normalized.scenarioRegime?.status ?? null,
     },
     baselineReadiness,
-    baselineReadinessSummary: buildBaselineReadinessSummary(baselineReadiness),
-    readinessLabels: buildReadinessLabels(baselineReadiness),
+    baselineReadinessSummary: buildBaselineReadinessSummary(baselineReadiness, baselineTruth),
+    readinessLabels: buildReadinessLabels(baselineReadiness, baselineTruth),
     confidenceDelta: normalized.confidenceDelta ?? 0,
     driverDeltas: normalized.driverDeltas ?? {},
     changedDrivers: normalized.changedDrivers ?? [],

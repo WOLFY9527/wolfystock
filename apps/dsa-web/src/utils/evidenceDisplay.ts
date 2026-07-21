@@ -1,4 +1,5 @@
 import { sanitizeUserFacingDataIssue } from './userFacingDataIssues';
+import { projectMarketTruth, type MarketTruthProjection } from './consumerDataQualityViewModel';
 
 export type NormalizedEvidenceEngine =
   | 'scanner'
@@ -364,34 +365,6 @@ function mapKnownLabel(value?: string | null): string | null {
   return raw;
 }
 
-function detectPosture(...values: unknown[]): NormalizedEvidencePosture {
-  const normalizedValues = collectStrings(...values).map((value) => normalizeKey(value));
-
-  if (normalizedValues.some((value) => value.includes('数据不足') || value.includes('禁止判断') || value === 'blocked')) {
-    return 'blocked';
-  }
-  if (normalizedValues.some((value) => value.includes('需人工复核') || value.includes('review_required'))) {
-    return 'review_required';
-  }
-  if (normalizedValues.some((value) => value.includes('依据需复核') || value.includes('allowed_metadata_only'))) {
-    return 'allowed_metadata_only';
-  }
-  if (
-    normalizedValues.some((value) => (
-      value.includes('仅观察')
-      || value.includes('仅供观察')
-      || value.includes('仅供风险观察')
-      || value.includes('observe_only')
-      || value.includes('research_prototype')
-      || value.includes('proxy_only')
-      || value.includes('insufficient_evidence')
-    ))
-  ) {
-    return 'observe_only';
-  }
-  return 'unknown';
-}
-
 function buildLimitationLabels(values: string[], options: NormalizeEvidenceOptions): string[] {
   const mapped = unique(values.flatMap((value) => { const v = mapKnownLabel(value); return v ? [v] : []; }));
   const maxLimitationLabels = options.maxLimitationLabels ?? mapped.length;
@@ -416,18 +389,9 @@ function confidenceCapFrom(payload: unknown): number | undefined {
   return asNumber(cap?.value);
 }
 
-function freshnessLabelFrom(...values: unknown[]): string | undefined {
-  const normalized = collectStrings(...values).map((value) => normalizeKey(value));
-  if (normalized.some((value) => value.includes('stale') || value.includes('expired'))) return '数据已过期';
-  if (normalized.some((value) => value.includes('unknown_freshness') || value.includes('freshness_unknown'))) return '数据新鲜度未知';
-  if (normalized.some((value) => value.includes('fallback'))) return '备用数据';
-  if (normalized.some((value) => value.includes('mock') || value.includes('fixture') || value.includes('synthetic') || value.includes('dry_run'))) return '演示数据';
-  return undefined;
-}
-
 function baseSummary(
   engine: NormalizedEvidenceEngine,
-  posture: NormalizedEvidencePosture,
+  truth: MarketTruthProjection,
   limitationLabels: string[],
   payload: unknown,
   options: NormalizeEvidenceOptions,
@@ -435,10 +399,15 @@ function baseSummary(
   adminReasonCodes: string[] = [],
 ): NormalizedEvidenceSummary {
   const confidenceCap = confidenceCapFrom(payload);
-  const freshnessLabel = freshnessLabelFrom(
-    firstValue(payload, ['freshnessLabel', 'freshness_label', 'freshnessState', 'freshness_state', 'fxFreshnessState']),
-    limitationLabels,
-  );
+  const posture: NormalizedEvidencePosture = truth.evidencePosture === 'observation_only'
+    ? 'observe_only'
+    : truth.evidencePosture === 'insufficient' ? 'observe_only'
+    : truth.evidencePosture === 'metadata_only' ? 'allowed_metadata_only' : truth.evidencePosture;
+  const freshnessLabel = ['stale', 'expired'].includes(truth.freshness)
+    ? '数据已过期'
+    : truth.freshness === 'fallback' ? '备用数据'
+      : ['mock', 'fixture', 'synthetic'].includes(truth.freshness) ? '演示数据'
+        : limitationLabels.includes('数据新鲜度未知') ? '数据新鲜度未知' : undefined;
 
   return {
     engine,
@@ -456,7 +425,7 @@ function baseSummary(
 
 export function normalizeScannerEvidence(payload: unknown, options: NormalizeEvidenceOptions = {}): NormalizedEvidenceSummary {
   const packet = firstRecord(payload, ['evidencePacket', 'evidence_packet']) ?? firstRecord(payload, []);
-  if (!packet) return baseSummary('scanner', 'unknown', [], payload, options);
+  if (!packet) return baseSummary('scanner', projectMarketTruth(undefined), [], payload, options);
 
   const labels = collectStrings(
     packet.userFacingLabels,
@@ -470,16 +439,20 @@ export function normalizeScannerEvidence(payload: unknown, options: NormalizeEvi
     packet.freshnessState,
     packet.freshness_state,
   );
-  const posture = detectPosture(labels);
   const limitationLabels = buildLimitationLabels(labels, options);
+  const truth = projectMarketTruth({
+    ...packet,
+    freshness: asString(firstValue(packet, ['freshnessLabel', 'freshness_label', 'freshnessState', 'freshness_state'])),
+    evidenceLabels: labels,
+  });
   const diagnostics = firstValue(packet, ['diagnostics', 'adminDiagnostics', 'admin_diagnostics']);
   const adminReasonCodes = collectStrings(packet.adminReasonCodes, packet.admin_reason_codes);
-  return baseSummary('scanner', posture, limitationLabels, packet, options, diagnostics, adminReasonCodes);
+  return baseSummary('scanner', truth, limitationLabels, packet, options, diagnostics, adminReasonCodes);
 }
 
 export function normalizeRotationEvidence(payload: unknown, options: NormalizeEvidenceOptions = {}): NormalizedEvidenceSummary {
   const packet = firstRecord(payload, ['rotationStateEvidence', 'rotation_state_evidence']) ?? firstRecord(payload, []);
-  if (!packet) return baseSummary('rotation', 'unknown', [], payload, options);
+  if (!packet) return baseSummary('rotation', projectMarketTruth(undefined), [], payload, options);
 
   const requiredData = firstRecord(firstValue(packet, ['requiredDataStatus', 'required_data_status']), []);
   const flowLanguageAllowed = firstValue(packet, ['flowLanguageAllowed', 'flow_language_allowed']);
@@ -497,16 +470,16 @@ export function normalizeRotationEvidence(payload: unknown, options: NormalizeEv
     packet.riskLabels,
     packet.risk_labels,
   );
-  const posture = detectPosture(labels);
   const limitationLabels = buildLimitationLabels(labels, options);
+  const truth = projectMarketTruth({ ...packet, evidenceLabels: labels });
   const diagnostics = firstValue(packet, ['adminDiagnostics', 'admin_diagnostics']);
   const adminReasonCodes = collectStrings(packet.adminReasonCodes, packet.admin_reason_codes);
-  return baseSummary('rotation', posture, limitationLabels, packet, options, diagnostics, adminReasonCodes);
+  return baseSummary('rotation', truth, limitationLabels, packet, options, diagnostics, adminReasonCodes);
 }
 
 export function normalizeOptionsEvidence(payload: unknown, options: NormalizeEvidenceOptions = {}): NormalizedEvidenceSummary {
   const packet = firstRecord(payload, []);
-  if (!packet) return baseSummary('options', 'unknown', [], payload, options);
+  if (!packet) return baseSummary('options', projectMarketTruth(undefined), [], payload, options);
 
   const decisionGrade = firstValue(packet, ['decisionGrade', 'decision_grade']);
   const labels = collectStrings(
@@ -519,22 +492,25 @@ export function normalizeOptionsEvidence(payload: unknown, options: NormalizeEvi
     packet.failClosedReasonCodes,
     packet.fail_closed_reason_codes,
     firstValue(packet, ['riskWarnings', 'risk_warnings']),
-    decisionGrade === false ? '数据不足，禁止判断' : null,
   );
-  const posture = detectPosture(labels);
   const limitationLabels = buildLimitationLabels(labels, options);
+  const truth = projectMarketTruth({
+    ...packet,
+    decisionGrade: typeof decisionGrade === 'boolean' ? decisionGrade : undefined,
+    evidenceLabels: labels,
+  });
   const diagnostics = {
     dataQualityGates: firstValue(packet, ['dataQualityGates', 'data_quality_gates']),
     liquidityGates: firstValue(packet, ['liquidityGates', 'liquidity_gates']),
     gateIssues: firstValue(packet, ['gateIssues', 'gate_issues']),
   };
   const adminReasonCodes = collectStrings(packet.failClosedReasonCodes, packet.fail_closed_reason_codes);
-  return baseSummary('options', posture, limitationLabels, packet, options, diagnostics, adminReasonCodes);
+  return baseSummary('options', truth, limitationLabels, packet, options, diagnostics, adminReasonCodes);
 }
 
 export function normalizeBacktestReadiness(payload: unknown, options: NormalizeEvidenceOptions = {}): NormalizedEvidenceSummary {
   const packet = firstRecord(payload, ['professionalReadiness', 'professional_readiness']) ?? firstRecord(payload, []);
-  if (!packet) return baseSummary('backtest', 'unknown', [], payload, options);
+  if (!packet) return baseSummary('backtest', projectMarketTruth(undefined), [], payload, options);
 
   const root = isRecord(payload) ? payload : {};
   const combined = { ...root, ...packet };
@@ -559,14 +535,14 @@ export function normalizeBacktestReadiness(payload: unknown, options: NormalizeE
     firstValue(combined, ['summaryLabel', 'summary_label']),
     backtestLabels,
   );
-  const posture = detectPosture(labels);
   const limitationLabels = buildLimitationLabels(labels, options);
-  return baseSummary('backtest', posture, limitationLabels, combined, options);
+  const truth = projectMarketTruth({ ...combined, evidenceLabels: labels });
+  return baseSummary('backtest', truth, limitationLabels, combined, options);
 }
 
 export function normalizePortfolioRiskEvidence(payload: unknown, options: NormalizeEvidenceOptions = {}): NormalizedEvidenceSummary {
   const packet = firstRecord(payload, ['portfolioRiskEvidence', 'portfolio_risk_evidence']) ?? firstRecord(payload, []);
-  if (!packet) return baseSummary('portfolio_risk', 'unknown', [], payload, options);
+  if (!packet) return baseSummary('portfolio_risk', projectMarketTruth(undefined), [], payload, options);
 
   const root = isRecord(payload) ? payload : {};
   const diagnosticsRecord = firstRecord(firstValue(root, ['riskDiagnostics', 'risk_diagnostics']), []);
@@ -597,9 +573,13 @@ export function normalizePortfolioRiskEvidence(payload: unknown, options: Normal
     cap?.reasonCodes,
     cap?.reason_codes,
   );
-  const posture = detectPosture(labels) === 'unknown' && labels.length ? 'review_required' : detectPosture(labels);
   const limitationLabels = buildLimitationLabels(labels, options);
+  const truth = projectMarketTruth({
+    ...combined,
+    freshness: asString(firstValue(combined, ['fxFreshnessState', 'fx_freshness_state'])),
+    evidenceLabels: labels,
+  });
   const diagnostics = firstValue(combined, ['diagnostics', 'adminDiagnostics', 'admin_diagnostics']);
   const adminReasonCodes = collectStrings(cap?.reasonCodes, cap?.reason_codes);
-  return baseSummary('portfolio_risk', posture, limitationLabels, combined, options, diagnostics, adminReasonCodes);
+  return baseSummary('portfolio_risk', truth, limitationLabels, combined, options, diagnostics, adminReasonCodes);
 }

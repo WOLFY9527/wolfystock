@@ -259,11 +259,11 @@
     {
       "path": "src/pages/MarketOverviewPage.tsx",
       "profile": "legacy-concentrated",
-      "maxSignals": { "stateCalls": 19, "effects": 11, "apiCalls": 2, "effectApiCalls": 1, "truthCalls": 20, "domainCalls": 14 },
+      "maxSignals": { "stateCalls": 19, "effects": 11, "apiCalls": 2, "effectApiCalls": 1, "truthCalls": 14, "domainCalls": 12 },
       "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "truth-projection", "domain-calculation"],
       "allowedDependencies": ["market"],
       "staleProtection": "observed",
-      "rationale": "The route is the accepted last-known-good owner but also concentrates request, stream, truth, and presentation synchronization.",
+      "rationale": "The route owns request, stream, and presentation synchronization while consuming qualified market view projections instead of maintaining page-local truth branches.",
       "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
     },
     {

@@ -1,6 +1,7 @@
 import apiClient from './index';
 import { toCamelCase } from './utils';
 import type { OptionsResearchReadiness } from '../types/researchReadiness';
+import { projectMarketTruth } from '../utils/consumerDataQualityViewModel';
 
 export type OptionsDirection = 'bullish' | 'bearish' | 'neutral' | 'volatility';
 export type OptionsRiskProfile = 'conservative' | 'balanced' | 'aggressive';
@@ -684,17 +685,20 @@ export function normalizeOptionsChainReadinessView(
 ): OptionsChainReadinessView {
   if (!readiness) return EMPTY_OPTIONS_CHAIN_READINESS_VIEW;
 
+  const truth = projectMarketTruth(readiness);
   const labels: OptionsChainReadinessLabel[] = [];
   const blockerLabels: OptionsChainReadinessLabel[] = [];
   const configurationMissing = readiness.configurationState === 'missing';
-  const unavailableBoundary = readiness.dataBoundary === 'unavailable';
+  const unavailableBoundary = truth.availability === 'unavailable';
 
   if (configurationMissing || unavailableBoundary || readiness.chainState === 'missing') {
     labels.push('链待接入');
-  } else if (readiness.chainState === 'partial' || readiness.chainState === 'stale' || readiness.overallState === 'partial') {
+  } else if (truth.availability === 'partial' || ['stale', 'delayed', 'cached'].includes(truth.freshness)) {
     labels.push('链部分可用');
-  } else {
+  } else if (truth.availability === 'available') {
     labels.push('链可用');
+  } else {
+    labels.push('链待接入');
   }
 
   if (readiness.expirationCoverage?.state === 'available') {
@@ -717,12 +721,12 @@ export function normalizeOptionsChainReadinessView(
     labels.push('演示样本');
   }
 
-  if (readiness.authorityState === 'observation_only' || readiness.overallState === 'blocked') {
+  if (truth.mode === 'observation_only' || truth.readiness === 'blocked') {
     labels.push('仅观察');
   } else if (
-    readiness.authorityState === 'authoritative'
-    && readiness.overallState === 'ready'
-    && readiness.chainState === 'available'
+    truth.scoreContribution === 'eligible'
+    && truth.readiness === 'ready'
+    && truth.availability === 'available'
     && blockerLabels.length === 0
   ) {
     labels.push('结构比较可用');
@@ -883,13 +887,14 @@ export function normalizeOptionsStructureSummary(payload: unknown): OptionsStruc
   const symbol = typeof normalized.symbol === 'string' && normalized.symbol.trim()
     ? normalized.symbol.trim().toUpperCase()
     : '';
+  const truth = projectMarketTruth(normalized);
   return {
     contractVersion: normalized.contractVersion ?? null,
     symbol,
     status: normalized.status ?? 'not_available',
     calculationState: normalized.calculationState ?? 'not_available',
     observationOnly: normalized.observationOnly !== false,
-    decisionGrade: normalized.decisionGrade === true,
+    decisionGrade: truth.mode === 'decision_grade',
     providerConfigured: normalized.providerConfigured === true,
     spotPrice: normalizeNumberOrNull(normalized.spotPrice),
     asOf: normalized.asOf ?? null,

@@ -22,9 +22,9 @@ import type {
   ResearchReadinessV1,
   ResearchSourceAuthority,
   ScannerContextFrame,
-  ScannerContextSignalFrame,
 } from '../types/researchReadiness';
 import type { ScannerRunDetail } from '../types/scanner';
+import { projectMarketTruth } from '../utils/consumerDataQualityViewModel';
 
 type ReadinessLocale = 'zh' | 'en';
 
@@ -156,10 +156,9 @@ function localizedCoverageLabel(
 ): string | null {
   const coverage = readiness?.evidenceCoverage;
   if (!coverage) return null;
-  const scoreGradeCount = coverage.scoreGradeCount ?? 0;
-  const observationOnlyCount = coverage.observationOnlyCount ?? 0;
-  const missingCount = coverage.missingCount ?? 0;
-  if (scoreGradeCount === 0 && observationOnlyCount === 0 && missingCount === 0) return null;
+  const counts = [coverage.scoreGradeCount, coverage.observationOnlyCount, coverage.missingCount];
+  if (counts.every((count) => count == null)) return null;
+  const [scoreGradeCount, observationOnlyCount, missingCount] = counts.map((count) => count ?? '?');
   return locale === 'en'
     ? `Coverage ${scoreGradeCount}/${observationOnlyCount}/${missingCount}`
     : `覆盖 ${scoreGradeCount}/${observationOnlyCount}/${missingCount}`;
@@ -255,17 +254,13 @@ function scannerContextTone(
 }
 
 function normalizeScannerContextPosture(state: string | null | undefined): ScannerTopDownContextPosture {
-  const normalized = String(state || '').trim().toLowerCase();
-  if (!normalized) return 'insufficient';
-  if (normalized === 'ready' || normalized === 'supportive') return 'supportive';
-  if (normalized === 'mixed' || normalized === 'partial') return 'mixed';
-  if (normalized === 'observe_only' || normalized === 'observation_only') return 'observe_only';
-  if (normalized === 'blocked') return 'blocked';
-  if (normalized === 'waiting') return 'waiting';
-  if (normalized === 'insufficient' || normalized === 'data_insufficient' || normalized === 'missing' || normalized === 'unavailable') {
-    return 'insufficient';
-  }
-  return 'observe_only';
+  const truth = projectMarketTruth({ readiness: state });
+  if (truth.readiness === 'blocked') return 'blocked';
+  if (truth.mode === 'observation_only') return 'observe_only';
+  if (state === 'insufficient') return 'insufficient';
+  if (truth.readiness === 'partial') return 'mixed';
+  if (truth.readiness === 'ready') return 'supportive';
+  return state === 'waiting' ? 'waiting' : 'insufficient';
 }
 
 function localizedSignalStateLabel(
@@ -400,7 +395,9 @@ export function buildConsumerResearchReadinessView(
   readiness: ResearchReadinessV1 | null | undefined,
   locale: ReadinessLocale,
 ): ConsumerResearchReadinessView {
-  const state = readiness?.readinessState || 'observe_only';
+  const truth = projectMarketTruth(readiness);
+  const state = readiness?.readinessState
+    || (truth.readiness === 'blocked' ? 'blocked' : truth.readiness === 'not_checked' ? 'waiting' : 'insufficient');
   return {
     state,
     verdictLabel: localizedStateLabel(state, locale),
@@ -473,12 +470,15 @@ function readEvidenceCoverageEntry(value: unknown): AnalysisEvidenceCoverageEntr
   if (!isRecord(value)) return null;
   const status = typeof value.status === 'string' ? value.status : null;
   if (!status) return null;
+  const truth = projectMarketTruth(value);
   return {
     status,
     sourceTier: typeof value.sourceTier === 'string' ? value.sourceTier : null,
     sourceAuthority: typeof value.sourceAuthority === 'string' ? value.sourceAuthority : null,
     freshness: typeof value.freshness === 'string' ? value.freshness : null,
-    fallbackOrProxy: value.fallbackOrProxy === true,
+    ...(truth.source.class === 'fallback' || truth.source.class === 'proxy'
+      ? { fallbackOrProxy: true }
+      : typeof value.fallbackOrProxy === 'boolean' ? { fallbackOrProxy: value.fallbackOrProxy } : {}),
     missingReasons: asStringArray(value.missingReasons),
     nextEvidenceNeeded: asStringArray(value.nextEvidenceNeeded),
   };
@@ -573,12 +573,11 @@ function readEvidenceCitationFrame(value: unknown): AnalysisEvidenceCitationFram
 function normalizeSourceProvenanceChoice(
   value: unknown,
   allowed: Set<string>,
-  fallback: string,
-): string {
+): string | null {
   const normalized = typeof value === 'string'
     ? value.trim().toLowerCase().replace(/[\s-]+/g, '_')
     : '';
-  return allowed.has(normalized) ? normalized : fallback;
+  return allowed.has(normalized) ? normalized : null;
 }
 
 function readNonNegativeNumber(value: unknown): number | null {
@@ -586,10 +585,10 @@ function readNonNegativeNumber(value: unknown): number | null {
   return Math.floor(value);
 }
 
-function readSourceProvenanceText(value: unknown, fallback = ''): string {
+function readSourceProvenanceText(value: unknown): string | null {
   const text = typeof value === 'string' ? value.trim() : '';
   if (!text || SOURCE_PROVENANCE_FORBIDDEN_TEXT.test(text)) {
-    return fallback;
+    return null;
   }
   return text;
 }
@@ -611,18 +610,38 @@ function readSourceProvenanceCountMap(value: unknown): Record<string, number> | 
 
 function readSourceProvenanceEntry(value: unknown): SourceProvenanceEntry | null {
   if (!isRecord(value)) return null;
-  const evidenceDomain = normalizeSourceProvenanceChoice(value.evidenceDomain, SOURCE_PROVENANCE_EVIDENCE_DOMAINS, 'general');
+  const sourceId = readSourceProvenanceText(value.sourceId);
+  const sourceLabel = readSourceProvenanceText(value.sourceLabel);
+  const evidenceDomain = normalizeSourceProvenanceChoice(value.evidenceDomain, SOURCE_PROVENANCE_EVIDENCE_DOMAINS);
+  const authorityTier = normalizeSourceProvenanceChoice(value.authorityTier, SOURCE_PROVENANCE_AUTHORITY_TIERS) || 'unknown';
+  const freshnessState = normalizeSourceProvenanceChoice(value.freshnessState, SOURCE_PROVENANCE_FRESHNESS_STATES) || 'unknown';
+  const sourceTier = normalizeSourceProvenanceChoice(value.sourceTier, SOURCE_PROVENANCE_SOURCE_TIERS) || 'unknown';
+  const truth = projectMarketTruth({
+    source: sourceId,
+    sourceLabel,
+    sourceType: sourceTier,
+    sourceAuthority: authorityTier,
+    freshness: freshnessState,
+    isFallback: value.fallbackOrProxy === true && sourceTier === 'fallback' ? true : undefined,
+    isProxy: value.fallbackOrProxy === true && sourceTier === 'proxy' ? true : undefined,
+    observationOnly: typeof value.observationOnly === 'boolean' ? value.observationOnly : undefined,
+    scoreContributionAllowed: typeof value.scoreContributionAllowed === 'boolean' ? value.scoreContributionAllowed : undefined,
+  });
   return {
     contractVersion: typeof value.contractVersion === 'string' ? value.contractVersion : null,
-    sourceId: readSourceProvenanceText(value.sourceId, 'unknown_source') || 'unknown_source',
-    sourceLabel: readSourceProvenanceText(value.sourceLabel, '未知来源') || '未知来源',
+    sourceId,
+    sourceLabel,
     evidenceDomain,
-    authorityTier: normalizeSourceProvenanceChoice(value.authorityTier, SOURCE_PROVENANCE_AUTHORITY_TIERS, 'unknown'),
-    freshnessState: normalizeSourceProvenanceChoice(value.freshnessState, SOURCE_PROVENANCE_FRESHNESS_STATES, 'unknown'),
-    sourceTier: normalizeSourceProvenanceChoice(value.sourceTier, SOURCE_PROVENANCE_SOURCE_TIERS, 'unknown'),
-    fallbackOrProxy: value.fallbackOrProxy === true,
-    observationOnly: value.observationOnly === true,
-    scoreContributionAllowed: value.scoreContributionAllowed === true,
+    authorityTier,
+    freshnessState: truth.freshness === 'unknown' ? freshnessState : truth.freshness,
+    sourceTier,
+    ...(truth.source.class === 'fallback' || truth.source.class === 'proxy'
+      ? { fallbackOrProxy: true }
+      : typeof value.fallbackOrProxy === 'boolean' ? { fallbackOrProxy: value.fallbackOrProxy } : {}),
+    ...(typeof truth.observationOnly === 'boolean' ? { observationOnly: truth.observationOnly } : {}),
+    ...(truth.scoreContribution === 'eligible'
+      ? { scoreContributionAllowed: true }
+      : truth.scoreContribution === 'ineligible' ? { scoreContributionAllowed: false } : {}),
     limitations: readSourceProvenanceCodeList(value.limitations),
     nextEvidenceNeeded: readSourceProvenanceCodeList(value.nextEvidenceNeeded),
   };
@@ -638,27 +657,23 @@ export function readSourceProvenanceSummary(value: unknown): SourceProvenanceSum
   if (!isRecord(value)) return null;
 
   const entries = readSourceProvenanceEntries(value.entries);
-  const derivedEntryCount = entries?.length ?? 0;
-  const entryCount = readNonNegativeNumber(value.entryCount) ?? derivedEntryCount;
+  const entryCount = readNonNegativeNumber(value.entryCount);
   const authorityTierCounts = readSourceProvenanceCountMap(value.authorityTierCounts);
   const freshnessStateCounts = readSourceProvenanceCountMap(value.freshnessStateCounts);
   const evidenceDomainCounts = readSourceProvenanceCountMap(value.evidenceDomainCounts);
-  const fallbackOrProxyCount = readNonNegativeNumber(value.fallbackOrProxyCount)
-    ?? (entries ? entries.filter((item) => item.fallbackOrProxy === true).length : 0);
-  const observationOnlyCount = readNonNegativeNumber(value.observationOnlyCount)
-    ?? (entries ? entries.filter((item) => item.observationOnly === true).length : 0);
-  const scoreContributionAllowedCount = readNonNegativeNumber(value.scoreContributionAllowedCount)
-    ?? (entries ? entries.filter((item) => item.scoreContributionAllowed === true).length : 0);
+  const fallbackOrProxyCount = readNonNegativeNumber(value.fallbackOrProxyCount);
+  const observationOnlyCount = readNonNegativeNumber(value.observationOnlyCount);
+  const scoreContributionAllowedCount = readNonNegativeNumber(value.scoreContributionAllowedCount);
 
   if (
-    entryCount === 0
+    entryCount == null
     && !entries?.length
     && !authorityTierCounts
     && !freshnessStateCounts
     && !evidenceDomainCounts
-    && fallbackOrProxyCount === 0
-    && observationOnlyCount === 0
-    && scoreContributionAllowedCount === 0
+    && fallbackOrProxyCount == null
+    && observationOnlyCount == null
+    && scoreContributionAllowedCount == null
   ) {
     return null;
   }
@@ -730,38 +745,20 @@ export function extractAnalysisSourceProvenanceFrame(
   return readSourceProvenanceEntries(details?.analysisResult?.sourceProvenanceFrame);
 }
 
-function inferEvidenceFromDataQuality(report: DataQualityReport | undefined): string[] {
-  if (!report) return ['technical', 'fundamentals', 'news'];
-  const evidence: string[] = [];
-  if (report.importantMissing?.length) evidence.push('fundamentals');
-  if (report.staleSources?.length) evidence.push('freshness');
-  if (report.providerTimeouts?.length || report.pendingSources?.length) evidence.push('news');
-  return evidence.length ? evidence : ['technical'];
-}
-
 export function inferAnalysisResearchReadiness(
-  report: DataQualityReport | undefined,
+  _report: DataQualityReport | undefined,
 ): ResearchReadinessV1 {
-  const missingEvidence = inferEvidenceFromDataQuality(report);
-  const insufficient = !report || report.requiredAvailable === false || report.dataQualityTier === 'insufficient';
+  void _report;
   return {
     researchReady: false,
-    readinessState: insufficient ? 'insufficient' : 'observe_only',
-    verdictLabel: insufficient ? '证据不足' : '仅观察',
-    blockingReasons: insufficient ? ['missing_required_evidence'] : [],
-    missingEvidence,
+    readinessState: 'insufficient',
+    verdictLabel: '证据不足',
+    blockingReasons: ['missing_required_evidence'],
+    missingEvidence: [],
     sourceAuthority: 'unavailable',
-    freshnessFloor: report?.staleSources?.length ? 'stale' : 'unknown',
-    nextEvidenceNeeded: insufficient
-      ? ['补齐关键研究证据后再判断']
-      : ['等待明确研究就绪结论后再升级判断'],
+    freshnessFloor: 'unknown',
+    nextEvidenceNeeded: ['等待明确研究就绪合同后再复核'],
   };
-}
-
-function deriveScannerSourceAuthority(frame: ScannerContextSignalFrame | null | undefined): ResearchSourceAuthority {
-  if (frame?.sourceAuthorityAllowed === true && frame?.scoreContributionAllowed === true) return 'scoreGradeAllowed';
-  if (frame?.observationOnly === true || frame?.scoreContributionAllowed === false) return 'observationOnly';
-  return 'unavailable';
 }
 
 export function inferScannerResearchReadiness(
@@ -782,22 +779,17 @@ export function inferScannerResearchReadiness(
     };
   }
 
-  const selectedCount = runDetail.summary?.selectedCount ?? runDetail.shortlist?.length ?? 0;
-  const failedCount = (runDetail.summary?.dataFailedCount ?? 0) + (runDetail.summary?.errorCount ?? 0);
-  const insufficient = selectedCount <= 0 && failedCount > 0;
   return {
     researchReady: false,
-    readinessState: insufficient ? 'insufficient' : 'observe_only',
-    verdictLabel: insufficient ? '证据不足' : '仅观察',
-    blockingReasons: insufficient ? ['missing_required_evidence'] : [],
-    missingEvidence: insufficient ? ['liquidity', 'source_authority'] : [],
-    sourceAuthority: deriveScannerSourceAuthority(frame?.liquidityFrame || frame?.macroRegime),
-    freshnessFloor: (frame?.marketReadiness?.freshnessFloor || frame?.liquidityFrame?.freshness || frame?.macroRegime?.freshness || 'unknown') as ResearchFreshnessFloor,
+    readinessState: 'insufficient',
+    verdictLabel: '证据不足',
+    blockingReasons: ['missing_required_evidence'],
+    missingEvidence: [],
+    sourceAuthority: 'unavailable',
+    freshnessFloor: 'unknown',
     nextEvidenceNeeded: frame?.marketReadiness?.nextEvidenceNeeded?.length
       ? frame.marketReadiness.nextEvidenceNeeded
-      : insufficient
-        ? ['补齐市场框架与候选证据后再复核']
-        : ['结合市场、流动性与主题框架继续观察'],
+      : ['等待显式研究就绪合同后再复核'],
   };
 }
 

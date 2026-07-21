@@ -2,6 +2,7 @@ import apiClient from './index';
 import { normalizeMarketIntelligenceEvidenceItem } from './marketIntelligenceEvidence';
 import { toCamelCase } from './utils';
 import type { InvestorSignalAssetPressure, InvestorSignalContract } from '../types/scanner';
+import { projectMarketTruth } from '../utils/consumerDataQualityViewModel';
 
 export type LiquidityMonitorFreshness = 'live' | 'cached' | 'delayed' | 'partial' | 'stale' | 'fallback' | 'mock' | 'error' | 'unavailable';
 export type LiquidityEvidenceFreshness = LiquidityMonitorFreshness | 'fresh' | 'synthetic' | 'unknown';
@@ -288,7 +289,7 @@ function normalizeInvestorSignalAssetPressure(
   return {
     asset: item.asset || null,
     pressure: item.pressure || null,
-    freshness: item.freshness || null,
+    freshness: item.freshness,
     isFallback: item.isFallback === true,
     isStale: item.isStale === true,
     isPartial: item.isPartial === true,
@@ -317,12 +318,19 @@ function normalizeCapitalFlowSignal(
 function normalizeLiquidityImpulseEvidenceItem(
   item?: Partial<LiquidityImpulseSynthesisEvidenceItem> | null,
 ): LiquidityImpulseSynthesisEvidenceItem | null {
-  return normalizeMarketIntelligenceEvidenceItem<LiquidityImpulseSynthesisEvidenceItem>(item, {
+  const normalized = normalizeMarketIntelligenceEvidenceItem<LiquidityImpulseSynthesisEvidenceItem>(item, {
     additionalFields: (evidenceItem) => ({
       includedInScore: evidenceItem.includedInScore,
       proxyOnly: evidenceItem.proxyOnly,
     }),
   });
+  if (!normalized) return null;
+  const truth = projectMarketTruth(normalized);
+  return {
+    ...normalized,
+    observationOnly: truth.observationOnly ?? normalized.observationOnly,
+    proxyOnly: truth.source.class === 'proxy' ? true : normalized.proxyOnly,
+  };
 }
 
 function normalizeLiquidityImpulseSynthesis(
@@ -373,12 +381,15 @@ function normalizeOfficialRiskBundleFamily(
     label: family.label || String(family.familyId),
     required: family.required === true,
     status: family.status || 'missing',
-    sourceType: family.sourceType || '',
-    sourceAuthorityAllowed: family.sourceAuthorityAllowed === true,
-    scoreAuthorityEligible: family.scoreAuthorityEligible === true,
-    observationOnly: family.observationOnly !== false,
-    freshness: family.freshness || 'unavailable',
-    asOf: family.asOf || null,
+    sourceType: family.sourceType || 'unknown',
+    ...(typeof family.sourceAuthorityAllowed === 'boolean'
+      ? { sourceAuthorityAllowed: family.sourceAuthorityAllowed } : {}),
+    ...(typeof family.scoreAuthorityEligible === 'boolean'
+      ? { scoreAuthorityEligible: family.scoreAuthorityEligible } : {}),
+    ...(typeof family.observationOnly === 'boolean'
+      ? { observationOnly: family.observationOnly } : {}),
+    freshness: family.freshness || 'unknown',
+    asOf: family.asOf,
     freshnessWindow: family.freshnessWindow || '',
     requiredSeries: Array.isArray(family.requiredSeries) ? family.requiredSeries.filter(Boolean) : [],
     fulfilledSeries: Array.isArray(family.fulfilledSeries) ? family.fulfilledSeries.filter(Boolean) : [],
@@ -399,12 +410,14 @@ function normalizeOfficialRiskBundleReadiness(
   return {
     contractVersion: readiness.contractVersion,
     status: readiness.status || 'missing',
-    scoreAuthority: readiness.scoreAuthority || 'observation_only',
-    scoreAuthorityEligible: readiness.scoreAuthorityEligible === true,
-    observationOnly: readiness.observationOnly !== false,
+    scoreAuthority: readiness.scoreAuthority || 'unknown',
+    ...(typeof readiness.scoreAuthorityEligible === 'boolean'
+      ? { scoreAuthorityEligible: readiness.scoreAuthorityEligible } : {}),
+    ...(typeof readiness.observationOnly === 'boolean'
+      ? { observationOnly: readiness.observationOnly } : {}),
     sourceAuthorityState: readiness.sourceAuthorityState,
-    asOf: readiness.asOf || null,
-    freshness: readiness.freshness || 'unavailable',
+    asOf: readiness.asOf,
+    freshness: readiness.freshness || 'unknown',
     requiredFamilies: Array.isArray(readiness.requiredFamilies) ? readiness.requiredFamilies.filter(Boolean) : [],
     availableFamilies: Array.isArray(readiness.availableFamilies) ? readiness.availableFamilies.filter(Boolean) : [],
     partialFamilies: Array.isArray(readiness.partialFamilies) ? readiness.partialFamilies.filter(Boolean) : [],
@@ -454,73 +467,64 @@ const OFFICIAL_RISK_FAMILY_LABELS: Record<string, string> = {
   creditStress: '信用压力',
 };
 
-function officialRiskBundleLabel(readiness?: OfficialRiskBundleReadiness | null): OfficialRiskBundleReadinessView['bundleLabel'] {
-  if (!readiness) return '官方风险包待补证';
-  if (readiness.status === 'available' && readiness.scoreAuthority === 'eligible') return '官方风险包可用';
-  if (readiness.status === 'partial') return '官方风险包部分待补';
-  if (readiness.status === 'stale') return '官方风险包待更新';
-  if (readiness.status === 'blocked') return '官方风险包待补证';
-  return '官方风险包待补证';
-}
-
-function officialRiskBundleVariant(readiness?: OfficialRiskBundleReadiness | null): OfficialRiskBundleReadinessView['bundleVariant'] {
-  if (!readiness) return 'neutral';
-  if (readiness.status === 'available' && readiness.scoreAuthority === 'eligible') return 'success';
-  if (readiness.status === 'partial') return 'info';
-  if (readiness.status === 'stale' || readiness.status === 'blocked') return 'caution';
-  return 'neutral';
-}
-
-function officialRiskFamilyStatusLabel(family: OfficialRiskBundleFamilyReadiness): string {
-  if (family.status === 'available' && !family.required) return '仅观察';
-  if (family.status === 'available') return '可用';
-  if (family.status === 'partial') return '部分待补';
-  if (family.status === 'stale' || family.freshness === 'stale') return '待更新';
-  if (family.status === 'blocked' || family.blockedSeries.length > 0) return '权限待确认';
-  return '待补证';
-}
-
-function officialRiskFamilyVariant(family: OfficialRiskBundleFamilyReadiness): OfficialRiskBundleReadinessChip['variant'] {
-  if (family.status === 'available' && !family.required) return 'info';
-  if (family.status === 'available') return 'success';
-  if (family.status === 'partial') return 'info';
-  if (family.status === 'stale' || family.status === 'blocked') return 'caution';
-  return 'neutral';
-}
-
-function officialRiskBundleSummary(readiness?: OfficialRiskBundleReadiness | null): string {
+export function buildOfficialRiskBundleReadinessView(
+  readiness?: OfficialRiskBundleReadiness | null,
+): OfficialRiskBundleReadinessView {
   if (!readiness) {
-    return '官方风险包未返回，当前不从其他流动性线索推断。';
+    return {
+      bundleLabel: '官方风险包待补证',
+      bundleVariant: 'neutral',
+      chips: [],
+      summary: '官方风险包未返回，当前不从其他流动性线索推断。',
+    };
   }
-  if (readiness.scoreAuthority === 'eligible') {
-    return 'VIX、利率与 Fed 流动性已满足官方来源、时效与完整性边界。';
-  }
+
+  const truth = projectMarketTruth(readiness);
+  const bundleLabel: OfficialRiskBundleReadinessView['bundleLabel'] = truth.availability === 'available'
+    && truth.scoreContribution === 'eligible'
+    ? '官方风险包可用'
+    : truth.freshness === 'stale'
+      ? '官方风险包待更新'
+      : truth.availability === 'partial' ? '官方风险包部分待补' : '官方风险包待补证';
+  const bundleVariant: OfficialRiskBundleReadinessView['bundleVariant'] = bundleLabel === '官方风险包可用'
+    ? 'success'
+    : bundleLabel === '官方风险包部分待补' ? 'info' : bundleLabel === '官方风险包待更新' ? 'caution' : 'neutral';
   const blockedCount = readiness.blockedFamilies.length;
   const staleCount = readiness.staleFamilies.length;
   const missingSeriesCount = readiness.missingRequiredSeries.length;
-  const cacheOnly = readiness.freshness === 'cached';
   const pieces = [
     missingSeriesCount > 0 ? `待补序列 ${missingSeriesCount} 项` : '',
     staleCount > 0 ? `待更新 ${staleCount} 项` : '',
     blockedCount > 0 ? `权限待确认 ${blockedCount} 项` : '',
-    cacheOnly ? '当前为缓存快照' : '',
-    readiness.scoreAuthority !== 'eligible' ? '仅观察，不升级结论' : '',
+    truth.freshness === 'cached' ? '当前为缓存快照' : '',
+    truth.scoreContribution !== 'eligible' ? '仅观察，不升级结论' : '',
   ].filter(Boolean);
-  return pieces.length ? pieces.join('；') : '官方风险包待补证，当前仅显示已返回的安全状态。';
-}
+  const summary = truth.scoreContribution === 'eligible'
+    ? 'VIX、利率与 Fed 流动性已满足官方来源、时效与完整性边界。'
+    : pieces.length ? pieces.join('；') : '官方风险包待补证，当前仅显示已返回的安全状态。';
 
-export function buildOfficialRiskBundleReadinessView(
-  readiness?: OfficialRiskBundleReadiness | null,
-): OfficialRiskBundleReadinessView {
-  const families = readiness?.families || [];
   return {
-    bundleLabel: officialRiskBundleLabel(readiness),
-    bundleVariant: officialRiskBundleVariant(readiness),
-    chips: families.map((family) => ({
-      key: family.familyId,
-      label: `${OFFICIAL_RISK_FAMILY_LABELS[family.familyId] || '风险线索'}${officialRiskFamilyStatusLabel(family)}`,
-      variant: officialRiskFamilyVariant(family),
-    })),
-    summary: officialRiskBundleSummary(readiness),
+    bundleLabel,
+    bundleVariant,
+    chips: readiness.families.map((family) => {
+      const familyTruth = projectMarketTruth(family);
+      const blocked = familyTruth.availability === 'blocked';
+      const label = familyTruth.availability === 'available' && !family.required
+        ? '仅观察'
+        : familyTruth.availability === 'available' && familyTruth.scoreContribution === 'eligible'
+          ? '可用'
+          : familyTruth.freshness === 'stale'
+            ? '待更新'
+            : blocked ? '权限待确认' : familyTruth.availability === 'partial' ? '部分待补' : '待补证';
+      const variant: OfficialRiskBundleReadinessChip['variant'] = label === '可用'
+        ? 'success'
+        : label === '仅观察' || label === '部分待补' ? 'info' : label === '待更新' || label === '权限待确认' ? 'caution' : 'neutral';
+      return {
+        key: family.familyId,
+        label: `${OFFICIAL_RISK_FAMILY_LABELS[family.familyId] || '风险线索'}${label}`,
+        variant,
+      };
+    }),
+    summary,
   };
 }

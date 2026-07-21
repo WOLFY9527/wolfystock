@@ -1,5 +1,9 @@
 import apiClient from './index';
 import { toCamelCase } from './utils';
+import {
+  projectMarketTruth,
+  type MarketObservationTruthInput,
+} from '../utils/consumerDataQualityViewModel';
 
 export type MarketRiskDirection = 'increasing' | 'decreasing' | 'neutral';
 export type MarketPanelStatus = 'success' | 'partial' | 'unavailable' | 'failure';
@@ -56,37 +60,21 @@ export interface MarketConsumerDataQuality {
   available: boolean;
 }
 
-export interface MarketDataMeta {
+export interface MarketDataMeta extends MarketObservationTruthInput {
   source: string;
-  sourceLabel?: string;
-  sourceType?: string;
   providerHealth?: MarketProviderHealth;
   providerFreshness?: MarketProviderFreshness | null;
   dataQuality?: MarketConsumerDataQuality | null;
   updatedAt: string;
-  asOf?: string;
   freshness: MarketDataFreshness;
-  isProxy?: boolean;
-  isFallback?: boolean;
-  isStale?: boolean;
-  isPartial?: boolean;
-  isUnavailable?: boolean;
-  isRefreshing?: boolean;
   isFromSnapshot?: boolean;
   lastSuccessfulAt?: string;
   refreshError?: string | null;
   lastError?: string | null;
   delayMinutes?: number;
-  sourceTier?: string;
-  trustLevel?: string;
   sourceConfidence?: string | null;
-  observationOnly?: boolean;
-  sourceAuthorityAllowed?: boolean;
-  scoreContributionAllowed?: boolean;
   sourceAuthorityReason?: string | null;
-  sourceAuthorityRouteRejected?: boolean;
   routeRejectedReasonCodes?: string[];
-  reasonCodes?: string[];
   breadthClaimType?: string | null;
   officialExchangePublishedBreadth?: boolean;
   fulfilledMetrics?: string[];
@@ -187,29 +175,6 @@ function isMarketOverviewItemContract(value: unknown): value is MarketOverviewIt
   return value.freshness === undefined || isMarketDataFreshnessValue(value.freshness);
 }
 
-function hasExplicitUnavailableState(panel: Partial<MarketOverviewPanel>): boolean {
-  return Boolean(
-    panel.isUnavailable
-    || panel.source === 'unavailable'
-    || panel.source === 'error'
-    || panel.freshness === 'unavailable'
-    || panel.freshness === 'error'
-    || panel.providerHealth?.status === 'unavailable'
-    || panel.providerHealth?.status === 'error'
-    || panel.providerFreshness?.isUnavailable,
-  );
-}
-
-function hasExplicitFailureState(panel: Partial<MarketOverviewPanel>): boolean {
-  return Boolean(
-    hasExplicitUnavailableState(panel)
-    || hasText(panel.errorMessage)
-    || hasText(panel.refreshError)
-    || hasText(panel.lastError)
-    || (panel.isFallback && panel.freshness === 'fallback'),
-  );
-}
-
 export function isMarketOverviewPanelContract(value: unknown): value is MarketOverviewPanel {
   if (!isRecord(value)) {
     return false;
@@ -226,16 +191,27 @@ export function isMarketOverviewPanelContract(value: unknown): value is MarketOv
     return false;
   }
 
+  const truth = projectMarketTruth(panel);
+  const explicitlyUnavailable = truth.availability === 'unavailable'
+    || truth.availability === 'malformed'
+    || truth.freshness === 'unavailable'
+    || truth.freshness === 'error';
   if (panel.status === 'success' || panel.status === 'partial') {
-    const hasAuthority = !['unknown', 'unavailable', 'error'].includes(panel.source.trim().toLowerCase())
-      && !['unavailable', 'error', 'unknown'].includes(panel.freshness)
+    const hasObservationIdentity = !['unknown', 'unavailable', 'error'].includes(panel.source.trim().toLowerCase())
+      && !['unavailable', 'error', 'unknown'].includes(truth.freshness)
       && hasPanelEvidenceTime(panel);
-    return hasAuthority && (panel.status === 'success' || panel.items.length > 0);
+    return hasObservationIdentity && (panel.status === 'success' || panel.items.length > 0);
   }
   if (panel.status === 'unavailable') {
-    return hasExplicitUnavailableState(panel);
+    return explicitlyUnavailable;
   }
-  return hasExplicitFailureState(panel);
+  return Boolean(
+    explicitlyUnavailable
+    || hasText(panel.errorMessage)
+    || hasText(panel.refreshError)
+    || hasText(panel.lastError)
+    || (truth.source.class === 'fallback' && truth.freshness === 'fallback'),
+  );
 }
 
 export function assertMarketOverviewPanelContract(value: unknown): MarketOverviewPanel {
@@ -265,11 +241,19 @@ function normalizePanel(payload: unknown): MarketOverviewPanel {
     providerHealth: normalized.providerHealth,
     providerFreshness: normalized.providerFreshness,
     dataQuality: normalized.dataQuality,
-    updatedAt: normalized.updatedAt || normalized.lastRefreshAt,
+    updatedAt: normalized.updatedAt,
+    observedAt: normalized.observedAt,
+    marketTime: normalized.marketTime,
+    providerTime: normalized.providerTime,
+    receivedAt: normalized.receivedAt,
+    generatedAt: normalized.generatedAt,
     asOf: normalized.asOf,
+    expiresAt: normalized.expiresAt,
     freshness: normalized.freshness,
     isProxy: normalized.isProxy,
     isFallback: normalized.isFallback,
+    isSynthetic: normalized.isSynthetic,
+    isFixture: normalized.isFixture,
     isStale: normalized.isStale,
     isPartial: normalized.isPartial,
     isUnavailable: normalized.isUnavailable,
@@ -280,9 +264,15 @@ function normalizePanel(payload: unknown): MarketOverviewPanel {
     lastError: normalized.lastError,
     delayMinutes: normalized.delayMinutes,
     sourceTier: normalized.sourceTier,
+    sourceClass: normalized.sourceClass,
     trustLevel: normalized.trustLevel,
     sourceConfidence: normalized.sourceConfidence,
     observationOnly: normalized.observationOnly,
+    decisionGrade: normalized.decisionGrade,
+    readiness: normalized.readiness,
+    readinessState: normalized.readinessState,
+    domainReady: normalized.domainReady,
+    runtimeAvailable: normalized.runtimeAvailable,
     sourceAuthorityAllowed: normalized.sourceAuthorityAllowed,
     scoreContributionAllowed: normalized.scoreContributionAllowed,
     sourceAuthorityReason: normalized.sourceAuthorityReason,
