@@ -144,6 +144,8 @@ def test_build_artifact_uses_temporary_output_and_binds_managed_environment(
 ) -> None:
     repo, artifact_path = _write_fixture(tmp_path)
     shutil.rmtree(repo / "static")
+    playwright_output = repo / "playwright-output"
+    monkeypatch.setenv("WOLFYSTOCK_FRONTEND_OUTPUT_DIR", str(playwright_output))
     _patch_current(monkeypatch)
     commands: list[list[str]] = []
 
@@ -167,10 +169,12 @@ def test_build_artifact_uses_temporary_output_and_binds_managed_environment(
     )
     monkeypatch.setattr("scripts.uat_fresh_build_verifier.read_backend_info", lambda _repo: object())
 
-    result = artifact.build_artifact(repo, artifact_path, expected_sha="candidate")
+    result = artifact.prepare_playwright_artifact(repo, expected_sha="candidate")
 
     assert result.ok is True
-    assert artifact_path.is_file()
+    prepared_artifact = playwright_output / artifact.PLAYWRIGHT_ARTIFACT_DIRECTORY / artifact.ARTIFACT_FILENAME
+    assert prepared_artifact.is_file()
+    assert not artifact_path.exists()
     assert result.payload["candidate"] == {"commit": "candidate", "tree": "tree", "dirty": False}
     assert result.payload["environment"]["managed"]["environmentFingerprint"] == "e" * 64
     assert set(result.payload["environment"]["managed"]["componentFingerprints"]) == {
@@ -179,6 +183,11 @@ def test_build_artifact_uses_temporary_output_and_binds_managed_environment(
         "browser",
         "rg",
     }
+    assert [item["command"] for item in result.payload["typecheck"]["commands"]] == [
+        "npm --prefix apps/dsa-web exec -- tsc --noEmit --incremental false -p apps/dsa-web/tsconfig.app.json",
+        "npm --prefix apps/dsa-web exec -- tsc --noEmit --incremental false -p apps/dsa-web/tsconfig.node.json",
+    ]
+    assert result.payload["artifact"]["candidate"]["tree"] == "tree"
     bundle = next(command for command in commands if "build:bundle" in command)
     output_dir = Path(bundle[bundle.index("--outDir") + 1])
     assert output_dir != repo / "static"
@@ -206,9 +215,9 @@ def test_build_artifact_rejects_existing_mismatch_without_replacing_identity(mon
     _manifest(repo, artifact_path)
     (repo / "static" / "assets" / "index.js").write_text("tampered\n", encoding="utf-8")
     before = artifact_path.read_bytes()
-    monkeypatch.setattr(artifact, "run_typecheck", lambda *_args: (_ for _ in ()).throw(AssertionError("must not rebuild")))
+    monkeypatch.setattr(artifact, "run_typecheck", lambda *_args: artifact.ArtifactResult(True, {"commands": []}))
 
-    result = artifact.build_artifact(repo, artifact_path, expected_sha="candidate")
+    result = artifact.prepare_playwright_artifact(repo, artifact_path, expected_sha="candidate")
 
     assert result.ok is False
     assert {"existing_artifact_verification_failed", "artifact_asset_mismatch"} <= set(result.error_codes)
@@ -221,10 +230,12 @@ def test_verify_artifact_rejects_dirty_tree_and_wrong_sha(monkeypatch, tmp_path:
     _manifest(repo, artifact_path)
     monkeypatch.setattr(artifact, "_candidate", lambda _repo, expected_sha=None: ({"commit": "other", "tree": "other-tree", "dirty": True}, ["worktree_dirty", "candidate_sha_mismatch"]))
 
-    result = artifact.verify_artifact(repo, artifact_path, expected_sha="candidate")
+    monkeypatch.setattr(artifact, "run_typecheck", lambda *_args: (_ for _ in ()).throw(AssertionError("must not typecheck")))
+
+    result = artifact.prepare_playwright_artifact(repo, artifact_path, expected_sha="candidate")
 
     assert result.ok is False
-    assert {"worktree_dirty", "candidate_sha_mismatch", "artifact_candidate_mismatch"} <= set(result.error_codes)
+    assert {"worktree_dirty", "candidate_sha_mismatch"} <= set(result.error_codes)
 
 
 def test_verify_artifact_rejects_lock_config_missing_and_tampered_assets(monkeypatch, tmp_path: Path) -> None:
@@ -265,3 +276,23 @@ def test_verify_artifact_rejects_manifest_tampering(monkeypatch, tmp_path: Path)
 
     assert result.ok is False
     assert "artifact_manifest_tampered" in result.error_codes
+
+    source_repo = Path(__file__).resolve().parents[2]
+    config = (source_repo / "apps" / "dsa-web" / "playwright.config.ts").read_text(encoding="utf-8")
+    package = json.loads((source_repo / "apps" / "dsa-web" / "package.json").read_text(encoding="utf-8"))
+    assert package["scripts"]["build:playwright-artifact"] == "python ../../scripts/web_build_artifact.py playwright"
+    assert "WOLFYSTOCK_FRONTEND_OUTPUT_DIR" in config
+    assert "WOLFYSTOCK_RELEASE_CANDIDATE_SHA" in config
+    assert "fileURLToPath(import.meta.url)" in config
+    assert "cwd: configRoot" in config
+    assert "playwright-web-artifact" in config
+    assert "npm run build:playwright-artifact -- --expected-sha ${candidateSha}" in config
+    assert "&& ${preview}" in config
+    assert "npm run build &&" not in config
+    assert "usesExternalServer ? {}" in config
+    assert "prebuiltArtifact" in config
+    assert "--expected-sha" in config
+    assert "executablePath: managedChromiumExecutable" in config
+    assert "channel:" not in config
+    assert "node_modules/.tmp" not in config
+    assert "node_modules/.vite" not in config

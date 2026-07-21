@@ -27,6 +27,7 @@ ARTIFACT_CONTRACT = "wolfystock_web_build_artifact_v1"
 ARTIFACT_FILENAME = ".wolfystock-web-build-artifact.json"
 WEB_RELATIVE = Path("apps/dsa-web")
 STATIC_RELATIVE = Path("static")
+PLAYWRIGHT_ARTIFACT_DIRECTORY = "playwright-web-artifact"
 CONFIG_FILES = (
     Path("package.json"),
     Path("vite.config.ts"),
@@ -286,18 +287,14 @@ def run_typecheck(repo_root: Path | str) -> ArtifactResult:
     return ArtifactResult(True, {"commands": command_log})
 
 
-def build_artifact(
-    repo_root: Path | str,
-    artifact_path: Path | str | None = None,
+def _build_artifact(
+    repo: Path,
+    artifact: Path,
     *,
     expected_sha: str | None = None,
+    prepared_typecheck: ArtifactResult | None = None,
 ) -> ArtifactResult:
-    repo = Path(repo_root).resolve()
-    static_root = repo / STATIC_RELATIVE
-    artifact = Path(artifact_path).resolve() if artifact_path else static_root / ARTIFACT_FILENAME
-    canonical_artifact = (static_root / ARTIFACT_FILENAME).resolve()
-    if artifact != canonical_artifact:
-        return ArtifactResult(False, {}, ["artifact_path_not_canonical"])
+    static_root = artifact.parent
     if artifact.exists():
         existing = verify_artifact(repo, artifact, expected_sha=expected_sha)
         if existing.ok:
@@ -317,7 +314,7 @@ def build_artifact(
     if errors:
         return ArtifactResult(False, {"candidate": candidate, "dependencyIntegrity": integrity}, sorted(set(errors)))
 
-    typecheck = run_typecheck(repo)
+    typecheck = prepared_typecheck or run_typecheck(repo)
     command_log = list(typecheck.payload.get("commands", []))
     if not typecheck.ok:
         return ArtifactResult(False, {"candidate": candidate, "commands": command_log}, typecheck.error_codes)
@@ -370,9 +367,75 @@ def build_artifact(
             if any(static_root.iterdir()):
                 return ArtifactResult(False, {}, ["artifact_destination_changed"])
             static_root.rmdir()
+        static_root.parent.mkdir(parents=True, exist_ok=True)
         staged_root.replace(static_root)
         _make_read_only(static_root)
         return staged_verification
+
+
+def build_artifact(
+    repo_root: Path | str,
+    artifact_path: Path | str | None = None,
+    *,
+    expected_sha: str | None = None,
+    prepared_typecheck: ArtifactResult | None = None,
+) -> ArtifactResult:
+    """Build the canonical release/UAT Web artifact under static/."""
+    repo = Path(repo_root).resolve()
+    static_root = repo / STATIC_RELATIVE
+    artifact = Path(artifact_path).resolve() if artifact_path else static_root / ARTIFACT_FILENAME
+    canonical_artifact = (static_root / ARTIFACT_FILENAME).resolve()
+    if artifact != canonical_artifact:
+        return ArtifactResult(False, {}, ["artifact_path_not_canonical"])
+    return _build_artifact(repo, artifact, expected_sha=expected_sha, prepared_typecheck=prepared_typecheck)
+
+
+def prepare_playwright_artifact(
+    repo_root: Path | str,
+    artifact_path: Path | str | None = None,
+    *,
+    expected_sha: str | None = None,
+) -> ArtifactResult:
+    """Prepare the canonical artifact required by configured Playwright preview."""
+    repo = Path(repo_root).resolve()
+    if artifact_path is None:
+        output_root = os.environ.get("WOLFYSTOCK_FRONTEND_OUTPUT_DIR", "").strip()
+        if not output_root or not Path(output_root).is_absolute():
+            return ArtifactResult(False, {}, ["playwright_output_directory_unavailable"])
+        artifact = Path(output_root).resolve() / PLAYWRIGHT_ARTIFACT_DIRECTORY / ARTIFACT_FILENAME
+    else:
+        artifact = Path(artifact_path).resolve()
+    candidate, errors = _candidate(repo, expected_sha)
+    environment, environment_errors = _environment_contract(repo)
+    errors.extend(environment_errors)
+    if errors:
+        return ArtifactResult(
+            False,
+            {"candidate": candidate, "environment": environment},
+            sorted(set(errors)),
+        )
+
+    typecheck = run_typecheck(repo)
+    if not typecheck.ok:
+        return ArtifactResult(
+            False,
+            {"candidate": candidate, "environment": environment, "typecheck": typecheck.payload},
+            typecheck.error_codes,
+        )
+
+    prepared = _build_artifact(
+        repo,
+        artifact,
+        expected_sha=expected_sha,
+        prepared_typecheck=typecheck,
+    )
+    payload = {
+        "candidate": candidate,
+        "environment": environment,
+        "typecheck": typecheck.payload,
+        "artifact": prepared.payload,
+    }
+    return ArtifactResult(prepared.ok, payload, prepared.error_codes, prepared.warning_codes)
 
 
 def verify_artifact(
@@ -426,20 +489,23 @@ def verify_artifact(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Create or verify an immutable Web build artifact.")
-    parser.add_argument("action", choices=("build", "manifest", "typecheck", "verify"))
+    parser.add_argument("action", choices=("build", "manifest", "playwright", "typecheck", "verify"))
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--artifact", type=Path, default=None)
     parser.add_argument("--expected-sha", default=None)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
-    artifact = args.artifact or args.repo_root / STATIC_RELATIVE / ARTIFACT_FILENAME
     if args.action == "build":
+        artifact = args.artifact or args.repo_root / STATIC_RELATIVE / ARTIFACT_FILENAME
         result = build_artifact(args.repo_root, artifact, expected_sha=args.expected_sha)
+    elif args.action == "playwright":
+        result = prepare_playwright_artifact(args.repo_root, args.artifact, expected_sha=args.expected_sha)
     elif args.action == "manifest":
         result = generate_manifest(args.repo_root)
     elif args.action == "typecheck":
         result = run_typecheck(args.repo_root)
     else:
+        artifact = args.artifact or args.repo_root / STATIC_RELATIVE / ARTIFACT_FILENAME
         result = verify_artifact(args.repo_root, artifact, expected_sha=args.expected_sha)
     if args.json:
         print(json.dumps({"ok": result.ok, "errorCodes": result.error_codes, "manifest": result.payload}, ensure_ascii=False, indent=2, sort_keys=True))
