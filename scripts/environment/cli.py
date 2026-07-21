@@ -35,6 +35,26 @@ def _emit(payload: dict[str, Any], *, error: bool = False) -> None:
     )
 
 
+def _format_development_result(payload: dict[str, Any], *, launcher: Path) -> str:
+    status = payload.get("status")
+    if status in {"stopped", "already_stopped"}:
+        return "WolfyStock stopped"
+    heading = "WolfyStock is already running" if status == "already_running" else "WolfyStock is ready"
+    return (
+        f"{heading}\n\n"
+        f"Frontend: {payload['frontendUrl']}\n"
+        f"Backend:  {payload['backendUrl']}\n\n"
+        f"Stop: {launcher} dev --stop"
+    )
+
+
+def _emit_development_result(payload: dict[str, Any], *, root: Path, as_json: bool) -> None:
+    if as_json:
+        _emit(payload)
+    else:
+        print(_format_development_result(payload, launcher=root / "wolfy"))
+
+
 def _root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -63,9 +83,9 @@ def _parser() -> argparse.ArgumentParser:
     qualify.add_argument("--baseline-commit")
     qualify.add_argument("--baseline-evidence", type=Path)
     qualify.add_argument("--output", type=Path)
-    development = subparsers.add_parser("dev", help="start isolated frontend and backend services")
-    development.add_argument("--json", action="store_true", required=True)
-    development.add_argument("--stop", metavar="RUN_ID")
+    development = subparsers.add_parser("dev", help="start the local frontend and backend")
+    development.add_argument("--json", action="store_true")
+    development.add_argument("--stop", nargs="?", const="", metavar="RUN_ID")
     lock = subparsers.add_parser("lock", help="inspect or explicitly update reviewed dependency locks")
     lock_families = lock.add_subparsers(dest="lock_family", required=True)
     python_lock = lock_families.add_parser("python", help="manage the authoritative Python lock family")
@@ -227,6 +247,7 @@ def _qualify(root: Path, manager: EnvironmentManager, args: argparse.Namespace, 
 def main(argv: Sequence[str] | None = None) -> int:
     raw = list(argv if argv is not None else sys.argv[1:])
     parser = _parser()
+    args: argparse.Namespace | None = None
     try:
         args = parser.parse_args(raw)
         root = _root()
@@ -238,7 +259,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             _emit(payload)
             return 0
+        if args.command == "dev" and args.stop is not None:
+            from .cache import environment_cache_root
+            from .services import stop_development_services
+
+            payload = stop_development_services(
+                environment_cache_root(), args.stop or None
+            )
+            _emit_development_result(payload, root=root, as_json=args.json)
+            return 0
         baseline = _validate_baseline(args) if args.command == "qualify-env" else None
+        if args.command == "dev":
+            try:
+                require_managed_python(root)
+            except EnvironmentFailure:
+                EnvironmentManager(root).ensure(
+                    offline=False, run_id="dev-bootstrap-" + secrets.token_hex(8)
+                )
         if args.command != "bootstrap":
             _managed_reexec(root, raw)
             require_managed_python(root)
@@ -255,18 +292,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _execute(root, manager, args)
         if args.command == "qualify-env":
             return _qualify(root, manager, args, baseline)
-        from .services import run_development_services, stop_development_services
+        from .services import run_development_services
 
-        payload = (
-            stop_development_services(manager.cache_root, args.stop)
-            if args.stop
-            else run_development_services(root, manager)
-        )
-        _emit(payload)
-        return 0 if payload.get("status") in {"ready", "stopped", "already_stopped"} else 1
+        payload = run_development_services(root, manager, isolated=args.json)
+        _emit_development_result(payload, root=root, as_json=args.json)
+        return 0 if payload.get("status") in {"ready", "already_running"} else 1
     except EnvironmentFailure as exc:
-        _emit({"status": "error", "reasonCode": exc.code, "message": exc.detail}, error=True)
+        if args is not None and args.command == "dev" and not args.json:
+            operation = "stop" if args.stop is not None else "start"
+            print(f"WolfyStock could not {operation}: {exc.detail}", file=sys.stderr)
+        else:
+            _emit({"status": "error", "reasonCode": exc.code, "message": exc.detail}, error=True)
         return 1
     except ValueError as exc:
-        _emit({"status": "error", "reasonCode": "environment_input_invalid", "message": str(exc)}, error=True)
+        if args is not None and args.command == "dev" and not args.json:
+            print(f"WolfyStock could not start: {exc}", file=sys.stderr)
+        else:
+            _emit({"status": "error", "reasonCode": "environment_input_invalid", "message": str(exc)}, error=True)
         return 1

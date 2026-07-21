@@ -61,9 +61,9 @@ This manual is a generated navigation and integrity catalog. It does not copy do
 | [.github/ISSUE_TEMPLATE/bug_report.md](../../.github/ISSUE_TEMPLATE/bug_report.md) | platform_template | active | yes | GitHub bug-report form body | 608e6c365e37 |
 | [.github/ISSUE_TEMPLATE/feature_request.md](../../.github/ISSUE_TEMPLATE/feature_request.md) | platform_template | active | yes | GitHub feature-request form body | 3940adddc1e1 |
 | [.github/PULL_REQUEST_TEMPLATE.md](../../.github/PULL_REQUEST_TEMPLATE.md) | platform_template | active | yes | GitHub pull-request template | 0dea45ebf511 |
-| [AGENTS.md](../../AGENTS.md) | canonical | active | yes | Repository AI rules and protected-domain boundaries | 35ab8fec9728 |
-| [CLAUDE.md](../../CLAUDE.md) | tool_entry | mirror | no | Claude automatic-discovery symlink | 35ab8fec9728 |
-| [README.md](../../README.md) | canonical | active | yes | Human product orientation and quick start | 0b22ed2ef427 |
+| [AGENTS.md](../../AGENTS.md) | canonical | active | yes | Repository AI rules and protected-domain boundaries | 8feefcff2c19 |
+| [CLAUDE.md](../../CLAUDE.md) | tool_entry | mirror | no | Claude automatic-discovery symlink | 8feefcff2c19 |
+| [README.md](../../README.md) | canonical | active | yes | Human product orientation and quick start | 2fcc0c10e497 |
 | [docs/README.md](../README.md) | generated | generated | no | Generated platform-discoverable documentation entry and task router | generated |
 | [docs/architecture/overview.md](../architecture/overview.md) | canonical | active | yes | System map, runtime entrypoints, and component ownership | cfe458a5a97c |
 | [docs/audits/README.md](../audits/README.md) | canonical | active | yes | Temporary audit evidence lifecycle policy | 4e9350acf50f |
@@ -75,7 +75,7 @@ This manual is a generated navigation and integrity catalog. It does not copy do
 | [docs/contracts/data-trust.md](../contracts/data-trust.md) | canonical | active | yes | Cross-domain truth, source, readiness, no-advice, and protected semantics | 976c004be4f6 |
 | [docs/contracts/historical-market-data.md](../contracts/historical-market-data.md) | canonical | active | yes | Historical OHLCV foundation contract | be8438c651f5 |
 | [docs/design/frontend.md](../design/frontend.md) | canonical | active | yes | Consumer frontend design and implementation contract | 7b033c9fcc31 |
-| [docs/development/environment.md](../development/environment.md) | canonical | active | yes | Dependency, bootstrap, target, snapshot, runtime, and configuration authority | cf13b7b2b6c7 |
+| [docs/development/environment.md](../development/environment.md) | canonical | active | yes | Dependency, bootstrap, target, snapshot, runtime, and configuration authority | 5e07212d571b |
 | [docs/development/validation.md](../development/validation.md) | canonical | active | yes | Validation command routing and evidence reference | f1f4f1d6949d |
 | [docs/generated/AI_PROJECT_MANUAL.md](AI_PROJECT_MANUAL.md) | generated | generated | no | Generated complete documentation catalog | generated |
 | [docs/operations/database.md](../operations/database.md) | canonical | active | yes | Database diagnostics, baseline artifacts, Phase F, and DuckDB runbook | 96c9087a86be |

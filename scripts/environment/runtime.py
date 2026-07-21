@@ -287,6 +287,65 @@ def project_test_environment(
     return preserved
 
 
+def project_development_environment(
+    source: dict[str, str],
+    context: RunContext,
+    *,
+    repository_root: Path,
+    managed_python: Path,
+    node_bin: Path,
+) -> dict[str, str]:
+    """Project local development onto managed tools and run-scoped mutable state."""
+
+    projected = dict(source)
+    for name in (
+        "COVERAGE_FILE",
+        "DSA_WEB_PLAYWRIGHT_EXTERNAL_SERVER",
+        "NODE_OPTIONS",
+        "PLAYWRIGHT_JSON_OUTPUT_NAME",
+        "PLAYWRIGHT_OUTPUT_DIR",
+        "PYTHONHOME",
+        "PYTHONPATH",
+        "PYTEST_ADDOPTS",
+        "PYTEST_PLUGINS",
+        "VIRTUAL_ENV",
+        "WOLFYSTOCK_RELEASE_CANDIDATE_SHA",
+        "WOLFYSTOCK_TEST_OFFLINE",
+        "WOLFYSTOCK_TEST_RUN_ID",
+    ):
+        projected.pop(name, None)
+    projected.update(
+        {
+            "PATH": os.pathsep.join(
+                (
+                    str(managed_python.parent),
+                    str(node_bin),
+                    "/usr/bin",
+                    "/bin",
+                )
+            ),
+            "DATABASE_PATH": str(context.database_path),
+            "DUCKDB_DATABASE_PATH": str(context.duckdb_path),
+            "ENV_FILE": str(repository_root / ".env"),
+            "LOG_DIR": str(context.logs_dir),
+            "HOME": str(context.root / "home"),
+            "TMPDIR": str(context.temp_dir),
+            "TEMP": str(context.temp_dir),
+            "TMP": str(context.temp_dir),
+            "XDG_CACHE_HOME": str(context.cache_dir),
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "WOLFYSTOCK_TEST_UPLOAD_DIR": str(context.uploads_dir),
+            "WOLFYSTOCK_FRONTEND_OUTPUT_DIR": str(context.frontend_dir),
+            "WOLFYSTOCK_SERVICE_STATE_DIR": str(context.service_dir),
+            "WOLFYSTOCK_ENV_POLICY_VERSION": ENVIRONMENT_POLICY_VERSION,
+            "CRYPTO_REALTIME_ENABLED": "false",
+            "WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS": "true",
+        }
+    )
+    (context.root / "home").mkdir(parents=True, exist_ok=True)
+    return projected
+
+
 def cleanup_run(context: RunContext, *, success: bool, retain_failures: int = 3) -> None:
     if not context.root.exists():
         return

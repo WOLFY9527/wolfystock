@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -14,10 +15,21 @@ from typing import Any, TYPE_CHECKING
 
 from .errors import EnvironmentFailure
 from .manager import managed_python_path
-from .runtime import cleanup_run, create_run_context, project_test_environment, write_run_json
+from .runtime import (
+    cleanup_run,
+    create_run_context,
+    project_development_environment,
+    project_test_environment,
+    write_run_json,
+)
 
 if TYPE_CHECKING:
     from .manager import EnvironmentManager
+
+
+DEFAULT_FRONTEND_PORT = 5173
+DEFAULT_BACKEND_PORT = 8000
+_RUN_ID = re.compile(r"dev-[a-z0-9-]{1,64}")
 
 
 def reserve_backend_socket() -> tuple[socket.socket, int]:
@@ -36,6 +48,36 @@ def reserve_frontend_port() -> int:
     finally:
         reservation.close()
     return port
+
+
+def _reserve_fixed_port(port: int) -> socket.socket:
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", port))
+        listener.listen(128)
+        return listener
+    except OSError as exc:
+        listener.close()
+        raise EnvironmentFailure(
+            "development_port_occupied",
+            f"port {port} is already in use; stop the process using it and run wolfy dev again",
+        ) from exc
+
+
+def reserve_fixed_service_ports(
+    *, frontend_port: int = DEFAULT_FRONTEND_PORT, backend_port: int = DEFAULT_BACKEND_PORT
+) -> tuple[socket.socket, socket.socket]:
+    frontend = _reserve_fixed_port(frontend_port)
+    try:
+        backend = _reserve_fixed_port(backend_port)
+    except EnvironmentFailure:
+        frontend.close()
+        raise
+    return frontend, backend
 
 
 def _terminate_process(process: Any) -> None:
@@ -148,10 +190,182 @@ def _wait_for_http(
 
 
 def _state_path(cache_root: Path, run_id: str) -> Path:
+    if _RUN_ID.fullmatch(run_id) is None:
+        raise EnvironmentFailure("development_run_id_invalid", "development run ID is invalid")
     return cache_root / "runs" / "active" / run_id / "services" / "dev.json"
 
 
-def run_development_services(root: Path, manager: "EnvironmentManager") -> dict[str, Any]:
+def _local_pointer_path(cache_root: Path) -> Path:
+    return cache_root / "runs" / "local-dev.json"
+
+
+def _write_local_pointer(cache_root: Path, run_id: str) -> None:
+    pointer = _local_pointer_path(cache_root)
+    pointer.parent.mkdir(parents=True, exist_ok=True)
+    temporary = pointer.with_name(f".{pointer.name}.{os.urandom(8).hex()}.tmp")
+    temporary.write_text(
+        json.dumps({"runId": run_id}, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, pointer)
+
+
+def _read_local_run_id(cache_root: Path) -> str | None:
+    pointer = _local_pointer_path(cache_root)
+    if not pointer.is_file():
+        return None
+    try:
+        payload = json.loads(pointer.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise EnvironmentFailure("development_state_invalid", "local development identity is invalid") from exc
+    run_id = payload.get("runId") if isinstance(payload, dict) else None
+    if not isinstance(run_id, str) or _RUN_ID.fullmatch(run_id) is None:
+        raise EnvironmentFailure("development_state_invalid", "local development identity is invalid")
+    return run_id
+
+
+def _remove_local_pointer(cache_root: Path, run_id: str) -> None:
+    if _read_local_run_id(cache_root) == run_id:
+        _local_pointer_path(cache_root).unlink(missing_ok=True)
+
+
+def _load_service_state(cache_root: Path, run_id: str) -> dict[str, Any] | None:
+    state_path = _state_path(cache_root, run_id)
+    if not state_path.is_file():
+        return None
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise EnvironmentFailure("development_state_invalid", "development service state is invalid") from exc
+    if not isinstance(state, dict) or state.get("schemaVersion") != "wolfystock_dev_service_state_v1":
+        raise EnvironmentFailure("development_state_invalid", "development service state is invalid")
+    if state.get("runId") != run_id or not isinstance(state.get("processes"), dict):
+        raise EnvironmentFailure("development_state_invalid", "development service state is invalid")
+    return state
+
+
+def _validated_processes(state: dict[str, Any], run_id: str) -> dict[str, dict[str, Any]]:
+    processes = state["processes"]
+    validated: dict[str, dict[str, Any]] = {}
+    for name, details in processes.items():
+        identity = details.get("identity") if isinstance(details, dict) else None
+        expected_identity = (
+            (
+                isinstance(identity, str)
+                and (
+                    identity == f"wolfy_service.py --run-id {run_id}"
+                    or identity.replace("\\", "/").endswith(
+                        f"/scripts/wolfy_service.py --run-id {run_id}"
+                    )
+                )
+            )
+            if name == "backend"
+            else (
+                isinstance(identity, str)
+                and run_id in identity
+                and identity.replace("\\", "/").endswith("/services/vite.wolfy.config.ts")
+                if name == "frontend"
+                else False
+            )
+        )
+        if (
+            not isinstance(name, str)
+            or not isinstance(details, dict)
+            or type(details.get("pid")) is not int
+            or details["pid"] <= 0
+            or not expected_identity
+        ):
+            raise EnvironmentFailure("development_state_invalid", "development process identity is invalid")
+        validated[name] = details
+    if len({details["pid"] for details in validated.values()}) != len(validated):
+        raise EnvironmentFailure("development_state_invalid", "development process identity is invalid")
+    return validated
+
+
+def _processes_still_owned(state: dict[str, Any], run_id: str) -> dict[str, str]:
+    commands: dict[str, str] = {}
+    for name, details in _validated_processes(state, run_id).items():
+        command = _process_command(details["pid"])
+        if command is None:
+            continue
+        if details["identity"] not in command:
+            raise EnvironmentFailure(
+                "development_process_identity_mismatch", "refusing to manage an unrelated process"
+            )
+        commands[name] = command
+    return commands
+
+
+def _http_has_run_identity(url: str, run_id: str) -> bool:
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(url, timeout=1.0) as response:
+            payload = json.loads(response.read(16 * 1024))
+    except (OSError, urllib.error.URLError, json.JSONDecodeError, UnicodeDecodeError):
+        return False
+    return 200 <= response.status < 400 and isinstance(payload, dict) and payload.get("runId") == run_id
+
+
+def _http_is_ready(url: str) -> bool:
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(url, timeout=1.0) as response:
+            return 200 <= response.status < 400
+    except (OSError, urllib.error.URLError):
+        return False
+
+
+def _cleanup_stale_local_runtime(cache_root: Path, run_id: str) -> None:
+    context = create_run_context(cache_root, run_id=run_id)
+    cleanup_run(context, success=True)
+    _local_pointer_path(cache_root).unlink(missing_ok=True)
+
+
+def _running_local_payload(cache_root: Path) -> dict[str, Any] | None:
+    run_id = _read_local_run_id(cache_root)
+    if run_id is None:
+        return None
+    state = _load_service_state(cache_root, run_id)
+    if state is None:
+        _cleanup_stale_local_runtime(cache_root, run_id)
+        return None
+    owned = _processes_still_owned(state, run_id)
+    if not owned:
+        _cleanup_stale_local_runtime(cache_root, run_id)
+        return None
+    healthy = (
+        set(owned) == {"backend", "frontend"}
+        and _http_has_run_identity(
+            f"http://127.0.0.1:{DEFAULT_BACKEND_PORT}/__wolfy__/ready", run_id
+        )
+        and _http_has_run_identity(
+            f"http://127.0.0.1:{DEFAULT_FRONTEND_PORT}/__wolfy__/ready", run_id
+        )
+        and _http_is_ready(f"http://127.0.0.1:{DEFAULT_BACKEND_PORT}/api/health/live")
+        and _http_is_ready(f"http://127.0.0.1:{DEFAULT_FRONTEND_PORT}/")
+    )
+    if not healthy:
+        stop_development_services(cache_root, run_id)
+        _local_pointer_path(cache_root).unlink(missing_ok=True)
+        return None
+    processes = _validated_processes(state, run_id)
+    return {
+        "status": "already_running",
+        "runId": run_id,
+        "frontendUrl": f"http://127.0.0.1:{DEFAULT_FRONTEND_PORT}",
+        "backendUrl": f"http://127.0.0.1:{DEFAULT_BACKEND_PORT}",
+        "processIds": {name: details["pid"] for name, details in processes.items()},
+        "readiness": {"frontend": "ready", "backend": "ready"},
+    }
+
+
+def run_development_services(
+    root: Path, manager: "EnvironmentManager", *, isolated: bool = False
+) -> dict[str, Any]:
+    if not isolated:
+        running = _running_local_payload(manager.cache_root)
+        if running is not None:
+            return running
     run_id = "dev-" + os.urandom(8).hex()
     context = create_run_context(manager.cache_root, run_id=run_id)
     try:
@@ -160,26 +374,48 @@ def run_development_services(root: Path, manager: "EnvironmentManager") -> dict[
     except (EnvironmentFailure, OSError, ValueError):
         cleanup_run(context, success=False)
         raise
-    backend_socket, backend_port = reserve_backend_socket()
-    frontend_port = reserve_frontend_port()
-    while frontend_port == backend_port:
-        frontend_port = reserve_frontend_port()
+    frontend_socket: socket.socket | None = None
+    try:
+        if isolated:
+            backend_socket, backend_port = reserve_backend_socket()
+            frontend_port = reserve_frontend_port()
+            while frontend_port == backend_port:
+                frontend_port = reserve_frontend_port()
+        else:
+            frontend_socket, backend_socket = reserve_fixed_service_ports()
+            frontend_port = DEFAULT_FRONTEND_PORT
+            backend_port = DEFAULT_BACKEND_PORT
+    except EnvironmentFailure:
+        cleanup_run(context, success=False)
+        raise
     node = shutil.which("node")
     if not node:
         backend_socket.close()
+        if frontend_socket is not None:
+            frontend_socket.close()
         cleanup_run(context, success=False)
         raise EnvironmentFailure("managed_node_missing", "Node executable is unavailable")
-    environment = project_test_environment(
-        dict(os.environ),
-        context,
-        managed_python=managed_python_path(root),
-        node_bin=Path(node).parent,
-        managed_rg_dir=verified.rg.path,
-        browser_path=verified.browser.path,
-        browser_executable=verified.browser_executable,
-        command=["dev"],
-    )
+    if isolated:
+        environment = project_test_environment(
+            dict(os.environ),
+            context,
+            managed_python=managed_python_path(root),
+            node_bin=Path(node).parent,
+            managed_rg_dir=verified.rg.path,
+            browser_path=verified.browser.path,
+            browser_executable=verified.browser_executable,
+            command=["dev"],
+        )
+    else:
+        environment = project_development_environment(
+            dict(os.environ),
+            context,
+            repository_root=root,
+            managed_python=managed_python_path(root),
+            node_bin=Path(node).parent,
+        )
     environment["WOLFYSTOCK_ENV_FINGERPRINT"] = verified.combined_fingerprint
+    environment["WOLFYSTOCK_ENV_CACHE"] = str(manager.cache_root)
     backend_log = context.logs_dir / "backend.log"
     frontend_log = context.logs_dir / "frontend.log"
     backend_handle = backend_log.open("a", encoding="utf-8")
@@ -208,6 +444,19 @@ def run_development_services(root: Path, manager: "EnvironmentManager") -> dict[
             popen_options["pass_fds"] = (backend_socket.fileno(),)
         backend = subprocess.Popen(backend_command, **popen_options)
         group.add("backend", backend)
+        state = {
+            "schemaVersion": "wolfystock_dev_service_state_v1",
+            "runId": run_id,
+            "processes": {
+                "backend": {
+                    "pid": backend.pid,
+                    "identity": f"{root / 'scripts' / 'wolfy_service.py'} --run-id {run_id}",
+                },
+            },
+        }
+        if not isolated:
+            write_run_json(context, "dev.json", state)
+            _write_local_pointer(manager.cache_root, run_id)
         config = _vite_config(root, context, backend_port=backend_port, frontend_port=frontend_port)
         vite = verified.web.path / "node_modules" / ".bin" / "vite"
         if not vite.is_file():
@@ -226,6 +475,9 @@ def run_development_services(root: Path, manager: "EnvironmentManager") -> dict[
             "--clearScreen",
             "false",
         ]
+        if frontend_socket is not None:
+            frontend_socket.close()
+            frontend_socket = None
         frontend = subprocess.Popen(
             frontend_command,
             cwd=root,
@@ -235,6 +487,12 @@ def run_development_services(root: Path, manager: "EnvironmentManager") -> dict[
             start_new_session=True,
         )
         group.add("frontend", frontend)
+        state["processes"]["frontend"] = {
+            "pid": frontend.pid,
+            "identity": str(config),
+        }
+        if not isolated:
+            write_run_json(context, "dev.json", state)
         backend_socket.close()
         _wait_for_http(
             f"http://127.0.0.1:{backend_port}/__wolfy__/ready",
@@ -248,17 +506,8 @@ def run_development_services(root: Path, manager: "EnvironmentManager") -> dict[
             expected_run_id=run_id,
         )
         _wait_for_http(f"http://127.0.0.1:{frontend_port}/", [backend, frontend])
-        state = {
-            "schemaVersion": "wolfystock_dev_service_state_v1",
-            "runId": run_id,
-            "processes": {
-                "backend": {"pid": backend.pid, "identity": f"wolfy_service.py --run-id {run_id}"},
-                "frontend": {"pid": frontend.pid, "identity": str(config)},
-            },
-        }
-        _state_path(manager.cache_root, run_id).write_text(
-            json.dumps(state, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"
-        )
+        if isolated:
+            write_run_json(context, "dev.json", state)
         return {
             "status": "ready",
             "environmentFingerprint": verified.combined_fingerprint,
@@ -271,7 +520,11 @@ def run_development_services(root: Path, manager: "EnvironmentManager") -> dict[
         }
     except Exception:
         backend_socket.close()
+        if frontend_socket is not None:
+            frontend_socket.close()
         group.rollback()
+        if not isolated:
+            _remove_local_pointer(manager.cache_root, run_id)
         cleanup_run(context, success=False)
         raise
     finally:
@@ -289,31 +542,38 @@ def _process_command(pid: int, *, platform_name: str | None = None) -> str | Non
         command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script]
     else:
         command = ["ps", "-p", str(pid), "-o", "command="]
-    result = subprocess.run(command, text=True, capture_output=True, check=False)
-    return result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else None
-
-
-def stop_development_services(cache_root: Path, run_id: str) -> dict[str, Any]:
-    state_path = _state_path(cache_root, run_id)
-    if not state_path.is_file():
-        return {"status": "already_stopped", "runId": run_id}
     try:
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise EnvironmentFailure("development_state_invalid", "development service state is invalid") from exc
-    processes = state.get("processes") if isinstance(state, dict) else None
-    if not isinstance(processes, dict):
-        raise EnvironmentFailure("development_state_invalid", "development service state is invalid")
+        result = subprocess.run(command, text=True, capture_output=True, check=False)
+    except OSError as exc:
+        raise EnvironmentFailure(
+            "development_process_inspection_failed", "development process identity could not be inspected"
+        ) from exc
+    if result.returncode == 0:
+        return result.stdout.strip() or None
+    if current_platform != "nt" and result.returncode == 1:
+        return None
+    raise EnvironmentFailure(
+        "development_process_inspection_failed", "development process identity could not be inspected"
+    )
+
+
+def stop_development_services(cache_root: Path, run_id: str | None = None) -> dict[str, Any]:
+    local = run_id is None
+    if run_id is None:
+        run_id = _read_local_run_id(cache_root)
+        if run_id is None:
+            return {"status": "already_stopped"}
+    state = _load_service_state(cache_root, run_id)
+    if state is None:
+        if local:
+            _cleanup_stale_local_runtime(cache_root, run_id)
+        return {"status": "already_stopped", "runId": run_id}
+    processes = _validated_processes(state, run_id)
+    owned = _processes_still_owned(state, run_id)
     stopped: list[int] = []
-    for details in processes.values():
-        if not isinstance(details, dict) or type(details.get("pid")) is not int:
-            raise EnvironmentFailure("development_state_invalid", "development process identity is invalid")
+    for name in owned:
+        details = processes[name]
         pid = details["pid"]
-        command = _process_command(pid)
-        if command is None:
-            continue
-        if run_id not in command:
-            raise EnvironmentFailure("development_process_identity_mismatch", "refusing to stop an unrelated process")
         try:
             if os.name != "nt":
                 os.killpg(pid, signal.SIGTERM)
@@ -329,15 +589,33 @@ def stop_development_services(cache_root: Path, run_id: str) -> dict[str, Any]:
         command = _process_command(pid)
         if command is None:
             continue
-        if run_id not in command:
+        details = next(item for item in processes.values() if item["pid"] == pid)
+        if details["identity"] not in command:
             raise EnvironmentFailure("development_process_identity_mismatch", "refusing to stop an unrelated process")
         try:
             if os.name != "nt":
                 os.killpg(pid, signal.SIGKILL)
             else:
-                os.kill(pid, signal.SIGTERM)
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
         except ProcessLookupError:
             pass
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        remaining = _processes_still_owned(state, run_id)
+        if not remaining:
+            break
+        time.sleep(0.1)
+    else:
+        raise EnvironmentFailure(
+            "development_process_stop_failed", "development processes did not stop within the bounded timeout"
+        )
     context = create_run_context(cache_root, run_id=run_id)
     cleanup_run(context, success=True)
+    if local:
+        _local_pointer_path(cache_root).unlink(missing_ok=True)
     return {"status": "stopped" if stopped else "already_stopped", "runId": run_id, "processIds": stopped}

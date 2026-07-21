@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-from scripts.environment.cli import _execute, _parser
+from scripts.environment.cli import _execute, _format_development_result, _parser
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -48,6 +48,37 @@ def test_cli_help_exposes_single_canonical_command_surface() -> None:
     assert result.returncode == 0, result.stderr
     for command in ("bootstrap", "env", "exec", "qualify-env", "dev", "lock"):
         assert command in result.stdout
+
+    parser = _parser()
+    human_start = parser.parse_args(["dev"])
+    human_stop = parser.parse_args(["dev", "--stop"])
+    json_start = parser.parse_args(["dev", "--json"])
+    isolated_stop = parser.parse_args(["dev", "--stop", "dev-fixture", "--json"])
+
+    assert (human_start.json, human_start.stop) == (False, None)
+    assert (human_stop.json, human_stop.stop) == (False, "")
+    assert (json_start.json, json_start.stop) == (True, None)
+    assert (isolated_stop.json, isolated_stop.stop) == (True, "dev-fixture")
+    assert _format_development_result(
+        {
+            "status": "ready",
+            "frontendUrl": "http://127.0.0.1:5173",
+            "backendUrl": "http://127.0.0.1:8000",
+        },
+        launcher=Path("/repo/wolfy"),
+    ) == (
+        "WolfyStock is ready\n\n"
+        "Frontend: http://127.0.0.1:5173\n"
+        "Backend:  http://127.0.0.1:8000\n\n"
+        "Stop: /repo/wolfy dev --stop"
+    )
+    assert _format_development_result(
+        {"status": "already_running", "frontendUrl": "http://127.0.0.1:5173", "backendUrl": "http://127.0.0.1:8000"},
+        launcher=Path("/repo/wolfy"),
+    ).startswith("WolfyStock is already running")
+    assert _format_development_result(
+        {"status": "already_stopped"}, launcher=Path("/repo/wolfy")
+    ) == "WolfyStock stopped"
 
 
 def test_lock_command_has_one_bounded_python_check_and_update_surface() -> None:

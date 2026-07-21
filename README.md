@@ -44,21 +44,28 @@ runtime boundaries.
 
 ## Quick Start
 
-Use the repository-owned environment authority from every checkout and
-worktree:
+Start the complete local product from any directory by invoking the checkout's
+launcher path:
+
+```bash
+/path/to/wolfystock/wolfy dev
+```
+
+The frontend is available at `http://127.0.0.1:5173` and the backend at
+`http://127.0.0.1:8000`. Stop both owned processes with:
+
+```bash
+/path/to/wolfystock/wolfy dev --stop
+```
+
+Use the repository-owned environment authority for dependency and validation
+work:
 
 ```bash
 ./wolfy bootstrap --ensure
 ./wolfy lock python --check
 ./wolfy env verify
 ./wolfy exec --profile test -- python -m pytest -q tests/test_offline_network_policy.py
-```
-
-Start isolated local services without fixed ports or live financial providers:
-
-```bash
-./wolfy dev --json
-./wolfy dev --stop <run-id> --json
 ```
 
 Product entrypoints, under an explicitly configured runtime:

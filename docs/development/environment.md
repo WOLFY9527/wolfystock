@@ -120,16 +120,38 @@ blocker remains a failure.
 
 ## Local Runtime
 
-Start and stop isolated services without fixed ports or live financial
-providers:
+Start the complete local product from any directory by invoking the checkout's
+`wolfy` launcher path:
+
+```bash
+/path/to/wolfystock/wolfy dev
+/path/to/wolfystock/wolfy dev --stop
+```
+
+The command verifies or ensures the managed environment, resolves the checkout
+from the launcher location, and starts the frontend at
+`http://127.0.0.1:5173` and backend at `http://127.0.0.1:8000`. It loads the
+checkout `.env` through the runtime settings authority, inherits configured
+host proxy variables, keeps mutable database, cache, build, temporary, log,
+upload, and service state outside immutable dependency snapshots, and does not
+enable live financial providers.
+
+Both ports are checked before either service starts. An unrelated listener is
+reported and never stopped. A repeated start reports the healthy recorded
+runtime, while stale metadata is removed only after recorded process identity
+checks. Stop needs no run ID, verifies every recorded process before signaling,
+and is idempotent.
+
+Automation and concurrent qualification can retain isolated dynamic ports and
+explicit run identity through the JSON interface:
 
 ```bash
 ./wolfy dev --json
 ./wolfy dev --stop <run-id> --json
 ```
 
-The start result includes environment fingerprint, run ID, URLs, process IDs,
-log paths, and readiness. Stop verifies the run identity and is idempotent.
+The JSON start result includes environment fingerprint, run ID, URLs, process
+IDs, log paths, and readiness.
 
 Product entrypoint variants, under an explicitly configured runtime:
 

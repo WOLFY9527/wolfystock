@@ -141,7 +141,7 @@
     "docsIndex": "docs/README.md",
     "docsIndexSha256": "b9e676ba0d1699818d5cc63efb24a21980440082e3619c2ebccdd08dacb6ac6b",
     "manual": "docs/generated/AI_PROJECT_MANUAL.md",
-    "manualSha256": "311a14f21945f30ee5dd2fb14f5932a11d65e1992350e184b43af6f42fb5d5fb",
+    "manualSha256": "79be32bfc863594ff73fd434228ef7041e9fb9ef85fd0c3d4ca726cfd02db3bd",
     "sourceManifest": "docs/generated/AI_PROJECT_MANUAL_SOURCES.json"
   },
   "registry": {
@@ -284,37 +284,37 @@
       "title": "Governance Instructions"
     },
     {
-      "bytes": 9891,
+      "bytes": 11083,
       "editable": true,
       "id": "repository-rules",
       "kind": "canonical",
-      "lineCount": 169,
+      "lineCount": 186,
       "path": "AGENTS.md",
-      "sha256": "35ab8fec9728fc40dd2979e8e6afb008992df688bd55f63da192ae35a23359cf",
+      "sha256": "8feefcff2c19bf4dc0587bda2c03e81b00baf780bdffe60c18e31277c832303e",
       "status": "active",
       "summary": "Repository AI rules and protected-domain boundaries",
       "title": "AGENTS.md"
     },
     {
-      "bytes": 9891,
+      "bytes": 11083,
       "editable": false,
       "id": "claude-discovery",
       "kind": "tool_entry",
-      "lineCount": 169,
+      "lineCount": 186,
       "path": "CLAUDE.md",
-      "sha256": "35ab8fec9728fc40dd2979e8e6afb008992df688bd55f63da192ae35a23359cf",
+      "sha256": "8feefcff2c19bf4dc0587bda2c03e81b00baf780bdffe60c18e31277c832303e",
       "status": "mirror",
       "summary": "Claude automatic-discovery symlink",
       "title": "AGENTS.md"
     },
     {
-      "bytes": 3931,
+      "bytes": 4104,
       "editable": true,
       "id": "human-entry",
       "kind": "canonical",
-      "lineCount": 109,
+      "lineCount": 116,
       "path": "README.md",
-      "sha256": "0b22ed2ef4273c313ab00b1815c3b01d04c4817dc5cecc674565bf3c4865982b",
+      "sha256": "2fcc0c10e497948cab9a48d20b8351a07ac47cbee7738d0bde8eacdc6fe37d1c",
       "status": "active",
       "summary": "Human product orientation and quick start",
       "title": "WolfyStock"
@@ -440,13 +440,13 @@
       "title": "Consumer Frontend Design Contract"
     },
     {
-      "bytes": 6416,
+      "bytes": 7406,
       "editable": true,
       "id": "development-environment",
       "kind": "canonical",
-      "lineCount": 165,
+      "lineCount": 187,
       "path": "docs/development/environment.md",
-      "sha256": "cf13b7b2b6c7218cf0d45ec18903c5f9b51387d22154abf30cb48e60c1deeb54",
+      "sha256": "5e07212d571b2725ad124d6c496faacb0d5356f65cb21f07491a4e0901c09bdf",
       "status": "active",
       "summary": "Dependency, bootstrap, target, snapshot, runtime, and configuration authority",
       "title": "Development Environment"
