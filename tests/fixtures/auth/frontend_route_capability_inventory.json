@@ -202,14 +202,64 @@
   ],
   "public_routes": [
     {
-      "route_id": "guest_home",
+      "route_id": "root",
+      "path": "/",
+      "localized_path": ""
+    },
+    {
+      "route_id": "guest",
       "path": "/guest",
       "localized_path": "guest"
     },
     {
-      "route_id": "market_rotation_radar",
+      "route_id": "login",
+      "path": "/login",
+      "localized_path": "login"
+    },
+    {
+      "route_id": "market_overview",
+      "path": "/market-overview",
+      "localized_path": "market-overview"
+    },
+    {
+      "route_id": "market.decision_cockpit",
+      "path": "/market/decision-cockpit",
+      "localized_path": "market/decision-cockpit"
+    },
+    {
+      "route_id": "market.liquidity_monitor",
+      "path": "/market/liquidity-monitor",
+      "localized_path": "market/liquidity-monitor"
+    },
+    {
+      "route_id": "market.rotation_radar",
       "path": "/market/rotation-radar",
       "localized_path": "market/rotation-radar"
+    },
+    {
+      "route_id": "register",
+      "path": "/register",
+      "localized_path": "register"
+    },
+    {
+      "route_id": "reset_password",
+      "path": "/reset-password",
+      "localized_path": "reset-password"
+    },
+    {
+      "route_id": "stock.stockCode",
+      "path": "/stock/:stockCode",
+      "localized_path": "stock/:stockCode"
+    },
+    {
+      "route_id": "stock.stockCode.structure_decision",
+      "path": "/stock/:stockCode/structure-decision",
+      "localized_path": "stock/:stockCode/structure-decision"
+    },
+    {
+      "route_id": "stocks.structure_decision",
+      "path": "/stocks/structure-decision",
+      "localized_path": "stocks/structure-decision"
     }
   ],
   "metadata": {

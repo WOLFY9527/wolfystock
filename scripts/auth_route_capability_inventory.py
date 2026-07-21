@@ -14,6 +14,7 @@ import inspect
 import json
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,19 @@ BACKEND_FIXTURE_PATH = Path("tests/fixtures/auth/backend_route_capability_invent
 FRONTEND_FIXTURE_PATH = Path("tests/fixtures/auth/frontend_route_capability_inventory.json")
 ADMIN_CAPABILITIES_PATH = Path("apps/dsa-web/src/utils/adminCapabilities.ts")
 APP_TSX_PATH = Path("apps/dsa-web/src/App.tsx")
+
+
+class FrontendRouteDeclarationError(ValueError):
+    """Raised when the centralized frontend route authority cannot be classified safely."""
+
+
+@dataclass(frozen=True)
+class FrontendRouteDeclaration:
+    path: str
+    placement: str
+    wrapper: str | None
+    redirect_to: str | None
+    has_element: bool
 
 SURFACE_CLASSIFICATION_VOCABULARY = [
     "public_consumer_safe_read",
@@ -452,9 +466,134 @@ def _read_source(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _collect_route_paths(source: str, wrapper_name: str) -> list[str]:
-    pattern = re.compile(rf'<Route\s+path="([^"]+)"\s+element={{<{wrapper_name}>', re.MULTILINE)
-    return sorted({match.group(1) for match in pattern.finditer(source)})
+def _scan_balanced(source: str, start: int, opening: str, closing: str, context: str) -> tuple[str, int]:
+    if start >= len(source) or source[start] != opening:
+        raise FrontendRouteDeclarationError(f"expected {opening} for {context}")
+    depth = 0
+    index = start
+    quote: str | None = None
+    while index < len(source):
+        character = source[index]
+        if quote:
+            if character == "\\":
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+            index += 1
+            continue
+        if source.startswith("//", index):
+            newline = source.find("\n", index + 2)
+            index = len(source) if newline == -1 else newline + 1
+            continue
+        if source.startswith("/*", index):
+            comment_end = source.find("*/", index + 2)
+            if comment_end == -1:
+                raise FrontendRouteDeclarationError(f"unterminated comment in {context}")
+            index = comment_end + 2
+            continue
+        if character in {"'", '"', "`"}:
+            quote = character
+        elif character == opening:
+            depth += 1
+        elif character == closing:
+            depth -= 1
+            if depth == 0:
+                return source[start + 1 : index], index + 1
+            if depth < 0:
+                break
+        index += 1
+    raise FrontendRouteDeclarationError(f"unterminated {context}")
+
+
+def _route_field(object_source: str, field: str) -> str | None:
+    matches = list(
+        re.finditer(rf"(?:^|[,\n])\s*{re.escape(field)}\s*:\s*(['\"])(.*?)\1", object_source, re.DOTALL)
+    )
+    if len(matches) > 1:
+        raise FrontendRouteDeclarationError(f"duplicate {field} in route declaration")
+    return matches[0].group(2) if matches else None
+
+
+def _parse_route_declaration(object_source: str) -> FrontendRouteDeclaration:
+    path = _route_field(object_source, "path")
+    placement = _route_field(object_source, "placement")
+    redirect_to = _route_field(object_source, "redirectTo")
+    has_element = re.search(r"(?:^|[,\n])\s*element\s*:", object_source) is not None
+    if not path or not placement:
+        raise FrontendRouteDeclarationError("route declaration requires literal path and placement")
+    if has_element == (redirect_to is not None):
+        raise FrontendRouteDeclarationError(f"route {path} must declare exactly one of element or redirectTo")
+
+    wrapper_matches = re.findall(r"<\s*(AdminSurfaceRoute|RegisteredSurfaceRoute)\b", object_source)
+    wrapper = wrapper_matches[0] if wrapper_matches else None
+    if len(set(wrapper_matches)) > 1:
+        raise FrontendRouteDeclarationError(f"contradictory protected wrapper declaration for {path}")
+    if wrapper and not re.search(rf"</\s*{wrapper}\s*>", object_source):
+        raise FrontendRouteDeclarationError(f"unclosed protected wrapper for {path}: {wrapper}")
+    unknown_wrappers = {
+        name
+        for name in re.findall(r"<\s*([A-Za-z_$][A-Za-z0-9_$]*(?:SurfaceRoute|ProtectedRoute|AdminRoute))\b", object_source)
+        if name not in {"AdminSurfaceRoute", "RegisteredSurfaceRoute"}
+    }
+    if unknown_wrappers:
+        raise FrontendRouteDeclarationError(
+            f"unknown protected wrapper for {path}: {', '.join(sorted(unknown_wrappers))}"
+        )
+    return FrontendRouteDeclaration(
+        path=path,
+        placement=placement,
+        wrapper=wrapper,
+        redirect_to=redirect_to,
+        has_element=has_element,
+    )
+
+
+def parse_frontend_route_declarations(source: str) -> list[FrontendRouteDeclaration]:
+    declaration = re.search(r"\bconst\s+routeDefinitions\s*:\s*AppRouteDefinition\[\]\s*=\s*\[", source)
+    if not declaration:
+        raise FrontendRouteDeclarationError("centralized routeDefinitions declaration not found")
+    array_start = declaration.end() - 1
+    array_source, _ = _scan_balanced(source, array_start, "[", "]", "routeDefinitions array")
+    declarations: list[FrontendRouteDeclaration] = []
+    index = 0
+    while index < len(array_source):
+        while index < len(array_source):
+            if array_source[index].isspace() or array_source[index] == ",":
+                index += 1
+                continue
+            if array_source.startswith("//", index):
+                newline = array_source.find("\n", index + 2)
+                index = len(array_source) if newline == -1 else newline + 1
+                continue
+            if array_source.startswith("/*", index):
+                comment_end = array_source.find("*/", index + 2)
+                if comment_end == -1:
+                    raise FrontendRouteDeclarationError("unterminated comment in routeDefinitions array")
+                index = comment_end + 2
+                continue
+            break
+        if index == len(array_source):
+            break
+        if array_source[index] != "{":
+            raise FrontendRouteDeclarationError("routeDefinitions entries must be object literals")
+        object_source, index = _scan_balanced(array_source, index, "{", "}", "route declaration")
+        declarations.append(_parse_route_declaration(object_source))
+        while index < len(array_source) and array_source[index].isspace():
+            index += 1
+        if index < len(array_source) and array_source[index] != ",":
+            raise FrontendRouteDeclarationError("route declaration must be followed by a comma")
+
+    protected_by_path: dict[str, str] = {}
+    for entry in declarations:
+        if not entry.wrapper:
+            continue
+        prior = protected_by_path.setdefault(entry.path, entry.wrapper)
+        if prior != entry.wrapper:
+            raise FrontendRouteDeclarationError(f"contradictory protected route declaration for {entry.path}")
+    if any(entry.wrapper for entry in declarations) and not protected_by_path:
+        raise FrontendRouteDeclarationError("protected route declarations did not produce a complete protected inventory")
+    return declarations
 
 
 def _flag_capability_map(source: str) -> dict[str, str]:
@@ -502,11 +641,15 @@ def build_frontend_inventory(repo_root: Path | str = REPO_ROOT) -> dict[str, Any
     flag_capabilities = _flag_capability_map(capability_source)
     gate_rules = _frontend_gate_rules(capability_source)
 
+    declarations = parse_frontend_route_declarations(app_source)
     admin_routes = []
-    for path in _collect_route_paths(app_source, "AdminSurfaceRoute"):
-        if not path.startswith("/"):
+    for declaration in declarations:
+        if declaration.wrapper != "AdminSurfaceRoute" or not declaration.path.startswith("/"):
             continue
+        path = declaration.path
         flag = gate_rules.get(path)
+        if flag is None:
+            raise FrontendRouteDeclarationError(f"admin route is not classified by capability map: {path}")
         admin_routes.append(
             {
                 "route_id": _frontend_route_id(path),
@@ -517,17 +660,19 @@ def build_frontend_inventory(repo_root: Path | str = REPO_ROOT) -> dict[str, Any
             }
         )
 
-    registered_routes = []
-    for path in _collect_route_paths(app_source, "RegisteredSurfaceRoute"):
-        if path.startswith("/"):
-            registered_routes.append(
-                {"route_id": _frontend_route_id(path), "path": path, "localized_path": path.lstrip("/")}
-            )
-
-    public_routes = [
-        {"route_id": "guest_home", "path": "/guest", "localized_path": "guest"},
-        {"route_id": "market_rotation_radar", "path": "/market/rotation-radar", "localized_path": "market/rotation-radar"},
+    registered_routes = [
+        {"route_id": _frontend_route_id(entry.path), "path": entry.path, "localized_path": entry.path.lstrip("/")}
+        for entry in declarations
+        if entry.wrapper == "RegisteredSurfaceRoute" and entry.path.startswith("/")
     ]
+    public_routes = [
+        {"route_id": _frontend_route_id(entry.path), "path": entry.path, "localized_path": entry.path.lstrip("/")}
+        for entry in declarations
+        if entry.wrapper is None and entry.has_element and entry.path.startswith("/") and entry.path != "/*"
+    ]
+    admin_routes.sort(key=lambda route: route["path"])
+    registered_routes.sort(key=lambda route: route["path"])
+    public_routes.sort(key=lambda route: route["path"])
     return {
         "admin_surface_routes": admin_routes,
         "registered_surface_routes": registered_routes,

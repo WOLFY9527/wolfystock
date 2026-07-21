@@ -10,11 +10,17 @@ import re
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.routing import APIRoute
 
 from api.route_access_policy import is_public_baseline_read
 from api.v1 import api_v1_router
-from scripts.auth_route_capability_inventory import build_backend_inventory, build_frontend_inventory
+from scripts.auth_route_capability_inventory import (
+    FrontendRouteDeclarationError,
+    build_backend_inventory,
+    build_frontend_inventory,
+    parse_frontend_route_declarations,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -405,11 +411,6 @@ def _extract_route_block(source: str, marker: str, closing: str) -> str:
     start = source.index(marker)
     end = source.index(closing, start)
     return source[start:end]
-
-
-def _collect_wrapped_route_paths(source: str, wrapper_name: str) -> set[str]:
-    pattern = re.compile(rf'<Route path="([^"]+)" element={{<{wrapper_name}>', re.MULTILINE)
-    return set(pattern.findall(source))
 
 
 def _format_auth_route_special_case(
@@ -837,8 +838,10 @@ def test_options_inventory_matches_auth_required_fixture_only_frontend_gate_cont
             concrete_path = signature[1].replace("{symbol}", "TEM")
             assert not is_public_baseline_read(signature[0], concrete_path)
 
-    assert '<Route path="/options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />' in app_source
-    assert '<Route path="options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />' in app_source
+    assert any(
+        entry.path == "/options-lab" and entry.wrapper == "RegisteredSurfaceRoute"
+        for entry in parse_frontend_route_declarations(app_source)
+    )
     assert "routePathname.startsWith('/options-lab')" in app_source
     assert "return <ConsumerProtectedFrame moduleName={moduleName} />;" in app_source
 
@@ -913,12 +916,14 @@ def test_frontend_route_inventory_matches_admin_capability_map_and_wrapper_bound
     app_source = APP_TSX.read_text(encoding="utf-8")
     capability_source = ADMIN_CAPABILITIES_TS.read_text(encoding="utf-8")
 
-    admin_wrapped_paths = _collect_wrapped_route_paths(app_source, "AdminSurfaceRoute")
-    registered_wrapped_paths = _collect_wrapped_route_paths(app_source, "RegisteredSurfaceRoute")
+    declarations = parse_frontend_route_declarations(app_source)
+    by_path = {entry.path: entry for entry in declarations}
+    admin_wrapped_paths = {entry.path for entry in declarations if entry.wrapper == "AdminSurfaceRoute"}
+    registered_wrapped_paths = {entry.path for entry in declarations if entry.wrapper == "RegisteredSurfaceRoute"}
 
     for entry in fixture["admin_surface_routes"]:
         assert entry["path"] in admin_wrapped_paths
-        assert entry["localized_path"] in admin_wrapped_paths
+        assert entry["localized_path"] == entry["path"].lstrip("/")
         expected_flag = entry["capability_flag"]
         route_prefix = entry["path"].replace("/:userId", "").replace("/:runId", "")
         if entry["route_id"] == "admin.users.userId.activity":
@@ -934,14 +939,73 @@ def test_frontend_route_inventory_matches_admin_capability_map_and_wrapper_bound
 
     for entry in fixture["registered_surface_routes"]:
         assert entry["path"] in registered_wrapped_paths
-        assert entry["localized_path"] in registered_wrapped_paths
+        assert entry["localized_path"] == entry["path"].lstrip("/")
 
     for prefix in fixture["guest_redirect_prefixes"]:
         assert prefix in admin_wrapped_paths
 
     for entry in fixture["public_routes"]:
-        assert f'path="{entry["path"]}"' in app_source
-        assert f'path="{entry["localized_path"]}"' in app_source or entry["localized_path"] == "guest"
+        assert entry["path"] in by_path
+        assert by_path[entry["path"]].wrapper is None
 
     assert "/market/rotation-radar" not in registered_wrapped_paths
     assert "/market/rotation-radar" not in admin_wrapped_paths
+    assert sum(entry.wrapper == "AdminSurfaceRoute" for entry in declarations) == 12
+    assert sum(entry.wrapper == "RegisteredSurfaceRoute" for entry in declarations) == 11
+    assert by_path["/guest"].wrapper is None
+    assert by_path["/market/rotation-radar"].wrapper is None
+    assert by_path["/admin/providers"].redirect_to == "/admin/market-providers"
+
+    formatted_source = """
+const unrelated = { path: '/ignored', element: <AdminSurfaceRoute><Ignored /></AdminSurfaceRoute> };
+const routeDefinitions: AppRouteDefinition[] = [
+  {
+    placement: 'shell',
+    path: '/admin/example',
+    element:
+      <AdminSurfaceRoute>
+        <Example />
+      </AdminSurfaceRoute>,
+  },
+  { placement: 'shell', path: '/member/example', element: <RegisteredSurfaceRoute><Example /></RegisteredSurfaceRoute> },
+  { placement: 'shell', path: '/alias', redirectTo: '/member/example', localizedRedirectTo: '../member/example' },
+  { placement: 'shell', path: '/public/example', element: <Example /> },
+];
+"""
+    formatted_declarations = parse_frontend_route_declarations(formatted_source)
+    assert [(entry.path, entry.wrapper, entry.redirect_to) for entry in formatted_declarations] == [
+        ("/admin/example", "AdminSurfaceRoute", None),
+        ("/member/example", "RegisteredSurfaceRoute", None),
+        ("/alias", None, "/member/example"),
+        ("/public/example", None, None),
+    ]
+
+    for invalid_source, message in [
+        (
+            "const routeDefinitions: AppRouteDefinition[] = [{ placement: 'shell', path: '/admin', element: <UnknownSurfaceRoute><Page /></UnknownSurfaceRoute> }];",
+            "unknown protected wrapper",
+        ),
+        (
+            "const routeDefinitions: AppRouteDefinition[] = [{ placement: 'shell', path: '/admin', element: <AdminSurfaceRoute><Page /></AdminSurfaceRoute> ",
+            "unterminated routeDefinitions array",
+        ),
+        (
+            """const routeDefinitions: AppRouteDefinition[] = [
+{ placement: 'shell', path: '/same', element: <AdminSurfaceRoute><Page /></AdminSurfaceRoute> },
+{ placement: 'shell', path: '/same', element: <RegisteredSurfaceRoute><Page /></RegisteredSurfaceRoute> },
+];""",
+            "contradictory protected route declaration",
+        ),
+        (
+            "const routeDefinitions: AppRouteDefinition[] = [{ placement: 'shell', path: '/admin', element: <AdminSurfaceRoute><Page /> }];",
+            "unclosed protected wrapper",
+        ),
+    ]:
+        with pytest.raises(FrontendRouteDeclarationError, match=message):
+            parse_frontend_route_declarations(invalid_source)
+
+    first = build_frontend_inventory(REPO_ROOT)
+    second = build_frontend_inventory(REPO_ROOT)
+    assert json.dumps(first, ensure_ascii=False, indent=2, sort_keys=False) == json.dumps(
+        second, ensure_ascii=False, indent=2, sort_keys=False
+    )
