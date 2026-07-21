@@ -1395,7 +1395,7 @@ const MarketOverviewPage = () => {
         />
         <details
           data-testid="market-overview-data-diagnostics-disclosure"
-          className="group rounded-lg bg-[color:var(--wolfy-surface-input)] px-2.5 py-1.5"
+          className="group rounded-lg bg-[color:var(--wolfy-surface-input)] px-2.5 py-1"
           onToggle={(event) => setDataDiagnosticsOpen(event.currentTarget.open)}
         >
           <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold text-[color:var(--wolfy-text-secondary)] marker:hidden">

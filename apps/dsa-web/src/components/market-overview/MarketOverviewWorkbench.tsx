@@ -3669,44 +3669,52 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
         >
           <MarketOverviewCoreTrendChart view={marketTrendChartView} language={language} />
         </div>
+        <section
+          data-testid="market-overview-hero-lane"
+          data-card-tier="hero"
+          data-evidence-group-role="regime-breadth"
+          data-market-journey-step="key-metrics"
+          className="flex min-w-0 flex-col gap-4"
+        >
+          {heroRows}
+        </section>
         <details className="group market-overview-asset-disclosure border-t border-[color:var(--wolfy-divider)]" data-testid="market-overview-primary-evidence-disclosure">
           <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-xs font-semibold text-[color:var(--wolfy-text-secondary)] marker:hidden">
-            <span>{language === 'en' ? 'Primary breadth and funds evidence' : '主要广度与资金证据'}</span>
+            <span>{language === 'en' ? 'Primary evidence boundary' : '主要证据边界'}</span>
             <span aria-hidden="true">＋</span>
           </summary>
-          <section
-            data-testid="market-overview-hero-lane"
-            data-card-tier="hero"
-            data-evidence-group-role="regime-breadth"
-            data-market-journey-step="key-metrics"
-            className="flex min-w-0 flex-col gap-4 pb-3"
-          >
-            {heroRows}
-          </section>
+          <p className="pb-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+            {language === 'en'
+              ? 'Primary cards retain the returned freshness and source limits; missing evidence is not inferred.'
+              : '主要卡片保留已返回的新鲜度与来源边界；缺失证据不作推断。'}
+          </p>
         </details>
       </section>
       <details className="group market-overview-deep-evidence-disclosure border-t border-[color:var(--wolfy-divider)]" data-testid="market-overview-deep-evidence-disclosure">
         <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between text-sm font-semibold text-[color:var(--wolfy-text-primary)] marker:hidden">
-          <span>{language === 'en' ? 'Asset classes, source boundaries, and secondary evidence' : '资产类别、来源边界与次级证据'}</span>
+          <span>{language === 'en' ? 'Secondary evidence boundary' : '次级证据边界'}</span>
           <span className="text-[color:var(--wolfy-text-muted)]" aria-hidden="true">＋</span>
         </summary>
-        <div className="space-y-4 pb-4">
-          <Suspense fallback={<MarketOverviewWorkbenchGridFallback language={language} />}>
-            <LazyMarketOverviewWorkbenchGrid
-              secondaryRows={secondaryRows}
-              deepRows={deepRows}
-              evidenceGroups={evidenceGroups}
-              showDeepSection={showDeepSection}
-              showContextRail={showContextRail}
-              contextHighlights={contextHighlights}
-              executiveGroups={executiveGroups}
-              showExecutiveGroups={showExecutiveGroups}
-            />
-          </Suspense>
-          <MarketOverviewResearchHandoff locale={language === 'en' ? 'en' : 'zh'} />
-          <MarketOverviewVisualEvidenceStrip cards={visualEvidenceCards} locale={language} />
-        </div>
+        <p className="pb-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+          {language === 'en'
+            ? 'Secondary and cross-asset evidence remains observational when authority or coverage is incomplete.'
+            : '来源权威或覆盖不完整时，次级与跨资产证据仍仅供观察。'}
+        </p>
       </details>
+      <Suspense fallback={<MarketOverviewWorkbenchGridFallback language={language} />}>
+        <LazyMarketOverviewWorkbenchGrid
+          secondaryRows={secondaryRows}
+          deepRows={deepRows}
+          evidenceGroups={evidenceGroups}
+          showDeepSection={showDeepSection}
+          showContextRail={showContextRail}
+          contextHighlights={contextHighlights}
+          executiveGroups={executiveGroups}
+          showExecutiveGroups={showExecutiveGroups}
+        />
+      </Suspense>
+      <MarketOverviewResearchHandoff locale={language === 'en' ? 'en' : 'zh'} />
+      <MarketOverviewVisualEvidenceStrip cards={visualEvidenceCards} locale={language} />
     </div>
   );
 };

@@ -529,12 +529,16 @@ function buildCompactMissingSummary(params: {
   summary: DecisionReadinessSummary;
   view?: MarketOverviewDecisionSemanticsView;
   missingButObservable: string[];
+  dataState: MarketOverviewDataStateStripView;
 }): string | null {
-  const { summary, view, missingButObservable } = params;
-  if (summary.state !== 'unavailable' && !view?.insufficient) {
-    return null;
+  const { summary, view, missingButObservable, dataState } = params;
+  if (summary.state === 'unavailable' || view?.insufficient) {
+    return marketNarrativeCopy(`可见事实有限：${missingButObservable.join(' / ')}；当前只保留已返回市场事实。`);
   }
-  return marketNarrativeCopy(`可见事实有限：${missingButObservable.join(' / ')}；当前只保留已返回市场事实。`);
+  if (summary.state === 'observe' && (dataState.hasFallback || dataState.hasUnavailable)) {
+    return '部分证据待补；当前只保留已返回市场事实。';
+  }
+  return null;
 }
 
 const MarketOverviewSetupPath: React.FC<{ testId: string }> = ({ testId }) => (
@@ -1222,26 +1226,28 @@ const MarketOverviewConclusionLayer: React.FC<{
     regimeSummary?.blockers[0]?.label,
     directionalSummary.blockingDrivers[0],
   ], 2, '暂无关键阻断');
-  const missingSummary = buildCompactMissingSummary({ summary, view, missingButObservable });
+  const missingSummary = buildCompactMissingSummary({ summary, view, missingButObservable, dataState });
   const whatHappened = buildWhatHappenedLine({ briefingSummary, heroAnchors, verdict });
   const whatMatters = buildWhatMattersLine({ drivers, verdict, directionalSummary });
   const nextCheck = buildNextCheckLine({ nextObservation, missingButObservable, summary, view });
   const narrativeFacts = [
     {
-      key: 'risk-volatility',
-      label: isEnglishRoute ? 'Risk / volatility' : '风险 / 波动',
-      value: drivers[0]?.detail || whatHappened,
-      detail: drivers[0]?.status || verdict.headline,
+      key: 'what-happened',
+      label: isEnglishRoute ? 'What happened' : '现在市场发生了什么',
+      value: whatHappened,
+      detail: verdict.headline,
     },
     {
-      key: 'breadth-funds',
-      label: isEnglishRoute ? 'Breadth / funds' : '广度 / 资金',
-      value: drivers[1]?.detail || whatMatters,
-      detail: drivers[1]?.status || directionalSummary.supportingTitle,
+      key: 'what-matters',
+      label: isEnglishRoute ? 'Why it matters' : '为什么',
+      value: whatMatters,
+      detail: isEnglishRoute
+        ? `Data state: ${dataStatusLabel(summary, dataState, researchLocale)}; confidence ${confidenceSummary.value}.`
+        : `数据状态：${dataStatusLabel(summary, dataState, researchLocale)}；信心水平：${confidenceSummary.value}。`,
     },
     {
       key: 'next',
-      label: isEnglishRoute ? 'Next watch' : '下一步关注',
+      label: isEnglishRoute ? 'What to check next' : '接下来观察什么',
       value: nextCheck,
       detail: isEnglishRoute
         ? 'Research check order only — not a stronger conclusion.'
@@ -1301,22 +1307,28 @@ const MarketOverviewConclusionLayer: React.FC<{
           data-testid="market-overview-decision-reasons"
           data-primary-information-block="reasons-risk"
           aria-label={isEnglishRoute ? 'Primary market reasons' : '主要市场依据'}
-          className="market-overview-decision-reasons grid min-w-0 grid-cols-1 gap-3 py-2 md:grid-cols-3"
+          className="market-overview-decision-reasons min-w-0 py-2"
         >
-          {narrativeFacts.map((fact) => (
-            <div
-              key={fact.key}
-              className="min-w-0"
-            >
-              <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{fact.label}</p>
-              <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">
-                {marketNarrativeCopy(fact.value, 'Market evidence pending', researchLocale)}
-              </p>
-              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-[color:var(--wolfy-text-muted)]">
-                {marketNarrativeCopy(fact.detail, 'Pending', researchLocale)}
-              </p>
-            </div>
-          ))}
+          <div
+            data-testid="market-overview-summary-strip"
+            aria-label={isEnglishRoute ? 'First-read summary' : '首读摘要'}
+            className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3"
+          >
+            {narrativeFacts.map((fact) => (
+              <div
+                key={fact.key}
+                className="min-w-0"
+              >
+                <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{fact.label}</p>
+                <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">
+                  {marketNarrativeCopy(fact.value, 'Market evidence pending', researchLocale)}
+                </p>
+                <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-[color:var(--wolfy-text-muted)]">
+                  {marketNarrativeCopy(fact.detail, 'Pending', researchLocale)}
+                </p>
+              </div>
+            ))}
+          </div>
         </section>
         {missingSummary ? (
           <p
@@ -1338,19 +1350,9 @@ const MarketOverviewConclusionLayer: React.FC<{
       </ObservationHead>
 
       <p className="px-2.5 py-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)] md:px-3">
-        {isEnglishRoute ? 'Research observation, not investment advice.' : '研究观察，不构成投资建议。'}
+        {isEnglishRoute ? 'Research observation, not investment advice or a trading instruction.' : '研究观察，不构成投资建议，也不构成交易指令。'}
       </p>
-      <details
-        className="group border-t border-[color:var(--wolfy-divider)] px-2.5 py-2 md:px-3"
-        data-testid="market-overview-trust-disclosure"
-        onToggle={(event) => setTrustDisclosureOpen(event.currentTarget.open)}
-      >
-        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-xs font-semibold text-[color:var(--wolfy-text-secondary)] marker:hidden">
-          <span>{isEnglishRoute ? 'Evidence boundary and research limits' : '证据边界与研究限制'}</span>
-          <span aria-hidden="true">＋</span>
-        </summary>
-        {trustDisclosureOpen ? (
-          <div className="flex min-w-0 flex-col gap-2 pb-2">
+      <div className="flex min-w-0 flex-col gap-2 border-t border-[color:var(--wolfy-divider)] px-2.5 py-2.5 md:px-3">
         <section
           data-testid="market-overview-key-drivers"
           className="sr-only"
@@ -1420,7 +1422,23 @@ const MarketOverviewConclusionLayer: React.FC<{
               : '状态与温度标签是观察就绪信号，不是评分化推荐。',
           ]}
         />
-
+      </div>
+      <details
+        className="group border-t border-[color:var(--wolfy-divider)] px-2.5 py-2 md:px-3"
+        data-testid="market-overview-trust-disclosure"
+        onToggle={(event) => setTrustDisclosureOpen(event.currentTarget.open)}
+      >
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-xs font-semibold text-[color:var(--wolfy-text-secondary)] marker:hidden">
+          <span>{isEnglishRoute ? 'Evidence boundary and research limits' : '证据边界与研究限制'}</span>
+          <span aria-hidden="true">＋</span>
+        </summary>
+        {trustDisclosureOpen ? (
+          <div className="flex min-w-0 flex-col gap-2 pb-2">
+            <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+              {isEnglishRoute
+                ? 'Returned drivers retain their source, freshness, and coverage limits.'
+                : '已返回的驱动因素保留其来源、新鲜度与覆盖边界。'}
+            </p>
           </div>
         ) : null}
       </details>
@@ -1608,7 +1626,11 @@ const MarketOverviewDataNotesDisclosure: React.FC<{
     className="group mt-3 rounded-lg bg-[color:var(--wolfy-surface-input)] px-2.5 py-1.5"
     onToggle={(event) => setOpen(event.currentTarget.open)}
   >
-    <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold text-[color:var(--wolfy-text-secondary)] marker:hidden">
+    <summary
+      role="button"
+      aria-expanded={open}
+      className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold text-[color:var(--wolfy-text-secondary)] marker:hidden"
+    >
       <span>{isEnglishRoute ? 'Evidence notes' : '数据说明'}</span>
       <span aria-hidden="true">＋</span>
     </summary>
@@ -1741,7 +1763,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
       )}
     >
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[color:var(--wolfy-divider)] to-transparent" aria-hidden="true" />
-      <div className="min-w-0">
+      <div data-testid="market-decision-semantics-strip" className="min-w-0">
         <MarketOverviewConclusionLayer
           testId="market-overview-decision-readiness"
           summary={readinessSummary}
@@ -1931,12 +1953,24 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
                 onExportSummary={onExportSummary}
               />
             </div>
+            <div data-market-research-flow="pulse" className="border-t border-[color:var(--wolfy-divider)]">
+              <CrossAssetHeroRibbon anchors={heroAnchors} />
+            </div>
+            <p className="sr-only">
+              {typeof window !== 'undefined' && parseLocaleFromPathname(window.location.pathname) === 'en'
+                ? 'ETF flow indicator · Institutional pressure indicator · Industry breadth indicator'
+                : 'ETF 资金流指标 · 机构压力指标 · 行业广度指标'}
+            </p>
             <details data-market-research-flow="pulse" className="group border-t border-[color:var(--wolfy-divider)] px-2 py-1.5">
               <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-xs font-semibold text-[color:var(--wolfy-text-secondary)] marker:hidden">
                 <span>{typeof window !== 'undefined' && parseLocaleFromPathname(window.location.pathname) === 'en' ? 'Cross-asset detail' : '跨资产详情'}</span>
                 <span aria-hidden="true">＋</span>
               </summary>
-              <CrossAssetHeroRibbon anchors={heroAnchors} />
+              <p className="pb-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                {typeof window !== 'undefined' && parseLocaleFromPathname(window.location.pathname) === 'en'
+                  ? 'Cross-asset levels preserve the returned source and freshness boundaries.'
+                  : '跨资产水平保留已返回的来源与新鲜度边界。'}
+              </p>
             </details>
           </div>
         </ConsoleBoard>
