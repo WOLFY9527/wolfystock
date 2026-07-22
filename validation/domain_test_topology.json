@@ -40280,8 +40280,8 @@
       }
     },
     "inventory": {
-      "count": 176,
-      "sha256": "9330504ca244199783332967bb8a62e8a29425a98d30a4086b70452a54d37608"
+      "count": 177,
+      "sha256": "b1814248c55af23ce59617bfef24078db3f55bd1a122c865b02a7979954c64f9"
     },
     "files": [
       {
@@ -40578,6 +40578,10 @@
       },
       {
         "path": "apps/dsa-web/src/components/liquidity-monitor/__tests__/liquidityConfidenceSemantics.test.ts",
+        "owner": "market"
+      },
+      {
+        "path": "apps/dsa-web/src/components/market-overview/__tests__/MarketProviderStateCopy.test.tsx",
         "owner": "market"
       },
       {

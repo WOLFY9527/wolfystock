@@ -73,9 +73,9 @@ def test_manifest_schema_preserves_baseline_and_complete_surface_counts() -> Non
     assert result["status"] == "valid"
     assert result["baselineBackendTests"] == 7_609
     assert result["backendTests"] == 7_932
-    assert result["vitestFiles"] == 176
-    assert result["playwrightSpecs"] == 64
-    assert result["playwrightProjectCases"] == 718
+    assert result["vitestFiles"] == 177
+    assert result["playwrightSpecs"] == 65
+    assert result["playwrightProjectCases"] == 720
     assert manifest["backend"]["baselineCapture"] == {
         "baseSha": topology.BASE_SHA,
         "count": 7_609,
@@ -194,7 +194,7 @@ def test_vitest_ownership_has_explicit_milestones_and_identifies_large_files() -
     manifest = load_manifest()
     entries = manifest["vitest"]["files"]
 
-    assert len(entries) == len({entry["path"] for entry in entries}) == 176
+    assert len(entries) == len({entry["path"] for entry in entries}) == 177
     assert {entry["owner"] for entry in entries} <= set(manifest["vitest"]["owners"])
     assert any(entry["owner"] == "milestone_t448_consumer_product" for entry in entries)
     assert any(entry["owner"] == "milestone_t451_auth_session" for entry in entries)
@@ -208,11 +208,11 @@ def test_playwright_ownership_retains_projects_and_mandatory_auth_cases() -> Non
     specs = playwright["specs"]
     cases = playwright["projectCases"]
 
-    assert len(specs) == 64
-    assert len(cases) == 718
+    assert len(specs) == 65
+    assert len(cases) == 720
     assert playwright["inventory"]["projectCaseCounts"] == {
-        "chromium": 357,
-        "chromium-mobile": 357,
+        "chromium": 358,
+        "chromium-mobile": 358,
         "release-real-runtime": 4,
     }
     assert {spec["owner"] for spec in specs} == set(topology.PLAYWRIGHT_CLASSES)
