@@ -31,6 +31,7 @@ from api.v1.schemas.stocks import (
     StockHistoryResponse,
     StockIntradayResponse,
     StockQuote,
+    StockTechnicalIndicatorsResponse,
     SymbolResearchPacketResponse,
     StockValidationResponse,
 )
@@ -70,6 +71,9 @@ _VALIDATION_VERIFIED_MESSAGE = "Symbol verified."
 _VALIDATION_UNKNOWN_MESSAGE = "Symbol format is supported, but verification is not confirmed yet."
 _STOCK_EVIDENCE_INTERNAL_ERROR_MESSAGE = "Stock evidence is temporarily unavailable. Please retry later."
 _STOCK_QUOTE_INTERNAL_ERROR_MESSAGE = "实时行情暂时不可用，请稍后重试。"
+_STOCK_TECHNICAL_INDICATORS_INTERNAL_ERROR_MESSAGE = (
+    "Technical indicators are temporarily unavailable."
+)
 
 
 def _consumer_safe_quote_source(result: dict) -> str | None:
@@ -621,6 +625,33 @@ def get_stock_quote(
             message=_STOCK_QUOTE_INTERNAL_ERROR_MESSAGE,
             retryable=True,
             fallback_message=_STOCK_QUOTE_INTERNAL_ERROR_MESSAGE,
+        ) from e
+
+
+@router.get(
+    "/{stock_code}/technical-indicators",
+    dependencies=[Depends(get_current_user)],
+    response_model=StockTechnicalIndicatorsResponse,
+    response_model_exclude_none=False,
+    responses={
+        200: {"description": "基于已校验调整后历史的技术指标"},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取股票技术指标",
+    description="返回基于已校验调整后历史 K 线的技术指标证据状态；不构成交易建议。",
+)
+def get_stock_technical_indicators(stock_code: str) -> StockTechnicalIndicatorsResponse:
+    try:
+        payload = StockService().get_technical_indicators(stock_code)
+        return StockTechnicalIndicatorsResponse.model_validate(payload)
+    except Exception as e:
+        logger.error("获取股票技术指标失败: %s", e, exc_info=True)
+        raise safe_api_error(
+            status_code=500,
+            error="internal_error",
+            message=_STOCK_TECHNICAL_INDICATORS_INTERNAL_ERROR_MESSAGE,
+            retryable=True,
+            fallback_message=_STOCK_TECHNICAL_INDICATORS_INTERNAL_ERROR_MESSAGE,
         ) from e
 
 

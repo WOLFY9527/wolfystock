@@ -786,6 +786,12 @@ class StockService:
             "sourceConfidence": runtime_payload.get("sourceConfidence") or {},
         }
 
+    def get_technical_indicators(self, stock_code: str) -> Dict[str, Any]:
+        """Return the canonical technical-indicator read model for one symbol."""
+        from src.services.stock_technical_indicators_service import StockTechnicalIndicatorsService
+
+        return StockTechnicalIndicatorsService(history_service=self).get_technical_indicators(stock_code)
+
     def get_intraday_data(
         self,
         stock_code: str,

@@ -1114,8 +1114,8 @@ def test_t437_t438_locale_corpus_adds_bounded_and_browser_owners_to_current_clas
     release_ids = set(release["execution"]["nodeIds"])
     assert canonical_ids.isdisjoint(release_only_ids)
     assert canonical_ids | release_only_ids == release_ids
-    assert len(canonical_ids) == 7_914
-    assert len(release_ids) == 7_932
+    assert len(canonical_ids) == 7_946
+    assert len(release_ids) == 7_964
     assert set(canonical["execution"]["nodeIds"]) < release_ids
     assert release["stages"][1]["required"] is True
     assert release["releaseQualificationRequired"] is True

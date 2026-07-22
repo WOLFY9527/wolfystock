@@ -75,6 +75,35 @@ SUBMITTED_RULE_RUN_CLAIM_STATUSES = frozenset({"queued", "parsing"})
 RULE_BACKTEST_STUCK_AFTER_SECONDS = 6 * 60 * 60
 DEFAULT_RULE_BACKTEST_UNIVERSE_MAX_SYMBOLS = 500
 
+
+def build_rule_indicator_sma(
+    closes: Sequence[Optional[float]],
+    period: int,
+) -> List[Optional[float]]:
+    return RuleBacktestEngine._build_sma(closes, period)
+
+
+def build_rule_indicator_ema(
+    closes: Sequence[Optional[float]],
+    period: int,
+) -> List[Optional[float]]:
+    return RuleBacktestEngine._build_ema(closes, period)
+
+
+def build_rule_indicator_rsi(
+    closes: Sequence[Optional[float]],
+    period: int,
+) -> List[Optional[float]]:
+    return RuleBacktestEngine._build_rsi(closes, period)
+
+
+def build_rule_indicator_bollinger(
+    closes: Sequence[Optional[float]],
+    period: int,
+    standard_deviations: float,
+) -> tuple[List[Optional[float]], List[Optional[float]], List[Optional[float]]]:
+    return RuleBacktestEngine._build_bollinger(closes, period, standard_deviations)
+
 BENCHMARK_MODE_AUTO = "auto"
 BENCHMARK_MODE_NONE = "none"
 BENCHMARK_MODE_SAME_SYMBOL = "same_symbol_buy_and_hold"

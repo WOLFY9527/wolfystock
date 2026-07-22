@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7932,
-      "sha256": "ebc59b24092aee498ff75bb8628743eb3af6725c28c8f66ebb94aabe6def70a5"
+      "count": 7964,
+      "sha256": "4102aaca775f29d280391a407e3c16c9453375dd098bc058e57329dd38f65c8c"
     },
     "tests": [
       {
@@ -5849,6 +5849,41 @@
         "baseline": true
       },
       {
+        "id": "tests/api/test_stock_technical_indicators_contract.py::test_endpoint_preserves_authentication_boundary",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_stock_technical_indicators_contract.py::test_endpoint_runtime_contract_with_injected_history[rows0-False-available]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_stock_technical_indicators_contract.py::test_endpoint_runtime_contract_with_injected_history[rows1-False-partial]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_stock_technical_indicators_contract.py::test_endpoint_runtime_contract_with_injected_history[rows2-False-unavailable]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_stock_technical_indicators_contract.py::test_endpoint_runtime_contract_with_injected_history[rows3-True-provider_unavailable]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_stock_technical_indicators_contract.py::test_endpoint_unexpected_source_exception_is_safe_and_fail_closed",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_stock_technical_indicators_contract.py::test_openapi_schema_has_no_numeric_indicator_defaults",
+        "domain": "market",
+        "baseline": false
+      },
+      {
         "id": "tests/api/test_t128_api_route_compatibility.py::test_admin_market_provider_operations_compatibility_alias_returns_safe_json",
         "domain": "api_schema_contracts",
         "baseline": true
@@ -8972,6 +9007,131 @@
         "id": "tests/services/test_source_provenance_contract.py::test_unknown_source_fails_closed",
         "domain": "api_schema_contracts",
         "baseline": true
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_each_indicator_boundary_uses_canonical_minimum_window[bollingerLower]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_each_indicator_boundary_uses_canonical_minimum_window[bollingerMiddle]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_each_indicator_boundary_uses_canonical_minimum_window[bollingerUpper]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_each_indicator_boundary_uses_canonical_minimum_window[ema12]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_each_indicator_boundary_uses_canonical_minimum_window[ema26]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_each_indicator_boundary_uses_canonical_minimum_window[macdHistogram]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_each_indicator_boundary_uses_canonical_minimum_window[macdSignal]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_each_indicator_boundary_uses_canonical_minimum_window[macd]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_each_indicator_boundary_uses_canonical_minimum_window[rsi14]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_each_indicator_boundary_uses_canonical_minimum_window[sma200]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_each_indicator_boundary_uses_canonical_minimum_window[sma20]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_each_indicator_boundary_uses_canonical_minimum_window[sma50]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_empty_history_is_explicitly_unavailable_without_zero_payload",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_insufficient_history_never_emits_values_or_trend_classification",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_malformed_history_cannot_produce_usable_values[duplicate_date]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_malformed_history_cannot_produce_usable_values[missing_adjusted_close]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_malformed_history_cannot_produce_usable_values[missing_close]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_malformed_history_cannot_produce_usable_values[non_finite_close]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_malformed_history_cannot_produce_usable_values[unordered]",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_partial_history_exposes_only_qualified_indicators",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_provider_failure_diagnostics_override_rows_even_when_lineage_looks_available",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_provider_unavailable_state_overrides_contradictory_rows",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_schema_serialization_keeps_unavailable_values_null_without_defaults",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_stale_history_is_unavailable_even_when_rows_are_sufficient",
+        "domain": "market",
+        "baseline": false
+      },
+      {
+        "id": "tests/services/test_stock_technical_indicators_service.py::test_sufficient_adjusted_history_preserves_lineage_and_finite_values",
+        "domain": "market",
+        "baseline": false
       },
       {
         "id": "tests/services/test_us_fundamentals_service.py::test_us_fundamentals_service_fail_closes_provider_exception_without_raw_text",

@@ -173,7 +173,7 @@
     },
     {
       "route_id": "stock.research_surface",
-      "path_pattern": "^/api/v1/stocks/(?:extract-from-image|parse-import|\\{stock_code\\}/(?:validate|research-packet|evidence|intraday|history))$",
+      "path_pattern": "^/api/v1/stocks/(?:extract-from-image|parse-import|\\{stock_code\\}/(?:validate|research-packet|evidence|intraday|history|technical-indicators))$",
       "methods": [
         "GET",
         "POST"
@@ -181,7 +181,7 @@
       "surface": "stock",
       "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "transitional_note": "Stock research, import, and history routes are authenticated-member surfaces; only the quote route is explicitly public."
+      "transitional_note": "Stock research, import, history, and technical-indicator routes are authenticated-member surfaces; only the quote route is explicitly public."
     },
     {
       "route_id": "options.member_surface",
@@ -2181,6 +2181,16 @@
     {
       "route_id": "api.v1.stocks.stock_code.structure_decision",
       "path": "/api/v1/stocks/{stock_code}/structure-decision",
+      "method": "GET",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "api.v1.stocks.stock_code.technical_indicators",
+      "path": "/api/v1/stocks/{stock_code}/technical-indicators",
       "method": "GET",
       "surface_classification": "authenticated_member",
       "auth_dependency_label": "authenticated_user",

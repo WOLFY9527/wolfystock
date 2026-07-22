@@ -933,3 +933,85 @@ class StockStructureDecisionBatchResponse(BaseModel):
         description="多股票比较证据包；仅描述证据覆盖、分歧和数据质量",
     )
     no_advice_disclosure: str = Field(..., alias="noAdviceDisclosure", description="非个性化建议披露")
+
+
+class StockTechnicalIndicatorValue(BaseModel):
+    """单个技术指标的证据状态和值。"""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid", allow_inf_nan=False)
+
+    value: Optional[float] = Field(None, description="仅在指标证据满足最小窗口时返回的有限数值")
+    status: Literal["available", "unavailable"] = Field(..., description="指标是否已满足证据要求")
+    required_bars: int = Field(..., alias="requiredBars", ge=1, description="该指标所需的最小有效 K 线数")
+    available_bars: int = Field(..., alias="availableBars", ge=0, description="可用于该指标的有效 K 线数")
+    reason: Optional[str] = Field(None, description="指标不可用时的结构化原因")
+    as_of: Optional[str] = Field(None, alias="asOf", description="该指标输入历史的最新日期")
+
+
+class StockTechnicalIndicatorsMap(BaseModel):
+    """固定、可空的技术指标字段集合，避免缺失值获得数值默认值。"""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    sma20: StockTechnicalIndicatorValue = Field(..., description="20 日简单移动平均")
+    sma50: StockTechnicalIndicatorValue = Field(..., description="50 日简单移动平均")
+    sma200: StockTechnicalIndicatorValue = Field(..., description="200 日简单移动平均")
+    ema12: StockTechnicalIndicatorValue = Field(..., description="12 日指数移动平均")
+    ema26: StockTechnicalIndicatorValue = Field(..., description="26 日指数移动平均")
+    rsi14: StockTechnicalIndicatorValue = Field(..., description="14 日相对强弱指标")
+    macd: StockTechnicalIndicatorValue = Field(..., description="MACD 快线")
+    macd_signal: StockTechnicalIndicatorValue = Field(..., alias="macdSignal", description="MACD 信号线")
+    macd_histogram: StockTechnicalIndicatorValue = Field(..., alias="macdHistogram", description="MACD 柱")
+    bollinger_upper: StockTechnicalIndicatorValue = Field(..., alias="bollingerUpper", description="布林带上轨")
+    bollinger_middle: StockTechnicalIndicatorValue = Field(..., alias="bollingerMiddle", description="布林带中轨")
+    bollinger_lower: StockTechnicalIndicatorValue = Field(..., alias="bollingerLower", description="布林带下轨")
+
+
+class StockTechnicalIndicatorsDataQuality(BaseModel):
+    """技术指标输入历史的可审计质量摘要。"""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    status: str = Field(..., description="历史证据状态")
+    reason: str = Field(..., description="历史证据状态原因")
+    required_bars: int = Field(..., alias="requiredBars", ge=1, description="最长指标所需的最小有效 K 线数")
+    observed_bars: int = Field(..., alias="observedBars", ge=0, description="收到的历史行数")
+    valid_bars: int = Field(..., alias="validBars", ge=0, description="通过历史质量校验的历史行数")
+    usable_bars: int = Field(..., alias="usableBars", ge=0, description="用于指标计算的调整后历史行数")
+    missing_bars: int = Field(..., alias="missingBars", ge=0, description="相对最长指标窗口的历史缺口")
+    adjustment_status: str = Field(..., alias="adjustmentStatus", description="调整价格血缘状态")
+    freshness: Optional[str] = Field(None, description="历史新鲜度")
+    freshness_state: Optional[str] = Field(None, alias="freshnessState", description="历史新鲜度状态")
+    usable_range: Dict[str, Optional[str]] = Field(default_factory=dict, alias="usableRange", description="有效历史日期范围")
+
+
+class StockTechnicalIndicatorsResponse(BaseModel):
+    """基于已校验调整后历史 K 线的股票技术指标响应。"""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid", allow_inf_nan=False)
+
+    contract_version: str = Field(..., alias="contractVersion", description="技术指标合约版本")
+    schema_version: str = Field(..., alias="schemaVersion", description="技术指标响应 schema 版本")
+    symbol: str = Field(..., description="归一化股票代码")
+    status: Literal[
+        "available",
+        "partial",
+        "unavailable",
+        "insufficient_history",
+        "invalid_history",
+        "provider_unavailable",
+    ] = Field(..., description="整体技术指标证据状态")
+    timeframe: str = Field(..., description="指标时间周期")
+    source: Optional[str] = Field(None, description="历史来源标识（已知时）")
+    provider: Optional[str] = Field(None, description="历史 provider 标识（已知时）")
+    source_label: Optional[str] = Field(None, alias="sourceLabel", description="消费者可读来源边界")
+    as_of: Optional[str] = Field(None, alias="asOf", description="历史输入的最新可用时间")
+    freshness: Optional[str] = Field(None, description="历史新鲜度")
+    adjustment_status: str = Field(..., alias="adjustmentStatus", description="调整价格血缘状态")
+    valid_bars: int = Field(..., alias="validBars", ge=0, description="有效调整后历史数")
+    required_bars: int = Field(..., alias="requiredBars", ge=1, description="最长指标所需历史数")
+    data_quality: StockTechnicalIndicatorsDataQuality = Field(..., alias="dataQuality", description="输入历史质量")
+    indicators: StockTechnicalIndicatorsMap = Field(..., description="按指标固定键返回的可用性和值")
+    reason: Optional[str] = Field(None, description="整体不可用或降级原因")
+    message: Optional[str] = Field(None, description="消费者安全状态说明")
+    no_advice_disclosure: str = Field(..., alias="noAdviceDisclosure", description="非个性化建议披露")
