@@ -12,6 +12,129 @@ import {
   MarketOverviewRefreshButton,
 } from './marketOverviewPrimitives';
 
+type MarketOverviewProviderState = 'unconfigured' | 'refreshing' | 'refreshFailed' | 'stale' | 'noData' | null;
+
+function hasNotConfiguredReason(panel?: MarketOverviewPanel): boolean {
+  if (!panel) return false;
+  const reasons = [
+    panel.degradationReason,
+    panel.sourceAuthorityReason,
+    panel.providerFreshness?.degradationReason,
+    ...(panel.routeRejectedReasonCodes || []),
+    ...(panel.reasonCodes || []),
+    ...(panel.items || []).flatMap((item) => [
+      item.degradationReason,
+      item.sourceAuthorityReason,
+      ...(item.routeRejectedReasonCodes || []),
+      ...(item.reasonCodes || []),
+    ]),
+  ];
+  return reasons.some((reason) => /(^|[_-])(not_configured|provider_not_configured|provider_missing)([_-]|$)/i.test(String(reason || '')));
+}
+
+function hasProviderFailure(panel?: MarketOverviewPanel): boolean {
+  if (!panel) return false;
+  return Boolean(
+    panel.status === 'failure'
+      || panel.errorMessage
+      || panel.refreshError
+      || panel.lastError
+      || panel.providerHealth?.status === 'error'
+      || panel.providerHealth?.errorSummary,
+  );
+}
+
+function hasStaleSnapshot(panel?: MarketOverviewPanel): boolean {
+  if (!panel) return false;
+  return Boolean(
+    panel.isStale
+      || panel.freshness === 'stale'
+      || panel.freshness === 'cached'
+      || panel.providerHealth?.status === 'stale'
+      || panel.providerHealth?.isStale,
+  );
+}
+
+function resolveMarketOverviewProviderState(
+  panel: MarketOverviewPanel | undefined,
+  hasUsableData: boolean,
+  refreshing: boolean,
+): MarketOverviewProviderState {
+  if (hasNotConfiguredReason(panel)) return 'unconfigured';
+  if (refreshing || panel?.isRefreshing || panel?.providerHealth?.isRefreshing) return 'refreshing';
+  if (!hasUsableData) return 'noData';
+  if (hasProviderFailure(panel)) return 'refreshFailed';
+  if (hasStaleSnapshot(panel)) return 'stale';
+  return hasUsableData ? null : 'noData';
+}
+
+export const MarketOverviewPanelStateNotice: React.FC<{
+  panel?: MarketOverviewPanel;
+  hasUsableData: boolean;
+  refreshing?: boolean;
+}> = ({ panel, hasUsableData, refreshing = false }) => {
+  const { language } = useI18n();
+  const state = resolveMarketOverviewProviderState(panel, hasUsableData, refreshing);
+  if (!state) {
+    return null;
+  }
+  const failure = hasProviderFailure(panel);
+  const isEnglish = language === 'en';
+  const copy = isEnglish
+    ? {
+        unconfigured: 'Market data provider not configured',
+        refreshingWithData: 'Refreshing; showing the latest available data',
+        refreshingWithoutData: 'Refreshing market data',
+        refreshFailed: 'Refresh failed; showing the retained usable snapshot',
+        stale: 'Data is stale; showing the latest snapshot',
+        noDataAfterFailure: 'Refresh failed; no usable data',
+        noData: 'No usable market data',
+      }
+    : {
+        unconfigured: '市场数据源未配置',
+        refreshingWithData: '正在刷新，当前显示最近可用数据',
+        refreshingWithoutData: '正在刷新市场数据',
+        refreshFailed: '刷新失败，继续显示可用快照',
+        stale: '数据已过期，显示最近快照',
+        noDataAfterFailure: '刷新失败，暂无可用数据',
+        noData: '暂无可用数据',
+      };
+
+  let message: string;
+  let badge: string;
+  let variant: 'neutral' | 'caution' | 'info';
+  if (state === 'unconfigured') {
+    message = copy.unconfigured;
+    badge = isEnglish ? 'Not configured' : '未配置';
+    variant = 'caution';
+  } else if (state === 'refreshing') {
+    message = hasUsableData ? copy.refreshingWithData : copy.refreshingWithoutData;
+    badge = isEnglish ? 'Refreshing' : '刷新中';
+    variant = 'info';
+  } else if (state === 'noData') {
+    message = failure ? copy.noDataAfterFailure : copy.noData;
+    badge = isEnglish ? 'Unavailable' : '不可用';
+    variant = 'caution';
+  } else if (state === 'stale') {
+    message = copy.stale;
+    badge = isEnglish ? 'Latest snapshot' : '最近快照';
+    variant = 'neutral';
+  } else {
+    message = copy.refreshFailed;
+    badge = isEnglish ? 'Refresh failed' : '刷新失败';
+    variant = 'caution';
+  }
+
+  return (
+    <div data-testid="market-overview-provider-state" className="flex min-w-0 items-center gap-2">
+      <TerminalChip variant={variant} className="px-2 py-1 text-[10px] font-semibold tracking-widest">
+        {badge}
+      </TerminalChip>
+      <span className="min-w-0 truncate text-[10px] text-[color:var(--wolfy-text-muted)]">{message}</span>
+    </div>
+  );
+};
+
 function isFallbackOnlyPanel(panel?: MarketOverviewPanel): boolean {
   if (!panel) {
     return false;
@@ -108,18 +231,11 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
           />
         </div>
 
-        {panel?.errorMessage ? (
-          <div className="flex min-w-0 items-center gap-2" title={panel.errorMessage}>
-            <TerminalChip
-              data-testid="market-overview-compact-error-badge"
-              variant={panel.isStale || panel.isFromSnapshot ? 'neutral' : 'caution'}
-              className="px-2 py-1 text-[10px] font-semibold tracking-widest"
-            >
-              {panel.isStale || panel.isFromSnapshot ? '最近快照' : '待刷新'}
-            </TerminalChip>
-            <span className="min-w-0 truncate text-[10px] text-[color:var(--wolfy-text-muted)]">刷新失败，保留最近快照</span>
-          </div>
-        ) : null}
+        <MarketOverviewPanelStateNotice
+          panel={panel}
+          hasUsableData={items.length > 0}
+          refreshing={refreshing || loading}
+        />
 
         {denseQuote ? (
           <div

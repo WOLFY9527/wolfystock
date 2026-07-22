@@ -1,8 +1,8 @@
 import type React from 'react';
 import type { MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
 import { useI18n } from '../../contexts/UiLanguageContext';
-import { TerminalChip } from '../terminal/TerminalPrimitives';
 import { isRenderableMarketOverviewItem } from './marketOverviewUtils';
+import { MarketOverviewPanelStateNotice } from './MarketOverviewCard';
 import {
   MarketOverviewCardFrame,
   MarketOverviewDenseQuoteItem,
@@ -45,18 +45,11 @@ export const VolatilityCard: React.FC<{
           />
         </div>
 
-        {panel?.errorMessage ? (
-          <div className="flex min-w-0 items-center gap-2" title={panel.errorMessage}>
-            <TerminalChip
-              data-testid="market-overview-compact-error-badge"
-              variant={panel.isStale || panel.isFromSnapshot ? 'neutral' : 'caution'}
-              className="px-2 py-1 text-[10px] font-semibold tracking-widest"
-            >
-              {panel.isStale || panel.isFromSnapshot ? '最近快照' : '待刷新'}
-            </TerminalChip>
-            <span className="min-w-0 truncate text-[10px] text-[color:var(--wolfy-text-muted)]">刷新失败，保留最近快照</span>
-          </div>
-        ) : null}
+        <MarketOverviewPanelStateNotice
+          panel={panel}
+          hasUsableData={items.length > 0}
+          refreshing={refreshing || loading}
+        />
 
         <div data-testid="market-overview-dense-quote-grid" className="flex min-h-0 flex-col overflow-y-auto no-scrollbar border-y border-[color:var(--wolfy-border-subtle)] ui-scroll-y-quiet">
           {compactItems.map((item) => (

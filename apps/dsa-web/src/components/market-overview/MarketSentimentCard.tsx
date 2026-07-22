@@ -2,11 +2,12 @@ import type React from 'react';
 import type { MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
-import { TerminalChip } from '../terminal/TerminalPrimitives';
+import { MarketOverviewPanelStateNotice } from './MarketOverviewCard';
 import {
   formatChangeSummary,
   formatMetricValue,
   getDirectionTone,
+  isRenderableMarketOverviewItem,
 } from './marketOverviewUtils';
 import {
   MarketOverviewCardFrame,
@@ -56,6 +57,7 @@ export const MarketSentimentCard: React.FC<{
     AAII: t('marketOverviewPage.cards.sentiment.labels.aaii'),
   };
   const items = panel?.items || [];
+  const usableItems = items.filter(isRenderableMarketOverviewItem);
   const primary = resolvePrimaryItem(items);
   const supporting = items
     .filter((item) => item.symbol !== primary?.symbol && isConsumerSafeSupportItem(item))
@@ -64,7 +66,7 @@ export const MarketSentimentCard: React.FC<{
   const score = typeof primary?.value === 'number' && Number.isFinite(primary.value)
     ? primary.value
     : null;
-  const gaugeRatio = score === null ? 0 : Math.min(1, Math.max(0, score / 100));
+  const gaugeRatio = score === null ? null : Math.min(1, Math.max(0, score / 100));
   const title = t('marketOverviewPage.cards.sentiment.title');
 
   return (
@@ -82,22 +84,11 @@ export const MarketSentimentCard: React.FC<{
           />
         </div>
 
-        {panel?.errorMessage ? (
-          <div className="flex min-w-0 items-center gap-2" title={panel.errorMessage}>
-            <TerminalChip
-              data-testid="market-overview-compact-error-badge"
-              variant={panel.isStale || panel.isFromSnapshot ? 'neutral' : 'caution'}
-              className="px-2 py-1 text-[10px] font-semibold tracking-widest"
-            >
-              {panel.isStale || panel.isFromSnapshot
-                ? (isEnglish ? 'Latest snapshot' : '最近快照')
-                : (isEnglish ? 'Refresh pending' : '待刷新')}
-            </TerminalChip>
-            <span className="min-w-0 truncate text-[10px] text-[color:var(--wolfy-text-muted)]">
-              {isEnglish ? 'Refresh failed; keeping the latest snapshot' : '刷新失败，保留最近快照'}
-            </span>
-          </div>
-        ) : null}
+        <MarketOverviewPanelStateNotice
+          panel={panel}
+          hasUsableData={usableItems.length > 0}
+          refreshing={refreshing || loading}
+        />
 
         {primary ? (
           <div className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] px-3 py-2">
@@ -117,10 +108,12 @@ export const MarketSentimentCard: React.FC<{
             <div className="mt-2 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 text-[9px] uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
               <span>{t('marketOverviewPage.cards.sentiment.gaugeLeft')}</span>
               <div className="h-1 min-w-0 overflow-hidden rounded-full bg-[color:var(--wolfy-surface-input)]">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-rose-400 via-sky-400 to-emerald-400"
-                  style={{ width: `${gaugeRatio * 100}%` }}
-                />
+                {gaugeRatio === null ? null : (
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-rose-400 via-sky-400 to-emerald-400"
+                    style={{ width: `${gaugeRatio * 100}%` }}
+                  />
+                )}
               </div>
               <span>{t('marketOverviewPage.cards.sentiment.gaugeRight')}</span>
             </div>
