@@ -53,6 +53,9 @@ class AuthRepository:
     def ensure_bootstrap_admin_user(self):
         return self.db.ensure_bootstrap_admin_user()
 
+    def ensure_bootstrap_admin_role_assignment(self) -> bool:
+        return self.db.ensure_bootstrap_admin_role_assignment()
+
     def get_app_user(self, user_id: str):
         return self.db.get_app_user(user_id)
 

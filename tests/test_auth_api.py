@@ -19,6 +19,7 @@ from dotenv import dotenv_values
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fastapi.responses import Response
+from sqlalchemy import func, select
 from starlette.requests import Request
 
 # Keep this test runnable when optional LLM runtime deps are not installed.
@@ -31,9 +32,9 @@ import src.auth as auth
 from api.deps import CurrentUser
 from api.middlewares.auth import AuthMiddleware
 from api.v1.endpoints import auth as auth_endpoint
-from src.admin_rbac import ADMIN_RBAC_ROLE_CAPABILITIES, OPS_ADMIN_ROLE
+from src.admin_rbac import ADMIN_RBAC_ROLE_CAPABILITIES, SUPER_ADMIN_ROLE
 from src.config import Config
-from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
+from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, ROLE_ADMIN
 from src.storage import AdminUserRole, DatabaseManager
 
 
@@ -45,6 +46,19 @@ def _reset_auth_globals() -> None:
     auth._password_hash_value = None
     auth._rate_limit = {}
     auth._admin_reauth_markers = {}
+
+
+CAPABILITY_FLAG_MAP = {
+    "canReadUsers": "users:read",
+    "canReadUserActivity": "users:activity:read",
+    "canReadUserPortfolio": "users:portfolio:read",
+    "canWriteUserSecurity": "users:security:write",
+    "canReadCostObservability": "cost:observability:read",
+    "canReadOpsLogs": "ops:logs:read",
+    "canReadProviders": "ops:providers:read",
+    "canReadNotifications": "ops:notifications:read",
+    "canReadSystemConfig": "ops:system_config:read",
+}
 
 
 class AuthApiTestCase(unittest.TestCase):
@@ -61,6 +75,12 @@ class AuthApiTestCase(unittest.TestCase):
         )
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.data_dir / "test.db")
+        self.coarse_fallback_patcher = patch.dict(
+            os.environ,
+            {"WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED": "false"},
+            clear=False,
+        )
+        self.coarse_fallback_patcher.start()
         Config.reset_instance()
         DatabaseManager.reset_instance()
 
@@ -70,13 +90,11 @@ class AuthApiTestCase(unittest.TestCase):
         self.data_dir_patcher.start()
 
         self.db = DatabaseManager.get_instance()
-        with self.db.get_session() as session:
-            session.add(AdminUserRole(user_id=BOOTSTRAP_ADMIN_USER_ID, role_key=OPS_ADMIN_ROLE))
-            session.commit()
 
     def tearDown(self) -> None:
         self.auth_patcher.stop()
         self.data_dir_patcher.stop()
+        self.coarse_fallback_patcher.stop()
         DatabaseManager.reset_instance()
         Config.reset_instance()
         os.environ.pop("ENV_FILE", None)
@@ -106,6 +124,12 @@ class AuthApiTestCase(unittest.TestCase):
     @staticmethod
     def _json_response_body(response) -> dict:
         return json.loads(response.body.decode("utf-8"))
+
+    def _assert_canonical_super_admin_capabilities(self, payload: dict) -> None:
+        expected = set(ADMIN_RBAC_ROLE_CAPABILITIES[SUPER_ADMIN_ROLE])
+        self.assertEqual(payload["adminCapabilities"], sorted(expected))
+        for flag, capability in CAPABILITY_FLAG_MAP.items():
+            self.assertEqual(payload[flag], capability in expected)
 
     @staticmethod
     def _legacy_hash(password: str) -> str:
@@ -149,8 +173,13 @@ class AuthApiTestCase(unittest.TestCase):
         self.assertFalse(data["passwordSet"])
         self.assertFalse(data["loggedIn"])
         self.assertEqual(data["setupState"], "no_password")
+        self.assertEqual(self.db.list_admin_user_roles(BOOTSTRAP_ADMIN_USER_ID), [])
+        me_response = asyncio.run(auth_endpoint.auth_me(self._build_request()))
+        self.assertEqual(me_response.status_code, 401)
+        self.assertEqual(self.db.list_admin_user_roles(BOOTSTRAP_ADMIN_USER_ID), [])
 
     def test_login_first_time_set_initial_password(self) -> None:
+        self.assertEqual(self.db.list_admin_user_roles(BOOTSTRAP_ADMIN_USER_ID), [])
         response = asyncio.run(
             auth_endpoint.auth_login(
                 self._build_request(),
@@ -160,6 +189,55 @@ class AuthApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("dsa_session=", response.headers["set-cookie"])
         self.assertIn(b'"ok":true', response.body)
+        login_payload = self._json_response_body(response)
+        expected_capabilities = sorted(ADMIN_RBAC_ROLE_CAPABILITIES[SUPER_ADMIN_ROLE])
+        self.assertEqual(self.db.list_admin_role_capabilities(SUPER_ADMIN_ROLE), expected_capabilities)
+        self.assertEqual(self.db.list_admin_user_roles(BOOTSTRAP_ADMIN_USER_ID), [SUPER_ADMIN_ROLE])
+        self._assert_canonical_super_admin_capabilities(login_payload["currentUser"])
+
+        session_cookie = self._extract_session_cookie(response)
+        status_payload = asyncio.run(
+            auth_endpoint.auth_status(self._build_request(cookies={auth.COOKIE_NAME: session_cookie}))
+        )
+        me_payload = asyncio.run(
+            auth_endpoint.auth_me(self._build_request(cookies={auth.COOKIE_NAME: session_cookie}))
+        )
+        self._assert_canonical_super_admin_capabilities(status_payload["currentUser"])
+        self._assert_canonical_super_admin_capabilities(me_payload)
+
+        DatabaseManager.reset_instance()
+        Config.reset_instance()
+        _reset_auth_globals()
+        self.db = DatabaseManager.get_instance()
+        self.assertEqual(self.db.list_admin_user_roles(BOOTSTRAP_ADMIN_USER_ID), [SUPER_ADMIN_ROLE])
+
+        repeated_response = asyncio.run(
+            auth_endpoint.auth_login(
+                self._build_request(),
+                auth_endpoint.LoginRequest(password="newpass123"),
+            )
+        )
+        self.assertEqual(repeated_response.status_code, 200)
+        repeated_payload = self._json_response_body(repeated_response)
+        self._assert_canonical_super_admin_capabilities(repeated_payload["currentUser"])
+        self.assertEqual(self.db.list_admin_user_roles(BOOTSTRAP_ADMIN_USER_ID), [SUPER_ADMIN_ROLE])
+        repeated_cookie = self._extract_session_cookie(repeated_response)
+        restarted_status = asyncio.run(
+            auth_endpoint.auth_status(self._build_request(cookies={auth.COOKIE_NAME: repeated_cookie}))
+        )
+        restarted_me = asyncio.run(
+            auth_endpoint.auth_me(self._build_request(cookies={auth.COOKIE_NAME: repeated_cookie}))
+        )
+        self._assert_canonical_super_admin_capabilities(restarted_status["currentUser"])
+        self._assert_canonical_super_admin_capabilities(restarted_me)
+        with self.db.get_session() as session:
+            assignment_count = session.execute(
+                select(func.count(AdminUserRole.id)).where(
+                    AdminUserRole.user_id == BOOTSTRAP_ADMIN_USER_ID,
+                    AdminUserRole.role_key == SUPER_ADMIN_ROLE,
+                )
+            ).scalar_one()
+        self.assertEqual(assignment_count, 1)
 
     def test_login_first_time_mismatch_rejected(self) -> None:
         response = asyncio.run(
@@ -188,6 +266,27 @@ class AuthApiTestCase(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'"ok":true', response.body)
+
+        with self.db.session_scope() as session:
+            session.query(AdminUserRole).filter(
+                AdminUserRole.user_id == BOOTSTRAP_ADMIN_USER_ID,
+                AdminUserRole.role_key == SUPER_ADMIN_ROLE,
+            ).delete()
+        session_count = len(self.db.list_app_user_sessions(BOOTSTRAP_ADMIN_USER_ID))
+        with patch.object(
+            auth_endpoint.AuthRepository,
+            "ensure_bootstrap_admin_role_assignment",
+            side_effect=RuntimeError("simulated assignment persistence failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "assignment persistence failure"):
+                asyncio.run(
+                    auth_endpoint.auth_login(
+                        self._build_request(),
+                        auth_endpoint.LoginRequest(password="mypass456"),
+                    )
+                )
+        self.assertEqual(len(self.db.list_app_user_sessions(BOOTSTRAP_ADMIN_USER_ID)), session_count)
+        self.assertEqual(self.db.list_admin_user_roles(BOOTSTRAP_ADMIN_USER_ID), [])
 
     def test_login_create_normal_user_and_auth_me(self) -> None:
         response = self._login_user(username="normal-user", password="secret123")
@@ -374,11 +473,11 @@ class AuthApiTestCase(unittest.TestCase):
             self.assertTrue(payload["isAdmin"])
             self.assertTrue(payload["isAuthenticated"])
             capabilities = payload["adminCapabilities"]
-            self.assertEqual(capabilities, sorted(ADMIN_RBAC_ROLE_CAPABILITIES[OPS_ADMIN_ROLE]))
-            self.assertFalse(payload["canReadUsers"])
-            self.assertFalse(payload["canReadUserActivity"])
-            self.assertFalse(payload["canReadUserPortfolio"])
-            self.assertFalse(payload["canWriteUserSecurity"])
+            self.assertEqual(capabilities, sorted(ADMIN_RBAC_ROLE_CAPABILITIES[SUPER_ADMIN_ROLE]))
+            self.assertTrue(payload["canReadUsers"])
+            self.assertTrue(payload["canReadUserActivity"])
+            self.assertTrue(payload["canReadUserPortfolio"])
+            self.assertTrue(payload["canWriteUserSecurity"])
             self.assertTrue(payload["canReadCostObservability"])
             self.assertTrue(payload["canReadOpsLogs"])
             self.assertTrue(payload["canReadProviders"])
@@ -402,10 +501,10 @@ class AuthApiTestCase(unittest.TestCase):
         self.assertTrue(current_user["isAuthenticated"])
         self.assertEqual(
             current_user["adminCapabilities"],
-            sorted(ADMIN_RBAC_ROLE_CAPABILITIES[OPS_ADMIN_ROLE]),
+            sorted(ADMIN_RBAC_ROLE_CAPABILITIES[SUPER_ADMIN_ROLE]),
         )
-        self.assertFalse(current_user["canWriteUserSecurity"])
-        self.assertFalse(current_user["canReadUserPortfolio"])
+        self.assertTrue(current_user["canWriteUserSecurity"])
+        self.assertTrue(current_user["canReadUserPortfolio"])
 
     def test_non_admin_current_user_has_no_admin_capability_summary(self) -> None:
         response = self._login_user(username="normal-user", password="secret123")
@@ -440,6 +539,42 @@ class AuthApiTestCase(unittest.TestCase):
                 "canReadSystemConfig",
             ):
                 self.assertFalse(payload[key])
+
+        self.db.create_or_update_app_user(
+            user_id="non-bootstrap-admin",
+            username="non-bootstrap-admin",
+            display_name="Non-Bootstrap Admin",
+            role=ROLE_ADMIN,
+            password_hash=auth.hash_password_for_storage("scoped-admin-pass"),
+            is_active=True,
+        )
+        admin_login = asyncio.run(
+            auth_endpoint.auth_login(
+                self._build_request(),
+                auth_endpoint.LoginRequest(
+                    username="non-bootstrap-admin",
+                    password="scoped-admin-pass",
+                ),
+            )
+        )
+        self.assertEqual(admin_login.status_code, 200)
+        admin_cookie = self._extract_session_cookie(admin_login)
+        admin_status = asyncio.run(
+            auth_endpoint.auth_status(self._build_request(cookies={auth.COOKIE_NAME: admin_cookie}))
+        )
+        admin_me = asyncio.run(
+            auth_endpoint.auth_me(self._build_request(cookies={auth.COOKIE_NAME: admin_cookie}))
+        )
+        for payload in (
+            self._json_response_body(admin_login)["currentUser"],
+            admin_status["currentUser"],
+            admin_me,
+        ):
+            self.assertTrue(payload["isAdmin"])
+            self.assertEqual(payload["adminCapabilities"], [])
+            for flag in CAPABILITY_FLAG_MAP:
+                self.assertFalse(payload[flag])
+        self.assertEqual(self.db.list_admin_user_roles("non-bootstrap-admin"), [])
 
     def test_unauthenticated_auth_status_reports_first_run_when_password_missing(self) -> None:
         data = asyncio.run(auth_endpoint.auth_status(self._build_request()))

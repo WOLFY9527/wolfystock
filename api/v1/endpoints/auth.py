@@ -1836,6 +1836,9 @@ async def auth_login(request: Request, body: LoginRequest):
     if mfa_error is not None:
         return mfa_error
 
+    if str(getattr(user_row, "id", "") or "") == BOOTSTRAP_ADMIN_USER_ID:
+        repo.ensure_bootstrap_admin_role_assignment()
+
     had_failures = has_rate_limit_failures(ip, username)
     clear_rate_limit(ip, username)
     if had_failures:

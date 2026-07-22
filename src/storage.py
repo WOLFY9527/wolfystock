@@ -71,7 +71,7 @@ from src.multi_user import (
     normalize_role,
     normalize_scope,
 )
-from src.admin_rbac import ADMIN_RBAC_ROLE_CAPABILITIES, ADMIN_RBAC_ROLES
+from src.admin_rbac import ADMIN_RBAC_ROLE_CAPABILITIES, ADMIN_RBAC_ROLES, SUPER_ADMIN_ROLE
 from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE
 from src.postgres_identity_store import PostgresPhaseAStore
 from src.postgres_analysis_chat_store import PostgresPhaseBStore
@@ -6076,6 +6076,56 @@ class DatabaseManager:
                 ).scalars().all()
                 if str(value or "").strip()
             ]
+
+    def ensure_bootstrap_admin_role_assignment(self) -> bool:
+        bootstrap_user = self.get_app_user(BOOTSTRAP_ADMIN_USER_ID)
+        if (
+            bootstrap_user is None
+            or str(getattr(bootstrap_user, "id", "") or "") != BOOTSTRAP_ADMIN_USER_ID
+            or str(getattr(bootstrap_user, "role", "") or "") != ROLE_ADMIN
+            or not bool(getattr(bootstrap_user, "is_active", True))
+        ):
+            raise RuntimeError("Bootstrap administrator identity is not active and canonical")
+
+        expected_capabilities = set(ADMIN_RBAC_ROLE_CAPABILITIES[SUPER_ADMIN_ROLE])
+        with self.session_scope() as session:
+            role = session.get(AdminRole, SUPER_ADMIN_ROLE)
+            stored_capabilities = set(
+                session.execute(
+                    select(AdminRoleCapability.capability).where(
+                        AdminRoleCapability.role_key == SUPER_ADMIN_ROLE
+                    )
+                ).scalars().all()
+            )
+            if role is None or stored_capabilities != expected_capabilities:
+                raise RuntimeError("Canonical super-admin RBAC seed is incomplete")
+
+            assignment = session.execute(
+                select(AdminUserRole).where(
+                    AdminUserRole.user_id == BOOTSTRAP_ADMIN_USER_ID,
+                    AdminUserRole.role_key == SUPER_ADMIN_ROLE,
+                )
+            ).scalar_one_or_none()
+            if assignment is not None:
+                return False
+
+            session.add(
+                AdminUserRole(
+                    user_id=BOOTSTRAP_ADMIN_USER_ID,
+                    role_key=SUPER_ADMIN_ROLE,
+                    assigned_by=BOOTSTRAP_ADMIN_USER_ID,
+                )
+            )
+            session.flush()
+            persisted_assignment = session.execute(
+                select(AdminUserRole.id).where(
+                    AdminUserRole.user_id == BOOTSTRAP_ADMIN_USER_ID,
+                    AdminUserRole.role_key == SUPER_ADMIN_ROLE,
+                )
+            ).scalar_one_or_none()
+            if persisted_assignment is None:
+                raise RuntimeError("Bootstrap administrator role assignment was not persisted")
+            return True
 
     def list_admin_capabilities_for_user(self, user_id: str) -> List[str]:
         role_keys = self.list_admin_user_roles(user_id)
