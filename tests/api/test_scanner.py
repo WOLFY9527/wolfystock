@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -19,6 +20,7 @@ from api.v1.schemas.scanner import (
     sanitize_scanner_consumer_payload,
 )
 from src.core.scanner_theme_registry import get_scanner_theme
+from src.services.market_scanner_service import ScannerRuntimeError
 
 
 def _scanner_api_user() -> CurrentUser:
@@ -32,6 +34,20 @@ def _scanner_api_user() -> CurrentUser:
         transitional=False,
         auth_enabled=True,
         session_id="session-1",
+    )
+
+
+def _scanner_member_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="member-1",
+        username="member",
+        display_name="Member",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+        session_id="member-session-1",
     )
 
 
@@ -108,11 +124,114 @@ def test_scanner_root_route_is_discoverable_and_points_to_canonical_routes() -> 
     assert payload["contractVersion"] == "scanner_discoverability_v1"
     assert payload["canonicalRoutes"]["run"] == "POST /api/v1/scanner/run"
     assert payload["canonicalRoutes"]["latest"] == "GET /api/v1/scanner/runs/{run_id}"
-    assert payload["canonicalRoutes"]["readiness"] == "GET /api/v1/scanner/status?market=us&profile=us_preopen_v1"
+    assert payload["canonicalRoutes"]["readiness"] == "GET /api/v1/scanner/readiness?market=us&profile=us_preopen_v1"
     assert payload["market"] == "us"
     assert payload["profile"] == "us_preopen_v1"
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
+
+
+def test_scanner_member_readiness_projects_only_consumer_safe_data() -> None:
+    app = FastAPI()
+    app.include_router(api_v1_router)
+    app.dependency_overrides[get_current_user] = _scanner_member_user
+    app.dependency_overrides[get_database_manager] = lambda: object()
+    service = MagicMock()
+    service.get_operational_status.return_value = {
+        "market": "us",
+        "profile": "us_preopen_v1",
+        "schedule_enabled": True,
+        "notification_enabled": True,
+        "last_manual_run": {"id": 99},
+        "dataReadiness": {
+            "state": "blocked",
+            "market": "us",
+            "profile": "us_preopen_v1",
+            "quoteCoverage": "unavailable",
+            "historyCoverage": "unavailable",
+            "freshness": "unavailable",
+            "blockerBucket": "missing_quote_snapshot",
+            "consumerSummary": "Scanner data is unavailable.",
+            "nextDataAction": "Wait for qualified market data.",
+            "scannerUniverseReadiness": {
+                "contractVersion": "scanner_universe_readiness_v1",
+                "status": "missing",
+                "consumerSafeMessage": "Market data is unavailable for this scan.",
+                "providerCallsEnabled": True,
+                "operatorNextAction": "Inspect provider credentials.",
+                "sourcePath": "/private/provider/config",
+            },
+        },
+    }
+
+    with patch("api.v1.endpoints.scanner.MarketScannerOperationsService", return_value=service):
+        response = TestClient(app).get("/api/v1/scanner/readiness?market=us&profile=us_preopen_v1")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "market": "us",
+        "profile": "us_preopen_v1",
+        "dataReadiness": {
+            "state": "blocked",
+            "market": "us",
+            "profile": "us_preopen_v1",
+            "quoteCoverage": "unavailable",
+            "historyCoverage": "unavailable",
+            "freshness": "unavailable",
+            "blockerBucket": "missing_quote_snapshot",
+            "consumerSummary": "Scanner data is unavailable.",
+            "nextDataAction": "Wait for qualified market data.",
+            "scannerUniverseReadiness": {
+                "status": "missing",
+                "consumerSafeMessage": "Market data is unavailable for this scan.",
+            },
+        },
+    }
+    service.get_operational_status.assert_called_once_with(market="us", profile="us_preopen_v1")
+
+    service.run_manual_scan.side_effect = ScannerRuntimeError(
+        "scanner_universe_missing",
+        "raw provider diagnostic must not reach an ordinary user",
+        diagnostics={
+            "dataReadiness": {
+                "state": "blocked",
+                "market": "us",
+                "profile": "us_preopen_v1",
+                "blockerBucket": "missing_quote_snapshot",
+                "scannerUniverseReadiness": {
+                    "contractVersion": "scanner_universe_readiness_v1",
+                    "status": "missing",
+                    "consumerSafeMessage": "Market data is unavailable for this scan.",
+                    "providerCallsEnabled": True,
+                    "operatorNextAction": "Inspect provider credentials.",
+                    "sourcePath": "/private/provider/config",
+                },
+            }
+        },
+    )
+
+    with patch("api.v1.endpoints.scanner.MarketScannerOperationsService", return_value=service):
+        run_response = TestClient(app).post("/api/v1/scanner/run", json={"market": "us", "profile": "us_preopen_v1"})
+
+    assert run_response.status_code == 409
+    run_error = run_response.json()["detail"]
+    assert run_error["error"] == "scanner_data_not_ready"
+    assert run_error["message"] == "Scanner data is insufficient for this request."
+    assert run_error["detail"] == {
+        "dataReadiness": {
+            "state": "blocked",
+            "market": "us",
+            "profile": "us_preopen_v1",
+            "blockerBucket": "missing_quote_snapshot",
+            "scannerUniverseReadiness": {
+                "status": "missing",
+                "consumerSafeMessage": "Market data is unavailable for this scan.",
+            },
+        }
+    }
+    serialized_error = json.dumps(run_error).lower()
+    for forbidden in ("contractversion", "providercallsenabled", "operatornextaction", "sourcepath", "private/provider", "raw provider"):
+        assert forbidden not in serialized_error
 
 
 def test_crypto_mining_theme_registry_has_11_symbols() -> None:

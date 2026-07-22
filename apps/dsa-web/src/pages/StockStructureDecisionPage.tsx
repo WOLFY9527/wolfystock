@@ -3019,12 +3019,12 @@ function StockTechnicalIndicatorsPanel({
   const isAvailable = statusToken === 'available' || statusToken === 'ready';
   const timeframe = periodLabel(indicators.timeframe, language) || indicators.timeframe || (isEnglish ? 'Daily' : '日线');
   const boundaryChips = [
-    technicalSourceBoundaryLabel(indicators, language),
-    technicalFreshnessLabel(indicators, language),
-    technicalAsOfLabel(indicators, language),
-    timeframe,
-    isEnglish ? 'Research observation only' : '仅研究观察',
-  ].filter(Boolean) as string[];
+    { id: 'source', label: technicalSourceBoundaryLabel(indicators, language) },
+    { id: 'freshness', label: technicalFreshnessLabel(indicators, language) },
+    { id: 'as-of', label: technicalAsOfLabel(indicators, language) },
+    { id: 'timeframe', label: timeframe },
+    { id: 'observation-boundary', label: isEnglish ? 'Research observation only' : '仅研究观察' },
+  ].filter((chip): chip is { id: string; label: string } => Boolean(chip.label));
 
   if (isAvailable && rows.length) {
     return (
@@ -3032,8 +3032,8 @@ function StockTechnicalIndicatorsPanel({
         <RoughSectionCard eyebrow={isEnglish ? 'Technical indicators' : '技术指标'} title={isEnglish ? 'Cached price-history indicators' : '本地价格历史技术指标'}>
           <div className="mb-3 flex flex-wrap gap-2">
             <StatusBadge status={status.status} label={status.label} size="sm" />
-            {boundaryChips.map((label) => (
-              <TerminalChip key={label} variant="neutral">{label}</TerminalChip>
+            {boundaryChips.map(({ id, label }) => (
+              <TerminalChip key={id} variant="neutral">{label}</TerminalChip>
             ))}
           </div>
           <RoughKeyValueRows rows={rows} />

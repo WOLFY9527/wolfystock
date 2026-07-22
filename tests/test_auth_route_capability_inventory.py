@@ -171,6 +171,7 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/scanner/strategy-simulation"): "authenticated_member",
     ("GET", "/api/v1/scanner/runs/{run_id}"): "authenticated_member",
     ("GET", "/api/v1/scanner/runs/{run_id}/research-overlay"): "authenticated_member",
+    ("GET", "/api/v1/scanner/readiness"): "authenticated_member",
     ("GET", "/api/v1/scanner/watchlists/today"): "admin_capability",
     ("GET", "/api/v1/scanner/watchlists/recent"): "admin_capability",
     ("GET", "/api/v1/scanner/status"): "admin_capability",

@@ -19,6 +19,7 @@ from api.deps import (
 from api.v1.errors import safe_api_error
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.scanner import (
+    ScannerConsumerReadinessResponse,
     ScannerOperationalStatusResponse,
     ScannerResearchOverlayResponse,
     ScannerRunDetailResponse,
@@ -28,11 +29,12 @@ from api.v1.schemas.scanner import (
     ScannerThemeGenerateRequest,
     ScannerThemeGenerationResponse,
     ScannerThemesResponse,
+    sanitize_scanner_consumer_readiness,
     sanitize_scanner_consumer_payload,
 )
 from src.core.scanner_theme_registry import create_ai_scanner_theme, list_scanner_themes
 from src.services.market_scanner_ops_service import MarketScannerOperationsService
-from src.services.market_scanner_service import MarketScannerService
+from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
 from src.services.scanner_research_overlay_service import ScannerResearchOverlayService
 from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER
 from src.storage import DatabaseManager
@@ -42,6 +44,7 @@ router = APIRouter()
 ResponseT = TypeVar("ResponseT")
 
 SCANNER_VALIDATION_ERROR_MESSAGE = "Scanner request could not be processed."
+SCANNER_DATA_NOT_READY_ERROR_MESSAGE = "Scanner data is insufficient for this request."
 SCANNER_INTERNAL_ERROR_MESSAGE = "Scanner data is temporarily unavailable. Please retry later."
 
 
@@ -96,6 +99,24 @@ def _actor(current_user: CurrentUser | object | None) -> dict | None:
 
 
 def _validation_error(exc: ValueError) -> HTTPException:
+    if isinstance(exc, ScannerRuntimeError):
+        data_readiness = exc.diagnostics.get("dataReadiness")
+        if not isinstance(data_readiness, dict):
+            universe_readiness = exc.diagnostics.get("scannerUniverseReadiness")
+            data_readiness = (
+                {"scannerUniverseReadiness": universe_readiness}
+                if isinstance(universe_readiness, dict)
+                else None
+            )
+        consumer_readiness = sanitize_scanner_consumer_readiness(data_readiness)
+        if consumer_readiness:
+            return safe_api_error(
+                status_code=409,
+                error="scanner_data_not_ready",
+                message=SCANNER_DATA_NOT_READY_ERROR_MESSAGE,
+                retryable=False,
+                detail={"dataReadiness": consumer_readiness},
+            )
     return safe_api_error(
         status_code=400,
         error="validation_error",
@@ -162,7 +183,7 @@ def get_scanner_route_summary(
     _ = current_user
     normalized_market = (market or "cn").strip().lower()
     normalized_profile = (profile or "").strip() or None
-    readiness_route = f"GET /api/v1/scanner/status?market={normalized_market}"
+    readiness_route = f"GET /api/v1/scanner/readiness?market={normalized_market}"
     if normalized_profile:
         readiness_route = f"{readiness_route}&profile={normalized_profile}"
     return {
@@ -395,6 +416,41 @@ def get_recent_watchlists(
         return ScannerRunHistoryResponse(**payload)
 
     return _run_endpoint("查询近期观察名单失败", _operation)
+
+
+@router.get(
+    "/readiness",
+    response_model=ScannerConsumerReadinessResponse,
+    responses={
+        200: {"description": "Scanner member readiness"},
+        400: {"description": "Readiness data is unavailable", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取 Scanner 用户就绪状态",
+)
+def get_scanner_consumer_readiness(
+    market: Optional[str] = Query("cn", description="市场过滤"),
+    profile: Optional[str] = Query(None, description="扫描配置过滤"),
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ScannerConsumerReadinessResponse:
+    def _operation() -> ScannerConsumerReadinessResponse:
+        service = _build_scanner_ops_service(db_manager, current_user)
+        payload = service.get_operational_status(
+            market=market or "cn",
+            profile=profile,
+        )
+        resolved_market = str(payload.get("market") or "").strip()
+        resolved_profile = str(payload.get("profile") or "").strip()
+        if not resolved_market or not resolved_profile:
+            raise ValueError("Scanner readiness scope is unavailable.")
+        return ScannerConsumerReadinessResponse(
+            market=resolved_market,
+            profile=resolved_profile,
+            dataReadiness=sanitize_scanner_consumer_readiness(payload.get("dataReadiness")),
+        )
+
+    return _run_endpoint("查询 Scanner 用户就绪状态失败", _operation)
 
 
 @router.get(

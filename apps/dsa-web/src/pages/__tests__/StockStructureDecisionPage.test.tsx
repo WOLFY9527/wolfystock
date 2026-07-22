@@ -1402,49 +1402,58 @@ describe('StockStructureDecisionPage', () => {
 
   it('renders cached price-history technical indicator values as research-only context', async () => {
     getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
-    getTechnicalIndicatorsMock.mockResolvedValue(technicalIndicatorsAvailable());
+    getTechnicalIndicatorsMock.mockResolvedValue({
+      ...technicalIndicatorsAvailable(),
+      freshness: 'fixture',
+    });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    renderRoutePattern(
-      <StockStructureDecisionPage />,
-      '/zh/stocks/AAPL/structure-decision',
-      '/zh/stocks/:stockCode/structure-decision',
-    );
+    try {
+      renderRoutePattern(
+        <StockStructureDecisionPage />,
+        '/zh/stocks/AAPL/structure-decision',
+        '/zh/stocks/:stockCode/structure-decision',
+      );
 
-    const page = await screen.findByTestId('stock-structure-decision-page');
-    const panel = await within(page).findByTestId('stock-technical-indicators-panel');
+      const page = await screen.findByTestId('stock-structure-decision-page');
+      const panel = await within(page).findByTestId('stock-technical-indicators-panel');
 
-    expect(getTechnicalIndicatorsMock).toHaveBeenCalledWith('AAPL');
-    expect(panel).toHaveTextContent('本地价格历史技术指标');
-    expect(panel).toHaveTextContent('指标可用');
-    expect(panel).toHaveTextContent('本地价格历史边界');
-    expect(panel).toHaveTextContent('最新可用');
-    expect(panel).toHaveTextContent('SMA 20');
-    expect(panel).toHaveTextContent('210.12');
-    expect(panel).toHaveTextContent('SMA 50');
-    expect(panel).toHaveTextContent('205.34');
-    expect(panel).toHaveTextContent('SMA 200');
-    expect(panel).toHaveTextContent('190.56');
-    expect(panel).toHaveTextContent('EMA 12');
-    expect(panel).toHaveTextContent('212.45');
-    expect(panel).toHaveTextContent('EMA 26');
-    expect(panel).toHaveTextContent('207.89');
-    expect(panel).toHaveTextContent('RSI 14');
-    expect(panel).toHaveTextContent('58.42');
-    expect(panel).toHaveTextContent('MACD');
-    expect(panel).toHaveTextContent('1.234');
-    expect(panel).toHaveTextContent('MACD 信号线');
-    expect(panel).toHaveTextContent('0.987');
-    expect(panel).toHaveTextContent('MACD 柱');
-    expect(panel).toHaveTextContent('0.247');
-    expect(panel).toHaveTextContent('布林带上轨');
-    expect(panel).toHaveTextContent('221.45');
-    expect(panel).toHaveTextContent('布林带中轨');
-    expect(panel).toHaveTextContent('210.12');
-    expect(panel).toHaveTextContent('布林带下轨');
-    expect(panel).toHaveTextContent('198.79');
-    expect(panel).toHaveTextContent('仅作研究观察上下文');
-    expect(panel.textContent || '').not.toMatch(/OHLCV|daily OHLCV|historical OHLCV/i);
-    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+      expect(getTechnicalIndicatorsMock).toHaveBeenCalledWith('AAPL');
+      expect(panel).toHaveTextContent('本地价格历史技术指标');
+      expect(panel).toHaveTextContent('指标可用');
+      expect(panel).toHaveTextContent('本地价格历史边界');
+      expect(panel).toHaveTextContent('更新');
+      expect(panel).toHaveTextContent('SMA 20');
+      expect(panel).toHaveTextContent('210.12');
+      expect(panel).toHaveTextContent('SMA 50');
+      expect(panel).toHaveTextContent('205.34');
+      expect(panel).toHaveTextContent('SMA 200');
+      expect(panel).toHaveTextContent('190.56');
+      expect(panel).toHaveTextContent('EMA 12');
+      expect(panel).toHaveTextContent('212.45');
+      expect(panel).toHaveTextContent('EMA 26');
+      expect(panel).toHaveTextContent('207.89');
+      expect(panel).toHaveTextContent('RSI 14');
+      expect(panel).toHaveTextContent('58.42');
+      expect(panel).toHaveTextContent('MACD');
+      expect(panel).toHaveTextContent('1.234');
+      expect(panel).toHaveTextContent('MACD 信号线');
+      expect(panel).toHaveTextContent('0.987');
+      expect(panel).toHaveTextContent('MACD 柱');
+      expect(panel).toHaveTextContent('0.247');
+      expect(panel).toHaveTextContent('布林带上轨');
+      expect(panel).toHaveTextContent('221.45');
+      expect(panel).toHaveTextContent('布林带中轨');
+      expect(panel).toHaveTextContent('210.12');
+      expect(panel).toHaveTextContent('布林带下轨');
+      expect(panel).toHaveTextContent('198.79');
+      expect(panel).toHaveTextContent('仅作研究观察上下文');
+      expect(consoleError).not.toHaveBeenCalled();
+      expect(panel.textContent || '').not.toMatch(/OHLCV|daily OHLCV|historical OHLCV/i);
+      expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it('renders missing-cache technical indicators without fabricating values', async () => {

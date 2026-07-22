@@ -89,21 +89,6 @@ describe('scannerApi investor signal normalization', () => {
         data: {
           market: 'us',
           profile: 'us_preopen_v1',
-          watchlist_date: '2026-06-21',
-          today_trading_day: false,
-          schedule_enabled: false,
-          schedule_run_immediately: false,
-          notification_enabled: false,
-          quality_summary: {
-            available: false,
-            review_window_days: 5,
-            run_count: 0,
-            reviewed_run_count: 0,
-            reviewed_candidate_count: 0,
-            strong_count: 0,
-            mixed_count: 0,
-            weak_count: 0,
-          },
           data_readiness: {
             state: 'not_run',
             market: 'us',
@@ -117,14 +102,20 @@ describe('scannerApi investor signal normalization', () => {
       });
 
     const detail: ScannerRunDetailWithDataReadiness = await scannerApi.getRun(45);
-    const status = await scannerApi.getStatus({ market: 'us', profile: 'us_preopen_v1' });
+    const readiness = await scannerApi.getReadiness({ market: 'us', profile: 'us_preopen_v1' });
 
     expect(detail.diagnostics.dataReadiness?.state).toBe('blocked');
     expect(detail.diagnostics.dataReadiness?.blockerBucket).toBe('missing_quote_snapshot');
     expect(detail.diagnostics.dataReadiness?.quoteCoverage).toBe('unknown');
     expect(detail.diagnostics.dataReadiness?.nextDataAction).toBe('Refresh quote snapshots.');
-    expect(status.dataReadiness?.state).toBe('not_run');
-    expect(status.dataReadiness?.blockerBucket).toBe('unknown');
+    expect(readiness.dataReadiness?.state).toBe('not_run');
+    expect(readiness.dataReadiness?.blockerBucket).toBe('unknown');
+    expect(get).toHaveBeenNthCalledWith(2, '/api/v1/scanner/readiness', {
+      params: {
+        market: 'us',
+        profile: 'us_preopen_v1',
+      },
+    });
   });
 
   it('converts consumer_diagnostics investor_signal into typed camelCase fields', async () => {

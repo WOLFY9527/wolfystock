@@ -20,7 +20,7 @@ import { findConsumerRawLeakage, textContentWithoutObservationBoundary } from '.
 const {
   getRuns,
   getRun,
-  getStatus,
+  getReadiness,
   getThemes,
   getStrategySimulation,
   createTheme,
@@ -33,7 +33,7 @@ const {
 } = vi.hoisted(() => ({
   getRuns: vi.fn(),
   getRun: vi.fn(),
-  getStatus: vi.fn(),
+  getReadiness: vi.fn(),
   getThemes: vi.fn(),
   getStrategySimulation: vi.fn(),
   createTheme: vi.fn(),
@@ -61,7 +61,7 @@ vi.mock('../../api/scanner', () => ({
   scannerApi: {
     getRuns,
     getRun,
-    getStatus,
+    getReadiness,
     getThemes,
     createTheme,
     getStrategySimulation,
@@ -1042,7 +1042,7 @@ describe('UserScannerPage', () => {
     });
     getRuns.mockReset();
     getRun.mockReset();
-    getStatus.mockReset();
+    getReadiness.mockReset();
     getThemes.mockReset();
     getStrategySimulation.mockReset();
     createTheme.mockReset();
@@ -1119,7 +1119,7 @@ describe('UserScannerPage', () => {
     });
     getRuns.mockResolvedValue(makeHistoryResponse());
     getRun.mockResolvedValue(makeRunDetail());
-    getStatus.mockResolvedValue({
+    getReadiness.mockResolvedValue({
       market: 'cn',
       profile: 'cn_preopen_v1',
       watchlistDate: '2026-04-22',
@@ -1911,10 +1911,10 @@ describe('UserScannerPage', () => {
     expect(textContentWithoutObservationBoundary(container)).not.toMatch(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
   });
 
-  it('uses scanner status data readiness when no run detail is available', async () => {
+  it('uses member scanner readiness when no run detail is available', async () => {
     getRuns.mockResolvedValue(makeHistoryResponse([]));
     getRun.mockResolvedValue(null as never);
-    getStatus.mockResolvedValue({
+    getReadiness.mockResolvedValue({
       market: 'cn',
       profile: 'cn_preopen_v1',
       watchlistDate: '2026-04-22',
@@ -4517,7 +4517,7 @@ describe('UserScannerPage', () => {
   it('shows stale scanner universe readiness without fake candidates or internal leakage', async () => {
     getRuns.mockResolvedValue(makeHistoryResponse([]));
     getRun.mockResolvedValue(null);
-    getStatus.mockResolvedValue({
+    getReadiness.mockResolvedValue({
       market: 'cn',
       profile: 'cn_preopen_v1',
       watchlistDate: '2026-06-27',
@@ -4557,7 +4557,6 @@ describe('UserScannerPage', () => {
           missingDataClasses: ['historical_ohlcv', 'quote_snapshot'],
           blockedProductSurfaces: ['Scanner', 'Market Overview', 'Backtest'],
           consumerSafeMessage: '扫描标的池已过期，需要更新后再扫描。',
-          operatorNextAction: 'Refresh the scanner local universe and rerun scanner readiness checks.',
           consumerSafe: true,
         },
       },
@@ -4583,7 +4582,7 @@ describe('UserScannerPage', () => {
   it('distinguishes missing scanner universe readiness from stale universe readiness', async () => {
     getRuns.mockResolvedValue(makeHistoryResponse([]));
     getRun.mockResolvedValue(null);
-    getStatus.mockResolvedValue({
+    getReadiness.mockResolvedValue({
       market: 'cn',
       profile: 'cn_preopen_v1',
       watchlistDate: '2026-06-27',
@@ -4646,7 +4645,7 @@ describe('UserScannerPage', () => {
     };
     getRuns.mockResolvedValue(makeHistoryResponse([]));
     getRun.mockResolvedValue(null);
-    getStatus.mockResolvedValue({
+    getReadiness.mockResolvedValue({
       market: 'cn',
       profile: 'cn_preopen_v1',
       watchlistDate: '2026-06-27',

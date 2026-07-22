@@ -81,47 +81,13 @@ function scannerRunSummary(overrides: Record<string, unknown> = {}) {
 }
 
 function scannerStatusPayload(overrides: Record<string, unknown> = {}) {
+  const readiness = overrides.data_readiness;
   return {
-    market: 'cn',
-    profile: 'cn_preopen_v1',
-    watchlist_date: '2026-05-02',
-    today_trading_day: true,
-    schedule_enabled: false,
-    schedule_run_immediately: false,
-    notification_enabled: false,
-    quality_summary: {
-      available: true,
-      review_window_days: 5,
-      run_count: 1,
-      reviewed_run_count: 1,
-      reviewed_candidate_count: 1,
-      strong_count: 1,
-      mixed_count: 0,
-      weak_count: 0,
-    },
-    data_readiness: {
-      state: 'ready',
-      market: 'cn',
-      profile: 'cn_preopen_v1',
-      universe_size: 320,
-      scanner_universe_readiness: {
-        status: 'available',
-        market: 'cn',
-        universe_size: 320,
-        consumer_safe_message: '标的池已准备，可以按当前条件运行扫描。',
-      },
-      quote_coverage: 'available',
-      history_coverage: 'available',
-      freshness: 'available',
-      candidate_evaluation_count: 48,
-      selected_count: 1,
-      rejected_count: 47,
-      failed_count: 0,
-      blocker_bucket: 'unknown',
-      consumer_summary: '扫描器可用于观察。',
-      next_data_action: '可以按当前条件运行扫描。',
-    },
-    ...overrides,
+    market: typeof overrides.market === 'string' ? overrides.market : 'cn',
+    profile: typeof overrides.profile === 'string' ? overrides.profile : 'cn_preopen_v1',
+    data_readiness: readiness && typeof readiness === 'object' && !Array.isArray(readiness)
+      ? readiness
+      : scannerDataReadiness(),
   };
 }
 const retryNoCandidateRun = {
@@ -407,7 +373,7 @@ async function fulfillJson(route: Route, body: Record<string, unknown>, status =
 
 async function installScannerStateRoutes(page: Page, matrixCase: ScannerStateMatrixCase) {
   await page.route('**/api/v1/auth/status', async (route) => fulfillJson(route, scannerAuthStatus()));
-  await page.route('**/api/v1/scanner/status**', async (route) => fulfillJson(route, matrixCase.statusPayload));
+  await page.route('**/api/v1/scanner/readiness**', async (route) => fulfillJson(route, matrixCase.statusPayload));
   await page.route(/\/api\/v1\/scanner\/runs(?:\?.*)?$/, async (route) => fulfillJson(route, matrixCase.runsPayload));
   await page.route('**/api/v1/scanner/runs/11', async (route) => {
     if (matrixCase.runDetailError) {
@@ -999,7 +965,7 @@ test.describe('scanner launch surface', () => {
     });
 
     await page.route('**/api/v1/auth/status', async (route) => fulfillJson(route, scannerAuthStatus()));
-    await page.route('**/api/v1/scanner/status**', async (route) => fulfillJson(route, scannerStatusPayload({
+    await page.route('**/api/v1/scanner/readiness**', async (route) => fulfillJson(route, scannerStatusPayload({
       data_readiness: scannerDataReadiness({
         state: 'ready',
         consumer_summary: '扫描器可用于观察。',
@@ -1062,28 +1028,13 @@ test.describe('scanner launch surface', () => {
         }),
       });
     });
-    await page.route('**/api/v1/scanner/status**', async (route) => {
+    await page.route('**/api/v1/scanner/readiness**', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
           market: 'cn',
           profile: 'cn_preopen_v1',
-          watchlist_date: '2026-05-02',
-          today_trading_day: true,
-          schedule_enabled: false,
-          schedule_run_immediately: false,
-          notification_enabled: false,
-          quality_summary: {
-            available: false,
-            review_window_days: 5,
-            run_count: 0,
-            reviewed_run_count: 0,
-            reviewed_candidate_count: 0,
-            strong_count: 0,
-            mixed_count: 0,
-            weak_count: 0,
-          },
           data_readiness: {
             state: 'not_run',
             market: 'cn',

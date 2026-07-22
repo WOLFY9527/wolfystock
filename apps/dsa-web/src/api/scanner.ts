@@ -4,7 +4,6 @@ import { consumerSafeReportText } from '../utils/homeReportIdentity';
 import type {
   ScannerCandidate,
   ScannerCandidateResearchPacket,
-  ScannerOperationalStatus,
   ScannerStrategySimulationResult,
   ScannerThemeGenerateRequest,
   ScannerThemeGenerationResponse,
@@ -30,7 +29,6 @@ export interface ScannerDataReadiness {
     availableDataClasses?: string[];
     missingDataClasses?: string[];
     blockedProductSurfaces?: string[];
-    operatorNextAction?: string | null;
     consumerSafeMessage?: string | null;
     consumerSafe?: boolean | null;
   } | null;
@@ -52,7 +50,9 @@ export type ScannerRunDetailWithDataReadiness = ScannerRunDetail & {
   };
 };
 
-export type ScannerOperationalStatusWithDataReadiness = ScannerOperationalStatus & {
+export type ScannerConsumerReadinessWithDataReadiness = {
+  market: string;
+  profile: string;
   dataReadiness?: ScannerDataReadiness | null;
 };
 
@@ -201,12 +201,13 @@ function normalizeScannerRunDetail(payload: Record<string, unknown>): ScannerRun
   };
 }
 
-function normalizeScannerOperationalStatus(payload: Record<string, unknown>): ScannerOperationalStatusWithDataReadiness {
-  const normalized = toCamelCase<ScannerOperationalStatusWithDataReadiness>(
+function normalizeScannerConsumerReadiness(payload: Record<string, unknown>): ScannerConsumerReadinessWithDataReadiness {
+  const normalized = toCamelCase<ScannerConsumerReadinessWithDataReadiness>(
     isRecord(payload) ? payload : {},
   );
   return {
-    ...normalized,
+    market: normalized.market,
+    profile: normalized.profile,
     dataReadiness: normalizeScannerDataReadiness(normalized.dataReadiness),
   };
 }
@@ -348,12 +349,12 @@ export const scannerApi = {
     return normalizeScannerHistoryResponse(response.data);
   },
 
-  getStatus: async (params: {
+  getReadiness: async (params: {
     market?: string;
     profile?: string;
-  } = {}): Promise<ScannerOperationalStatusWithDataReadiness> => {
+  } = {}): Promise<ScannerConsumerReadinessWithDataReadiness> => {
     const response = await apiClient.get<Record<string, unknown>>(
-      '/api/v1/scanner/status',
+      '/api/v1/scanner/readiness',
       {
         params: {
           market: params.market || 'cn',
@@ -361,6 +362,6 @@ export const scannerApi = {
         },
       },
     );
-    return normalizeScannerOperationalStatus(isRecord(response.data) ? response.data : {});
+    return normalizeScannerConsumerReadiness(isRecord(response.data) ? response.data : {});
   },
 };

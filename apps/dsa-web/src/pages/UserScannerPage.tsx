@@ -22,7 +22,7 @@ import {
 import {
   scannerApi,
   type ScannerDataReadiness,
-  type ScannerOperationalStatusWithDataReadiness,
+  type ScannerConsumerReadinessWithDataReadiness,
 } from '../api/scanner';
 import { watchlistApi } from '../api/watchlist';
 import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
@@ -117,7 +117,6 @@ import type { TrustDisclosureBucket } from '../utils/trustDisclosure';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import { getConsumerSafeApiErrorCopy } from '../utils/consumerErrorCopy';
 import {
-  consumerSafeOperatorAction,
   getConsumerDataStateEntry,
   sanitizeConsumerDataStateText,
 } from '../utils/consumerDataStateVocabulary';
@@ -481,11 +480,9 @@ function buildScannerDataReadinessView(
     ? localizedDataReadinessLabel(blockerBucket, SCANNER_DATA_READINESS_BLOCKER_LABELS, language)
       || (language === 'en' ? 'To confirm' : '待确认')
     : null);
-  const operatorAction = universeReadiness?.operatorNextAction;
   const nextDataLabel = sanitizeScannerDataReadinessText(universeReadiness?.consumerSafeMessage, language)
     || sanitizeScannerDataReadinessText(readiness.nextDataAction, language)
     || sanitizeScannerDataReadinessText(readiness.consumerSummary, language)
-    || (operatorAction ? consumerSafeOperatorAction(operatorAction, universeStatus || state) : null)
     || blockerLabel;
   const coverageChips = [
     universeStatus ? {
@@ -2577,7 +2574,7 @@ const UserScannerPage: React.FC = () => {
   const [isGeneratingTheme, setIsGeneratingTheme] = useState(false);
   const [customSymbols, setCustomSymbols] = useState('');
   const [runDetail, setRunDetail] = useState<ScannerRunDetail | null>(null);
-  const [scannerOperationalStatus, setScannerOperationalStatus] = useState<ScannerOperationalStatusWithDataReadiness | null>(null);
+  const [scannerConsumerReadiness, setScannerConsumerReadiness] = useState<ScannerConsumerReadinessWithDataReadiness | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
   const [historyItems, setHistoryItems] = useState<ScannerRunHistoryItem[]>([]);
   const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
@@ -2717,14 +2714,14 @@ const UserScannerPage: React.FC = () => {
 
   useEffect(() => {
     let isMounted = true;
-    scannerApi.getStatus({ market, profile })
+    scannerApi.getReadiness({ market, profile })
       .then((response) => {
         if (!isMounted) return;
-        setScannerOperationalStatus(response);
+        setScannerConsumerReadiness(response);
       })
       .catch(() => {
         if (!isMounted) return;
-        setScannerOperationalStatus(null);
+        setScannerConsumerReadiness(null);
       });
     return () => {
       isMounted = false;
@@ -2815,7 +2812,7 @@ const UserScannerPage: React.FC = () => {
   useEffect(() => {
     setHasLoadedHistory(false);
     setRunDetail(null);
-    setScannerOperationalStatus(null);
+    setScannerConsumerReadiness(null);
     selectedRunIdRef.current = null;
     setSelectedRunId(null);
     setStrategySimulation(null);
@@ -3064,7 +3061,7 @@ const UserScannerPage: React.FC = () => {
     [language, previewThreshold, previousRunDetail, runDetail],
   );
   const scannerDataReadiness = getRunDetailDataReadiness(runDetail)
-    || scannerOperationalStatus?.dataReadiness
+    || scannerConsumerReadiness?.dataReadiness
     || null;
   const scannerDataReadinessView = useMemo(
     () => buildScannerDataReadinessView(scannerDataReadiness, language),

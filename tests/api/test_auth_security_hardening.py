@@ -324,6 +324,36 @@ class AuthSecurityHardeningTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["detail"]["error"], "validation_error")
 
+    def test_analysis_post_accepts_dynamic_loopback_origin_only_outside_production(self) -> None:
+        with patch.dict(os.environ, {"APP_ENV": "test"}, clear=False):
+            with self._new_client("http://127.0.0.1:8000") as client:
+                login = self._login("alice", "userpass123", origin="http://127.0.0.1:56332", client=client)
+                self.assertEqual(login.status_code, 200)
+
+                response = client.post(
+                    "/api/v1/analysis/analyze",
+                    json={},
+                    headers={"Origin": "http://127.0.0.1:56332"},
+                )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"]["error"], "validation_error")
+
+    def test_analysis_post_rejects_dynamic_loopback_origin_in_production(self) -> None:
+        with self._new_client("http://127.0.0.1:8000") as client:
+            login = self._login("alice", "userpass123", origin="http://127.0.0.1:56332", client=client)
+            self.assertEqual(login.status_code, 200)
+
+            with patch.dict(os.environ, {"APP_ENV": "production"}, clear=False):
+                response = client.post(
+                    "/api/v1/analysis/analyze",
+                    json={},
+                    headers={"Origin": "http://127.0.0.1:56332"},
+                )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"], "csrf_origin_forbidden")
+
     def test_analysis_post_without_auth_stays_401(self) -> None:
         response = self.client.post(
             "/api/v1/analysis/analyze",
@@ -390,14 +420,37 @@ class AuthSecurityHardeningTestCase(unittest.TestCase):
 class CorsProductionGuardrailTestCase(unittest.TestCase):
     def test_production_rejects_wildcard_cors(self) -> None:
         from api.app import create_app
+        from src.runtime.composition import RuntimeContainer
+        from src.runtime.settings import RuntimeSettings
 
-        with patch.dict(os.environ, {"APP_ENV": "production", "CORS_ALLOW_ALL": "true"}, clear=False):
-            with self.assertRaises(RuntimeError):
-                create_app()
+        with patch.dict(
+            os.environ,
+            {
+                "APP_ENV": "production",
+                "ADMIN_AUTH_ENABLED": "true",
+                "CORS_ALLOW_ALL": "true",
+            },
+            clear=False,
+        ):
+            container = RuntimeContainer(runtime_settings=RuntimeSettings.load())
+            with self.assertRaisesRegex(RuntimeError, "CORS_ALLOW_ALL is not allowed in production"):
+                create_app(container)
 
     def test_production_requires_explicit_cors_origins(self) -> None:
         from api.app import create_app
+        from src.runtime.composition import RuntimeContainer
+        from src.runtime.settings import RuntimeSettings
 
-        with patch.dict(os.environ, {"APP_ENV": "production", "CORS_ALLOW_ALL": "false", "CORS_ORIGINS": ""}, clear=False):
-            with self.assertRaises(RuntimeError):
-                create_app()
+        with patch.dict(
+            os.environ,
+            {
+                "APP_ENV": "production",
+                "ADMIN_AUTH_ENABLED": "true",
+                "CORS_ALLOW_ALL": "false",
+                "CORS_ORIGINS": "",
+            },
+            clear=False,
+        ):
+            container = RuntimeContainer(runtime_settings=RuntimeSettings.load())
+            with self.assertRaisesRegex(RuntimeError, "CORS_ORIGINS must be explicitly configured in production"):
+                create_app(container)

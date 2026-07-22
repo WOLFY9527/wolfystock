@@ -39,6 +39,7 @@ EXEMPT_PATHS = frozenset({
 })
 
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+_DEVELOPMENT_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 def _path_exempt(path: str, method: str) -> bool:
@@ -82,12 +83,34 @@ def _same_origin_for_request(request: Request) -> str | None:
     return _origin_from_value(str(request.url))
 
 
+def _is_development_loopback_origin(origin: str) -> bool:
+    if is_production_mode():
+        return False
+    parsed = urlparse(origin)
+    if (
+        parsed.scheme.lower() != "http"
+        or parsed.hostname not in _DEVELOPMENT_LOOPBACK_HOSTS
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        return False
+    try:
+        port = parsed.port
+    except ValueError:
+        return False
+    return port is not None and 1 <= port <= 65535
+
+
 def _csrf_origin_allowed(request: Request) -> bool:
     origin = _request_origin(request)
     if origin is None:
         return not is_production_mode()
     request_origin = _same_origin_for_request(request)
-    return origin == request_origin or origin in _trusted_origins()
+    return (
+        origin == request_origin
+        or origin in _trusted_origins()
+        or _is_development_loopback_origin(origin)
+    )
 
 
 def _error_response(request: Request, *, status_code: int, error: str, message: str) -> JSONResponse:

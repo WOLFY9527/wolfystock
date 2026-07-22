@@ -630,13 +630,10 @@ async function installRouteIdentityMocks(page: Page) {
       no_advice_disclosure: 'Research planning only.',
     });
   });
-  await page.route('**/api/v1/scanner/status**', async (route) => {
+  await page.route('**/api/v1/scanner/readiness**', async (route) => {
     await fulfillJson(route, {
-      status: 'ready',
       market: 'cn',
       profile: 'cn_preopen_v1',
-      last_run_at: '2026-06-07T09:45:00-04:00',
-      latest_run_id: 'uat-route-identity-scanner-run',
       data_readiness: {
         state: 'ready',
         market: 'cn',

@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7964,
-      "sha256": "4102aaca775f29d280391a407e3c16c9453375dd098bc058e57329dd38f65c8c"
+      "count": 7967,
+      "sha256": "27b7068a81223726316f1e413076a906e2d5bfa480002c75691d6ac8e4a0d4f0"
     },
     "tests": [
       {
@@ -1699,9 +1699,19 @@
         "baseline": true
       },
       {
+        "id": "tests/api/test_auth_security_hardening.py::AuthSecurityHardeningTestCase::test_analysis_post_accepts_dynamic_loopback_origin_only_outside_production",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
         "id": "tests/api/test_auth_security_hardening.py::AuthSecurityHardeningTestCase::test_analysis_post_keeps_trusted_dev_origin_for_regular_user",
         "domain": "auth_security",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_auth_security_hardening.py::AuthSecurityHardeningTestCase::test_analysis_post_rejects_dynamic_loopback_origin_in_production",
+        "domain": "auth_security",
+        "baseline": false
       },
       {
         "id": "tests/api/test_auth_security_hardening.py::AuthSecurityHardeningTestCase::test_analysis_post_rejects_evil_origin_for_authenticated_cookie",
@@ -5102,6 +5112,11 @@
         "id": "tests/api/test_scanner.py::test_scanner_consumer_payload_recursively_redacts_ohlcv_readiness_forbidden_diagnostics",
         "domain": "scanner",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_scanner.py::test_scanner_member_readiness_projects_only_consumer_safe_data",
+        "domain": "scanner",
+        "baseline": false
       },
       {
         "id": "tests/api/test_scanner.py::test_scanner_root_route_is_discoverable_and_points_to_canonical_routes",

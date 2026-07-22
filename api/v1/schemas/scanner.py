@@ -64,6 +64,39 @@ _SCANNER_FORBIDDEN_CONSUMER_TEXT_RE = re.compile(
     r"https?://|api[_-]?key|secret|cookie|session_id|token",
     re.IGNORECASE,
 )
+_SCANNER_CONSUMER_READINESS_FIELDS = frozenset(
+    {
+        "state",
+        "market",
+        "profile",
+        "universeSize",
+        "quoteCoverage",
+        "historyCoverage",
+        "freshness",
+        "candidateEvaluationCount",
+        "selectedCount",
+        "rejectedCount",
+        "failedCount",
+        "blockerBucket",
+        "consumerSummary",
+        "nextDataAction",
+    }
+)
+_SCANNER_CONSUMER_UNIVERSE_READINESS_FIELDS = frozenset(
+    {
+        "status",
+        "market",
+        "universeSize",
+        "lastUpdatedAt",
+        "freshnessState",
+        "requiredDataClasses",
+        "availableDataClasses",
+        "missingDataClasses",
+        "blockedProductSurfaces",
+        "consumerSafeMessage",
+        "consumerSafe",
+    }
+)
 _SCANNER_PACKET_FORBIDDEN_TEXT_RE = re.compile(
     r"fallback|trustlevel|reasoncode|launchverdict|consumervisible|advisoryonly|"
     r"liveenforcement|isfallback|isstale|ispartial|sourcetype|"
@@ -444,6 +477,28 @@ def sanitize_scanner_consumer_payload(payload: Dict[str, Any]) -> Dict[str, Any]
             if isinstance(item.get("historicalOhlcvReadiness"), dict):
                 item["historicalOhlcvReadiness"] = _scanner_sanitize_consumer_value(item["historicalOhlcvReadiness"])
             item["consumerDiagnostics"] = _scanner_consumer_diagnostics_payload(item.get("consumerDiagnostics"))
+    return result
+
+
+def sanitize_scanner_consumer_readiness(value: Any) -> Dict[str, Any]:
+    """Project Scanner readiness into the ordinary-user API contract."""
+    sanitized = _scanner_sanitize_consumer_value(value)
+    if not isinstance(sanitized, dict):
+        return {}
+    result = {
+        key: sanitized[key]
+        for key in _SCANNER_CONSUMER_READINESS_FIELDS
+        if key in sanitized
+    }
+    universe_readiness = sanitized.get("scannerUniverseReadiness")
+    if isinstance(universe_readiness, dict):
+        safe_universe_readiness = {
+            key: universe_readiness[key]
+            for key in _SCANNER_CONSUMER_UNIVERSE_READINESS_FIELDS
+            if key in universe_readiness
+        }
+        if safe_universe_readiness:
+            result["scannerUniverseReadiness"] = safe_universe_readiness
     return result
 
 
@@ -1322,3 +1377,11 @@ class ScannerOperationalStatusResponse(BaseModel):
     last_manual_run: Optional[ScannerOperationRunSummary] = None
     latest_failure: Optional[ScannerOperationRunSummary] = None
     quality_summary: ScannerQualitySummaryResponse = Field(default_factory=ScannerQualitySummaryResponse)
+
+
+class ScannerConsumerReadinessResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    market: str
+    profile: str
+    dataReadiness: Dict[str, Any]

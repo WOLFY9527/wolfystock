@@ -407,6 +407,7 @@ def test_docs_openapi_and_backend_diagnostics_have_explicit_surface_classificati
     assert classifications[("GET", "/api/v1/scanner/watchlists/today")] == "admin_capability"
     assert classifications[("GET", "/api/v1/scanner/watchlists/recent")] == "admin_capability"
     assert classifications[("GET", "/api/v1/scanner/status")] == "admin_capability"
+    assert classifications[("GET", "/api/v1/scanner/readiness")] == "authenticated_member"
     assert classifications[("GET", "/api/v1/usage/summary")] == "admin_capability"
     assert classifications[("GET", "/api/v1/admin/logs/storage/summary")] == "admin_capability"
     assert classifications[("POST", "/api/v1/admin/users/onboard")] == "admin_capability"

@@ -1092,25 +1092,10 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
       return fulfillJson(route, scannerThemes);
     }
 
-    if (method === 'GET' && path === '/api/v1/scanner/status') {
+    if (method === 'GET' && path === '/api/v1/scanner/readiness') {
       return fulfillJson(route, {
         market: 'cn',
         profile: 'cn_preopen_v1',
-        watchlist_date: '2026-05-02',
-        today_trading_day: true,
-        schedule_enabled: false,
-        schedule_run_immediately: false,
-        notification_enabled: false,
-        quality_summary: {
-          available: true,
-          review_window_days: 5,
-          run_count: 1,
-          reviewed_run_count: 1,
-          reviewed_candidate_count: scannerShortlist.length,
-          strong_count: 1,
-          mixed_count: 0,
-          weak_count: 0,
-        },
         data_readiness: {
           state: 'partial',
           market: 'cn',

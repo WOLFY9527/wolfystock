@@ -371,6 +371,46 @@ test('creates and restores an ordinary-user session through the real browser jou
   });
   await expectNoAdminNavigation(page);
 
+  const readinessResponsePromise = page.waitForResponse(
+    (response) => response.url().includes('/api/v1/scanner/readiness') && response.request().method() === 'GET',
+  );
+  await page.goto(`${appUrl}/zh/scanner`, { waitUntil: 'domcontentloaded' });
+  await expect(page).toHaveURL(/\/zh\/scanner$/);
+  await expect(page.getByTestId('scanner-page-heading')).toBeVisible({ timeout: 30_000 });
+  const readinessResponse = await readinessResponsePromise;
+  expect(readinessResponse.status()).toBe(200);
+  const readinessPayload = await readinessResponse.json();
+  expect(Object.keys(readinessPayload).sort()).toEqual(['dataReadiness', 'market', 'profile']);
+  expect(JSON.stringify(readinessPayload)).not.toMatch(/schedule|notification|last_manual|providercallsenabled|operatornextaction|sourcepath/i);
+
+  const scannerRunButton = page.getByTestId('scanner-run-button');
+  await expect(scannerRunButton).toBeVisible();
+  await expect(scannerRunButton).toBeEnabled();
+  const scannerRunResponsePromise = page.waitForResponse(
+    (response) => response.url().includes('/api/v1/scanner/run') && response.request().method() === 'POST',
+  );
+  await scannerRunButton.click();
+  const scannerRunResponse = await scannerRunResponsePromise;
+  expect(scannerRunResponse.status()).toBe(409);
+  const scannerRunPayload = await scannerRunResponse.json();
+  expect(scannerRunPayload).toMatchObject({
+    error: 'scanner_data_not_ready',
+    message: 'Scanner data is insufficient for this request.',
+    detail: {
+      dataReadiness: {
+        scannerUniverseReadiness: {
+          status: 'missing',
+          consumerSafeMessage: '扫描标的池缺失，暂时无法生成候选。',
+        },
+      },
+    },
+  });
+  expect(JSON.stringify(scannerRunPayload)).not.toMatch(/permission|admin|contractversion|providercallsenabled|operatornextaction|sourcepath/i);
+  const scannerRunFeedback = page.getByTestId('scanner-run-feedback');
+  await expect(scannerRunFeedback).toContainText(/数据不足/);
+  await expect(scannerRunFeedback).not.toContainText(/权限|permission/i);
+  await expectNoAdminNavigation(page);
+
   const watchlistLink = visibleConsumerNav(page).getByRole('link', { name: '观察列表', exact: true });
   await expect(watchlistLink).toBeVisible();
   await watchlistLink.click();
@@ -419,8 +459,12 @@ test('creates and restores an ordinary-user session through the real browser jou
   expectOrdinaryIdentity(restoredIdentity, username, displayName);
   await expectNoAdminNavigation(page);
 
-  expect(consoleErrors).toEqual([]);
+  expect(consoleErrors).toEqual([
+    'Failed to load resource: the server responded with a status of 409 (Conflict)',
+  ]);
   expect(pageErrors).toEqual([]);
   expect(failedRequests).toEqual([]);
-  expect(httpErrors).toEqual([]);
+  expect(httpErrors).toEqual([
+    `POST 409 ${appUrl}/api/v1/scanner/run`,
+  ]);
 });

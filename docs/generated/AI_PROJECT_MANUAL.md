@@ -72,7 +72,7 @@ This manual is a generated navigation and integrity catalog. It does not copy do
 | [docs/audits/t570-official-macro-provider-order-decision.md](../audits/t570-official-macro-provider-order-decision.md) | temporary_evidence | temporary | yes | Official macro provider-order decision evidence | 0e6766d8d36b |
 | [docs/audits/t575-backend-production-simplification-audit.md](../audits/t575-backend-production-simplification-audit.md) | temporary_evidence | temporary | yes | Backend simplification evidence and T612-T629 roadmap | cd1f8bc827a8 |
 | [docs/audits/t576-frontend-production-simplification-audit.md](../audits/t576-frontend-production-simplification-audit.md) | temporary_evidence | temporary | yes | Frontend simplification evidence and T600-T611 roadmap | 9081512345ee |
-| [docs/contracts/data-trust.md](../contracts/data-trust.md) | canonical | active | yes | Cross-domain truth, source, readiness, no-advice, and protected semantics | 976c004be4f6 |
+| [docs/contracts/data-trust.md](../contracts/data-trust.md) | canonical | active | yes | Cross-domain truth, source, readiness, no-advice, and protected semantics | 8b23cdef47af |
 | [docs/contracts/historical-market-data.md](../contracts/historical-market-data.md) | canonical | active | yes | Historical OHLCV foundation contract | be8438c651f5 |
 | [docs/design/frontend.md](../design/frontend.md) | canonical | active | yes | Consumer frontend design and implementation contract | 7b033c9fcc31 |
 | [docs/development/environment.md](../development/environment.md) | canonical | active | yes | Dependency, bootstrap, target, snapshot, runtime, and configuration authority | 8f1cc32526f2 |
@@ -81,7 +81,7 @@ This manual is a generated navigation and integrity catalog. It does not copy do
 | [docs/operations/database.md](../operations/database.md) | canonical | active | yes | Database diagnostics, baseline artifacts, Phase F, and DuckDB runbook | 96c9087a86be |
 | [docs/operations/historical-ohlcv-seed.md](../operations/historical-ohlcv-seed.md) | canonical | active | yes | Local historical OHLCV seed and verification runbook | d4d4706d3d51 |
 | [docs/operations/operator-evidence.md](../operations/operator-evidence.md) | canonical | active | yes | Sanitized offline operator-evidence runbook | a819a54cae32 |
-| [docs/operations/release.md](../operations/release.md) | canonical | active | yes | Production-readiness and release qualification authority | c0dcd939b2ad |
+| [docs/operations/release.md](../operations/release.md) | canonical | active | yes | Production-readiness and release qualification authority | b12def381196 |
 
 Inventory summary: registered=32, discovered=32; canonical=13, generated=2, platform_template=3, temporary_evidence=5, tool_entry=1, tool_mirror=4, tool_workflow=4.
 

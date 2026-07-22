@@ -369,7 +369,7 @@
     {
       "path": "src/pages/UserScannerPage.tsx",
       "profile": "legacy-concentrated",
-      "maxSignals": { "stateCalls": 50, "effects": 12, "apiCalls": 12, "effectApiCalls": 4, "truthCalls": 19, "domainCalls": 44 },
+      "maxSignals": { "stateCalls": 50, "effects": 12, "apiCalls": 12, "effectApiCalls": 4, "truthCalls": 18, "domainCalls": 44 },
       "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "truth-projection", "domain-calculation", "cross-domain-dependency"],
       "allowedDependencies": ["research", "scanner", "watchlist"],
       "staleProtection": "observed",

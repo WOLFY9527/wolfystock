@@ -94,6 +94,12 @@ Scanner score contributions, filters, thresholds, ordering, universe,
 live/fallback labels, comparable-run readiness, and stored run semantics are
 protected. A candidate is a research-priority signal, not a recommendation.
 
+An authenticated ordinary member may receive a bounded Scanner readiness
+projection before running the Scanner. It does not expose operator diagnostics
+or grant an admin capability. A data-readiness failure remains a data condition
+with a consumer-safe explanation; it must not be presented as an authorization
+failure. Detailed Scanner operational status remains an admin-only boundary.
+
 ### Options
 
 Options Lab is a read-only research console, not execution, strategy ranking,
