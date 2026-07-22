@@ -41115,13 +41115,13 @@
       "release-real-runtime"
     ],
     "inventory": {
-      "specCount": 64,
-      "specSha256": "df5b4d9bc7d5bc4e553324a317331769d12d2086c4a4635bb3262d943ae255a6",
-      "projectCaseCount": 718,
-      "projectCaseSha256": "c078ef05f7e65359629e5cc21d1e782ac0d44861dd984af1313e989a15a2bff7",
+      "specCount": 65,
+      "specSha256": "afe3eee835b06cb52750ec3dda3752db4ae7c695ffa8b94319e906bb6dde9ef4",
+      "projectCaseCount": 720,
+      "projectCaseSha256": "f0af0b1a75b416fbdcbefe12d20f9e0c2e854060e513e52c90d255661b7a7deb",
       "projectCaseCounts": {
-        "chromium": 357,
-        "chromium-mobile": 357,
+        "chromium": 358,
+        "chromium-mobile": 358,
         "release-real-runtime": 4
       }
     },
@@ -41165,6 +41165,11 @@
         "path": "apps/dsa-web/e2e/backtest-visual-result.smoke.spec.ts",
         "owner": "bounded_integration",
         "mandatory": false
+      },
+      {
+        "path": "apps/dsa-web/e2e/bootstrap-admin-real-browser-regression.spec.ts",
+        "owner": "protected_critical",
+        "mandatory": true
       },
       {
         "path": "apps/dsa-web/e2e/consumer-copy-forbidden-vocabulary.smoke.spec.ts",
@@ -41657,6 +41662,13 @@
         "project": "chromium-mobile",
         "owner": "bounded_integration",
         "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/bootstrap-admin-real-browser-regression.spec.ts::bootstrap-admin-real-browser-regression.spec.ts › bootstrap-admin real-browser regression › persists canonical capabilities from first setup through admin navigation, reload, and logout",
+        "spec": "apps/dsa-web/e2e/bootstrap-admin-real-browser-regression.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "protected_critical",
+        "mandatory": true
       },
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/consumer-copy-forbidden-vocabulary.smoke.spec.ts::consumer-copy-forbidden-vocabulary.smoke.spec.ts › consumer routes keep backend/provider/debug vocabulary out of default copy",
@@ -44156,6 +44168,13 @@
         "project": "chromium",
         "owner": "bounded_integration",
         "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/bootstrap-admin-real-browser-regression.spec.ts::bootstrap-admin-real-browser-regression.spec.ts › bootstrap-admin real-browser regression › persists canonical capabilities from first setup through admin navigation, reload, and logout",
+        "spec": "apps/dsa-web/e2e/bootstrap-admin-real-browser-regression.spec.ts",
+        "project": "chromium",
+        "owner": "protected_critical",
+        "mandatory": true
       },
       {
         "id": "chromium::apps/dsa-web/e2e/consumer-copy-forbidden-vocabulary.smoke.spec.ts::consumer-copy-forbidden-vocabulary.smoke.spec.ts › consumer routes keep backend/provider/debug vocabulary out of default copy",
