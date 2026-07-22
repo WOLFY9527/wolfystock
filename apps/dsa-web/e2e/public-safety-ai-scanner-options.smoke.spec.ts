@@ -338,13 +338,17 @@ async function installOptionsRoute(page: Page): Promise<OptionsHarness> {
 async function signIn(page: Page, redirectPath: string, productIdentity: ReturnType<Page['getByTestId']>) {
   await page.goto(`/login?redirect=${encodeURIComponent(redirectPath)}`);
   const username = page.locator('#username');
-  await username.waitFor({ state: 'visible', timeout: 10_000 });
-  await username.fill('wolfy-user');
-  await page.locator('#password').fill('mock-password');
-  await Promise.all([
-    page.waitForResponse((response) => response.url().includes('/api/v1/auth/login') && response.status() === 200),
-    page.getByRole('button', { name: /sign in|登录继续|授权进入工作台|完成设置并登录/i }).click(),
-  ]);
+  await expect
+    .poll(async () => new URL(page.url()).pathname === redirectPath || await username.isVisible(), { timeout: 10_000 })
+    .toBe(true);
+  if (new URL(page.url()).pathname !== redirectPath) {
+    await username.fill('wolfy-user');
+    await page.locator('#password').fill('mock-password');
+    await Promise.all([
+      page.waitForResponse((response) => response.url().includes('/api/v1/auth/login') && response.status() === 200),
+      page.getByRole('button', { name: /sign in|登录继续|授权进入工作台|完成设置并登录/i }).click(),
+    ]);
+  }
   await page.waitForURL((url) => url.pathname === redirectPath);
   await expect(productIdentity).toBeVisible({ timeout: 15_000 });
 }
@@ -381,6 +385,15 @@ async function expectNoOptionsTradingCta(page: Page) {
   await expect(page.getByRole('link', { name: ctaPattern })).toHaveCount(0);
 }
 
+async function evaluateOptionsReadiness(page: Page) {
+  const evaluate = page.getByRole('button', { name: '评估情景准备度' });
+  await expect(evaluate).toBeEnabled({ timeout: 15_000 });
+  await Promise.all([
+    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/options/decision/evaluate' && response.status() === 200),
+    evaluate.click(),
+  ]);
+}
+
 appTest.describe('AI and scanner public safety surfaces', () => {
   appTest('scanner exposes limited-data states while keeping diagnostics collapsed by default', async ({ page }) => {
     await installOptionsRoute(page);
@@ -391,7 +404,9 @@ appTest.describe('AI and scanner public safety surfaces', () => {
 
       await expect(page.getByTestId('user-scanner-workspace')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('scanner-result-row-NVDA')).toBeVisible();
-      await expect(page.getByTestId('scanner-status-strip')).toContainText(/数据暂不可用|数据不足|Provider issue|Fallback data|Insufficient data/);
+      const statusStrip = page.getByTestId('scanner-status-strip');
+      await expect(statusStrip).toContainText('信号状态');
+      await expect(statusStrip).toContainText('部分可用');
       await expect(page.getByTestId('scanner-diagnostics-panel')).toHaveCount(0);
       await expect(page.getByTestId('scanner-result-history-summary')).toHaveCount(0);
       await expectSurfaceSafety(page);
@@ -408,20 +423,33 @@ appTest.describe('options public safety surface', () => {
       await signIn(page, '/zh/options-lab', page.getByRole('heading', { name: '期权实验室' }));
 
       await expect(page.getByRole('heading', { name: '期权实验室' })).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByTestId('options-lab-consumer-availability')).toBeVisible();
-      await expect(page.getByTestId('options-lab-consumer-availability')).toContainText('当前主任务');
+      const consumerAvailability = page.getByTestId('options-lab-consumer-availability');
+      await expect(consumerAvailability).toBeVisible();
+      await expect(consumerAvailability).toContainText('当前可读');
+      await expect(consumerAvailability).toContainText('期权链快照、IV 分布');
+      await expect(consumerAvailability).toContainText('合约链可见');
       await expect(page.getByTestId('options-lab-decision-engine')).toBeVisible();
       await expect(page.getByTestId('options-lab-decision-engine')).toContainText('数据不足，暂不形成结论');
-      await expect(page.getByTestId('options-lab-decision-engine')).toContainText('演示数据');
+      await expect(page.getByTestId('options-lab-decision-engine')).toContainText('评估情景准备度');
+      await evaluateOptionsReadiness(page);
+      await expect(page.getByTestId('options-lab-decision-engine')).toContainText('演示/延迟数据');
       await expect(page.locator('body')).toContainText('只读情景分析');
-      await expect(page.locator('body')).toContainText('不构成执行指令');
+      await expect(page.locator('body')).toContainText('非交易指令');
       await expect(page.getByTestId('options-lab-summary-strip')).toContainText('当前可观察');
       await expect(page.getByTestId('options-lab-summary-strip')).toContainText('假设价格');
-      await expect(page.getByTestId('options-lab-readiness-gate-summary').getByRole('button', { name: /展开 完整门控与补证/ })).toHaveAttribute('aria-expanded', 'false');
-      await expect(page.getByTestId('options-lab-strategy-comparison')).toContainText('观察结构样例');
-      await expect(page.getByTestId('options-lab-strategy-comparison')).toContainText('样例顺序 #1');
-      await expect(page.getByTestId('options-lab-strategy-comparison')).toContainText('专业结构：');
-      await expect(page.getByTestId('options-lab-strategy-comparison')).toContainText('先把样例结构作为风险剖面阅读');
+      const decisionReadiness = page.getByTestId('options-lab-decision-readiness-strip');
+      await expect(decisionReadiness).toContainText('未达判断等级');
+      await expect(decisionReadiness).toContainText('仅观察');
+      await expect(decisionReadiness).toContainText('数据质量受限');
+      await expect(page.getByTestId('options-lab-readiness-gate-summary')).toHaveCount(0);
+      const strategyComparison = page.getByTestId('options-lab-strategy-comparison');
+      await expect(strategyComparison).toContainText('观察结构样例');
+      await expect(strategyComparison).toContainText('运行结构比较');
+      await expect(strategyComparison).toContainText('等待结构比较前提');
+      await expect(strategyComparison).toContainText('基础数据已加载。选择“运行结构比较”后才会执行分析。');
+      await expect(strategyComparison).not.toContainText('样例顺序 #1');
+      await expect(strategyComparison).not.toContainText('专业结构：');
+      await expect(strategyComparison).toContainText('先把样例结构作为风险剖面阅读');
       await expect(page.locator('body')).not.toContainText('候选策略');
       await expect(page.locator('body')).not.toContainText('首个候选');
       await expect(page.locator('body')).not.toContainText('观察排序 #1');
@@ -434,8 +462,9 @@ appTest.describe('options public safety surface', () => {
       await expectNoHorizontalOverflow(page);
       await expectNoRawInternalArtifacts(page);
       await expectNoOptionsTradingCta(page);
-
-      expect(harness.requests.count('POST', '/api/v1/options/decision/evaluate')).toBeGreaterThan(0);
     }
+
+    expect(harness.requests.count('POST', '/api/v1/options/strategies/compare')).toBe(0);
+    expect(harness.requests.count('POST', '/api/v1/options/decision/evaluate')).toBe(viewports.length);
   });
 });

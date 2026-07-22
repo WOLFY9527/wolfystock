@@ -41286,7 +41286,7 @@
       "specCount": 68,
       "specSha256": "d55aa1572f78d4ea0c2493f3c4d2a08e65b77b572a96776805edbb06ff55693c",
       "projectCaseCount": 726,
-      "projectCaseSha256": "080a5278e20562bc4b392815a096f3be1225b887d783f16aa9567fd51e574753",
+      "projectCaseSha256": "588626d2f05212f52ef0f5ad34b293b555834f52d4ccb5bd446d3f4f4978c8c8",
       "projectCaseCounts": {
         "chromium": 361,
         "chromium-mobile": 361,
@@ -42813,7 +42813,7 @@
         "mandatory": true
       },
       {
-        "id": "chromium-mobile::apps/dsa-web/e2e/readiness-browser-acceptance.smoke.spec.ts::readiness-browser-acceptance.smoke.spec.ts › Options Lab readiness browser acceptance › gate summary labels are visible and sanitized when readiness gates are present",
+        "id": "chromium-mobile::apps/dsa-web/e2e/readiness-browser-acceptance.smoke.spec.ts::readiness-browser-acceptance.smoke.spec.ts › Options Lab readiness browser acceptance › compact readiness chips are visible and sanitized when readiness gates are present",
         "spec": "apps/dsa-web/e2e/readiness-browser-acceptance.smoke.spec.ts",
         "project": "chromium-mobile",
         "owner": "uat",
@@ -45340,7 +45340,7 @@
         "mandatory": true
       },
       {
-        "id": "chromium::apps/dsa-web/e2e/readiness-browser-acceptance.smoke.spec.ts::readiness-browser-acceptance.smoke.spec.ts › Options Lab readiness browser acceptance › gate summary labels are visible and sanitized when readiness gates are present",
+        "id": "chromium::apps/dsa-web/e2e/readiness-browser-acceptance.smoke.spec.ts::readiness-browser-acceptance.smoke.spec.ts › Options Lab readiness browser acceptance › compact readiness chips are visible and sanitized when readiness gates are present",
         "spec": "apps/dsa-web/e2e/readiness-browser-acceptance.smoke.spec.ts",
         "project": "chromium",
         "owner": "uat",

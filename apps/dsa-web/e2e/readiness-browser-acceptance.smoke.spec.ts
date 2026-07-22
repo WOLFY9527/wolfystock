@@ -17,36 +17,6 @@ const marketOverviewProxyLabelPattern = /ETF flow proxy|Institutional pressure p
 const forbiddenUnsafeTradingPattern =
   /买入按钮|立即交易|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy|must buy|must sell|buy now|sell now|place order|you should buy|you should sell/i;
 
-const optionsReadinessSummaryFixture = {
-  options_research_ready: false,
-  readiness_state: 'blocked',
-  data_quality_tier: 'synthetic_demo_only',
-  decision_grade: false,
-  provider_authority: 'observationOnly',
-  liquidity_gate: 'manual_review',
-  iv_greeks_gate: 'blocked',
-  spread_gate: 'manual_review',
-  scenario_coverage: 'strategy_compare_ready',
-  no_trading_boundary: {
-    analytical_only: true,
-    no_broker_execution: true,
-    no_order_placement: true,
-    no_portfolio_mutation: true,
-    no_trading_recommendation: true,
-  },
-  blocking_reasons: [
-    'provider_authority_tier_observation_only',
-    'missing_greeks',
-    'wide_bid_ask_spread',
-    'synthetic_demo_only',
-  ],
-  next_evidence_needed: [
-    '补齐 provider authority 佐证',
-    '补齐 Greeks',
-    '补齐 OI/成交量与更紧价差',
-  ],
-};
-
 const signedInUser = {
   id: 'user-1',
   username: 'wolfy-user',
@@ -112,6 +82,27 @@ async function installSignedInHomeRoutes(page: Page) {
     await fulfillJson(route, signedInUser);
   });
 
+  await page.route('**/api/v1/stocks/*/structure-decision', async (route) => {
+    await fulfillJson(route, {
+      ticker: 'ORCL',
+      structure_state: 'unknown',
+      confidence: 'low',
+      confidence_state: {
+        status: 'insufficient',
+        label: 'Evidence insufficient',
+      },
+      data_quality: {
+        status: 'insufficient',
+        observed_bars: 0,
+        usable_bars: 0,
+      },
+      missing_evidence: [{ kind: 'structure', message: 'Structure evidence is unavailable in this browser fixture.' }],
+      observation_only: true,
+      decision_grade: false,
+      no_advice_disclosure: 'Research observation only.',
+    });
+  });
+
   await page.route('**/api/v1/stocks/*/evidence**', async (route) => {
     await fulfillJson(route, {
       symbols: ['ORCL'],
@@ -141,6 +132,33 @@ async function installSignedInHomeRoutes(page: Page) {
         generated_at: '2026-06-02T00:00:00Z',
         source: 'read_only_evidence_v2',
       },
+    });
+  });
+
+  await page.route('**/api/v1/history**', async (route) => {
+    if (new URL(route.request().url()).pathname !== '/api/v1/history') {
+      return route.fallback();
+    }
+    await fulfillJson(route, {
+      total: 1,
+      page: 1,
+      limit: 20,
+      items: [
+        {
+          id: 3,
+          query_id: 'q3',
+          stock_code: 'ORCL',
+          stock_name: 'Oracle',
+          company_name: 'Oracle',
+          report_type: 'detailed',
+          created_at: '2026-04-27T08:00:00Z',
+          report_generated_at: '2026-04-27T08:03:00Z',
+          current_price: 130.2,
+          change_pct: -0.4,
+          model_used: 'fixture-model',
+          is_test: false,
+        },
+      ],
     });
   });
 
@@ -1116,54 +1134,33 @@ async function expectSafeReadinessStrip(page: Page, testId: string) {
   await appExpect(strip).not.toContainText(tradingPattern);
 }
 
+async function expectSafeOptionsDecisionReadiness(page: Page) {
+  const evaluate = page.getByRole('button', { name: '评估情景准备度' });
+  await appExpect(evaluate).toBeEnabled({ timeout: 15_000 });
+  await Promise.all([
+    page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/options/decision/evaluate' && response.status() === 200),
+    evaluate.click(),
+  ]);
+  const readiness = page.getByTestId('options-lab-decision-readiness-strip');
+  await appExpect(readiness).toBeVisible({ timeout: 15_000 });
+  await appExpect(readiness).toContainText('未达判断等级');
+  await appExpect(readiness).toContainText('仅观察');
+  await appExpect(readiness).toContainText('数据质量受限');
+  await appExpect(readiness).not.toContainText(optionsGateSummaryLeakPattern);
+  await appExpect(readiness).not.toContainText(tradingPattern);
+  await appExpect(page.getByTestId('options-lab-readiness-gate-summary')).toHaveCount(0);
+}
+
 async function expectSafeEvidenceCoverageStrip(page: Page) {
   const strip = page.getByTestId('home-evidence-coverage-strip');
   await appExpect(strip).toBeVisible({ timeout: 15_000 });
   await appExpect(strip).toContainText('证据覆盖');
-  await appExpect(strip).toContainText('技术面 可用');
-  await appExpect(strip).toContainText('基本面 降级');
-  await appExpect(strip).toContainText('新闻 缺失');
-  await appExpect(strip).toContainText('催化 阻断');
-  await appExpect(strip).toContainText('财报 待补');
-  await appExpect(strip).toContainText('补充基本面证据');
-  await appExpect(strip).toContainText('补充新闻证据');
-  await appExpect(strip).toContainText('补充催化证据');
-  await appExpect(strip).toContainText('补充财报证据');
+  await appExpect(strip).toContainText('覆盖不可用');
+  await appExpect(strip).toContainText('证据覆盖暂不可用，当前结论不能视为研究就绪。');
+  await appExpect(strip).not.toContainText(/技术面 可用|基本面 降级|新闻 缺失|催化 阻断|财报 待补/);
   await appExpect(strip).not.toContainText(internalEvidenceCoveragePattern);
   await appExpect(strip).not.toContainText(rawLeakPattern);
   await appExpect(strip).not.toContainText(tradingPattern);
-}
-
-async function installOptionsReadinessSummaryRoute(page: Page) {
-  await page.route('**/api/v1/options/underlyings/*/summary', async (route) => {
-    const url = new URL(route.request().url());
-    const pathParts = url.pathname.split('/');
-    const symbol = decodeURIComponent(pathParts[pathParts.length - 2] || 'TEM').toUpperCase();
-    await fulfillJson(route, {
-      symbol,
-      market: 'us',
-      underlying: {
-        price: 52.34,
-        change_pct: 1.2,
-        source: 'playwright_fixture',
-        as_of: '2026-05-06T09:45:00-04:00',
-        freshness: 'mock',
-      },
-      options_availability: {
-        supported: true,
-        provider: 'playwright_fixture',
-        limitations: ['mocked_product_route_harness'],
-      },
-      metadata: {
-        read_only: true,
-        no_external_calls_in_tests: true,
-        limitations: ['mocked_playwright_product_auth'],
-        source_label: 'Playwright Fixture',
-        updated_at: '2026-05-06T09:45:00-04:00',
-      },
-      options_readiness: optionsReadinessSummaryFixture,
-    });
-  });
 }
 
 appTest.describe('consumer research readiness browser acceptance', () => {
@@ -1174,6 +1171,10 @@ appTest.describe('consumer research readiness browser acceptance', () => {
       await openSignedInHome(page);
       await expectRootNonEmpty(page);
       await expectNoHorizontalOverflow(page);
+      const researchBoundary = page.getByTestId('home-research-trust-strip');
+      await appExpect(researchBoundary).not.toHaveAttribute('open');
+      await page.getByTestId('home-research-boundary-disclosure').click();
+      await appExpect(researchBoundary).toHaveAttribute('open');
       await expectSafeReadinessStrip(page, 'home-research-readiness-strip');
       await expectSafeEvidenceCoverageStrip(page);
       expect(consoleErrors).toEqual([]);
@@ -1224,7 +1225,10 @@ appTest.describe('consumer research readiness browser acceptance', () => {
       await appExpect(page.getByTestId('user-scanner-workspace')).toBeVisible({ timeout: 15_000 });
       await expectRootNonEmpty(page);
       await expectNoHorizontalOverflow(page);
-      await expectSafeReadinessStrip(page, 'scanner-research-readiness-strip');
+      await expectSafeReadinessStrip(
+        page,
+        viewport.width >= 1280 ? 'scanner-research-readiness-strip' : 'scanner-research-readiness-strip-secondary',
+      );
       const topDownStrip = page.getByTestId('scanner-top-down-context-strip');
       await appExpect(topDownStrip).toBeVisible({ timeout: 15_000 });
       await appExpect(topDownStrip).toContainText('市场驱动因素');
@@ -1277,21 +1281,8 @@ appTest.describe('Options Lab readiness browser acceptance', () => {
       await openOptionsRouteWithHarness(page, '/zh/options-lab');
       await expectRootNonEmpty(page);
       await expectNoHorizontalOverflow(page);
-      await expectSafeReadinessStrip(page, 'options-lab-research-readiness-strip');
-      const summary = page.getByTestId('options-lab-readiness-gate-summary');
-      await appExpect(summary).toBeVisible({ timeout: 15_000 });
-      await appExpect(summary).toContainText('门控摘要');
-      await appExpect(summary).toContainText('数据层级：证据不足');
-      await appExpect(summary).toContainText('授权级别：待补证');
-      await appExpect(summary).toContainText('流动性：已阻断');
-      await appExpect(summary).toContainText('IV / Greeks：已阻断');
-      await appExpect(summary).toContainText('价差：已阻断');
-      await appExpect(summary).toContainText('情景覆盖：缺少链路');
-      await appExpect(summary).toContainText('判断等级：未通过');
-      await appExpect(summary).toContainText('执行边界：只读无执行');
-      await appExpect(summary).toContainText('当前缺少就绪度回执，先按证据不足处理。');
-      await appExpect(summary).not.toContainText(optionsGateSummaryLeakPattern);
-      await appExpect(summary).not.toContainText(tradingPattern);
+      await appExpect(page.getByTestId('options-lab-decision-engine')).toContainText('评估情景准备度');
+      await expectSafeOptionsDecisionReadiness(page);
       await expectForbiddenTradingWordingAbsent(page);
       expect(consoleErrors).toEqual([]);
       expect(unhandledApiRoutes).toEqual([]);
@@ -1304,11 +1295,8 @@ appTest.describe('Options Lab readiness browser acceptance', () => {
       const harness = await openOptionsRouteWithHarness(page, '/zh/options-lab');
       await expectRootNonEmpty(page);
       await expectNoHorizontalOverflow(page);
-      await expectSafeReadinessStrip(page, 'options-lab-research-readiness-strip');
-
-      const summary = page.getByTestId('options-lab-readiness-gate-summary');
-      await appExpect(summary).toBeVisible({ timeout: 15_000 });
-      await appExpect(summary).toContainText('门控摘要');
+      await appExpect(page.getByTestId('options-lab-decision-engine')).toContainText('评估情景准备度');
+      await expectSafeOptionsDecisionReadiness(page);
 
       const scenarioEvidence = page.getByTestId('options-lab-scenario-evidence');
       await appExpect(scenarioEvidence).toBeVisible({ timeout: 15_000 });
@@ -1324,7 +1312,7 @@ appTest.describe('Options Lab readiness browser acceptance', () => {
       await appExpect(scenarioEvidence).toContainText('Call 2 / Put 2');
       await appExpect(scenarioEvidence).toContainText('演示/延迟');
       await appExpect(scenarioEvidence).toContainText('流动性：人工复核');
-      await appExpect(scenarioEvidence).toContainText('IV / Greeks：已阻断');
+      await appExpect(scenarioEvidence).toContainText('IV / 希腊值：已阻断');
       await appExpect(scenarioEvidence).toContainText('价差：人工复核');
       await appExpect(scenarioEvidence).toContainText('假设摘要');
       await appExpect(scenarioEvidence).toContainText('当前来自判断回执');
@@ -1334,7 +1322,7 @@ appTest.describe('Options Lab readiness browser acceptance', () => {
       await appExpect(scenarioEvidence).toContainText('收益证据');
       await appExpect(scenarioEvidence).toContainText('预期波动：$5.20');
       await appExpect(scenarioEvidence).toContainText('预期波动幅度：9.9%');
-      await appExpect(scenarioEvidence).toContainText('假设价格下情景估算：$577.00');
+      await appExpect(scenarioEvidence).toContainText('情景估算：$577.00');
       await appExpect(scenarioEvidence).toContainText('波动来源：平值跨式中间价');
       await appExpect(scenarioEvidence).toContainText('风险证据');
       await appExpect(scenarioEvidence).toContainText('权利金风险：$230.00');
@@ -1350,53 +1338,36 @@ appTest.describe('Options Lab readiness browser acceptance', () => {
       await appExpect(scenarioEvidence).toContainText('补齐成交深度与更紧价差证据');
       await appExpect(scenarioEvidence).toContainText('只读边界');
       await appExpect(scenarioEvidence).toContainText('仅观察');
-      await appExpect(scenarioEvidence).toContainText('不触发执行动作');
-      await appExpect(scenarioEvidence).toContainText('不改动现有持仓');
-      await appExpect(scenarioEvidence).toContainText('结论仅用于研究记录');
+      await appExpect(scenarioEvidence).toContainText('研究记录');
+      await appExpect(scenarioEvidence).toContainText('非交易指令');
       await appExpect(scenarioEvidence).not.toContainText(optionsGateSummaryLeakPattern);
-      await appExpect(scenarioEvidence).not.toContainText(tradingPattern);
+      await appExpect(scenarioEvidence).not.toContainText(forbiddenUnsafeTradingPattern);
 
       const visualsPanel = page.getByTestId('options-lab-visuals-panel');
       await appExpect(visualsPanel).toBeVisible({ timeout: 15_000 });
       await appExpect(visualsPanel).toContainText('收益边界与 IV 快照');
       await appExpect(visualsPanel).toContainText('到期收益示意');
       await appExpect(visualsPanel).toContainText('IV 偏斜示意');
-      await appExpect(visualsPanel).toContainText('不构成买卖建议');
+      await appExpect(visualsPanel).toContainText('非交易指令');
       await appExpect(visualsPanel).not.toContainText(optionsGateSummaryLeakPattern);
 
       await expectForbiddenTradingWordingAbsent(page);
-      expect(harness.requests.count('POST', '/api/v1/options/strategies/compare')).toBeGreaterThan(0);
-      expect(harness.requests.count('POST', '/api/v1/options/decision/evaluate')).toBeGreaterThan(0);
+      expect(harness.requests.count('POST', '/api/v1/options/decision/evaluate')).toBe(1);
       expect(consoleErrors).toEqual([]);
       expect(unhandledApiRoutes).toEqual([]);
     }
   });
 
-  appTest('gate summary labels are visible and sanitized when readiness gates are present', async ({ page, consoleErrors, unhandledApiRoutes }) => {
+  appTest('compact readiness chips are visible and sanitized when readiness gates are present', async ({ page, consoleErrors, unhandledApiRoutes }) => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       await installOptionsProductHarness(page);
-      await installOptionsReadinessSummaryRoute(page);
       await page.goto('/zh/options-lab');
       await page.waitForLoadState('domcontentloaded');
       await expectRootNonEmpty(page);
       await expectNoHorizontalOverflow(page);
-      await expectSafeReadinessStrip(page, 'options-lab-research-readiness-strip');
-      const summary = page.getByTestId('options-lab-readiness-gate-summary');
-      await appExpect(summary).toBeVisible({ timeout: 15_000 });
-      await appExpect(summary).toContainText('门控摘要');
-      await appExpect(summary).toContainText('数据层级：演示/延迟');
-      await appExpect(summary).toContainText('授权级别：观察级');
-      await appExpect(summary).toContainText('流动性：人工复核');
-      await appExpect(summary).toContainText('IV / Greeks：已阻断');
-      await appExpect(summary).toContainText('价差：人工复核');
-      await appExpect(summary).toContainText('情景覆盖：策略对比');
-      await appExpect(summary).toContainText('判断等级：未通过');
-      await appExpect(summary).toContainText('执行边界：只读无执行');
-      await appExpect(summary).toContainText('当前仍受授权、IV / Greeks 与流动性证据限制。');
-      await appExpect(summary).toContainText('下一步：补齐授权链路、IV / Greeks、OI / 成交量与更紧价差证据。');
-      await appExpect(summary).not.toContainText(optionsGateSummaryLeakPattern);
-      await appExpect(summary).not.toContainText(tradingPattern);
+      await appExpect(page.getByTestId('options-lab-decision-engine')).toContainText('评估情景准备度');
+      await expectSafeOptionsDecisionReadiness(page);
       expect(consoleErrors).toEqual([]);
       expect(unhandledApiRoutes).toEqual([]);
     }
