@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { analysisApi } from '../../api/analysis';
 import { dashboardOverviewApi } from '../../api/dashboardOverview';
@@ -136,6 +136,11 @@ async function closeOpenDrawerWithEscape() {
 
 async function waitForHistoryDrawerToClose() {
   await waitForElementToBeRemoved(() => screen.queryByTestId('home-bento-history-drawer'));
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="home-location-path">{`${location.pathname}${location.search}`}</output>;
 }
 
 function persistSelectedHistoryIdForTest(recordId: number | string) {
@@ -622,6 +627,17 @@ describe('HomeSurfacePage', () => {
 
   const renderSurface = (initialPath = '/') => render(
     <MemoryRouter initialEntries={[initialPath]}>
+      <UiPreferencesProvider>
+        <UiLanguageProvider>
+          <HomeSurfacePage />
+        </UiLanguageProvider>
+      </UiPreferencesProvider>
+    </MemoryRouter>,
+  );
+
+  const renderSurfaceWithLocation = (initialPath = '/') => render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <LocationProbe />
       <UiPreferencesProvider>
         <UiLanguageProvider>
           <HomeSurfacePage />
@@ -3971,6 +3987,50 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => expect(screen.getByTestId('home-bento-omnibar-input')).toHaveValue(''));
     expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
     expect(analysisApi.analyzeAsync).toHaveBeenCalled();
+  });
+
+  it('hands a valid home search submission to the canonical stock structure route', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    renderSurfaceWithLocation('/');
+
+    const input = screen.getByTestId('home-bento-omnibar-input');
+    fireEvent.change(input, { target: { value: 'AAPL' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(screen.getByTestId('home-location-path')).toHaveTextContent(
+      '/stocks/AAPL/structure-decision?symbol=AAPL&source=manual',
+    ));
+  });
+
+  it.each([
+    ['A-share', '600519', '600519'],
+    ['Hong Kong', '0700.HK', '0700.HK'],
+  ])('normalizes a supported %s search before routing', async (_market, query, normalized) => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    renderSurfaceWithLocation('/');
+
+    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: query } });
+    fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
+
+    await waitFor(() => expect(screen.getByTestId('home-location-path')).toHaveTextContent(
+      `/stocks/${normalized}/structure-decision?symbol=${normalized}&source=manual`,
+    ));
+  });
+
+  it('keeps invalid and empty home search values on the current route with explicit feedback', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    renderSurfaceWithLocation('/market-overview');
+
+    const form = screen.getByTestId('home-bento-omnibar');
+    const input = screen.getByTestId('home-bento-omnibar-input');
+    fireEvent.submit(form);
+    expect(await screen.findByText('请输入股票代码后再开始分析')).toBeInTheDocument();
+    expect(screen.getByTestId('home-location-path')).toHaveTextContent('/market-overview');
+
+    fireEvent.change(input, { target: { value: 'not-a-symbol!' } });
+    fireEvent.submit(form);
+    expect(await screen.findByText('请输入格式正确的股票代码')).toBeInTheDocument();
+    expect(screen.getByTestId('home-location-path')).toHaveTextContent('/market-overview');
   });
 
   it('rejects malformed ticker input before calling ticker validation or analysis', async () => {

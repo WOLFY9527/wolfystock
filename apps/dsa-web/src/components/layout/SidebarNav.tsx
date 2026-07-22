@@ -799,6 +799,11 @@ function useSidebarNavView({
           }}
           onFocus={() => setStockSearchFocused(true)}
           onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              submitStockSearch();
+              return;
+            }
             if (event.key === 'Escape') {
               event.preventDefault();
               setStockSearchFocused(false);

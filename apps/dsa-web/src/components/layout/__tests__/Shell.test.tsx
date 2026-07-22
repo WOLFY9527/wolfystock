@@ -348,6 +348,29 @@ describe('Shell', () => {
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/stocks/AAPL/structure-decision'));
   });
 
+  it('submits the shell stock search on Enter without losing Escape focus behavior', async () => {
+    render(
+      <MemoryRouter initialEntries={['/market-overview']}>
+        <ThemeProvider>
+          <LocationProbe />
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const searchInput = screen.getByLabelText('个股');
+    fireEvent.change(searchInput, { target: { value: 'AAPL' } });
+    fireEvent.keyDown(searchInput, { key: 'Enter' });
+
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/stocks/AAPL/structure-decision'));
+
+    fireEvent.keyDown(searchInput, { key: 'Escape' });
+    expect(screen.queryByTestId('shell-stock-search-popover')).not.toBeInTheDocument();
+    expect(searchInput).not.toHaveFocus();
+  });
+
   it('keeps CTA route labels and aria labels owned by the core route registry', () => {
     const ctaRoutes = [
       '/market-overview',

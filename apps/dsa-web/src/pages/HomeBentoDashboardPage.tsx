@@ -1,6 +1,6 @@
 import type React from 'react';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { History, Lock, MoreHorizontal, Search, Star, Upload } from 'lucide-react';
 import { getParsedApiError } from '../api/error';
 import {
@@ -89,7 +89,9 @@ import { cn } from '../utils/cn';
 import { getToneColor } from '../utils/marketColors';
 import { createConsumerDataHealthSummary } from '../utils/consumerDataQualityViewModel';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
-import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
+import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../utils/localeRouting';
+import { buildResearchWorkspacePath } from '../utils/researchWorkspaceRoute';
+import { validateStockCode } from '../utils/validation';
 import { resolveHomeDashboardSelection } from './homeDashboardSelection';
 import {
   MetaLabel,
@@ -3576,6 +3578,7 @@ type DesiredFieldSpec = {
 
 const CJK_TEXT_RE = /[\u3400-\u9FFF]/;
 const TICKER_FORMAT_RE = /^(?:[A-Z]{1,5}(?:\.(?:US|[A-Z]))?|\d{6})$/;
+const stockSearchRouteAuthority = buildResearchWorkspacePath;
 const EMPTY_FIELD_VALUE = '-';
 const UNTRUSTED_SCAN_SKIP_KEYS = new Set([
   'rawResult',
@@ -6609,6 +6612,7 @@ function FullDecisionReportDrawerFallback({ onClose }: { onClose: () => void }) 
 
 const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest = false }) => {
   const { surfaceRef } = useSafariRenderReady();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
@@ -7199,6 +7203,36 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
   }, [activeTasks, focusLatestHistoryForStock, pendingAnalysisTicker, refreshHistory, routeSymbol, routeTaskId]);
 
+  const handleStockSearchSubmit = () => {
+    const rawQuery = searchQuery.trim();
+    if (!rawQuery) {
+      setStatusToast({
+        message: locale === 'en' ? 'Enter a ticker before starting analysis.' : '请输入股票代码后再开始分析',
+        tone: 'error',
+      });
+      return;
+    }
+
+    const validation = validateStockCode(normalizeTickerQuery(rawQuery));
+    if (!validation.valid) {
+      setStatusToast({
+        message: locale === 'en' ? 'Please enter a correctly formatted ticker.' : '请输入格式正确的股票代码',
+        tone: 'error',
+      });
+      return;
+    }
+
+    const builtPath = stockSearchRouteAuthority('stock-structure', language, {
+      symbol: validation.normalized,
+      source: 'manual',
+    });
+    const target = routeLocale ? builtPath : stripLocalePrefix(builtPath);
+    setStatusToast(null);
+    setSearchQuery('');
+    navigate(target);
+    void handleAnalyze(validation.normalized);
+  };
+
   const handleAnalyze = async (tickerOverride?: string) => {
     const rawQuery = (tickerOverride ?? searchQuery).trim();
     if (!rawQuery) {
@@ -7463,7 +7497,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         data-testid="home-bento-omnibar"
         onSubmit={(event) => {
           event.preventDefault();
-          void handleAnalyze();
+          handleStockSearchSubmit();
         }}
       >
         <CompactFilterBar
@@ -7512,6 +7546,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               aria-label={locale === 'en' ? 'Search ticker' : '搜索股票代码'}
               onChange={(event) => {
                 setSearchQuery(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  handleStockSearchSubmit();
+                }
               }}
               autoComplete="off"
               disabled={isBusy}

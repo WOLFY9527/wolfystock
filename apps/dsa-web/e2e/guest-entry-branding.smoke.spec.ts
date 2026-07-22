@@ -103,7 +103,7 @@ appTest('guest first fold stays honest when the public market snapshot is unavai
   await expectNoConsumerRawLeakage(page.locator('body'), { label: '/en/guest unavailable snapshot' });
 });
 
-appTest('guest search shows preview-unavailable state when preview stalls', async ({ page }) => {
+appTest('guest search navigation is not blocked when preview stalls', async ({ page }) => {
   await page.route('**/api/v1/analysis/preview', async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 5_000));
     await route.fulfill({
@@ -139,9 +139,9 @@ appTest('guest search shows preview-unavailable state when preview stalls', asyn
   await page.getByTestId('home-bento-omnibar-input').fill('TSLA');
   await page.getByRole('button', { name: '分析' }).click();
 
-  await appExpect(page.getByTestId('guest-preview-unavailable-state')).toBeVisible({ timeout: 8_000 });
-  await appExpect(page.getByTestId('guest-preview-unavailable-state')).toContainText('公开预览暂时不可用');
-  await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible();
+  await appExpect(page).toHaveURL(/\/zh\/stocks\/TSLA\/structure-decision\?symbol=TSLA&source=manual$/);
+  await appExpect(page.getByTestId('guest-preview-unavailable-state')).toHaveCount(0);
+  await appExpect(page.getByTestId('guest-home-clean-search')).toHaveCount(0);
   await appExpect(page.getByTestId('home-research-console')).toHaveCount(0);
   await appExpect(page.getByTestId('home-research-score-strip')).toHaveCount(0);
   await appExpect(page.locator('body')).not.toContainText(/实时诱饵|WOLFY AI|唤醒 AI|本地研究快照|本地快照|Tesla, Inc\.|NVIDIA Corporation|目标价|止损|买入|卖出|持有|仓位建议/i);
