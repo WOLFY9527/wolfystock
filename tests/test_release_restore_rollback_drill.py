@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -10,9 +12,12 @@ SCRIPT = REPO_ROOT / "scripts" / "release_restore_rollback_drill.py"
 
 
 def _run_helper(*args: str) -> subprocess.CompletedProcess[str]:
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
     return subprocess.run(
-        ["python3", str(SCRIPT), *args],
+        [sys.executable, str(SCRIPT), *args],
         cwd=REPO_ROOT,
+        env=environment,
         text=True,
         capture_output=True,
         check=False,
@@ -27,6 +32,28 @@ def _write_json(tmp_path: Path, payload: dict) -> Path:
     path = tmp_path / "release-restore-rollback-drill.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
+
+
+def _candidate_sha() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+def _candidate_tree() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD^{tree}"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    return result.stdout.strip()
 
 
 def _accepted_artifact() -> dict:
@@ -95,6 +122,58 @@ def test_sanitized_operator_artifact_is_review_ready_without_release_approval(tm
     assert payload["networkCallsExecuted"] is False
     assert payload["checks"]["requiredFields"]["missingFields"] == []
     assert payload["checks"]["safety"]["unsafeFindingCount"] == 0
+
+    candidate_sha = _candidate_sha()
+    local_result = _run_helper("--local-isolated", "--expected-sha", candidate_sha)
+
+    assert local_result.returncode == 0
+    local_payload = _output(local_result)
+    assert local_payload["mode"] == "local_isolated_execution"
+    assert local_payload["drillStatus"] == "QUALIFIED_LOCAL_ISOLATED"
+    assert local_payload["restoreReady"] is True
+    assert local_payload["rollbackReady"] is True
+    assert local_payload["releaseApproved"] is False
+    assert local_payload["manualReviewRequired"] is True
+    assert local_payload["productionStorageTouched"] is False
+    assert local_payload["networkCallsExecuted"] is False
+    assert local_payload["productionDestructiveOperationsExecuted"] is False
+    assert local_payload["isolatedDatabaseActionsExecuted"] is True
+    assert local_payload["isolatedRollbackTargetReplacementExecuted"] is True
+    assert local_payload["qualificationScope"] == "local_isolated_release_profile"
+    assert local_payload["candidate"]["sha"] == candidate_sha
+    assert local_payload["candidate"]["tree"] == _candidate_tree()
+    assert local_payload["identities"]["configurationSha256"]
+    assert local_payload["identities"]["backupMetadataSha256"]
+    assert local_payload["identities"]["backupSha256"]
+    assert local_payload["identities"]["restoreSha256"]
+    assert local_payload["identities"]["schemaSha256"]
+    assert local_payload["rollbackDecision"] == "executed_to_verified_backup"
+    assert local_payload["observedRpoSeconds"] == 0
+    assert local_payload["observedRtoSeconds"] >= 0
+    assert {check["id"] for check in local_payload["checks"]} == {
+        "managed_test_isolation",
+        "candidate_identity",
+        "backup_metadata_and_checksum",
+        "restore_to_separate_clean_target",
+        "restored_application_startup",
+        "user_session_role_and_owner_isolation",
+        "schema_identity",
+        "controlled_rollback",
+    }
+    assert {check["status"] for check in local_payload["checks"]} == {"pass"}
+
+    mismatched_candidate = _run_helper("--local-isolated", "--expected-sha", "0" * 40)
+
+    assert mismatched_candidate.returncode == 1
+    mismatch_payload = _output(mismatched_candidate)
+    assert mismatch_payload["drillStatus"] == "NO-GO"
+    assert mismatch_payload["restoreReady"] is False
+    assert mismatch_payload["rollbackReady"] is False
+    assert mismatch_payload["failureCode"] == "candidate_identity_mismatch"
+    assert mismatch_payload["productionStorageTouched"] is False
+    assert mismatch_payload["productionDestructiveOperationsExecuted"] is False
+    assert mismatch_payload["isolatedDatabaseActionsExecuted"] is False
+    assert mismatch_payload["isolatedRollbackTargetReplacementExecuted"] is False
 
 
 def test_missing_fields_keep_drill_in_no_go_posture(tmp_path: Path) -> None:

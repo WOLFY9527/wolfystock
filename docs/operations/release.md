@@ -91,6 +91,19 @@ Real restore execution, retention decisions, migrations, cleanup, and deletion
 remain separately authorized operations. See
 [`docs/operations/database.md`](database.md).
 
+For the managed local release profile,
+`./wolfy exec --profile test -- python scripts/release_restore_rollback_drill.py --local-isolated --expected-sha <candidate-sha>`
+executes an isolated SQLite backup, clean-target restore, application startup,
+owner-isolation verification, and controlled rollback. The full candidate SHA
+is mandatory, and the emitted result binds the candidate, configuration,
+backup, restore, schema, RPO/RTO, and rollback decision without raw paths or
+secret values. `QUALIFIED_LOCAL_ISOLATED` qualifies only that managed local
+profile: it is neither target-environment evidence nor release approval. The
+separate `--offline` mode remains an advisory sanitized-packet review and is
+not restore-execution evidence. The local result separately records the
+isolated rollback-target replacement and confirms that no production
+destructive operation occurred.
+
 ### WS2 And Async Runtime
 
 Process-local SSE, durable polling, synthetic worker, and multi-instance

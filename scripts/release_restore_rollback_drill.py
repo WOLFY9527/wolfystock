@@ -1,19 +1,34 @@
 #!/usr/bin/env python3
-"""Validate a release restore/rollback drill packet offline.
+"""Validate offline drill packets or execute a bounded local restore qualification.
 
-This helper is advisory only. It does not connect to databases, read secrets,
-run migrations, restore data, delete files, send notifications, or call
-networks. Operators provide sanitized labels and plan notes for review.
+Offline mode accepts only sanitized operator labels and remains advisory. The
+explicit local-isolated mode uses the managed test run root to exercise the
+application's SQLite backup, restore, startup, and rollback path. Neither mode
+approves a release or touches production storage, secrets, or networks.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import re
+import sqlite3
+import subprocess
 import sys
+import tempfile
+import time
+from contextlib import contextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+from backup_restore_drill_safe_root import validate_run_identity
 
 
 SCHEMA_VERSION = "wolfystock_release_restore_rollback_drill_v1"
@@ -125,6 +140,13 @@ APPROVAL_CLAIM_PATTERNS = (
     re.compile(r"^\s*GO\s*$", re.IGNORECASE),
 )
 APPROVAL_KEYS = {"launchapproved", "releaseapproved", "launchgo", "go"}
+LOCAL_DRILL_SCHEMA_VERSION = "wolfystock_t689_local_isolated_restore_drill_v1"
+LOCAL_DRILL_PROFILE = "local_isolated_release_profile"
+_CANDIDATE_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+
+
+class LocalDrillError(RuntimeError):
+    """Fail the executable local drill without exposing mutable local details."""
 
 
 def _empty_artifact() -> dict[str, Any]:
@@ -295,12 +317,464 @@ def _build_report(payload: dict[str, Any], *, load_error: str | None = None) -> 
     }
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _sha256_json(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _git_revision(repository_root: Path, revision: str) -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", revision],
+        cwd=repository_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise LocalDrillError("candidate_identity_unavailable")
+    value = result.stdout.strip()
+    if not _CANDIDATE_SHA_PATTERN.fullmatch(value):
+        raise LocalDrillError("candidate_identity_invalid")
+    return value
+
+
+def _sqlite_backup(source: Path, destination: Path) -> None:
+    if not source.is_file():
+        raise LocalDrillError("backup_source_missing")
+    if destination.exists() or destination.is_symlink():
+        raise LocalDrillError("backup_target_not_clean")
+    if source.resolve() == destination.resolve():
+        raise LocalDrillError("backup_source_equals_target")
+
+    with sqlite3.connect(f"file:{source}?mode=ro", uri=True) as source_connection:
+        with sqlite3.connect(destination) as destination_connection:
+            source_connection.backup(destination_connection)
+
+
+def _sqlite_schema_sha256(path: Path) -> str:
+    if not path.is_file():
+        raise LocalDrillError("schema_target_missing")
+    with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as connection:
+        user_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+        rows = connection.execute(
+            "SELECT type, name, tbl_name, sql FROM sqlite_master "
+            "WHERE sql IS NOT NULL ORDER BY type, name, tbl_name"
+        ).fetchall()
+    return _sha256_json(
+        {
+            "engine": "sqlite",
+            "userVersion": user_version,
+            "objects": [[str(value or "") for value in row] for row in rows],
+        }
+    )
+
+
+def _restore_environment(previous: dict[str, str | None]) -> None:
+    for key, value in previous.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+
+
+@contextmanager
+def _isolated_runtime_database(database_path: Path, environment_path: Path) -> Iterator[Any]:
+    """Bind the app's normal Config and DatabaseManager owners to one disposable database."""
+    from src.config import Config
+    from src.storage import DatabaseManager
+
+    previous = {
+        key: os.environ.get(key)
+        for key in (
+            "ADMIN_AUTH_ENABLED",
+            "CRYPTO_REALTIME_ENABLED",
+            "DATABASE_PATH",
+            "ENV_FILE",
+            "WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS",
+        )
+    }
+    environment_path.write_text(
+        "\n".join(
+            (
+                "ADMIN_AUTH_ENABLED=false",
+                "CRYPTO_REALTIME_ENABLED=false",
+                f"DATABASE_PATH={database_path}",
+                "WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS=true",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    os.environ["ENV_FILE"] = str(environment_path)
+    os.environ["DATABASE_PATH"] = str(database_path)
+    os.environ["ADMIN_AUTH_ENABLED"] = "false"
+    os.environ["CRYPTO_REALTIME_ENABLED"] = "false"
+    os.environ["WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS"] = "true"
+    Config.reset_instance()
+    DatabaseManager.reset_instance()
+    try:
+        yield DatabaseManager.get_instance()
+    finally:
+        DatabaseManager.reset_instance()
+        Config.reset_instance()
+        _restore_environment(previous)
+
+
+def _seed_isolated_persistent_state(database: Any) -> dict[str, int]:
+    from src.services.portfolio_service import PortfolioService
+    from src.services.watchlist_service import WatchlistService
+
+    expires_at = datetime.now() + timedelta(hours=1)
+    users = (
+        ("restore-owner-alpha", "restore-alpha", "user"),
+        ("restore-owner-beta", "restore-beta", "user"),
+        ("restore-admin", "restore-admin", "admin"),
+    )
+    for user_id, username, role in users:
+        database.create_or_update_app_user(
+            user_id=user_id,
+            username=username,
+            display_name=username,
+            role=role,
+            password_hash=None,
+            is_active=True,
+        )
+        database.create_app_user_session(
+            session_id=f"restore-session-{user_id}",
+            user_id=user_id,
+            expires_at=expires_at,
+        )
+
+    alpha_account = PortfolioService(owner_id="restore-owner-alpha").create_account(
+        name="Restore Alpha Account",
+        broker=None,
+        market="us",
+        base_currency="USD",
+    )
+    beta_account = PortfolioService(owner_id="restore-owner-beta").create_account(
+        name="Restore Beta Account",
+        broker=None,
+        market="cn",
+        base_currency="CNY",
+    )
+
+    watchlist = WatchlistService(db_manager=database)
+    alpha_item = watchlist.add_item(
+        owner_id="restore-owner-alpha",
+        symbol="AAPL",
+        market="us",
+        name="Restore Alpha Watchlist",
+    )
+    beta_item = watchlist.add_item(
+        owner_id="restore-owner-beta",
+        symbol="600519",
+        market="cn",
+        name="Restore Beta Watchlist",
+    )
+    return {
+        "alphaAccountId": int(alpha_account["id"]),
+        "betaAccountId": int(beta_account["id"]),
+        "alphaWatchlistItemId": int(alpha_item["id"]),
+        "betaWatchlistItemId": int(beta_item["id"]),
+    }
+
+
+def _verify_restored_state(database: Any, identifiers: dict[str, int]) -> None:
+    from src.services.portfolio_service import PortfolioService
+    from src.services.watchlist_service import WatchlistService
+
+    alpha_user = database.get_app_user("restore-owner-alpha")
+    beta_user = database.get_app_user("restore-owner-beta")
+    admin_user = database.get_app_user("restore-admin")
+    if (
+        alpha_user is None
+        or beta_user is None
+        or admin_user is None
+        or str(alpha_user.role) != "user"
+        or str(beta_user.role) != "user"
+        or str(admin_user.role) != "admin"
+    ):
+        raise LocalDrillError("restored_roles_invalid")
+
+    alpha_session = database.get_app_user_session("restore-session-restore-owner-alpha")
+    beta_session = database.get_app_user_session("restore-session-restore-owner-beta")
+    if (
+        alpha_session is None
+        or beta_session is None
+        or str(alpha_session.user_id) != "restore-owner-alpha"
+        or str(beta_session.user_id) != "restore-owner-beta"
+    ):
+        raise LocalDrillError("restored_sessions_invalid")
+
+    alpha_portfolio = PortfolioService(owner_id="restore-owner-alpha")
+    beta_portfolio = PortfolioService(owner_id="restore-owner-beta")
+    if alpha_portfolio.get_account(identifiers["alphaAccountId"]) is None:
+        raise LocalDrillError("restored_alpha_portfolio_missing")
+    if beta_portfolio.get_account(identifiers["betaAccountId"]) is None:
+        raise LocalDrillError("restored_beta_portfolio_missing")
+    if beta_portfolio.get_account(identifiers["alphaAccountId"]) is not None:
+        raise LocalDrillError("portfolio_owner_isolation_failed")
+
+    watchlist = WatchlistService(db_manager=database)
+    if (
+        watchlist.get_item_by_id(
+            owner_id="restore-owner-alpha",
+            item_id=identifiers["alphaWatchlistItemId"],
+        )
+        is None
+    ):
+        raise LocalDrillError("restored_alpha_watchlist_missing")
+    if (
+        watchlist.get_item_by_id(
+            owner_id="restore-owner-beta",
+            item_id=identifiers["betaWatchlistItemId"],
+        )
+        is None
+    ):
+        raise LocalDrillError("restored_beta_watchlist_missing")
+    if (
+        watchlist.get_item_by_id(
+            owner_id="restore-owner-beta",
+            item_id=identifiers["alphaWatchlistItemId"],
+        )
+        is not None
+    ):
+        raise LocalDrillError("watchlist_owner_isolation_failed")
+
+
+def _start_restored_application(database_path: Path, environment_path: Path, identifiers: dict[str, int]) -> None:
+    from fastapi.testclient import TestClient
+
+    with _isolated_runtime_database(database_path, environment_path) as database:
+        _verify_restored_state(database, identifiers)
+        from api.app import create_app
+
+        app = create_app(static_dir=environment_path.parent / "missing-static")
+        with TestClient(app) as client:
+            response = client.get("/api/health/ready")
+        if response.status_code != 200 or response.json().get("ready") is not True:
+            raise LocalDrillError("restored_application_not_ready")
+
+
+def _seed_rollback_drift(database: Any) -> None:
+    database.create_or_update_app_user(
+        user_id="restore-rollback-drift",
+        username="restore-rollback-drift",
+        display_name="restore-rollback-drift",
+        role="user",
+        password_hash=None,
+        is_active=True,
+    )
+
+
+def _managed_environment_fingerprint(run_root: Path) -> str:
+    evidence_path = run_root / "services" / "environment-evidence.json"
+    try:
+        payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise LocalDrillError("managed_environment_evidence_unavailable") from exc
+    fingerprint = str(payload.get("environmentFingerprint") or "")
+    if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+        raise LocalDrillError("managed_environment_fingerprint_invalid")
+    return fingerprint
+
+
+def _local_check(check_id: str, *, evidence: dict[str, Any] | None = None) -> dict[str, Any]:
+    return {"id": check_id, "status": "pass", "evidence": evidence or {}}
+
+
+def _local_failure_report(failure_code: str) -> dict[str, Any]:
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "localDrillSchemaVersion": LOCAL_DRILL_SCHEMA_VERSION,
+        "mode": "local_isolated_execution",
+        "qualificationScope": LOCAL_DRILL_PROFILE,
+        "drillStatus": "NO-GO",
+        "restoreReady": False,
+        "rollbackReady": False,
+        "releaseApproved": False,
+        "manualReviewRequired": True,
+        "productionStorageTouched": False,
+        "networkCallsExecuted": False,
+        "productionDestructiveOperationsExecuted": False,
+        "isolatedDatabaseActionsExecuted": False,
+        "isolatedRollbackTargetReplacementExecuted": False,
+        "failureCode": failure_code,
+    }
+
+
+def _run_local_isolated_drill(*, expected_sha: str) -> dict[str, Any]:
+    if not _CANDIDATE_SHA_PATTERN.fullmatch(expected_sha):
+        raise LocalDrillError("expected_candidate_sha_invalid")
+
+    actual_sha = _git_revision(REPOSITORY_ROOT, "HEAD")
+    if actual_sha != expected_sha:
+        raise LocalDrillError("candidate_identity_mismatch")
+    tree_sha = _git_revision(REPOSITORY_ROOT, "HEAD^{tree}")
+    run_root, temp_root = validate_run_identity(dict(os.environ))
+    environment_fingerprint = _managed_environment_fingerprint(run_root)
+    started_at = time.monotonic()
+
+    with tempfile.TemporaryDirectory(prefix="t689-release-restore-", dir=temp_root) as work_dir_value:
+        work_dir = Path(work_dir_value)
+        source_path = work_dir / "source.sqlite"
+        backup_path = work_dir / "backup.sqlite"
+        backup_metadata_path = work_dir / "backup-metadata.json"
+        restore_path = work_dir / "restored.sqlite"
+        rollback_target_path = work_dir / "rollback-target.sqlite"
+        source_environment_path = work_dir / "source.env"
+        restored_environment_path = work_dir / "restored.env"
+        rollback_environment_path = work_dir / "rollback.env"
+
+        with _isolated_runtime_database(source_path, source_environment_path) as source_database:
+            identifiers = _seed_isolated_persistent_state(source_database)
+        source_schema_sha256 = _sqlite_schema_sha256(source_path)
+        source_sha256_before_backup = _sha256_file(source_path)
+        database_target_sha256 = hashlib.sha256(str(restore_path.resolve()).encode("utf-8")).hexdigest()
+        configuration_sha256 = _sha256_json(
+            {
+                "candidateSha": actual_sha,
+                "candidateTree": tree_sha,
+                "databaseEngine": "sqlite",
+                "databaseTargetSha256": database_target_sha256,
+                "environmentFingerprint": environment_fingerprint,
+                "profile": LOCAL_DRILL_PROFILE,
+            }
+        )
+
+        _sqlite_backup(source_path, backup_path)
+        if _sha256_file(source_path) != source_sha256_before_backup:
+            raise LocalDrillError("backup_mutated_source")
+        backup_sha256 = _sha256_file(backup_path)
+        backup_metadata = {
+            "backupFormat": "sqlite-backup-api",
+            "backupSha256": backup_sha256,
+            "candidateSha": actual_sha,
+            "candidateTree": tree_sha,
+            "configurationSha256": configuration_sha256,
+            "schemaSha256": source_schema_sha256,
+        }
+        backup_metadata_serialized = json.dumps(
+            backup_metadata,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        backup_metadata_path.write_text(backup_metadata_serialized, encoding="utf-8")
+        backup_metadata_sha256 = _sha256_file(backup_metadata_path)
+        if backup_metadata_sha256 != _sha256_json(backup_metadata):
+            raise LocalDrillError("backup_metadata_checksum_mismatch")
+        if json.loads(backup_metadata_path.read_text(encoding="utf-8")) != backup_metadata:
+            raise LocalDrillError("backup_metadata_readback_mismatch")
+
+        _sqlite_backup(backup_path, restore_path)
+        restore_sha256 = _sha256_file(restore_path)
+        restored_schema_sha256 = _sqlite_schema_sha256(restore_path)
+        if restored_schema_sha256 != source_schema_sha256:
+            raise LocalDrillError("restore_schema_identity_mismatch")
+        _start_restored_application(restore_path, restored_environment_path, identifiers)
+
+        _sqlite_backup(restore_path, rollback_target_path)
+        with _isolated_runtime_database(rollback_target_path, rollback_environment_path) as rollback_database:
+            _seed_rollback_drift(rollback_database)
+            if rollback_database.get_app_user("restore-rollback-drift") is None:
+                raise LocalDrillError("rollback_drift_not_created")
+        rollback_target_path.unlink()
+        _sqlite_backup(backup_path, rollback_target_path)
+        _start_restored_application(rollback_target_path, rollback_environment_path, identifiers)
+        with _isolated_runtime_database(rollback_target_path, rollback_environment_path) as rollback_database:
+            if rollback_database.get_app_user("restore-rollback-drift") is not None:
+                raise LocalDrillError("rollback_drift_persisted")
+
+        observed_rto_seconds = round(time.monotonic() - started_at, 6)
+        checks = [
+            _local_check(
+                "managed_test_isolation",
+                evidence={"environmentFingerprint": environment_fingerprint, "profile": LOCAL_DRILL_PROFILE},
+            ),
+            _local_check("candidate_identity", evidence={"sha": actual_sha, "tree": tree_sha}),
+            _local_check(
+                "backup_metadata_and_checksum",
+                evidence={"backupMetadataSha256": backup_metadata_sha256, "backupSha256": backup_sha256},
+            ),
+            _local_check("restore_to_separate_clean_target", evidence={"restoreSha256": restore_sha256}),
+            _local_check("restored_application_startup"),
+            _local_check("user_session_role_and_owner_isolation"),
+            _local_check("schema_identity", evidence={"schemaSha256": restored_schema_sha256}),
+            _local_check("controlled_rollback"),
+        ]
+        return {
+            "schemaVersion": SCHEMA_VERSION,
+            "localDrillSchemaVersion": LOCAL_DRILL_SCHEMA_VERSION,
+            "mode": "local_isolated_execution",
+            "qualificationScope": LOCAL_DRILL_PROFILE,
+            "drillStatus": "QUALIFIED_LOCAL_ISOLATED",
+            "restoreReady": True,
+            "rollbackReady": True,
+            "releaseApproved": False,
+            "manualReviewRequired": True,
+            "productionStorageTouched": False,
+            "networkCallsExecuted": False,
+            "productionDestructiveOperationsExecuted": False,
+            "isolatedDatabaseActionsExecuted": True,
+            "isolatedRollbackTargetReplacementExecuted": True,
+            "candidate": {"sha": actual_sha, "tree": tree_sha},
+            "identities": {
+                "configurationSha256": configuration_sha256,
+                "backupMetadataSha256": backup_metadata_sha256,
+                "backupSha256": backup_sha256,
+                "restoreSha256": restore_sha256,
+                "schemaSha256": restored_schema_sha256,
+            },
+            "observedRpoSeconds": 0,
+            "observedRtoSeconds": observed_rto_seconds,
+            "rollbackDecision": "executed_to_verified_backup",
+            "checks": checks,
+        }
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Validate release restore/rollback drill labels offline.")
-    parser.add_argument("--offline", action="store_true", required=True, help="Run offline advisory validation only.")
+    parser = argparse.ArgumentParser(description="Validate or execute a bounded release restore/rollback drill.")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--offline", action="store_true", help="Run offline advisory validation only.")
+    mode.add_argument(
+        "--local-isolated",
+        action="store_true",
+        help="Execute the managed-test-only SQLite backup, restore, startup, and rollback drill.",
+    )
     parser.add_argument("--artifact", help="Path to sanitized operator-supplied drill JSON.")
+    parser.add_argument("--expected-sha", help="Exact Git candidate SHA required by --local-isolated.")
     parser.add_argument("--allow-no-go", action="store_true", help="Return exit 0 even when the drill remains NO-GO.")
     args = parser.parse_args(argv)
+
+    if args.local_isolated:
+        if args.artifact:
+            parser.error("--artifact is only valid with --offline")
+        if args.allow_no_go:
+            parser.error("--allow-no-go is only valid with --offline")
+        if not args.expected_sha:
+            parser.error("--expected-sha is required with --local-isolated")
+        try:
+            report = _run_local_isolated_drill(expected_sha=args.expected_sha)
+        except LocalDrillError as exc:
+            report = _local_failure_report(str(exc))
+            exit_code = 1
+        else:
+            exit_code = 0
+        json.dump(report, sys.stdout, ensure_ascii=False, indent=2, sort_keys=True)
+        sys.stdout.write("\n")
+        return exit_code
+
+    if args.expected_sha:
+        parser.error("--expected-sha is only valid with --local-isolated")
 
     load_error: str | None = None
     payload = _empty_artifact()
