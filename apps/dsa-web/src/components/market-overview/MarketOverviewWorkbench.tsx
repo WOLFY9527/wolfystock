@@ -72,8 +72,8 @@ import { mapConsumerStatusText } from '../../utils/consumerStatusLabels';
 import { getConsumerDataStateEntry } from '../../utils/consumerDataStateVocabulary';
 import type { OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';
 import {
-  buildMarketDirectionalSummary,
   marketIntelligenceReasonLabel,
+  resolveMarketIntelligenceConsumerView,
   type MarketDirectionalSummary,
 } from '../../utils/marketIntelligenceGuidance';
 import { buildMarketIntelligenceEvidenceMarkdown } from '../../utils/marketIntelligenceEvidenceExport';
@@ -1990,7 +1990,9 @@ function marketDecisionSemanticsLine(
   );
   const label = marketOverviewConsumerSemanticsText(rawLabel, `${fallbackPrefix} ${index + 1}`, language);
   const meta = [
-    item.reason || item.reasonCode ? marketIntelligenceReasonLabel(marketDecisionSemanticsText(item.reason || item.reasonCode)) : '',
+    item.reason || item.reasonCode
+      ? marketIntelligenceReasonLabel(marketDecisionSemanticsText(item.reason || item.reasonCode), language)
+      : '',
     marketOverviewConsumerSemanticsText(item.surface, '', language),
     marketDecisionSemanticsText(item.label) ? marketOverviewConsumerSemanticsText(item.detail, '', language) : '',
   ].filter(Boolean).join(' · ');
@@ -3313,20 +3315,7 @@ function useMarketOverviewWorkbenchModel({
   const marketDecision = buildMarketDecision({ activeCategory, panels, dataQuality, topLevelDataStatus });
   const decisionReliable = isTemperatureReliable(panels.temperature);
   const disabledLabel = temperatureDisabledStateLabel(panels.temperature);
-  const regimeSynthesisView = buildMarketRegimeSynthesisView(
-    panels.temperature.marketRegimeSynthesis,
-    decisionReliable,
-    language,
-  );
-  const regimeSummaryView = buildMarketOverviewRegimeSummaryView(
-    panels.temperature.regimeSummary,
-    language,
-  );
-  const decisionSemanticsView = buildMarketDecisionSemanticsView(
-    panels.temperature.marketDecisionSemantics,
-    language,
-  );
-  const directionalSummaryView = buildMarketDirectionalSummary({
+  const marketIntelligenceConsumerView = resolveMarketIntelligenceConsumerView({
     temperature: panels.temperature,
     briefing: panels.briefing,
     panels: {
@@ -3337,6 +3326,20 @@ function useMarketOverviewWorkbenchModel({
     decisionReliable,
     locale: language,
   });
+  const regimeSynthesisView = buildMarketRegimeSynthesisView(
+    marketIntelligenceConsumerView.regimeSynthesis,
+    decisionReliable,
+    language,
+  );
+  const regimeSummaryView = buildMarketOverviewRegimeSummaryView(
+    panels.temperature.regimeSummary,
+    language,
+  );
+  const decisionSemanticsView = buildMarketDecisionSemanticsView(
+    marketIntelligenceConsumerView.decisionSemantics,
+    language,
+  );
+  const directionalSummaryView = marketIntelligenceConsumerView.directionalSummary;
   const dataStateStatuses = collectDataStateMeta(panels).map(resolveProviderStatus);
   const fallbackCount = dataQuality.counts.fallback + dataQuality.counts.mock;
   const unavailableCount = dataStateStatuses.filter((status) => status === 'partial' || status === 'unavailable' || status === 'error').length + refreshErrorCount;

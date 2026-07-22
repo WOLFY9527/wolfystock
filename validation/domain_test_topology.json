@@ -40440,8 +40440,8 @@
       }
     },
     "inventory": {
-      "count": 177,
-      "sha256": "b1814248c55af23ce59617bfef24078db3f55bd1a122c865b02a7979954c64f9"
+      "count": 178,
+      "sha256": "30276b8efe1b1484a5da5cfa263380604d68ada7f55bb6ae945073cc25f46086"
     },
     "files": [
       {
@@ -40742,6 +40742,10 @@
       },
       {
         "path": "apps/dsa-web/src/components/market-overview/__tests__/MarketProviderStateCopy.test.tsx",
+        "owner": "market"
+      },
+      {
+        "path": "apps/dsa-web/src/components/market-overview/__tests__/marketEvidenceLocalization.test.ts",
         "owner": "market"
       },
       {

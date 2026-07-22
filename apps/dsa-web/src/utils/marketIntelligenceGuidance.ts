@@ -138,6 +138,15 @@ const ZH_REASON_LABELS: Record<string, string> = {
   present: '已就绪',
   installed: '已安装',
   missing: '缺失',
+  unknown_pillar: '覆盖待确认',
+  missing_direction_or_magnitude: '方向待确认',
+  source_tier_discount: '数据边界待确认',
+  trust_discount: '数据边界待确认',
+  freshness_discount: '延迟可用',
+  unscorable: '证据不足',
+  unscorable_quality: '证据不足',
+  conflicts_with_primary_regime: '反向信号',
+  market_decision_semantics_data_insufficient: '证据不足',
 };
 
 const EN_REASON_LABELS: Record<string, string> = {
@@ -180,6 +189,57 @@ const EN_REASON_LABELS: Record<string, string> = {
   trust_gate_blocked: 'Trust gate blocked',
   unavailable_source: 'Data unavailable',
   watch_only_language: 'Observation-only language',
+  unknown_pillar: 'Coverage pending',
+  missing_direction_or_magnitude: 'Direction pending',
+  source_tier_discount: 'Data boundary pending',
+  trust_discount: 'Data boundary pending',
+  freshness_discount: 'Delayed data',
+  unscorable: 'Insufficient evidence',
+  unscorable_quality: 'Insufficient evidence',
+  conflicts_with_primary_regime: 'Counter signal',
+  market_decision_semantics_data_insufficient: 'Insufficient evidence',
+};
+
+const ZH_EVIDENCE_KEY_LABELS: Record<string, string> = {
+  official_macro_rates_volatility: '官方宏观/利率/波动',
+  liquidity_conditions: '流动性/条件',
+  rotation_or_risk_participation: '轮动/风险参与',
+  risk_appetite: '风险偏好',
+  rates_pressure: '利率压力',
+  dollar_pressure: '美元压力',
+  volatility_stress: '波动压力',
+  liquidity_impulse: '流动性脉冲',
+  crypto_risk_beta: '加密风险偏好',
+  breadth_health: 'A股宽度',
+  china_risk_appetite: '中国风险偏好',
+  rotation_leadership: '轮动质量',
+  risk_asset_demand: '风险资产需求',
+  funding_stress: '融资压力',
+  equity_flow_proxy: '股票流向代理',
+  breadth_confirmation: '宽度确认',
+  crypto_liquidity_beta: '加密流动性风险',
+  china_liquidity_context: '中国流动性背景',
+};
+
+const EN_EVIDENCE_KEY_LABELS: Record<string, string> = {
+  official_macro_rates_volatility: 'Official macro/rates/volatility',
+  liquidity_conditions: 'Liquidity/conditions',
+  rotation_or_risk_participation: 'Rotation/risk participation',
+  risk_appetite: 'Risk appetite',
+  rates_pressure: 'Rates pressure',
+  dollar_pressure: 'Dollar pressure',
+  volatility_stress: 'Volatility stress',
+  liquidity_impulse: 'Liquidity impulse',
+  crypto_risk_beta: 'Crypto risk beta',
+  breadth_health: 'Breadth health',
+  china_risk_appetite: 'China risk appetite',
+  rotation_leadership: 'Rotation quality',
+  risk_asset_demand: 'Risk asset demand',
+  funding_stress: 'Funding stress',
+  equity_flow_proxy: 'Equity flow proxy',
+  breadth_confirmation: 'Breadth confirmation',
+  crypto_liquidity_beta: 'Crypto liquidity beta',
+  china_liquidity_context: 'China liquidity context',
 };
 
 function normalizeReason(value?: string | null): string {
@@ -203,11 +263,120 @@ export function marketIntelligenceReasonLabel(
   if (labels[normalized]) {
     return labels[normalized];
   }
+  const requiredPillar = normalized.match(/^required_(.+)_not_score_grade$/)?.[1];
+  if (requiredPillar) {
+    const pillarLabel = marketIntelligenceEvidenceKeyLabel(requiredPillar, locale);
+    return locale === 'en' ? `${pillarLabel} is not score-grade` : `${pillarLabel}尚未达到评分级证据`;
+  }
   const sharedLabel = sanitizeUserFacingDataIssue(raw, locale);
   if (sharedLabel && sharedLabel !== raw) {
     return sharedLabel;
   }
   return locale === 'en' ? 'Data boundary pending confirmation' : titleCaseFromCode(normalized);
+}
+
+export type MarketIntelligenceEvidenceItem = {
+  key?: unknown;
+  label?: unknown;
+  pillar?: unknown;
+  reason?: unknown;
+  reasonCode?: unknown;
+};
+
+export function marketIntelligenceEvidenceKeyLabel(
+  value?: string | null,
+  locale: MarketIntelligenceGuidanceLocale = 'zh',
+): string {
+  const normalized = normalizeReason(value);
+  if (!normalized) {
+    return locale === 'en' ? 'Evidence item' : '证据项';
+  }
+  const labels = locale === 'en' ? EN_EVIDENCE_KEY_LABELS : ZH_EVIDENCE_KEY_LABELS;
+  return labels[normalized] || (locale === 'en' ? 'Evidence item' : '证据项');
+}
+
+function evidencePillarFromItem(item: MarketIntelligenceEvidenceItem): string {
+  const explicitPillar = normalizeReason(String(item.pillar || ''));
+  if (explicitPillar) {
+    return explicitPillar;
+  }
+  const keyPillar = String(item.key || '').trim().match(/^missing:(.+)$/i)?.[1];
+  if (keyPillar) {
+    return normalizeReason(keyPillar);
+  }
+  const labelPillar = String(item.label || '').match(/\bmissing scoring evidence for\s+([a-z0-9_:-]+)$/i)?.[1];
+  return normalizeReason(labelPillar || '');
+}
+
+export function marketIntelligenceEvidenceLabel(
+  item: MarketIntelligenceEvidenceItem,
+  locale: MarketIntelligenceGuidanceLocale = 'zh',
+): string {
+  const reason = normalizeReason(String(item.reason || item.reasonCode || ''));
+  const pillarLabel = marketIntelligenceEvidenceKeyLabel(evidencePillarFromItem(item), locale);
+  if (!reason) {
+    return pillarLabel;
+  }
+  const reasonLabel = marketIntelligenceReasonLabel(reason, locale);
+  return `${pillarLabel}${locale === 'en' ? ': ' : '：'}${reasonLabel}`;
+}
+
+function localizeMarketIntelligenceEvidenceItem<T extends MarketIntelligenceEvidenceItem>(
+  item: T,
+  locale: MarketIntelligenceGuidanceLocale,
+): T {
+  if (!evidencePillarFromItem(item)) {
+    return item;
+  }
+  const consumerLabel = marketIntelligenceEvidenceLabel(item, locale);
+  return {
+    ...item,
+    label: consumerLabel,
+  } as T;
+}
+
+function localizeMarketRegimeEvidence(
+  synthesis: MarketRegimeSynthesis | undefined,
+  locale: MarketIntelligenceGuidanceLocale,
+): MarketRegimeSynthesis | undefined {
+  if (!synthesis) {
+    return undefined;
+  }
+  return {
+    ...synthesis,
+    dataGaps: synthesis.dataGaps.map((item) => localizeMarketIntelligenceEvidenceItem(item, locale)),
+  };
+}
+
+function localizeMarketDecisionEvidence(
+  semantics: MarketDecisionSemantics | undefined,
+  locale: MarketIntelligenceGuidanceLocale,
+): MarketDecisionSemantics | undefined {
+  if (!semantics) {
+    return undefined;
+  }
+  const readiness = semantics.directionReadiness;
+  return {
+    ...semantics,
+    dataGaps: semantics.dataGaps.map((item) => localizeMarketIntelligenceEvidenceItem(item, locale)),
+    directionReadiness: readiness
+      ? {
+        ...readiness,
+        scoreGradePillars: {
+          ...readiness.scoreGradePillars,
+          items: readiness.scoreGradePillars.items.map((item) => localizeMarketIntelligenceEvidenceItem(item, locale)),
+        },
+        observationOnlyPillars: {
+          ...readiness.observationOnlyPillars,
+          items: readiness.observationOnlyPillars.items.map((item) => localizeMarketIntelligenceEvidenceItem(item, locale)),
+        },
+        missingPillars: {
+          ...readiness.missingPillars,
+          items: readiness.missingPillars.items.map((item) => localizeMarketIntelligenceEvidenceItem(item, locale)),
+        },
+      }
+      : undefined,
+  };
 }
 
 export function marketIntelligenceReasonLabels(
@@ -473,6 +642,38 @@ export function buildMarketDirectionalSummary({
     blockingDrivers,
     watchTitle: locale === 'en' ? 'Observable directions' : '可观察方向',
     watchItems,
+  };
+}
+
+export type MarketIntelligenceConsumerView = {
+  directionalSummary: MarketDirectionalSummary;
+  regimeSynthesis?: MarketRegimeSynthesis;
+  decisionSemantics?: MarketDecisionSemantics;
+};
+
+export function resolveMarketIntelligenceConsumerView({
+  temperature,
+  briefing,
+  panels,
+  decisionReliable,
+  locale,
+}: {
+  temperature: MarketTemperatureResponse;
+  briefing: MarketBriefingResponse;
+  panels: MarketDirectionalPanels;
+  decisionReliable: boolean;
+  locale: MarketIntelligenceGuidanceLocale;
+}): MarketIntelligenceConsumerView {
+  return {
+    directionalSummary: buildMarketDirectionalSummary({
+      temperature,
+      briefing,
+      panels,
+      decisionReliable,
+      locale,
+    }),
+    regimeSynthesis: localizeMarketRegimeEvidence(temperature.marketRegimeSynthesis, locale),
+    decisionSemantics: localizeMarketDecisionEvidence(temperature.marketDecisionSemantics, locale),
   };
 }
 
