@@ -41283,13 +41283,13 @@
       "release-real-runtime"
     ],
     "inventory": {
-      "specCount": 67,
-      "specSha256": "e6e12f196ddd40884753d2b9068e81895aec0060793fa12fbdf9dd2fbe20c601",
-      "projectCaseCount": 724,
-      "projectCaseSha256": "d21175fbeb789edf493305cfdf719c5ae7b83b91e4550229027705c3ec21eea4",
+      "specCount": 68,
+      "specSha256": "d55aa1572f78d4ea0c2493f3c4d2a08e65b77b572a96776805edbb06ff55693c",
+      "projectCaseCount": 726,
+      "projectCaseSha256": "080a5278e20562bc4b392815a096f3be1225b887d783f16aa9567fd51e574753",
       "projectCaseCounts": {
-        "chromium": 360,
-        "chromium-mobile": 360,
+        "chromium": 361,
+        "chromium-mobile": 361,
         "release-real-runtime": 4
       }
     },
@@ -41598,6 +41598,11 @@
         "path": "apps/dsa-web/e2e/t560-integrated-focus-runtime.spec.ts",
         "owner": "milestone",
         "mandatory": false
+      },
+      {
+        "path": "apps/dsa-web/e2e/t676-ordinary-user-auth-session.real.spec.ts",
+        "owner": "protected_critical",
+        "mandatory": true
       },
       {
         "path": "apps/dsa-web/e2e/uat-route-identity-auth-session.spec.ts",
@@ -43786,6 +43791,13 @@
         "project": "chromium-mobile",
         "owner": "milestone",
         "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/t676-ordinary-user-auth-session.real.spec.ts::t676-ordinary-user-auth-session.real.spec.ts › creates and restores an ordinary-user session through the real browser journey",
+        "spec": "apps/dsa-web/e2e/t676-ordinary-user-auth-session.real.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "protected_critical",
+        "mandatory": true
       },
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/uat-route-identity-auth-session.spec.ts::uat-route-identity-auth-session.spec.ts › UAT route identity auth-session gate › distinguishes navigation methods inside one authenticated browser context",
@@ -46306,6 +46318,13 @@
         "project": "chromium",
         "owner": "milestone",
         "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/t676-ordinary-user-auth-session.real.spec.ts::t676-ordinary-user-auth-session.real.spec.ts › creates and restores an ordinary-user session through the real browser journey",
+        "spec": "apps/dsa-web/e2e/t676-ordinary-user-auth-session.real.spec.ts",
+        "project": "chromium",
+        "owner": "protected_critical",
+        "mandatory": true
       },
       {
         "id": "chromium::apps/dsa-web/e2e/uat-route-identity-auth-session.spec.ts::uat-route-identity-auth-session.spec.ts › UAT route identity auth-session gate › distinguishes navigation methods inside one authenticated browser context",

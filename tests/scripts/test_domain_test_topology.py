@@ -74,8 +74,8 @@ def test_manifest_schema_preserves_baseline_and_complete_surface_counts() -> Non
     assert result["baselineBackendTests"] == 7_609
     assert result["backendTests"] == 7_964
     assert result["vitestFiles"] == 178
-    assert result["playwrightSpecs"] == 67
-    assert result["playwrightProjectCases"] == 724
+    assert result["playwrightSpecs"] == 68
+    assert result["playwrightProjectCases"] == 726
     assert manifest["backend"]["baselineCapture"] == {
         "baseSha": topology.BASE_SHA,
         "count": 7_609,
@@ -208,11 +208,11 @@ def test_playwright_ownership_retains_projects_and_mandatory_auth_cases() -> Non
     specs = playwright["specs"]
     cases = playwright["projectCases"]
 
-    assert len(specs) == 67
-    assert len(cases) == 724
+    assert len(specs) == 68
+    assert len(cases) == 726
     assert playwright["inventory"]["projectCaseCounts"] == {
-        "chromium": 360,
-        "chromium-mobile": 360,
+        "chromium": 361,
+        "chromium-mobile": 361,
         "release-real-runtime": 4,
     }
     assert {spec["owner"] for spec in specs} == set(topology.PLAYWRIGHT_CLASSES)
