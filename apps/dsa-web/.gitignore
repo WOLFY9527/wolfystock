@@ -15,6 +15,7 @@ playwright-report
 blob-report
 test-results
 coverage/
+.tsbuildinfo/
 
 # Editor directories and files
 .vscode/*
