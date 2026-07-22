@@ -41283,13 +41283,13 @@
       "release-real-runtime"
     ],
     "inventory": {
-      "specCount": 65,
-      "specSha256": "afe3eee835b06cb52750ec3dda3752db4ae7c695ffa8b94319e906bb6dde9ef4",
-      "projectCaseCount": 720,
-      "projectCaseSha256": "f0af0b1a75b416fbdcbefe12d20f9e0c2e854060e513e52c90d255661b7a7deb",
+      "specCount": 67,
+      "specSha256": "e6e12f196ddd40884753d2b9068e81895aec0060793fa12fbdf9dd2fbe20c601",
+      "projectCaseCount": 724,
+      "projectCaseSha256": "d21175fbeb789edf493305cfdf719c5ae7b83b91e4550229027705c3ec21eea4",
       "projectCaseCounts": {
-        "chromium": 358,
-        "chromium-mobile": 358,
+        "chromium": 360,
+        "chromium-mobile": 360,
         "release-real-runtime": 4
       }
     },
@@ -41526,6 +41526,16 @@
       },
       {
         "path": "apps/dsa-web/e2e/smoke.spec.ts",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "path": "apps/dsa-web/e2e/stock-search-navigation.real-runtime.spec.ts",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "path": "apps/dsa-web/e2e/stock-search-navigation.smoke.spec.ts",
         "owner": "bounded_integration",
         "mandatory": false
       },
@@ -42406,7 +42416,7 @@
         "mandatory": false
       },
       {
-        "id": "chromium-mobile::apps/dsa-web/e2e/guest-entry-branding.smoke.spec.ts::guest-entry-branding.smoke.spec.ts › guest search shows preview-unavailable state when preview stalls",
+        "id": "chromium-mobile::apps/dsa-web/e2e/guest-entry-branding.smoke.spec.ts::guest-entry-branding.smoke.spec.ts › guest search navigation is not blocked when preview stalls",
         "spec": "apps/dsa-web/e2e/guest-entry-branding.smoke.spec.ts",
         "project": "chromium-mobile",
         "owner": "bounded_integration",
@@ -43262,6 +43272,20 @@
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/smoke.spec.ts::smoke.spec.ts › web deployment smoke › signed-in home bento dashboard renders drawer interactions and mobile stack when reachable",
         "spec": "apps/dsa-web/e2e/smoke.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/stock-search-navigation.real-runtime.spec.ts::stock-search-navigation.real-runtime.spec.ts › qualifies stock search navigation against the managed runtime",
+        "spec": "apps/dsa-web/e2e/stock-search-navigation.real-runtime.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/stock-search-navigation.smoke.spec.ts::stock-search-navigation.smoke.spec.ts › home stock search reaches the canonical route through keyboard, button, and suggestions",
+        "spec": "apps/dsa-web/e2e/stock-search-navigation.smoke.spec.ts",
         "project": "chromium-mobile",
         "owner": "bounded_integration",
         "mandatory": false
@@ -44912,7 +44936,7 @@
         "mandatory": false
       },
       {
-        "id": "chromium::apps/dsa-web/e2e/guest-entry-branding.smoke.spec.ts::guest-entry-branding.smoke.spec.ts › guest search shows preview-unavailable state when preview stalls",
+        "id": "chromium::apps/dsa-web/e2e/guest-entry-branding.smoke.spec.ts::guest-entry-branding.smoke.spec.ts › guest search navigation is not blocked when preview stalls",
         "spec": "apps/dsa-web/e2e/guest-entry-branding.smoke.spec.ts",
         "project": "chromium",
         "owner": "bounded_integration",
@@ -45768,6 +45792,20 @@
       {
         "id": "chromium::apps/dsa-web/e2e/smoke.spec.ts::smoke.spec.ts › web deployment smoke › signed-in home bento dashboard renders drawer interactions and mobile stack when reachable",
         "spec": "apps/dsa-web/e2e/smoke.spec.ts",
+        "project": "chromium",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/stock-search-navigation.real-runtime.spec.ts::stock-search-navigation.real-runtime.spec.ts › qualifies stock search navigation against the managed runtime",
+        "spec": "apps/dsa-web/e2e/stock-search-navigation.real-runtime.spec.ts",
+        "project": "chromium",
+        "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/stock-search-navigation.smoke.spec.ts::stock-search-navigation.smoke.spec.ts › home stock search reaches the canonical route through keyboard, button, and suggestions",
+        "spec": "apps/dsa-web/e2e/stock-search-navigation.smoke.spec.ts",
         "project": "chromium",
         "owner": "bounded_integration",
         "mandatory": false
