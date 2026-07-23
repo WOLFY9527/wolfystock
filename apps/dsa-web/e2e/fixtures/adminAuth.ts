@@ -358,15 +358,29 @@ function ruleBacktestRunsPayload() {
 
 function portfolioSnapshotPayload() {
   return {
+    as_of: '2026-05-06',
+    cost_method: 'fifo',
+    currency: 'USD',
     account_count: 0,
-    accounts: [],
-    totals: {
-      total_value: 0,
-      total_cost: 0,
-      total_pnl: 0,
-      total_pnl_percent: 0,
-      currency: 'USD',
+    total_cash: 0,
+    total_market_value: 0,
+    total_equity: 0,
+    realized_pnl: 0,
+    unrealized_pnl: 0,
+    fee_total: 0,
+    tax_total: 0,
+    fx_stale: false,
+    portfolio_truth: {
+      state: 'no_account',
+      account_state: 'no_account',
+      valuation_state: 'not_applicable',
+      value_semantics: 'not_applicable',
+      authoritative_total: null,
+      covered_subtotal: null,
+      account_count: 0,
+      position_count: 0,
     },
+    accounts: [],
   };
 }
 

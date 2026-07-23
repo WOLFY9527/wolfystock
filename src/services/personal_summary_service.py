@@ -6,6 +6,10 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping, Optional, Sequence
 
+from pydantic import ValidationError
+
+from api.v1.schemas.portfolio import PortfolioTruth
+
 from api.v1.schemas.personal_summary import (
     PERSONAL_SUMMARY_NO_ADVICE_DISCLOSURE,
     PersonalSummaryDataQuality,
@@ -171,10 +175,14 @@ class PersonalSummaryService:
             self._lookup(snapshot, "concentrationStatus", "concentration_status"),
             default="sample_data" if snapshot_sample_data else "no_evidence",
         )
+        portfolio_truth = self._portfolio_truth(snapshot)
         return PersonalSummaryPortfolioSnapshot(
-            totalValue=self._float_value(
-                self._lookup(snapshot, "totalValue", "total_equity", "totalEquity", "total_market_value", "totalMarketValue")
+            totalValue=(
+                portfolio_truth.authoritative_total
+                if portfolio_truth is not None and portfolio_truth.value_semantics == "authoritative_total"
+                else None
             ),
+            portfolioTruth=portfolio_truth,
             dailyChange=self._float_value(self._lookup(snapshot, "dailyChange", "daily_change")),
             cashPercent=self._portfolio_cash_percent(snapshot),
             largestExposure=self._portfolio_largest_exposure(snapshot),
@@ -185,6 +193,16 @@ class PersonalSummaryService:
             connected=connected,
             sampleData=snapshot_sample_data,
         )
+
+    @staticmethod
+    def _portfolio_truth(snapshot: Mapping[str, Any]) -> Optional[PortfolioTruth]:
+        raw_truth = PersonalSummaryService._lookup(snapshot, "portfolioTruth", "portfolio_truth")
+        if not isinstance(raw_truth, Mapping):
+            return None
+        try:
+            return PortfolioTruth.model_validate(raw_truth)
+        except ValidationError:
+            return None
 
     def _build_watchlist_exceptions(
         self,

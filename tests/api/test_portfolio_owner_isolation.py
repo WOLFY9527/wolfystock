@@ -578,6 +578,16 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
             "fee_total": 0.0,
             "tax_total": 0.0,
             "fx_stale": False,
+            "portfolio_truth": {
+                "state": "fully_valued_nonzero",
+                "account_state": "holdings_present",
+                "valuation_state": "fully_valued",
+                "value_semantics": "authoritative_total",
+                "authoritative_total": 2800.0,
+                "covered_subtotal": None,
+                "account_count": 1,
+                "position_count": 1,
+            },
             "portfolio_attribution": {
                 "safe_consumer_evidence": "kept",
                 "admin_debug_trace": {"raw_payload_stored": True},

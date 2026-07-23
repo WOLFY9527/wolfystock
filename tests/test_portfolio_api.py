@@ -404,6 +404,19 @@ class PortfolioApiTestCase(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["availability"]["valuation"]["state"], "unavailable")
         self.assertEqual(
+            payload["portfolio_truth"],
+            {
+                "state": "valuation_unavailable",
+                "account_state": "holdings_present",
+                "valuation_state": "unavailable",
+                "value_semantics": "unavailable",
+                "authoritative_total": None,
+                "covered_subtotal": None,
+                "account_count": 1,
+                "position_count": 1,
+            },
+        )
+        self.assertEqual(
             payload["availability"]["valuation"]["unavailable_native_values"],
             [
                 {
@@ -835,6 +848,11 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(payload["analytics_readiness"]["score_authority"], "observation_only")
         self.assertEqual(payload["valuation_lineage"]["readiness"]["state"], "partial")
         self.assertIn("fx_stale", payload["valuation_lineage"]["readiness"]["missing_evidence"])
+        self.assertEqual(payload["portfolio_truth"]["state"], "valuation_partial")
+        self.assertEqual(payload["portfolio_truth"]["account_state"], "holdings_present")
+        self.assertEqual(payload["portfolio_truth"]["value_semantics"], "covered_subtotal")
+        self.assertIsNone(payload["portfolio_truth"]["authoritative_total"])
+        self.assertIsNotNone(payload["portfolio_truth"]["covered_subtotal"])
 
     def test_snapshot_and_risk_contract_distinguishes_no_account(self) -> None:
         snapshot_resp = self.client.get(
@@ -853,6 +871,19 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(snapshot["account_count"], 0)
         self.assertEqual(snapshot["data_status"], "no_account")
         self.assertEqual(snapshot["calculation_status"], "calculation_unavailable")
+        self.assertEqual(
+            snapshot["portfolio_truth"],
+            {
+                "state": "no_account",
+                "account_state": "no_account",
+                "valuation_state": "not_applicable",
+                "value_semantics": "not_applicable",
+                "authoritative_total": None,
+                "covered_subtotal": None,
+                "account_count": 0,
+                "position_count": 0,
+            },
+        )
         self.assertFalse(snapshot["availability"]["metrics_ready"])
         self.assertEqual(snapshot["availability"]["reason"], "no_account")
         self.assertEqual(risk["data_status"], "no_account")
@@ -883,6 +914,19 @@ class PortfolioApiTestCase(unittest.TestCase):
         risk = risk_resp.json()
         self.assertEqual(snapshot["data_status"], "no_positions")
         self.assertEqual(snapshot["calculation_status"], "calculation_unavailable")
+        self.assertEqual(
+            snapshot["portfolio_truth"],
+            {
+                "state": "account_no_holdings",
+                "account_state": "no_holdings",
+                "valuation_state": "fully_valued",
+                "value_semantics": "authoritative_total",
+                "authoritative_total": 0.0,
+                "covered_subtotal": None,
+                "account_count": 1,
+                "position_count": 0,
+            },
+        )
         self.assertEqual(snapshot["accounts"][0]["data_status"], "no_positions")
         self.assertFalse(snapshot["availability"]["metrics_ready"])
         self.assertEqual(snapshot["availability"]["reason"], "no_positions")

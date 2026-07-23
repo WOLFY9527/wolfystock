@@ -713,6 +713,27 @@ function analysisTasksPayload() {
 function portfolioSnapshotPayload() {
   return {
     as_of: '2026-05-06',
+    cost_method: 'fifo',
+    currency: 'USD',
+    account_count: 1,
+    total_cash: 0,
+    total_market_value: 600,
+    total_equity: 600,
+    realized_pnl: 0,
+    unrealized_pnl: 0,
+    fee_total: 0,
+    tax_total: 0,
+    fx_stale: false,
+    portfolio_truth: {
+      state: 'fully_valued_nonzero',
+      account_state: 'holdings_present',
+      valuation_state: 'fully_valued',
+      value_semantics: 'authoritative_total',
+      authoritative_total: 600,
+      covered_subtotal: null,
+      account_count: 1,
+      position_count: 1,
+    },
     accounts: [
       {
         account_id: 1,

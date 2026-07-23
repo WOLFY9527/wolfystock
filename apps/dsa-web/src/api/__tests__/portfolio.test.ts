@@ -58,6 +58,16 @@ describe('portfolioApi scenario risk adapter', () => {
         fee_total: 0,
         tax_total: 0,
         fx_stale: true,
+        portfolio_truth: {
+          state: 'valuation_partial',
+          account_state: 'holdings_present',
+          valuation_state: 'partial',
+          value_semantics: 'covered_subtotal',
+          authoritative_total: null,
+          covered_subtotal: 3000,
+          account_count: 1,
+          position_count: 1,
+        },
         fx_freshness_state: 'missing',
         valuation_lineage_state: 'price_fallback',
         confidence_cap: {
@@ -420,6 +430,16 @@ describe('portfolioApi scenario risk adapter', () => {
         fee_total: 0,
         tax_total: 0,
         fx_stale: false,
+        portfolio_truth: {
+          state: 'valuation_partial',
+          account_state: 'holdings_present',
+          valuation_state: 'partial',
+          value_semantics: 'covered_subtotal',
+          authoritative_total: null,
+          covered_subtotal: 3000,
+          account_count: 1,
+          position_count: 2,
+        },
         price_lineage: {
           status: 'stale',
           score_authority: 'observation_only',
@@ -577,6 +597,16 @@ describe('portfolioApi scenario risk adapter', () => {
         fee_total: 0,
         tax_total: 0,
         fx_stale: false,
+        portfolio_truth: {
+          state: 'fully_valued_nonzero',
+          account_state: 'holdings_present',
+          valuation_state: 'fully_valued',
+          value_semantics: 'authoritative_total',
+          authoritative_total: 3000,
+          covered_subtotal: null,
+          account_count: 1,
+          position_count: 1,
+        },
         accounts: [],
       },
     });
@@ -595,6 +625,52 @@ describe('portfolioApi scenario risk adapter', () => {
       snapshot: { label: '估值不可用', affectedSymbols: [], affectedCurrencies: [], affectedPairs: [], count: 0, total: 0 },
       analytics: { label: '风险视图待生成', affectedSymbols: [], affectedCurrencies: [], count: 0, total: 0 },
     });
+
+    get.mockResolvedValueOnce({
+      data: {
+        as_of: '2026-03-20',
+        cost_method: 'fifo',
+        currency: 'CNY',
+        total_cash: 0,
+        total_market_value: 0,
+        total_equity: 0,
+        realized_pnl: 0,
+        unrealized_pnl: 0,
+        fee_total: 0,
+        tax_total: 0,
+        fx_stale: false,
+        accounts: [],
+      },
+    });
+    await expect(portfolioApi.getSnapshot()).rejects.toThrow('Invalid portfolio truth contract');
+
+    get.mockResolvedValueOnce({
+      data: {
+        as_of: '2026-03-20',
+        cost_method: 'fifo',
+        currency: 'CNY',
+        total_cash: 0,
+        total_market_value: 0,
+        total_equity: 0,
+        realized_pnl: 0,
+        unrealized_pnl: 0,
+        fee_total: 0,
+        tax_total: 0,
+        fx_stale: false,
+        portfolio_truth: {
+          state: 'valuation_unavailable',
+          account_state: 'no_holdings',
+          valuation_state: 'unavailable',
+          value_semantics: 'unavailable',
+          authoritative_total: null,
+          covered_subtotal: null,
+          account_count: 0,
+          position_count: 0,
+        },
+        accounts: [],
+      },
+    });
+    await expect(portfolioApi.getSnapshot()).rejects.toThrow('Invalid portfolio truth contract');
   });
 
   it('normalizes portfolio risk exposure research context with the same bounded projection', async () => {

@@ -218,7 +218,31 @@ async function installAiResearchHarness(page: Page) {
       return fulfillJson(route, { items: [] });
     }
     if (method === 'GET' && path === '/api/v1/portfolio/snapshot') {
-      return fulfillJson(route, { asOf: '2026-05-09', accounts: [] });
+      return fulfillJson(route, {
+        asOf: '2026-05-09',
+        costMethod: 'fifo',
+        currency: 'USD',
+        accountCount: 0,
+        totalCash: 0,
+        totalMarketValue: 0,
+        totalEquity: 0,
+        realizedPnl: 0,
+        unrealizedPnl: 0,
+        feeTotal: 0,
+        taxTotal: 0,
+        fxStale: false,
+        portfolioTruth: {
+          state: 'no_account',
+          accountState: 'no_account',
+          valuationState: 'not_applicable',
+          valueSemantics: 'not_applicable',
+          authoritativeTotal: null,
+          coveredSubtotal: null,
+          accountCount: 0,
+          positionCount: 0,
+        },
+        accounts: [],
+      });
     }
     if (method === 'GET' && path === '/api/v1/scanner/recent-watchlists') {
       return fulfillJson(route, { items: [] });

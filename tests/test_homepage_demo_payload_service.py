@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from pathlib import Path
 
 from src.services.homepage_demo_payload_service import (
@@ -114,7 +115,11 @@ def _assert_no_forbidden_terms(payload: dict[str, object]) -> None:
     serialized = _serialized(payload)
     advice_hits = [term for term in FORBIDDEN_TRADING_TERMS if term in serialized]
     leak_hits = [term for term in FORBIDDEN_INTERNAL_MARKERS if term in serialized]
-    public_copy_hits = [term.lower() for term in FORBIDDEN_PUBLIC_COPY if term.lower() in serialized]
+    public_copy_hits = [
+        term.lower()
+        for term in FORBIDDEN_PUBLIC_COPY
+        if re.search(rf"(?<![a-z0-9]){re.escape(term.lower())}(?![a-z0-9])", serialized)
+    ]
     assert advice_hits == []
     assert leak_hits == []
     assert public_copy_hits == []

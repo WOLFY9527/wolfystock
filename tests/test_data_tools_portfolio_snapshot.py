@@ -30,6 +30,16 @@ class _FakePortfolioService:
             "realized_pnl": 1200.0,
             "unrealized_pnl": 800.0,
             "fx_stale": False,
+            "portfolio_truth": {
+                "state": "fully_valued_nonzero",
+                "account_state": "holdings_present",
+                "valuation_state": "fully_valued",
+                "value_semantics": "authoritative_total",
+                "authoritative_total": 60000.0,
+                "covered_subtotal": None,
+                "account_count": 1,
+                "position_count": 2,
+            },
             "accounts": [
                 {
                     "account_id": 1,
@@ -117,6 +127,19 @@ class TestGetPortfolioSnapshotTool(unittest.TestCase):
         self.assertEqual(result["risk"]["status"], "ok")
         self.assertEqual(_FakePortfolioService.constructed_owner_ids, ["user-a"])
         self.assertEqual(_FakeRiskService.constructed_portfolio_owner_ids, ["user-a"])
+        self.assertEqual(
+            result["snapshot"]["portfolio_truth"],
+            {
+                "state": "fully_valued_nonzero",
+                "account_state": "holdings_present",
+                "valuation_state": "fully_valued",
+                "value_semantics": "authoritative_total",
+                "authoritative_total": 60000.0,
+                "covered_subtotal": None,
+                "account_count": 1,
+                "position_count": 2,
+            },
+        )
 
         account = result["snapshot"]["accounts"][0]
         self.assertIn("top_positions", account)

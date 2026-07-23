@@ -176,6 +176,7 @@ function makeSnapshot(options: {
   }>;
 } = {}) {
   const accountId = options.accountId ?? 1;
+  const accountCount = options.accountCount ?? 1;
   const positions = options.includePosition ? [
     {
       symbol: 'AAPL',
@@ -239,11 +240,43 @@ function makeSnapshot(options: {
       warnings: options.includePosition ? ['single_position_gt_30', 'single_currency_gt_80', 'single_market_gt_80'] : ['no_holdings'],
     },
   };
+  const portfolioTruth = accountCount === 0
+    ? {
+      state: 'no_account' as const,
+      accountState: 'no_account' as const,
+      valuationState: 'not_applicable' as const,
+      valueSemantics: 'not_applicable' as const,
+      authoritativeTotal: null,
+      coveredSubtotal: null,
+      accountCount: 0,
+      positionCount: 0,
+    }
+    : options.includePosition
+      ? {
+        state: 'fully_valued_nonzero' as const,
+        accountState: 'holdings_present' as const,
+        valuationState: 'fully_valued' as const,
+        valueSemantics: 'authoritative_total' as const,
+        authoritativeTotal: 3000,
+        coveredSubtotal: null,
+        accountCount,
+        positionCount: 1,
+      }
+      : {
+        state: 'account_no_holdings' as const,
+        accountState: 'no_holdings' as const,
+        valuationState: 'fully_valued' as const,
+        valueSemantics: 'authoritative_total' as const,
+        authoritativeTotal: 0,
+        coveredSubtotal: null,
+        accountCount,
+        positionCount: 0,
+      };
   return {
     asOf: '2026-03-19',
     costMethod: 'fifo' as const,
     currency: 'CNY',
-    accountCount: options.accountCount ?? 1,
+    accountCount,
     totalCash: options.includePosition ? 1000 : 0,
     totalMarketValue: options.includePosition ? 2000 : 0,
     totalEquity: options.includePosition ? 3000 : 0,
@@ -252,6 +285,7 @@ function makeSnapshot(options: {
     feeTotal: 0,
     taxTotal: 0,
     fxStale: options.fxStale ?? true,
+    portfolioTruth,
     ...(options.exposureResearchContext !== undefined ? { exposureResearchContext: options.exposureResearchContext } : {}),
     ...(options.riskExposureReadiness !== undefined ? { riskExposureReadiness: options.riskExposureReadiness } : {}),
     ...(options.portfolioLineageSummary !== undefined ? { portfolioLineageSummary: options.portfolioLineageSummary } : {}),
@@ -479,6 +513,16 @@ function makeValuationEvidenceSnapshot(overrides: Record<string, unknown> = {}) 
         debugTrace: 'debug-trace-must-not-leak',
       },
     }),
+    portfolioTruth: {
+      state: 'valuation_partial' as const,
+      accountState: 'holdings_present' as const,
+      valuationState: 'partial' as const,
+      valueSemantics: 'covered_subtotal' as const,
+      authoritativeTotal: null,
+      coveredSubtotal: 3000,
+      accountCount: 1,
+      positionCount: 1,
+    },
     priceLineage: {
       status: 'stale',
       scoreAuthority: 'observation_only',
@@ -1463,11 +1507,23 @@ describe('PortfolioPage FX refresh', () => {
         partialPositionCount: 1,
         blockedPositionCount: 0,
       },
+      portfolioTruth: {
+        state: 'valuation_partial',
+        accountState: 'holdings_present',
+        valuationState: 'partial',
+        valueSemantics: 'covered_subtotal',
+        authoritativeTotal: null,
+        coveredSubtotal: 3000,
+        accountCount: 1,
+        positionCount: 1,
+      },
       valuationSummary: {
-        totalMarketValue: 'CNY 2,000.00',
-        totalEquity: 'CNY 3,000.00',
-        totalCash: 'CNY 1,000.00',
-        unrealizedPnl: 'CNY 100.00',
+        valueSemantics: 'covered_subtotal',
+        totalMarketValue: null,
+        totalEquity: null,
+        totalCash: null,
+        unrealizedPnl: null,
+        coveredSubtotal: 'CNY 3,000.00',
       },
     });
     expect(exported.generatedAt).toEqual(expect.any(String));
@@ -2643,6 +2699,59 @@ describe('PortfolioPage FX refresh', () => {
     expect(exposure).toHaveTextContent('折算暂不可用');
     expect(exposure).not.toHaveTextContent('USD 0.00');
     expect(exposure).not.toHaveTextContent('CNY 0.00');
+  });
+
+  it('renders no-account portfolio truth instead of a dominant zero fallback', async () => {
+    getAccounts.mockResolvedValue(makeAccounts([]));
+    getSnapshot.mockResolvedValue({
+      ...makeSnapshot({ accountCount: 0, includePosition: false, fxStale: false }),
+      portfolioTruth: {
+        state: 'no_account',
+        accountState: 'no_account',
+        valuationState: 'not_applicable',
+        valueSemantics: 'not_applicable',
+        authoritativeTotal: null,
+        coveredSubtotal: null,
+        accountCount: 0,
+        positionCount: 0,
+      },
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const totalAssets = screen.getByTestId('portfolio-total-assets-value');
+    expect(totalAssets).toHaveTextContent('尚未创建组合');
+    expect(totalAssets).not.toHaveTextContent('CNY 0.00');
+  });
+
+  it('renders unavailable valuation truth without exposing a zero as total assets', async () => {
+    getSnapshot.mockResolvedValue({
+      ...makeSnapshot({ includePosition: true, fxStale: false }),
+      totalCash: 0,
+      totalMarketValue: 0,
+      totalEquity: 0,
+      portfolioTruth: {
+        state: 'valuation_unavailable',
+        accountState: 'holdings_present',
+        valuationState: 'unavailable',
+        valueSemantics: 'unavailable',
+        authoritativeTotal: null,
+        coveredSubtotal: null,
+        accountCount: 1,
+        positionCount: 1,
+      },
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const totalAssets = screen.getByTestId('portfolio-total-assets-value');
+    expect(totalAssets).toHaveTextContent('估值暂不可用');
+    expect(totalAssets).not.toHaveTextContent('CNY 0.00');
+    expect(screen.getByTestId('portfolio-trade-station-summary')).not.toHaveTextContent('CNY 0.00');
   });
 
   it('renders missing market category cleanly without raw unknown text', async () => {

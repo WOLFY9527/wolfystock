@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 
+import pytest
+
 from api.v1.schemas.portfolio import (
     PortfolioBrokerConnectionItem,
     PortfolioCashLedgerListResponse,
@@ -19,6 +21,7 @@ from api.v1.schemas.portfolio import (
     PortfolioLiveFxRateResponse,
     PortfolioSnapshotResponse,
     PortfolioTradeListResponse,
+    PortfolioTruth,
 )
 from src.services.market_data_source_registry import project_source_provenance
 
@@ -70,6 +73,7 @@ SNAPSHOT_REQUIRED_KEYS = {
     "fee_total",
     "tax_total",
     "fx_stale",
+    "portfolio_truth",
     "market_breakdown",
     "fx_rates",
     "portfolio_attribution",
@@ -158,6 +162,29 @@ def test_portfolio_snapshot_golden_fixture_matches_public_read_model_contract() 
     assert snapshot["unrealized_pnl"] == 1700.0
     assert snapshot["fee_total"] >= 0
     assert snapshot["tax_total"] >= 0
+    assert snapshot["portfolio_truth"] == {
+        "state": "fully_valued_nonzero",
+        "account_state": "holdings_present",
+        "valuation_state": "fully_valued",
+        "value_semantics": "authoritative_total",
+        "authoritative_total": 25200.0,
+        "covered_subtotal": None,
+        "account_count": 2,
+        "position_count": 2,
+    }
+    with pytest.raises(ValueError):
+        PortfolioTruth.model_validate(
+            {
+                "state": "valuation_unavailable",
+                "account_state": "no_holdings",
+                "valuation_state": "unavailable",
+                "value_semantics": "unavailable",
+                "authoritative_total": None,
+                "covered_subtotal": None,
+                "account_count": 0,
+                "position_count": 0,
+            }
+        )
 
     assert {item["market"] for item in snapshot["market_breakdown"]} == {"cn", "us"}
     assert round(sum(item["weight_pct"] for item in snapshot["market_breakdown"]), 4) == 100.0

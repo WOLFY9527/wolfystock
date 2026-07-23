@@ -128,6 +128,15 @@ cost basis, broker sync/import overlays, ledger mutations, and owner-isolated
 read projections. UI and reporting code must not recalculate accounting
 authority or imply broker order execution.
 
+Aggregate Portfolio snapshots carry `portfolio_truth` as the interpretation
+authority for their monetary values. Its distinct `no_account`,
+`account_no_holdings`, `valuation_unavailable`, `valuation_partial`,
+`fully_valued_zero`, and `fully_valued_nonzero` states must survive API,
+summary, compact-tool, consumer, and export projections. Only an
+`authoritative_total` may be presented as a portfolio total; a
+`covered_subtotal` remains partial, and unavailable or not-applicable values
+must remain non-numeric rather than becoming zero.
+
 ### Auth And Admin Evidence
 
 Auth, RBAC, sessions, cookies, CSRF/CORS, MFA, owner isolation, and admin

@@ -227,6 +227,16 @@ def _build_personal_summary_payload() -> dict[str, object]:
         .build_summary(
             portfolio_snapshot={
                 "total_equity": 250000.0,
+                "portfolio_truth": {
+                    "state": "fully_valued_nonzero",
+                    "account_state": "holdings_present",
+                    "valuation_state": "fully_valued",
+                    "value_semantics": "authoritative_total",
+                    "authoritative_total": 250000.0,
+                    "covered_subtotal": None,
+                    "account_count": 1,
+                    "position_count": 1,
+                },
                 "daily_change": 1800.5,
                 "cash_percent": 12.5,
                 "largest_exposure": 28.1,

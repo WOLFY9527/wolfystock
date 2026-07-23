@@ -51,6 +51,11 @@ import type {
   PortfolioTradeListResponse,
   PortfolioTradeListItem,
   PortfolioTradeUpdateRequest,
+  PortfolioTruth,
+  PortfolioTruthAccountState,
+  PortfolioTruthState,
+  PortfolioTruthValuationState,
+  PortfolioTruthValueSemantics,
 } from '../types/portfolio';
 
 type SnapshotQuery = {
@@ -769,6 +774,105 @@ function normalizeNullableNumber(value: unknown): number | null | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : value === null ? null : undefined;
 }
 
+const PORTFOLIO_TRUTH_STATES: readonly PortfolioTruthState[] = [
+  'no_account',
+  'account_no_holdings',
+  'valuation_unavailable',
+  'valuation_partial',
+  'fully_valued_zero',
+  'fully_valued_nonzero',
+];
+const PORTFOLIO_TRUTH_ACCOUNT_STATES: readonly PortfolioTruthAccountState[] = [
+  'no_account',
+  'no_holdings',
+  'holdings_present',
+];
+const PORTFOLIO_TRUTH_VALUATION_STATES: readonly PortfolioTruthValuationState[] = [
+  'not_applicable',
+  'unavailable',
+  'partial',
+  'fully_valued',
+];
+const PORTFOLIO_TRUTH_VALUE_SEMANTICS: readonly PortfolioTruthValueSemantics[] = [
+  'not_applicable',
+  'unavailable',
+  'covered_subtotal',
+  'authoritative_total',
+];
+
+function normalizePortfolioTruth(value: unknown): PortfolioTruth {
+  if (!isRecord(value)) {
+    throw new Error('Invalid portfolio truth contract');
+  }
+
+  const state = pickString(value.state);
+  const accountState = pickString(value.accountState);
+  const valuationState = pickString(value.valuationState);
+  const valueSemantics = pickString(value.valueSemantics);
+  const authoritativeTotal = normalizeNullableNumber(value.authoritativeTotal);
+  const coveredSubtotal = normalizeNullableNumber(value.coveredSubtotal);
+  const accountCount = value.accountCount;
+  const positionCount = value.positionCount;
+  if (
+    !state || !PORTFOLIO_TRUTH_STATES.includes(state as PortfolioTruthState)
+    || !accountState || !PORTFOLIO_TRUTH_ACCOUNT_STATES.includes(accountState as PortfolioTruthAccountState)
+    || !valuationState || !PORTFOLIO_TRUTH_VALUATION_STATES.includes(valuationState as PortfolioTruthValuationState)
+    || !valueSemantics || !PORTFOLIO_TRUTH_VALUE_SEMANTICS.includes(valueSemantics as PortfolioTruthValueSemantics)
+    || authoritativeTotal === undefined
+    || coveredSubtotal === undefined
+    || typeof accountCount !== 'number' || !Number.isInteger(accountCount) || accountCount < 0
+    || typeof positionCount !== 'number' || !Number.isInteger(positionCount) || positionCount < 0
+  ) {
+    throw new Error('Invalid portfolio truth contract');
+  }
+
+  const truth: PortfolioTruth = {
+    state: state as PortfolioTruthState,
+    accountState: accountState as PortfolioTruthAccountState,
+    valuationState: valuationState as PortfolioTruthValuationState,
+    valueSemantics: valueSemantics as PortfolioTruthValueSemantics,
+    authoritativeTotal,
+    coveredSubtotal,
+    accountCount,
+    positionCount,
+  };
+  const semanticsValid = (
+    (truth.valueSemantics === 'authoritative_total' && truth.authoritativeTotal !== null && truth.coveredSubtotal === null)
+    || (truth.valueSemantics === 'covered_subtotal' && truth.authoritativeTotal === null && truth.coveredSubtotal !== null)
+    || ((truth.valueSemantics === 'unavailable' || truth.valueSemantics === 'not_applicable')
+      && truth.authoritativeTotal === null && truth.coveredSubtotal === null)
+  );
+  if (!semanticsValid) {
+    throw new Error('Invalid portfolio truth contract');
+  }
+
+  const expected = {
+    no_account: { accountState: 'no_account', valuationState: 'not_applicable', valueSemantics: 'not_applicable' },
+    account_no_holdings: { accountState: 'no_holdings', valuationState: 'fully_valued', valueSemantics: 'authoritative_total' },
+    valuation_unavailable: { valuationState: 'unavailable', valueSemantics: 'unavailable' },
+    valuation_partial: { valuationState: 'partial', valueSemantics: 'covered_subtotal' },
+    fully_valued_zero: { accountState: 'holdings_present', valuationState: 'fully_valued', valueSemantics: 'authoritative_total' },
+    fully_valued_nonzero: { accountState: 'holdings_present', valuationState: 'fully_valued', valueSemantics: 'authoritative_total' },
+  } as const;
+  const stateExpectation = expected[truth.state];
+  if (
+    ('accountState' in stateExpectation && truth.accountState !== stateExpectation.accountState)
+    || truth.valuationState !== stateExpectation.valuationState
+    || truth.valueSemantics !== stateExpectation.valueSemantics
+    || (truth.state === 'no_account' && (truth.accountCount !== 0 || truth.positionCount !== 0))
+    || (truth.state === 'account_no_holdings' && (truth.accountCount === 0 || truth.positionCount !== 0))
+    || (truth.state === 'valuation_unavailable' && truth.accountCount === 0)
+    || (truth.state === 'valuation_partial' && truth.accountCount === 0)
+    || ((truth.state === 'fully_valued_zero' || truth.state === 'fully_valued_nonzero')
+      && (truth.accountCount === 0 || truth.positionCount === 0))
+    || (truth.state === 'fully_valued_zero' && truth.authoritativeTotal !== 0)
+    || (truth.state === 'fully_valued_nonzero' && truth.authoritativeTotal === 0)
+  ) {
+    throw new Error('Invalid portfolio truth contract');
+  }
+  return truth;
+}
+
 function normalizeExposureResearchDominantExposure(value: unknown): PortfolioExposureResearchContext['dominantExposure'] {
   const data = normalizeStringRecord(value);
   const type = pickString(data.type);
@@ -1026,13 +1130,16 @@ function normalizeRiskExposureReadiness(value: unknown): PortfolioRiskExposureRe
 
 function normalizePortfolioSnapshotResponse(data: unknown): PortfolioSnapshotWithLineage {
   const normalized = toCamelCase<Record<string, unknown>>(data);
-  const priceLineage = normalizePriceLineage(isRecord(normalized) ? normalized.priceLineage : undefined);
-  const fxLineage = normalizeFxLineage(isRecord(normalized) ? normalized.fxLineage : undefined);
+  const normalizedRecord = isRecord(normalized) ? normalized : {};
+  const portfolioTruth = normalizePortfolioTruth(normalizedRecord.portfolioTruth);
+  const priceLineage = normalizePriceLineage(normalizedRecord.priceLineage);
+  const fxLineage = normalizeFxLineage(normalizedRecord.fxLineage);
   const valuationSnapshotLineage = normalizeValuationSnapshotLineage(
-    isRecord(normalized) ? normalized.valuationSnapshotLineage : undefined,
+    normalizedRecord.valuationSnapshotLineage,
   );
-  const analyticsReadiness = normalizeAnalyticsReadiness(isRecord(normalized) ? normalized.analyticsReadiness : undefined);
-  const snapshotFields = { ...normalized };
+  const analyticsReadiness = normalizeAnalyticsReadiness(normalizedRecord.analyticsReadiness);
+  const snapshotFields = { ...normalizedRecord };
+  delete snapshotFields.portfolioTruth;
   delete snapshotFields.priceLineage;
   delete snapshotFields.fxLineage;
   delete snapshotFields.valuationSnapshotLineage;
@@ -1041,11 +1148,12 @@ function normalizePortfolioSnapshotResponse(data: unknown): PortfolioSnapshotWit
   delete snapshotFields.riskExposureReadiness;
   return {
     ...snapshotFields,
+    portfolioTruth,
     exposureResearchContext: normalizeExposureResearchContext(
-      isRecord(normalized) ? normalized.exposureResearchContext : undefined,
+      normalizedRecord.exposureResearchContext,
     ),
     riskExposureReadiness: normalizeRiskExposureReadiness(
-      isRecord(normalized) ? normalized.riskExposureReadiness : undefined,
+      normalizedRecord.riskExposureReadiness,
     ),
     ...(priceLineage ? { priceLineage } : {}),
     ...(fxLineage ? { fxLineage } : {}),

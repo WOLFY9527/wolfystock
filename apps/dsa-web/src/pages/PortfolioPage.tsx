@@ -80,6 +80,7 @@ import type {
   PortfolioStructureReviewResponse,
   PortfolioTradeListItem,
   PortfolioTradeUpdateRequest,
+  PortfolioTruth,
 } from '../types/portfolio';
 
 const PORTFOLIO_FIELD_LABEL_CLASS = '!mb-1 text-[11px] font-medium tracking-normal text-[color:var(--wolfy-text-muted)]';
@@ -258,11 +259,14 @@ type PortfolioValuationEvidencePack = {
     };
     lastUpdatedAt: string;
   };
+  portfolioTruth: PortfolioTruth;
   valuationSummary: {
-    totalMarketValue: string;
-    totalEquity: string;
-    totalCash: string;
-    unrealizedPnl: string;
+    valueSemantics: PortfolioTruth['valueSemantics'];
+    totalMarketValue: string | null;
+    totalEquity: string | null;
+    totalCash: string | null;
+    unrealizedPnl: string | null;
+    coveredSubtotal: string | null;
     currency: string;
   };
   warnings: string[];
@@ -696,6 +700,33 @@ function safeEvidenceNumber(value: number | null | undefined): number | string {
   return typeof value === 'number' && Number.isFinite(value) ? value : UNKNOWN_EVIDENCE_VALUE;
 }
 
+function portfolioTruthDisplayLabel(truth: PortfolioTruth | null, language: PortfolioLanguage): string {
+  if (!truth) {
+    return language === 'zh' ? '估值加载中' : 'Valuation loading';
+  }
+  switch (truth.state) {
+    case 'no_account':
+      return language === 'zh' ? '尚未创建组合' : 'No portfolio account';
+    case 'account_no_holdings':
+      return language === 'zh' ? '暂无持仓' : 'No holdings yet';
+    case 'valuation_unavailable':
+      return language === 'zh' ? '估值暂不可用' : 'Valuation unavailable';
+    case 'valuation_partial':
+      return language === 'zh' ? '估值部分可用' : 'Valuation partially available';
+    default:
+      return language === 'zh' ? '估值已确认' : 'Valuation confirmed';
+  }
+}
+
+function canDisplayPortfolioAmounts(truth: PortfolioTruth | null): truth is PortfolioTruth {
+  return Boolean(
+    truth
+    && truth.valueSemantics === 'authoritative_total'
+    && truth.authoritativeTotal !== null
+    && truth.state !== 'account_no_holdings',
+  );
+}
+
 function uniqueSafeEvidenceList(values: Array<string | null | undefined>): string[] {
   return Array.from(new Set(values.map((value) => String(value || '').trim()).filter(Boolean))).sort();
 }
@@ -722,13 +753,14 @@ function buildPortfolioValuationEvidencePack(options: {
   accountLabel: string;
   positions: PortfolioPositionItem[];
   summary: PortfolioLineageSummary | null;
+  portfolioTruth: PortfolioTruth;
   priceLineage?: PortfolioPriceLineage;
   fxLineage?: PortfolioFxLineage;
   valuationLineage?: PortfolioValuationSnapshotLineage;
-  totalMarketValue: number;
-  totalEquity: number;
-  totalCash: number;
-  unrealizedPnl: number;
+  totalMarketValue: number | null;
+  totalEquity: number | null;
+  totalCash: number | null;
+  unrealizedPnl: number | null;
   currency: string;
   warnings: string[];
 }): PortfolioValuationEvidencePack {
@@ -745,6 +777,14 @@ function buildPortfolioValuationEvidencePack(options: {
   const priceLineage = options.priceLineage;
   const fxLineage = options.fxLineage;
   const safeWarnings = uniqueSafeEvidenceList(options.warnings);
+  const authoritativeTotals = options.portfolioTruth.valueSemantics === 'authoritative_total';
+  const formatAuthoritativeAmount = (value: number | null): string | null => (
+    authoritativeTotals && value !== null ? formatMoney(value, options.currency) : null
+  );
+  const coveredSubtotal = options.portfolioTruth.valueSemantics === 'covered_subtotal'
+    && options.portfolioTruth.coveredSubtotal !== null
+    ? formatMoney(options.portfolioTruth.coveredSubtotal, options.currency)
+    : null;
 
   return {
     schemaVersion: PORTFOLIO_VALUATION_EVIDENCE_PACK_SCHEMA,
@@ -797,11 +837,14 @@ function buildPortfolioValuationEvidencePack(options: {
       },
       lastUpdatedAt: safeEvidenceString(valuationLineage?.lastUpdatedAt ?? valuationSummary?.lastUpdatedAt),
     },
+    portfolioTruth: options.portfolioTruth,
     valuationSummary: {
-      totalMarketValue: formatMoney(options.totalMarketValue, options.currency),
-      totalEquity: formatMoney(options.totalEquity, options.currency),
-      totalCash: formatMoney(options.totalCash, options.currency),
-      unrealizedPnl: formatMoney(options.unrealizedPnl, options.currency),
+      valueSemantics: options.portfolioTruth.valueSemantics,
+      totalMarketValue: formatAuthoritativeAmount(options.totalMarketValue),
+      totalEquity: formatAuthoritativeAmount(options.totalEquity),
+      totalCash: formatAuthoritativeAmount(options.totalCash),
+      unrealizedPnl: formatAuthoritativeAmount(options.unrealizedPnl),
+      coveredSubtotal,
       currency: options.currency,
     },
     warnings: safeWarnings.length ? safeWarnings : [UNKNOWN_EVIDENCE_VALUE],
@@ -2738,11 +2781,21 @@ const PortfolioPage: React.FC = () => {
 
     return null;
   })();
-  const totalEquity = snapshot?.totalEquity ?? 0;
-  const totalCash = snapshot?.totalCash ?? 0;
-  const totalMarketValue = snapshot?.totalMarketValue ?? 0;
-  const totalUnrealizedPnl = positionRows.reduce((sum, row) => sum + row.unrealizedPnlBase, 0);
-  const convertMoney = (value: number, fromCurrency: string | undefined | null): ConvertedMoney => {
+  const portfolioTruth = snapshot?.portfolioTruth ?? null;
+  const portfolioTruthLabel = portfolioTruthDisplayLabel(portfolioTruth, language);
+  const displaysAuthoritativeAmounts = canDisplayPortfolioAmounts(portfolioTruth);
+  const rawTotalEquity = snapshot?.totalEquity ?? null;
+  const rawTotalCash = snapshot?.totalCash ?? null;
+  const rawTotalMarketValue = snapshot?.totalMarketValue ?? null;
+  const rawTotalUnrealizedPnl = positionRows.reduce((sum, row) => sum + row.unrealizedPnlBase, 0);
+  const totalEquity = displaysAuthoritativeAmounts ? portfolioTruth.authoritativeTotal : null;
+  const totalCash = displaysAuthoritativeAmounts ? rawTotalCash : null;
+  const totalMarketValue = displaysAuthoritativeAmounts ? rawTotalMarketValue : null;
+  const totalUnrealizedPnl = displaysAuthoritativeAmounts ? rawTotalUnrealizedPnl : null;
+  const convertMoney = (value: number | null, fromCurrency: string | undefined | null): ConvertedMoney => {
+    if (value === null) {
+      return null;
+    }
     const rate = getFxRateForDisplay(fxRateRows, fromCurrency, displayCurrency);
     if (!rate) {
       return null;
@@ -2764,16 +2817,26 @@ const PortfolioPage: React.FC = () => {
   const totalHistoryRows = tradeEvents.length + cashEvents.length + corporateEvents.length;
   const hasSmallHistory = totalHistoryRows <= 5;
   const shouldRenderFullHistory = hasHoldings || (isEmptyPortfolio && hasHistory && (!hasSmallHistory || showEmptyFullHistory));
-  const formatDisplayMoney = (value: number, converted: ConvertedMoney, fromCurrency: string) => {
+  const formatPortfolioAmount = (value: number | null, converted: ConvertedMoney, fromCurrency: string) => {
+    if (value === null) return portfolioTruthLabel;
     if (converted) return formatMoney(converted.value, displayCurrency);
-    if (value === 0) return formatMoney(0, displayCurrency);
     return formatMoney(value, fromCurrency);
   };
+  const coveredSubtotalDescription = portfolioTruth?.valueSemantics === 'covered_subtotal'
+    && portfolioTruth.coveredSubtotal !== null
+    ? `${language === 'zh' ? '已覆盖小计' : 'Covered subtotal'}: ${formatPortfolioAmount(
+      portfolioTruth.coveredSubtotal,
+      convertMoney(portfolioTruth.coveredSubtotal, snapshotCurrency),
+      snapshotCurrency,
+    )}`
+    : null;
   const hasFxUnavailable = fxRateRows.some((item) => item.source === 'missing' || item.rate == null)
-    || (!totalEquityDisplay && totalEquity !== 0)
-    || (!totalCashDisplay && totalCash !== 0)
-    || (!totalMarketValueDisplay && totalMarketValue !== 0)
-    || (!totalUnrealizedDisplay && totalUnrealizedPnl !== 0);
+    || (displaysAuthoritativeAmounts && (
+      (!totalEquityDisplay && rawTotalEquity !== null && rawTotalEquity !== 0)
+      || (!totalCashDisplay && rawTotalCash !== null && rawTotalCash !== 0)
+      || (!totalMarketValueDisplay && rawTotalMarketValue !== null && rawTotalMarketValue !== 0)
+      || (!totalUnrealizedDisplay && rawTotalUnrealizedPnl !== 0)
+    ));
   const hasPriceFallback = positionRows.some((row) => row.isPriceFallback);
   const hasUpdatingPrice = hasHoldings && positionRows.some((row) => !row.priceAsOf && !row.isPriceFallback);
   const hasLimitedConfidence = positionRows.some(hasLimitedValuationConfidence);
@@ -2810,9 +2873,11 @@ const PortfolioPage: React.FC = () => {
   };
   const analytics = snapshot?.analytics ?? null;
   const pnlSourceCurrency = analytics?.pnl.displayCurrency || snapshotCurrency;
-  const realizedPnl = analytics?.pnl.realized.amount ?? snapshot?.realizedPnl ?? 0;
-  const unrealizedPnl = analytics?.pnl.unrealized.amount ?? totalUnrealizedPnl;
-  const totalPnl = analytics?.pnl.total.amount ?? realizedPnl + unrealizedPnl;
+  const realizedPnl = displaysAuthoritativeAmounts ? (analytics?.pnl.realized.amount ?? snapshot?.realizedPnl ?? null) : null;
+  const unrealizedPnl = displaysAuthoritativeAmounts ? (analytics?.pnl.unrealized.amount ?? totalUnrealizedPnl) : null;
+  const totalPnl = displaysAuthoritativeAmounts
+    ? (analytics?.pnl.total.amount ?? (realizedPnl ?? 0) + (unrealizedPnl ?? 0))
+    : null;
   const realizedPnlDisplay = convertMoney(realizedPnl, pnlSourceCurrency);
   const unrealizedPnlDisplay = convertMoney(unrealizedPnl, pnlSourceCurrency);
   const totalPnlDisplay = convertMoney(totalPnl, pnlSourceCurrency);
@@ -3327,7 +3392,11 @@ const PortfolioPage: React.FC = () => {
   const valuationEvidenceBlocked = Boolean(
     snapshot
     && hasHoldings
-    && hasBlockedValuationEvidence(portfolioLineageSummary, snapshot.valuationSnapshotLineage, hasFxUnavailable),
+    && (
+      snapshot.portfolioTruth.valueSemantics === 'unavailable'
+      || snapshot.portfolioTruth.valueSemantics === 'not_applicable'
+      || hasBlockedValuationEvidence(portfolioLineageSummary, snapshot.valuationSnapshotLineage, hasFxUnavailable)
+    ),
   );
   const valuationEvidenceWarnings = [
     ...safeRiskWarningLabels,
@@ -3344,6 +3413,7 @@ const PortfolioPage: React.FC = () => {
         : formatConsumerAccountLabel(scopedAccount?.name, language),
       positions: positionRows,
       summary: portfolioLineageSummary,
+      portfolioTruth: snapshot.portfolioTruth,
       priceLineage: snapshot.priceLineage,
       fxLineage: snapshot.fxLineage,
       valuationLineage: snapshot.valuationSnapshotLineage,
@@ -3949,8 +4019,13 @@ const PortfolioPage: React.FC = () => {
                     data-testid="portfolio-total-assets-value"
                     className="mt-2 font-mono text-[2.2rem] font-semibold leading-none text-[color:var(--wolfy-text-primary)] tabular-nums md:text-[2.75rem]"
                   >
-                    {formatDisplayMoney(totalEquity, totalEquityDisplay, snapshotCurrency)}
+                    {formatPortfolioAmount(totalEquity, totalEquityDisplay, snapshotCurrency)}
                   </div>
+                  {coveredSubtotalDescription ? (
+                    <p data-testid="portfolio-total-assets-covered-subtotal" className="mt-2 text-xs text-[color:var(--wolfy-text-muted)]">
+                      {coveredSubtotalDescription}
+                    </p>
+                  ) : null}
                   <p className="mt-3 max-w-[72ch] text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                     {heroConclusion}
                   </p>
@@ -4034,7 +4109,7 @@ const PortfolioPage: React.FC = () => {
                         data-testid="portfolio-summary-market-value"
                         className="mt-2 break-words font-mono text-[1.75rem] font-semibold leading-none text-[color:var(--wolfy-text-primary)] tabular-nums md:text-[2.1rem]"
                       >
-                        {formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}
+                        {formatPortfolioAmount(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}
                       </div>
                       <div className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{holdingsHeaderNote}</div>
                     </TerminalPanel>
@@ -4042,13 +4117,17 @@ const PortfolioPage: React.FC = () => {
                       <div data-testid="portfolio-pnl-total" className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{pnlLabels.total}</div>
                       <div
                         data-testid="portfolio-summary-pnl-value"
-                        className={`mt-2 break-words font-mono text-[1.75rem] font-semibold leading-none tabular-nums md:text-[2.1rem] ${totalPnl >= 0 ? 'text-[color:var(--state-success-text)]' : 'text-[color:var(--state-danger-text)]'}`}
+                        className={`mt-2 break-words font-mono text-[1.75rem] font-semibold leading-none tabular-nums md:text-[2.1rem] ${totalPnl == null ? 'text-[color:var(--wolfy-text-secondary)]' : totalPnl >= 0 ? 'text-[color:var(--state-success-text)]' : 'text-[color:var(--state-danger-text)]'}`}
                       >
-                        {totalPnlDisplay ? formatSignedMoney(totalPnlDisplay.value, displayCurrency) : formatSignedMoney(totalPnl, pnlSourceCurrency)}
+                        {totalPnl == null
+                          ? portfolioTruthLabel
+                          : totalPnlDisplay
+                            ? formatSignedMoney(totalPnlDisplay.value, displayCurrency)
+                            : formatSignedMoney(totalPnl, pnlSourceCurrency)}
                       </div>
                       <div className="mt-3 grid min-w-0 grid-cols-1 gap-1.5 text-xs text-[color:var(--wolfy-text-muted)] sm:grid-cols-2">
-                        <span data-testid="portfolio-pnl-realized" className="min-w-0 break-words">{pnlLabels.realized} {realizedPnlDisplay ? formatSignedMoney(realizedPnlDisplay.value, displayCurrency) : formatSignedMoney(realizedPnl, pnlSourceCurrency)}</span>
-                        <span data-testid="portfolio-pnl-unrealized" className="min-w-0 break-words">{pnlLabels.unrealized} {unrealizedPnlDisplay ? formatSignedMoney(unrealizedPnlDisplay.value, displayCurrency) : formatSignedMoney(unrealizedPnl, pnlSourceCurrency)}</span>
+                        <span data-testid="portfolio-pnl-realized" className="min-w-0 break-words">{pnlLabels.realized} {realizedPnl == null ? portfolioTruthLabel : realizedPnlDisplay ? formatSignedMoney(realizedPnlDisplay.value, displayCurrency) : formatSignedMoney(realizedPnl, pnlSourceCurrency)}</span>
+                        <span data-testid="portfolio-pnl-unrealized" className="min-w-0 break-words">{pnlLabels.unrealized} {unrealizedPnl == null ? portfolioTruthLabel : unrealizedPnlDisplay ? formatSignedMoney(unrealizedPnlDisplay.value, displayCurrency) : formatSignedMoney(unrealizedPnl, pnlSourceCurrency)}</span>
                       </div>
                     </TerminalPanel>
                   </div>
@@ -4056,7 +4135,7 @@ const PortfolioPage: React.FC = () => {
                   <div data-testid="portfolio-summary-aux-row" className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
                     <TerminalPanel as="section" dense data-testid="portfolio-summary-cash-card" className="min-w-0">
                       <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.totalCash}</div>
-                      <div data-testid="portfolio-summary-cash-value" className="mt-1.5 break-words font-mono text-base font-medium text-[color:var(--wolfy-text-primary)] tabular-nums">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</div>
+                      <div data-testid="portfolio-summary-cash-value" className="mt-1.5 break-words font-mono text-base font-medium text-[color:var(--wolfy-text-primary)] tabular-nums">{formatPortfolioAmount(totalCash, totalCashDisplay, snapshotCurrency)}</div>
                       <div className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '可用于继续配置或缓冲波动。' : 'Available for new allocation or downside buffer.'}</div>
                     </TerminalPanel>
                     <TerminalPanel as="section" dense data-testid="portfolio-summary-holdings-card" className="min-w-0">
@@ -4960,8 +5039,8 @@ const PortfolioPage: React.FC = () => {
                 />
               </div>
               <div data-testid="portfolio-trade-station-summary" className="mt-3 flex flex-col gap-1 border-y border-[color:var(--wolfy-border-subtle)] py-2">
-                <div className="flex justify-between gap-3 text-xs"><span className="text-muted-text">{copy.totalCash}</span><span className="font-mono text-foreground">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</span></div>
-                <div className="flex justify-between gap-3 text-xs"><span className="text-muted-text">{copy.totalMarketValue}</span><span className="font-mono text-foreground">{formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}</span></div>
+                <div className="flex justify-between gap-3 text-xs"><span className="text-muted-text">{copy.totalCash}</span><span className="font-mono text-foreground">{formatPortfolioAmount(totalCash, totalCashDisplay, snapshotCurrency)}</span></div>
+                <div className="flex justify-between gap-3 text-xs"><span className="text-muted-text">{copy.totalMarketValue}</span><span className="font-mono text-foreground">{formatPortfolioAmount(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}</span></div>
                 <div className="flex justify-between text-xs"><span className="text-muted-text">{copy.fxState}</span><span data-testid="portfolio-bento-hero-fx-value" className={snapshot?.fxStale ? 'text-[color:var(--state-warning-text)]' : 'text-[color:var(--state-success-text)]'}>{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</span></div>
               </div>
               {tradeFeedback ? (

@@ -328,6 +328,16 @@ class HomepageDemoPayloadService:
         payload = self._personal_summary_service.build_summary(
             portfolio_snapshot={
                 "total_equity": 580000.0,
+                "portfolio_truth": {
+                    "state": "fully_valued_nonzero",
+                    "account_state": "holdings_present",
+                    "valuation_state": "fully_valued",
+                    "value_semantics": "authoritative_total",
+                    "authoritative_total": 580000.0,
+                    "covered_subtotal": None,
+                    "account_count": 1,
+                    "position_count": 1,
+                },
                 "daily_change": 2300.0,
                 "cash_percent": 18.4,
                 "largest_exposure": 16.2,
@@ -379,6 +389,16 @@ class HomepageDemoPayloadService:
         payload = self._personal_summary_service.build_summary(
             portfolio_snapshot={
                 "total_equity": 580000.0,
+                "portfolio_truth": {
+                    "state": "fully_valued_nonzero",
+                    "account_state": "holdings_present",
+                    "valuation_state": "fully_valued",
+                    "value_semantics": "authoritative_total",
+                    "authoritative_total": 580000.0,
+                    "covered_subtotal": None,
+                    "account_count": 1,
+                    "position_count": 1,
+                },
                 "daily_change": -3200.0,
                 "cash_percent": 27.0,
                 "largest_exposure": 24.5,

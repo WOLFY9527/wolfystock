@@ -11,6 +11,16 @@
   "fee_total": 18.0,
   "tax_total": 4.0,
   "fx_stale": true,
+  "portfolio_truth": {
+    "state": "fully_valued_nonzero",
+    "account_state": "holdings_present",
+    "valuation_state": "fully_valued",
+    "value_semantics": "authoritative_total",
+    "authoritative_total": 25200.0,
+    "covered_subtotal": null,
+    "account_count": 2,
+    "position_count": 2
+  },
   "market_breakdown": [
     {
       "market": "cn",

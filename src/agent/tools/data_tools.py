@@ -125,6 +125,7 @@ def _compact_portfolio_snapshot(snapshot: dict, include_positions: bool = False,
         "realized_pnl": snapshot.get("realized_pnl"),
         "unrealized_pnl": snapshot.get("unrealized_pnl"),
         "fx_stale": snapshot.get("fx_stale"),
+        "portfolio_truth": snapshot.get("portfolio_truth"),
         "accounts": compact_accounts,
     }
 

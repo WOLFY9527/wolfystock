@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7967,
-      "sha256": "27b7068a81223726316f1e413076a906e2d5bfa480002c75691d6ac8e4a0d4f0"
+      "count": 7969,
+      "sha256": "9d0468d39ade5e86867aeefc2d14e207820ae0421e9c8ecaa82d8d50f10419e0"
     },
     "tests": [
       {
@@ -28099,6 +28099,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_personal_summary_service.py::test_summary_never_projects_an_unavailable_valuation_as_zero",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
         "id": "tests/test_personal_summary_service.py::test_watchlist_exceptions_are_ranked_deduped_and_bounded_for_homepage",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -29570,6 +29575,11 @@
       },
       {
         "id": "tests/test_portfolio_valuation_truth.py::PortfolioValuationTruthTestCase::test_multicurrency_components_keep_price_income_fees_fx_and_cash_distinct",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_valuation_truth.py::PortfolioValuationTruthTestCase::test_portfolio_truth_model_separates_account_and_valuation_states",
         "domain": "portfolio_broker",
         "baseline": false
       },

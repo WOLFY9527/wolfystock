@@ -19,6 +19,10 @@ from src.storage import DatabaseManager
 
 class PortfolioValuationTruthTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        self._previous_environment = {
+            key: os.environ.get(key)
+            for key in ("ENV_FILE", "DATABASE_PATH", "ADMIN_AUTH_ENABLED")
+        }
         self.temp_dir = tempfile.TemporaryDirectory()
         self.env_path = Path(self.temp_dir.name) / ".env"
         self.db_path = Path(self.temp_dir.name) / "portfolio-valuation-truth.db"
@@ -36,6 +40,7 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
         )
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.db_path)
+        os.environ["ADMIN_AUTH_ENABLED"] = "false"
         Config.reset_instance()
         DatabaseManager.reset_instance()
         self.db = DatabaseManager.get_instance()
@@ -44,8 +49,11 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         DatabaseManager.reset_instance()
         Config.reset_instance()
-        os.environ.pop("ENV_FILE", None)
-        os.environ.pop("DATABASE_PATH", None)
+        for key, value in self._previous_environment.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
         self.temp_dir.cleanup()
 
     def _save_close(self, symbol: str, on_date: date, close: float) -> None:
@@ -159,6 +167,128 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
         self.assertEqual(partial["availability"]["valuation"]["state"], "partial")
         self.assertEqual(partial["total_cash"], 1000.0)
         self.assertEqual(partial["performance"]["calculation_state"], "partial")
+
+    def test_portfolio_truth_model_separates_account_and_valuation_states(self) -> None:
+        no_account = self.service.get_portfolio_snapshot(as_of=date(2026, 1, 2), cost_method="fifo")
+        self.assertEqual(
+            no_account["portfolio_truth"],
+            {
+                "state": "no_account",
+                "account_state": "no_account",
+                "valuation_state": "not_applicable",
+                "value_semantics": "not_applicable",
+                "authoritative_total": None,
+                "covered_subtotal": None,
+                "account_count": 0,
+                "position_count": 0,
+            },
+        )
+
+        empty_account_id = self._create_account(name="Empty", base_currency="USD")
+        no_holdings = self.service.get_portfolio_snapshot(
+            account_id=empty_account_id,
+            as_of=date(2026, 1, 2),
+            cost_method="fifo",
+        )
+        self.assertEqual(
+            no_holdings["portfolio_truth"],
+            {
+                "state": "account_no_holdings",
+                "account_state": "no_holdings",
+                "valuation_state": "fully_valued",
+                "value_semantics": "authoritative_total",
+                "authoritative_total": 0.0,
+                "covered_subtotal": None,
+                "account_count": 1,
+                "position_count": 0,
+            },
+        )
+
+        unavailable_account_id = self._create_account(name="Unknown FX", base_currency="CNY")
+        self.service.record_cash_ledger(
+            account_id=unavailable_account_id,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=25.0,
+            currency="USD",
+        )
+        unavailable = self.service.get_portfolio_snapshot(
+            account_id=unavailable_account_id,
+            as_of=date(2026, 1, 2),
+            cost_method="fifo",
+        )
+        self.assertEqual(unavailable["portfolio_truth"]["state"], "valuation_unavailable")
+        self.assertEqual(unavailable["portfolio_truth"]["account_state"], "no_holdings")
+        self.assertEqual(unavailable["portfolio_truth"]["value_semantics"], "unavailable")
+        self.assertIsNone(unavailable["portfolio_truth"]["authoritative_total"])
+        self.assertIsNone(unavailable["portfolio_truth"]["covered_subtotal"])
+
+        partial_account_id = self._create_account(name="Partial FX", base_currency="CNY")
+        self.service.record_cash_ledger(
+            account_id=partial_account_id,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=25.0,
+            currency="USD",
+        )
+        self.service.record_cash_ledger(
+            account_id=partial_account_id,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=100.0,
+            currency="CNY",
+        )
+        partial = self.service.get_portfolio_snapshot(
+            account_id=partial_account_id,
+            as_of=date(2026, 1, 2),
+            cost_method="fifo",
+        )
+        self.assertEqual(partial["portfolio_truth"]["state"], "valuation_partial")
+        self.assertEqual(partial["portfolio_truth"]["value_semantics"], "covered_subtotal")
+        self.assertIsNone(partial["portfolio_truth"]["authoritative_total"])
+        self.assertEqual(partial["portfolio_truth"]["covered_subtotal"], 100.0)
+
+        zero_account_id = self._create_account(name="Fully Valued Zero", base_currency="USD")
+        self.service.record_trade(
+            account_id=zero_account_id,
+            symbol="ZERO",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=1.0,
+            price=100.0,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("ZERO", date(2026, 1, 2), 100.0)
+        fully_valued_zero = self.service.get_portfolio_snapshot(
+            account_id=zero_account_id,
+            as_of=date(2026, 1, 2),
+            cost_method="fifo",
+        )
+        self.assertEqual(fully_valued_zero["portfolio_truth"]["state"], "fully_valued_zero")
+        self.assertEqual(fully_valued_zero["portfolio_truth"]["value_semantics"], "authoritative_total")
+        self.assertEqual(fully_valued_zero["portfolio_truth"]["authoritative_total"], 0.0)
+
+        nonzero_account_id = self._create_account(name="Fully Valued Nonzero", base_currency="USD")
+        self.service.record_trade(
+            account_id=nonzero_account_id,
+            symbol="NONZERO",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=1.0,
+            price=100.0,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("NONZERO", date(2026, 1, 2), 110.0)
+        fully_valued_nonzero = self.service.get_portfolio_snapshot(
+            account_id=nonzero_account_id,
+            as_of=date(2026, 1, 2),
+            cost_method="fifo",
+        )
+        self.assertEqual(fully_valued_nonzero["portfolio_truth"]["state"], "fully_valued_nonzero")
+        self.assertEqual(fully_valued_nonzero["portfolio_truth"]["value_semantics"], "authoritative_total")
+        self.assertEqual(fully_valued_nonzero["portfolio_truth"]["authoritative_total"], 10.0)
 
     def test_multicurrency_components_keep_price_income_fees_fx_and_cash_distinct(self) -> None:
         account_id = self._create_account(base_currency="CNY")

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from collections import defaultdict, deque
 from dataclasses import dataclass
@@ -2881,6 +2882,7 @@ class PortfolioService:
             )
         )
         snapshot_payload.update(self._build_portfolio_lineage_summary(snapshot=snapshot_payload))
+        snapshot_payload["portfolio_truth"] = self._build_portfolio_truth(snapshot=snapshot_payload)
         snapshot_payload["valuation_lineage"] = self._build_portfolio_valuation_lineage_sidecar(
             snapshot=snapshot_payload
         )
@@ -2983,6 +2985,103 @@ class PortfolioService:
             "fx_lineage": fx_lineage,
             "valuation_snapshot_lineage": valuation_snapshot_lineage,
             "analytics_readiness": analytics_readiness,
+        }
+
+    @staticmethod
+    def _portfolio_truth_number(value: Any) -> Optional[float]:
+        if isinstance(value, bool):
+            return None
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return number if math.isfinite(number) else None
+
+    def _build_portfolio_truth(self, *, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        """Classify whether a portfolio total is authoritative, partial, or unavailable."""
+        accounts = [item for item in list(snapshot.get("accounts") or []) if isinstance(item, dict)]
+        positions = self._snapshot_positions(snapshot)
+        account_count = len(accounts)
+        position_count = len(positions)
+        total_equity = self._portfolio_truth_number(snapshot.get("total_equity"))
+        valuation = snapshot.get("valuation") if isinstance(snapshot.get("valuation"), dict) else {}
+        valuation_state = str(valuation.get("state") or "unavailable").strip().lower()
+        valuation_snapshot_lineage = (
+            snapshot.get("valuation_snapshot_lineage")
+            if isinstance(snapshot.get("valuation_snapshot_lineage"), dict)
+            else {}
+        )
+        valuation_lineage_state = str(valuation_snapshot_lineage.get("status") or "").strip().lower()
+        data_status = str(snapshot.get("data_status") or "").strip().lower()
+        price_lineage = snapshot.get("price_lineage") if isinstance(snapshot.get("price_lineage"), dict) else {}
+        price_counts = price_lineage.get("counts") if isinstance(price_lineage.get("counts"), dict) else {}
+        price_total = int(price_counts.get("total") or 0)
+        price_missing = int(price_counts.get("missing") or 0)
+        price_unavailable = price_total > 0 and price_missing >= price_total
+        price_partial = price_missing > 0 and not price_unavailable
+        account_state = "no_holdings" if position_count == 0 else "holdings_present"
+
+        if account_count == 0:
+            return {
+                "state": "no_account",
+                "account_state": "no_account",
+                "valuation_state": "not_applicable",
+                "value_semantics": "not_applicable",
+                "authoritative_total": None,
+                "covered_subtotal": None,
+                "account_count": 0,
+                "position_count": 0,
+            }
+
+        unavailable = (
+            total_equity is None
+            or valuation_state == "unavailable"
+            or price_unavailable
+            or (
+                data_status == PORTFOLIO_DATA_STATUS_PROVIDER_UNAVAILABLE
+                and not price_partial
+                and valuation_state != "partial"
+            )
+        )
+        if unavailable:
+            return {
+                "state": "valuation_unavailable",
+                "account_state": account_state,
+                "valuation_state": "unavailable",
+                "value_semantics": "unavailable",
+                "authoritative_total": None,
+                "covered_subtotal": None,
+                "account_count": account_count,
+                "position_count": position_count,
+            }
+
+        if valuation_state == "partial" or price_partial or valuation_lineage_state == "partial":
+            return {
+                "state": "valuation_partial",
+                "account_state": account_state,
+                "valuation_state": "partial",
+                "value_semantics": "covered_subtotal",
+                "authoritative_total": None,
+                "covered_subtotal": total_equity,
+                "account_count": account_count,
+                "position_count": position_count,
+            }
+
+        if position_count == 0:
+            state = "account_no_holdings"
+        elif total_equity == 0:
+            state = "fully_valued_zero"
+        else:
+            state = "fully_valued_nonzero"
+        return {
+            "state": state,
+            "account_state": account_state,
+            "valuation_state": "fully_valued",
+            "value_semantics": "authoritative_total",
+            "authoritative_total": total_equity,
+            "covered_subtotal": None,
+            "account_count": account_count,
+            "position_count": position_count,
         }
 
     def _build_account_valuation_lineage_sidecar(

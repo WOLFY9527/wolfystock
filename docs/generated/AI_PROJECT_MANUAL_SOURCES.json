@@ -141,7 +141,7 @@
     "docsIndex": "docs/README.md",
     "docsIndexSha256": "b9e676ba0d1699818d5cc63efb24a21980440082e3619c2ebccdd08dacb6ac6b",
     "manual": "docs/generated/AI_PROJECT_MANUAL.md",
-    "manualSha256": "e3979c4df3eb13476fcf4911bdccaf15ddfb106fc4c67a17f1be8e628e822c6d",
+    "manualSha256": "94080c7770152176d66e17483580a4f32001e1076bbd9b54fe80475e7305fd09",
     "sourceManifest": "docs/generated/AI_PROJECT_MANUAL_SOURCES.json"
   },
   "registry": {
@@ -404,13 +404,13 @@
       "title": "T576 Frontend Production Simplification Audit"
     },
     {
-      "bytes": 8293,
+      "bytes": 8832,
       "editable": true,
       "id": "data-trust",
       "kind": "canonical",
-      "lineCount": 179,
+      "lineCount": 188,
       "path": "docs/contracts/data-trust.md",
-      "sha256": "8b23cdef47af4b6ba947e7a5385982a6676b0c9272927331c597874ccf5975db",
+      "sha256": "5ce708456c430d421759cda3ad8d762749487c3f60d284ecc50875b18a81719b",
       "status": "active",
       "summary": "Cross-domain truth, source, readiness, no-advice, and protected semantics",
       "title": "Data Trust And Protected Semantics"

@@ -20,6 +20,16 @@ test('portfolio IBKR sync happy path keeps the result visible after metadata ref
 
   const initialSnapshot = {
     ...snapshotBase,
+    portfolio_truth: {
+      state: 'account_no_holdings',
+      account_state: 'no_holdings',
+      valuation_state: 'fully_valued',
+      value_semantics: 'authoritative_total',
+      authoritative_total: 3000,
+      covered_subtotal: null,
+      account_count: 1,
+      position_count: 0,
+    },
     total_cash: 1000,
     total_market_value: 2000,
     total_equity: 3000,
@@ -48,6 +58,16 @@ test('portfolio IBKR sync happy path keeps the result visible after metadata ref
 
   const syncedSnapshot = {
     ...snapshotBase,
+    portfolio_truth: {
+      state: 'fully_valued_nonzero',
+      account_state: 'holdings_present',
+      valuation_state: 'fully_valued',
+      value_semantics: 'authoritative_total',
+      authoritative_total: 6600,
+      covered_subtotal: null,
+      account_count: 1,
+      position_count: 1,
+    },
     total_cash: 5000,
     total_market_value: 1600,
     total_equity: 6600,

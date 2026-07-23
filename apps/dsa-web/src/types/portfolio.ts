@@ -493,6 +493,29 @@ export interface PortfolioRiskExposureReadiness {
   blockers: string[];
 }
 
+export type PortfolioTruthState =
+  | 'no_account'
+  | 'account_no_holdings'
+  | 'valuation_unavailable'
+  | 'valuation_partial'
+  | 'fully_valued_zero'
+  | 'fully_valued_nonzero';
+
+export type PortfolioTruthAccountState = 'no_account' | 'no_holdings' | 'holdings_present';
+export type PortfolioTruthValuationState = 'not_applicable' | 'unavailable' | 'partial' | 'fully_valued';
+export type PortfolioTruthValueSemantics = 'not_applicable' | 'unavailable' | 'covered_subtotal' | 'authoritative_total';
+
+export interface PortfolioTruth {
+  state: PortfolioTruthState;
+  accountState: PortfolioTruthAccountState;
+  valuationState: PortfolioTruthValuationState;
+  valueSemantics: PortfolioTruthValueSemantics;
+  authoritativeTotal: number | null;
+  coveredSubtotal: number | null;
+  accountCount: number;
+  positionCount: number;
+}
+
 export interface PortfolioSnapshotResponse extends PortfolioEvidenceMetadata, PortfolioRiskDiagnosticsResponseFields {
   asOf: string;
   costMethod: PortfolioCostMethod;
@@ -506,6 +529,7 @@ export interface PortfolioSnapshotResponse extends PortfolioEvidenceMetadata, Po
   feeTotal: number;
   taxTotal: number;
   fxStale: boolean;
+  portfolioTruth: PortfolioTruth;
   fxRates?: PortfolioFxRateItem[];
   portfolioAttribution?: Record<string, unknown>;
   exposureResearchContext?: PortfolioExposureResearchContext | null;
