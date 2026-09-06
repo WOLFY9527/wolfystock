@@ -73,6 +73,12 @@ UAT_ENV_OVERRIDES = {
     "WOLFYSTOCK_HISTORICAL_OHLCV_CACHE_SEED_ENABLED": "false",
     "PREFETCH_REALTIME_QUOTES": "false",
 }
+UAT_RUNTIME_PATH_KEYS = (
+    "DATABASE_PATH", "DUCKDB_DATABASE_PATH", "ENV_FILE", "LOG_DIR", "HOME",
+    "TMPDIR", "TEMP", "TMP", "XDG_CACHE_HOME", "COVERAGE_FILE",
+    "PYTEST_ADDOPTS", "WOLFYSTOCK_TEST_UPLOAD_DIR",
+    "WOLFYSTOCK_FRONTEND_OUTPUT_DIR", "WOLFYSTOCK_SERVICE_STATE_DIR",
+)
 PROXY_ENV_KEYS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")
 POSIX_COMMAND_DIRS = (Path("/usr/sbin"), Path("/usr/bin"), Path("/sbin"), Path("/bin"))
 
@@ -98,6 +104,7 @@ class RunContext:
     evidence_dir: Path
     evidence_path: Path
     run_log_path: Path
+    runtime_state_dir: Path
 
 
 @dataclass(frozen=True)
@@ -627,13 +634,40 @@ def run_runtime_smoke(**kwargs: Any) -> dict[str, Any]:
     return _run_runtime_smoke(**kwargs)
 
 
-def build_uat_runtime_env(base_env: Mapping[str, str] | None = None) -> dict[str, str]:
+def build_uat_runtime_env(
+    base_env: Mapping[str, str] | None = None,
+    *,
+    runtime_state_dir: Path | None = None,
+) -> dict[str, str]:
     env = dict(os.environ if base_env is None else base_env)
     env.update(UAT_ENV_OVERRIDES)
     env["NO_PROXY"] = _merge_no_proxy(env.get("NO_PROXY"))
     env["no_proxy"] = _merge_no_proxy(env.get("no_proxy"))
     for key in PROXY_ENV_KEYS:
         env.pop(key, None)
+    if runtime_state_dir is not None:
+        state_root = Path(runtime_state_dir).resolve()
+        paths = {
+            "DATABASE_PATH": state_root / "database.sqlite",
+            "DUCKDB_DATABASE_PATH": state_root / "wolfystock.duckdb",
+            "ENV_FILE": state_root / ".env",
+            "LOG_DIR": state_root / "logs",
+            "HOME": state_root / "home",
+            "TMPDIR": state_root / "tmp",
+            "TEMP": state_root / "tmp",
+            "TMP": state_root / "tmp",
+            "XDG_CACHE_HOME": state_root / "cache",
+            "COVERAGE_FILE": state_root / "coverage.data",
+            "PYTEST_ADDOPTS": f"--basetemp={state_root / 'pytest-temp'}",
+            "WOLFYSTOCK_TEST_UPLOAD_DIR": state_root / "uploads",
+            "WOLFYSTOCK_FRONTEND_OUTPUT_DIR": state_root / "frontend-output",
+            "WOLFYSTOCK_SERVICE_STATE_DIR": state_root / "service-state",
+        }
+        for key, path in paths.items():
+            if isinstance(path, Path) and key not in {"DATABASE_PATH", "DUCKDB_DATABASE_PATH", "ENV_FILE", "COVERAGE_FILE"}:
+                path.mkdir(parents=True, exist_ok=True)
+        env.update({key: str(path) for key, path in paths.items()})
+        env["WOLFYSTOCK_UAT_RUNTIME_STATE_DIR"] = str(state_root)
     return env
 
 
@@ -990,6 +1024,7 @@ def start_runtime(
     port: int,
     python_bin: str | None = None,
     run_log_path: Path | None = None,
+    runtime_env: Mapping[str, str] | None = None,
 ) -> subprocess.Popen[str]:
     python = str(_select_runtime_python(repo_root, python_bin=python_bin))
     command = [python, str(repo_root / "main.py"), "--serve-only", "--host", host, "--port", str(port)]
@@ -1002,7 +1037,7 @@ def start_runtime(
     process = subprocess.Popen(
         command,
         cwd=repo_root,
-        env=build_uat_runtime_env(),
+        env=dict(runtime_env or build_uat_runtime_env()),
         stdout=log_handle,
         stderr=subprocess.STDOUT,
         text=True,
@@ -1089,6 +1124,43 @@ def pid_is_alive(pid: int) -> bool:
     return _probe_process(pid).state == "alive"
 
 
+def _cleanup_owned_runtime_state(
+    runtime: Mapping[str, Any],
+    *,
+    run_id: str,
+    evidence_path: Path,
+) -> dict[str, Any]:
+    state = runtime.get("state") if isinstance(runtime.get("state"), Mapping) else {}
+    root_raw = str(state.get("root") or "").strip()
+    if not root_raw or state.get("ownedByHarness") is not True:
+        return {"status": "not_requested", "reasonCode": "runtime_state_unowned_or_missing"}
+    root_path = Path(root_raw)
+    expected_root = evidence_path.resolve().parent / "runtime-state" / run_id
+    root = root_path.resolve()
+    if (
+        root_path.is_symlink()
+        or root != expected_root.resolve()
+        or root.name != run_id
+        or root.parent.name != "runtime-state"
+        or not root.is_dir()
+    ):
+        return {"status": "failed", "reasonCode": "runtime_state_identity_mismatch", "root": str(root)}
+    marker = root / "runtime-owner.json"
+    if marker.is_symlink():
+        return {"status": "failed", "reasonCode": "runtime_state_owner_mismatch", "root": str(root)}
+    try:
+        payload = json.loads(marker.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {"status": "failed", "reasonCode": "runtime_state_owner_unreadable", "root": str(root), "errorType": type(exc).__name__}
+    if payload.get("runId") != run_id or payload.get("contract") != "wolfystock_uat_runtime_state_v1":
+        return {"status": "failed", "reasonCode": "runtime_state_owner_mismatch", "root": str(root)}
+    try:
+        shutil.rmtree(root)
+    except OSError as exc:
+        return {"status": "failed", "reasonCode": "runtime_state_cleanup_failed", "root": str(root), "errorType": type(exc).__name__}
+    return {"status": "succeeded", "reasonCode": "runtime_state_removed", "root": str(root)}
+
+
 def stop_runtime_from_evidence(
     evidence_path: Path,
     *,
@@ -1105,8 +1177,22 @@ def stop_runtime_from_evidence(
         default_reason="explicit_evidence_path",
         freshness=freshness,
     )
+    run = evidence.get("run") if isinstance(evidence.get("run"), Mapping) else {}
+    runtime = evidence.get("runtime") if isinstance(evidence.get("runtime"), Mapping) else {}
 
     def _finish_stop_result(result: dict[str, Any]) -> dict[str, Any]:
+        if result.get("status") in {"stopped", "absent"}:
+            cleanup = _cleanup_owned_runtime_state(
+                runtime,
+                run_id=str(run.get("runId") or ""),
+                evidence_path=evidence_path,
+            )
+            result["cleanup"] = cleanup
+            if cleanup.get("status") == "failed":
+                result["status"] = "rejected"
+                result["reasonCode"] = cleanup.get("reasonCode")
+        else:
+            result.setdefault("cleanup", {"status": "not_requested", "reasonCode": "runtime_not_stopped"})
         result.setdefault("evidencePath", str(evidence_path))
         result.setdefault("selection", selection_payload)
         result.setdefault("evidenceFreshness", freshness)
@@ -1122,8 +1208,6 @@ def stop_runtime_from_evidence(
             "evidenceFreshness": freshness,
         }
         return _finish_stop_result(result)
-    run = evidence.get("run") if isinstance(evidence.get("run"), Mapping) else {}
-    runtime = evidence.get("runtime") if isinstance(evidence.get("runtime"), Mapping) else {}
     pid = _safe_int(run.get("pid"))
     expected_cwd = str(run.get("cwd") or "")
     expected_command = _normalize_command_line(runtime.get("command"))
@@ -1296,7 +1380,34 @@ def stop_runtime_from_evidence(
             "windowsError": getattr(exc, "winerror", None),
         }
         return _finish_stop_result(result)
-    result = {"status": "stopped", "reasonCode": "task_owned_pid_terminated", "pid": pid, "cwd": observed_cwd}
+    runtime_state = runtime.get("state") if isinstance(runtime.get("state"), Mapping) else {}
+    if isinstance(runtime_state, Mapping) and runtime_state.get("root"):
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            post_probe = _probe_process(pid)
+            if post_probe.state == "absent":
+                result = {
+                    "status": "stopped",
+                    "reasonCode": "task_owned_pid_terminated",
+                    "pid": pid,
+                    "cwd": observed_cwd,
+                    "processState": post_probe.state,
+                }
+                return _finish_stop_result(result)
+            if post_probe.state == "access_denied":
+                break
+            time.sleep(0.1)
+    else:
+        return _finish_stop_result(
+            {"status": "stopped", "reasonCode": "task_owned_pid_terminated", "pid": pid, "cwd": observed_cwd}
+        )
+    result = {
+        "status": "rejected",
+        "reasonCode": "terminate_timeout",
+        "pid": pid,
+        "cwd": observed_cwd,
+        "processState": _probe_process(pid).state,
+    }
     return _finish_stop_result(result)
 
 
@@ -1456,12 +1567,14 @@ def create_run_context(evidence_dir: Path) -> RunContext:
     compact_time = start_time.replace("-", "").replace(":", "").split(".", 1)[0]
     run_id = f"uat-{compact_time}-{uuid4().hex[:8]}"
     evidence_dir.mkdir(parents=True, exist_ok=True)
+    runtime_state_dir = evidence_dir / "runtime-state" / run_id
     return RunContext(
         run_id=run_id,
         start_time=start_time,
         evidence_dir=evidence_dir,
         evidence_path=evidence_dir / f"{run_id}-evidence.json",
         run_log_path=evidence_dir / f"{run_id}-runtime.log",
+        runtime_state_dir=runtime_state_dir,
     )
 
 
@@ -1846,6 +1959,31 @@ def run_harness(
         evidence["run"]["evidencePath"] = evidence["evidencePath"]
         return EXIT_FAILED, evidence
 
+    runtime_env = build_uat_runtime_env(runtime_state_dir=run_context.runtime_state_dir)
+    previous_process_env = dict(os.environ)
+
+    def restore_process_env() -> None:
+        os.environ.clear()
+        os.environ.update(previous_process_env)
+
+    def remove_unstarted_runtime_state() -> None:
+        if run_context.runtime_state_dir.exists():
+            shutil.rmtree(run_context.runtime_state_dir)
+
+    os.environ.update(runtime_env)
+    try:
+        (run_context.runtime_state_dir / "runtime-owner.json").write_text(
+            json.dumps(
+                {"contract": "wolfystock_uat_runtime_state_v1", "runId": run_context.run_id},
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    except Exception:
+        restore_process_env()
+        remove_unstarted_runtime_state()
+        raise
     try:
         authenticated_fixture, member_account, admin_account = seed_authenticated_uat_smoke_accounts()
     except Exception as exc:
@@ -1873,11 +2011,19 @@ def run_harness(
         evidence["authenticatedUatFixture"] = authenticated_fixture
         evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
         evidence["run"]["evidencePath"] = evidence["evidencePath"]
+        restore_process_env()
+        remove_unstarted_runtime_state()
         return EXIT_FAILED, evidence
 
     uat_accounts = None
     if prepare_uat_accounts:
-        uat_accounts = seed_uat_consumer_test_accounts()
+        try:
+            uat_accounts = seed_uat_consumer_test_accounts()
+        except Exception as exc:
+            uat_accounts = {
+                "status": "failed",
+                "reasonCode": f"uat_account_preparation_{type(exc).__name__}",
+            }
         if uat_accounts.get("status") != "seeded":
             evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
             evidence["environmentFingerprint"] = artifact_environment_fingerprint
@@ -1896,9 +2042,12 @@ def run_harness(
             evidence["uatAccountPreparation"] = uat_accounts
             evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
             evidence["run"]["evidencePath"] = evidence["evidencePath"]
+            restore_process_env()
+            remove_unstarted_runtime_state()
             return EXIT_FAILED, evidence
 
     process: subprocess.Popen[str] | None = None
+    runtime_started = False
     try:
         runtime_log = build_runtime_log(run_context)
         expected_python = _select_runtime_python(repo_root)
@@ -1908,7 +2057,9 @@ def run_harness(
             port=port,
             python_bin=str(expected_python),
             run_log_path=run_context.run_log_path,
+            runtime_env=runtime_env,
         )
+        runtime_started = True
         runtime_log = build_runtime_log(run_context, process)
         client = DirectNoProxyHttpClient()
         readiness = wait_for_readiness(client, base_url, timeout_seconds=readiness_timeout_seconds)
@@ -1985,6 +2136,12 @@ def run_harness(
             "listener": {"host": host, "port": int(port), "baseUrl": base_url},
             "processStartTime": process_start_time(process.pid),
             "ownedByHarness": True,
+            "state": {
+                "contract": "wolfystock_uat_runtime_state_v1",
+                "ownedByHarness": True,
+                "root": str(run_context.runtime_state_dir),
+                "paths": {key: runtime_env.get(key) for key in UAT_RUNTIME_PATH_KEYS},
+            },
         }
         smoke_checks = smoke_report.get("checks") if isinstance(smoke_report.get("checks"), dict) else {}
         if smoke_report.get("summaryStatus") != "PASS" or smoke_report.get("exitCode") != EXIT_OK:
@@ -2068,6 +2225,17 @@ def run_harness(
             stop_result = stop_owned_runtime(process)
             if process is not None:
                 build_runtime_log(run_context, process)
+            if stop_result.get("status") in {"stopped", "absent"} and "evidence" in locals():
+                runtime_payload = evidence.get("runtime") if isinstance(evidence.get("runtime"), Mapping) else {}
+                cleanup = _cleanup_owned_runtime_state(
+                    runtime_payload,
+                    run_id=run_context.run_id,
+                    evidence_path=run_context.evidence_path,
+                )
+                stop_result["cleanup"] = cleanup
+                if cleanup.get("status") == "failed":
+                    stop_result["status"] = "rejected"
+                    stop_result["reasonCode"] = cleanup.get("reasonCode")
             try:
                 if "evidence" in locals():
                     evidence["runtimeStop"] = {
@@ -2077,6 +2245,9 @@ def run_harness(
                     write_evidence(evidence_dir, evidence, run_context=run_context)
             except Exception:
                 pass
+        restore_process_env()
+        if not runtime_started:
+            remove_unstarted_runtime_state()
 
 
 def main(argv: Sequence[str] | None = None) -> int:

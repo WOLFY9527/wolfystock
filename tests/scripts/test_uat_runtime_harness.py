@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -609,6 +610,208 @@ def test_build_uat_runtime_env_removes_proxy_vars_and_sets_isolation_flags() -> 
     assert env["WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED"] == "false"
     assert "127.0.0.1" in env["NO_PROXY"]
     assert "localhost" in env["NO_PROXY"]
+
+
+def test_build_uat_runtime_env_projects_mutable_paths_into_owned_state(tmp_path: Path) -> None:
+    state = tmp_path / "runtime-state" / "uat-run"
+    env = harness.build_uat_runtime_env({"DATABASE_PATH": str(tmp_path / "outer.sqlite")}, runtime_state_dir=state)
+    assert env["WOLFYSTOCK_UAT_RUNTIME_STATE_DIR"] == str(state.resolve())
+    for key in harness.UAT_RUNTIME_PATH_KEYS:
+        assert str(state.resolve()) in env[key]
+    assert env["DATABASE_PATH"] != str(tmp_path / "outer.sqlite")
+    assert (state / "logs").is_dir()
+    assert (state / "tmp").is_dir()
+
+
+def test_persistent_runtime_survives_outer_exec_cleanup_and_session_write(tmp_path: Path) -> None:
+    from scripts.environment.runtime import cleanup_run, create_run_context
+
+    outer = create_run_context(tmp_path / "cache", run_id="run-outer")
+    outer.database_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(outer.database_path) as connection:
+        connection.execute("CREATE TABLE app_user_sessions (session_id TEXT PRIMARY KEY, user_id TEXT NOT NULL)")
+        connection.commit()
+    state = tmp_path / "evidence" / "runtime-state" / "uat-run"
+    runtime_env = harness.build_uat_runtime_env(runtime_state_dir=state)
+    runtime_database = Path(runtime_env["DATABASE_PATH"])
+    with sqlite3.connect(runtime_database) as connection:
+        connection.execute("CREATE TABLE app_user_sessions (session_id TEXT PRIMARY KEY, user_id TEXT NOT NULL)")
+        connection.commit()
+
+    cleanup_run(outer, success=True)
+    assert not outer.root.exists()
+    with pytest.raises(sqlite3.OperationalError):
+        sqlite3.connect(outer.database_path)
+    assert state.is_dir()
+    assert not runtime_database.is_relative_to(outer.root)
+    with sqlite3.connect(runtime_database) as connection:
+        connection.execute(
+            "INSERT INTO app_user_sessions(session_id, user_id) VALUES (?, ?)",
+            ("post-harness-session", "uat-runtime-member"),
+        )
+        assert connection.execute("SELECT COUNT(*) FROM app_user_sessions").fetchone()[0] == 1
+
+
+def test_stop_cleans_owned_state_only_after_runtime_is_absent(monkeypatch, tmp_path: Path) -> None:
+    state = tmp_path / "runtime-state" / "uat-run"
+    state.mkdir(parents=True)
+    (state / "runtime-owner.json").write_text(
+        json.dumps({"contract": "wolfystock_uat_runtime_state_v1", "runId": "uat-run"}), encoding="utf-8"
+    )
+    evidence = tmp_path / "evidence.json"
+    evidence.write_text(
+        json.dumps({"run": {"runId": "uat-run", "pid": 42, "cwd": str(tmp_path)}, "runtime": {"ownedByHarness": True, "state": {"ownedByHarness": True, "root": str(state)}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="absent"))
+    result = harness.stop_runtime_from_evidence(evidence)
+    assert result["status"] == "absent"
+    assert result["cleanup"]["status"] == "succeeded"
+    assert not state.exists()
+
+
+def test_stop_rejected_does_not_delete_live_runtime_state(monkeypatch, tmp_path: Path) -> None:
+    state = tmp_path / "runtime-state" / "uat-run"
+    state.mkdir(parents=True)
+    (state / "runtime-owner.json").write_text(
+        json.dumps({"contract": "wolfystock_uat_runtime_state_v1", "runId": "uat-run"}), encoding="utf-8"
+    )
+    evidence = tmp_path / "evidence.json"
+    evidence.write_text(
+        json.dumps({"run": {"runId": "uat-run", "pid": 42, "cwd": str(tmp_path)}, "runtime": {"ownedByHarness": True, "state": {"ownedByHarness": True, "root": str(state)}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
+    monkeypatch.setattr(harness, "process_cwd", lambda _pid: "/tmp/other")
+    result = harness.stop_runtime_from_evidence(evidence)
+    assert result["status"] == "rejected"
+    assert result["cleanup"]["status"] == "not_requested"
+    assert state.exists()
+
+
+def test_stop_does_not_delete_state_until_terminated_runtime_is_absent(monkeypatch, tmp_path: Path) -> None:
+    state = tmp_path / "runtime-state" / "uat-run"
+    state.mkdir(parents=True)
+    (state / "runtime-owner.json").write_text(
+        json.dumps({"contract": "wolfystock_uat_runtime_state_v1", "runId": "uat-run"}), encoding="utf-8"
+    )
+    evidence = tmp_path / "evidence.json"
+    evidence.write_text(
+        json.dumps(
+            {
+                "run": {"runId": "uat-run", "pid": 42, "cwd": str(tmp_path)},
+                "runtime": {
+                    "ownedByHarness": True,
+                    "processStartTime": "Sun Jul  5 00:00:00 2026",
+                    "state": {"ownedByHarness": True, "root": str(state)},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    probes = iter((harness.ProcessProbe(state="alive"), harness.ProcessProbe(state="alive")))
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: next(probes, harness.ProcessProbe(state="alive")))
+    monkeypatch.setattr(harness, "process_start_time", lambda _pid: "Sun Jul  5 00:00:00 2026")
+    monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path))
+    monkeypatch.setattr(harness, "_terminate_pid", lambda _pid: None)
+    monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
+    monotonic_values = iter((0.0, 11.0, 11.0))
+    monkeypatch.setattr(harness.time, "monotonic", lambda: next(monotonic_values, 11.0))
+    monkeypatch.setattr(harness.time, "sleep", lambda _seconds: None)
+
+    result = harness.stop_runtime_from_evidence(evidence)
+
+    assert result["status"] == "rejected"
+    assert result["reasonCode"] == "terminate_timeout"
+    assert result["cleanup"]["status"] == "not_requested"
+    assert state.exists()
+
+
+def test_stop_rejects_runtime_state_outside_evidence_root(monkeypatch, tmp_path: Path) -> None:
+    evidence_root = tmp_path / "evidence"
+    evidence_root.mkdir()
+    outside = tmp_path / "other" / "runtime-state" / "uat-run"
+    outside.mkdir(parents=True)
+    (outside / "runtime-owner.json").write_text(
+        json.dumps({"contract": "wolfystock_uat_runtime_state_v1", "runId": "uat-run"}), encoding="utf-8"
+    )
+    evidence = evidence_root / "evidence.json"
+    evidence.write_text(
+        json.dumps(
+            {
+                "run": {"runId": "uat-run", "pid": 42, "cwd": str(tmp_path)},
+                "runtime": {
+                    "ownedByHarness": True,
+                    "state": {"ownedByHarness": True, "root": str(outside)},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="absent"))
+
+    result = harness.stop_runtime_from_evidence(evidence)
+
+    assert result["status"] == "rejected"
+    assert result["cleanup"]["reasonCode"] == "runtime_state_identity_mismatch"
+    assert outside.exists()
+
+
+def test_run_harness_restores_parent_environment_on_fixture_failure(monkeypatch, tmp_path: Path) -> None:
+    _write_static(tmp_path)
+    _patch_canonical_runtime_inputs(monkeypatch)
+    monkeypatch.setattr(harness, "validate_source", lambda _repo_root, _expected_sha: _valid_source())
+    monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
+    monkeypatch.setattr(harness, "verify_frontend_static_build", lambda **_kwargs: _local_build())
+    monkeypatch.setattr(harness, "read_backend_info", lambda _repo_root: object())
+    monkeypatch.setattr(
+        harness,
+        "seed_authenticated_uat_smoke_accounts",
+        lambda: ({"status": "failed", "reasonCode": "fixture_failed"}, None, None),
+    )
+    before = dict(os.environ)
+
+    exit_code, evidence = harness.run_harness(
+        repo_root=tmp_path,
+        expected_sha="45b6965d",
+        host="127.0.0.1",
+        port=8111,
+        evidence_dir=tmp_path / "output" / "runtime-verification",
+    )
+
+    assert exit_code == 1
+    assert evidence["failure"] == "authenticated_uat_fixture_failed"
+    assert dict(os.environ) == before
+    runtime_state_root = tmp_path / "output" / "runtime-verification" / "runtime-state"
+    if runtime_state_root.exists():
+        assert not list(runtime_state_root.iterdir())
+
+
+def test_run_harness_restores_parent_environment_when_account_preparation_raises(monkeypatch, tmp_path: Path) -> None:
+    _write_static(tmp_path)
+    _patch_canonical_runtime_inputs(monkeypatch)
+    monkeypatch.setattr(harness, "validate_source", lambda _repo_root, _expected_sha: _valid_source())
+    monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
+    monkeypatch.setattr(harness, "verify_frontend_static_build", lambda **_kwargs: _local_build())
+    monkeypatch.setattr(harness, "read_backend_info", lambda _repo_root: object())
+    monkeypatch.setattr(harness, "seed_uat_consumer_test_accounts", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    before = dict(os.environ)
+
+    exit_code, evidence = harness.run_harness(
+        repo_root=tmp_path,
+        expected_sha="45b6965d",
+        host="127.0.0.1",
+        port=8112,
+        evidence_dir=tmp_path / "output" / "runtime-verification",
+        prepare_uat_accounts=True,
+    )
+
+    assert exit_code == 1
+    assert evidence["failure"] == "uat_account_preparation_failed"
+    assert dict(os.environ) == before
+    runtime_state_root = tmp_path / "output" / "runtime-verification" / "runtime-state"
+    if runtime_state_root.exists():
+        assert not list(runtime_state_root.iterdir())
 
 
 def test_find_system_command_uses_reviewed_absolute_fallback(monkeypatch, tmp_path: Path) -> None:

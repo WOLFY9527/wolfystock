@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8381,
-      "sha256": "f2ff7ee826663ca6cdecca2601f0abd91d3e4e5d98164ce9786f0285391cc52d"
+      "count": 8390,
+      "sha256": "c24b3500b4892c3325ef36b2cfcc755e44c4e24edb265a226061a14f2fa06888"
     },
     "tests": [
       {
@@ -7039,6 +7039,11 @@
         "baseline": true
       },
       {
+        "id": "tests/scripts/test_uat_runtime_harness.py::test_build_uat_runtime_env_projects_mutable_paths_into_owned_state",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_uat_runtime_harness.py::test_build_uat_runtime_env_removes_proxy_vars_and_sets_isolation_flags",
         "domain": "runtime_operator_tooling",
         "baseline": true
@@ -7102,6 +7107,11 @@
         "id": "tests/scripts/test_uat_runtime_harness.py::test_latest_evidence_uses_embedded_timestamp_before_mtime",
         "domain": "runtime_operator_tooling",
         "baseline": true
+      },
+      {
+        "id": "tests/scripts/test_uat_runtime_harness.py::test_persistent_runtime_survives_outer_exec_cleanup_and_session_write",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
       },
       {
         "id": "tests/scripts/test_uat_runtime_harness.py::test_preflight_cli_implicit_latest_exposes_selection_reason",
@@ -7199,6 +7209,16 @@
         "baseline": true
       },
       {
+        "id": "tests/scripts/test_uat_runtime_harness.py::test_run_harness_restores_parent_environment_on_fixture_failure",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_uat_runtime_harness.py::test_run_harness_restores_parent_environment_when_account_preparation_raises",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_uat_runtime_harness.py::test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime",
         "domain": "runtime_operator_tooling",
         "baseline": true
@@ -7274,6 +7294,16 @@
         "baseline": true
       },
       {
+        "id": "tests/scripts/test_uat_runtime_harness.py::test_stop_cleans_owned_state_only_after_runtime_is_absent",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_uat_runtime_harness.py::test_stop_does_not_delete_state_until_terminated_runtime_is_absent",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_uat_runtime_harness.py::test_stop_from_evidence_cli_implicit_stale_rejects_before_identity_checks",
         "domain": "runtime_operator_tooling",
         "baseline": true
@@ -7292,6 +7322,16 @@
         "id": "tests/scripts/test_uat_runtime_harness.py::test_stop_owned_runtime_reports_already_absent",
         "domain": "runtime_operator_tooling",
         "baseline": true
+      },
+      {
+        "id": "tests/scripts/test_uat_runtime_harness.py::test_stop_rejected_does_not_delete_live_runtime_state",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_uat_runtime_harness.py::test_stop_rejects_runtime_state_outside_evidence_root",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
       },
       {
         "id": "tests/scripts/test_uat_runtime_harness.py::test_stop_rejects_stale_evidence_before_termination_when_current_authority_required",
@@ -11607,6 +11647,11 @@
         "id": "tests/test_api_app_health.py::ApiAppHealthTestCase::test_ready_health_returns_unavailable_without_leaking_storage_exception",
         "domain": "api_schema_contracts",
         "baseline": true
+      },
+      {
+        "id": "tests/test_api_app_health.py::ApiAppHealthTestCase::test_uat_readiness_fails_when_owned_state_directory_disappears",
+        "domain": "api_schema_contracts",
+        "baseline": false
       },
       {
         "id": "tests/test_api_app_health.py::test_create_app_does_not_trigger_market_overview_providers_or_prewarm",

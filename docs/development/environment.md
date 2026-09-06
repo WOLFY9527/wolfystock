@@ -93,7 +93,13 @@ The `test` profile removes credentials, production DSNs, admin bootstrap flags,
 startup modifiers, proxy settings, and user-data paths. It allocates one
 run-scoped SQLite database, cache, logs, uploads, temp files, coverage, pytest
 cache, frontend output, and service metadata directory. Successful runs are
-removed; a bounded number of failed runs may remain for diagnosis.
+removed; a bounded number of failed runs may remain for diagnosis. The
+persistent UAT harness is the explicit exception: it projects those mutable
+paths into its own `output/runtime-verification/runtime-state/<run-id>/` tree
+and marks the child with `WOLFYSTOCK_UAT_RUNTIME_STATE_DIR`, so outer
+`wolfy exec` cleanup cannot remove live runtime state. The identity-bound UAT
+stop operation removes that tree only after the owned runtime is `stopped` or
+`absent`; rejected or live-stop attempts leave it untouched.
 
 Run a command inside that profile with:
 

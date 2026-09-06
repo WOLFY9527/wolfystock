@@ -136,7 +136,7 @@
     "docsIndex": "docs/README.md",
     "docsIndexSha256": "b9e676ba0d1699818d5cc63efb24a21980440082e3619c2ebccdd08dacb6ac6b",
     "manual": "docs/generated/AI_PROJECT_MANUAL.md",
-    "manualSha256": "9903d9a0cde7d58d7543a4db2d4426bacaae22236539044f9df970ff68f298f4",
+    "manualSha256": "cb4503ff0e2a12937fcab3794b949d83178834015c2c688698a75e292405cb55",
     "sourceManifest": "docs/generated/AI_PROJECT_MANUAL_SOURCES.json"
   },
   "registry": {
@@ -387,25 +387,25 @@
       "title": "Consumer Frontend Design Contract"
     },
     {
-      "bytes": 9488,
+      "bytes": 9933,
       "editable": true,
       "id": "development-environment",
       "kind": "canonical",
-      "lineCount": 234,
+      "lineCount": 240,
       "path": "docs/development/environment.md",
-      "sha256": "daafda4c2ccb3fac2c4c78e6fe9c57ee6e4d8e5508e95e41ad8d451b8aa63e53",
+      "sha256": "eaba2d40fec1f1ae7325bf8186a012314aff4cbfd83e8efec4c124115c33ed06",
       "status": "active",
       "summary": "Dependency, bootstrap, target, snapshot, runtime, and configuration authority",
       "title": "Development Environment"
     },
     {
-      "bytes": 9620,
+      "bytes": 10166,
       "editable": true,
       "id": "validation-reference",
       "kind": "canonical",
-      "lineCount": 204,
+      "lineCount": 212,
       "path": "docs/development/validation.md",
-      "sha256": "62cc4c8f5e48df649f3f3f7978c61d50d99117b8405724b4ea8d2bcda7b56c8c",
+      "sha256": "7bbd0701c0c88e438c5979087be5d677e661e450174c6dfdb0f62b239e7b676b",
       "status": "active",
       "summary": "Validation command routing and evidence reference",
       "title": "Validation And Evidence"

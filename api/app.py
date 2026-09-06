@@ -18,6 +18,7 @@ FastAPI 应用工厂模块
 
 import mimetypes
 import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -217,6 +218,29 @@ def _project_public_readiness_payload(payload: Dict[str, Any]) -> Dict[str, Any]
 
 
 def _storage_readiness_check() -> Tuple[bool, Dict[str, Any]]:
+    runtime_state_dir = str(os.getenv("WOLFYSTOCK_UAT_RUNTIME_STATE_DIR") or "").strip()
+    if runtime_state_dir:
+        state_root = Path(runtime_state_dir).resolve()
+        database_path = Path(str(os.getenv("DATABASE_PATH") or "")).expanduser()
+        if not database_path.is_absolute():
+            database_path = (Path.cwd() / database_path).resolve()
+        required = {
+            "runtimeState": state_root,
+            "databaseParent": database_path.parent,
+            "logDir": Path(str(os.getenv("LOG_DIR") or state_root / "logs")).resolve(),
+            "serviceState": Path(str(os.getenv("WOLFYSTOCK_SERVICE_STATE_DIR") or state_root / "service-state")).resolve(),
+        }
+        missing = [name for name, path in required.items() if not path.exists()]
+        invalid = [name for name, path in required.items() if path.exists() and not path.is_dir()]
+        unwritable = [name for name, path in required.items() if path.exists() and path.is_dir() and not os.access(path, os.W_OK)]
+        if missing or invalid or unwritable:
+            return False, {
+                "status": "not_ready",
+                "detail": "UAT runtime persistence is missing or not writable",
+                "missing": missing,
+                "invalid": invalid,
+                "unwritable": unwritable,
+            }
     try:
         db = get_db()
         session = db.get_session()
@@ -224,6 +248,17 @@ def _storage_readiness_check() -> Tuple[bool, Dict[str, Any]]:
             session.execute(text("SELECT 1"))
         finally:
             session.close()
+        if runtime_state_dir:
+            database_path = Path(str(os.getenv("DATABASE_PATH") or "")).expanduser()
+            if not database_path.is_absolute():
+                database_path = (Path.cwd() / database_path).resolve()
+            if not database_path.exists() or not os.access(database_path, os.W_OK):
+                return False, {
+                    "status": "not_ready",
+                    "detail": "UAT runtime database is missing or not writable",
+                    "missing": ["database"] if not database_path.exists() else [],
+                    "unwritable": ["database"] if database_path.exists() and not os.access(database_path, os.W_OK) else [],
+                }
         return True, {"status": "ok", "detail": "storage session responded to SELECT 1"}
     except Exception:
         return False, {"status": "not_ready", "detail": "storage check failed"}

@@ -117,7 +117,15 @@ never repairs or builds a missing or invalid artifact. It fails closed before
 runtime bind on an unknown port owner, missing or corrupt artifact, source or
 candidate mismatch, stale asset, or invalid provenance. Non-WolfyStock HTML
 also fails qualification. Evidence under `output/runtime-verification/` is
-run-scoped and is not durable documentation.
+run-scoped and is not durable documentation. The harness creates an
+independent durable state directory at
+`output/runtime-verification/runtime-state/<run-id>/` for the persistent child
+runtime, projects mutable database/log/temp/cache/upload/frontend/service paths
+there, and sets `WOLFYSTOCK_UAT_RUNTIME_STATE_DIR`. This UAT-owned exception is
+independent of the ephemeral `wolfy exec` `runs/active/run-*` projection. State
+remains until identity-bound stop observes the runtime `stopped` or `absent`,
+then only that owned directory is removed; rejected stops preserve state and
+evidence.
 
 The managed UAT runtime sets `CRYPTO_REALTIME_ENABLED=false`,
 `WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS=true`,

@@ -196,6 +196,21 @@ class ApiAppHealthTestCase(unittest.TestCase):
         _assert_public_health_payload_is_safe(payload)
         self.assertTrue(db.session.executed)
 
+    def test_uat_readiness_fails_when_owned_state_directory_disappears(self) -> None:
+        missing_state = Path(tempfile.mkdtemp()) / "runtime-state"
+        with patch.dict(
+            api_app.os.environ,
+            {
+                "WOLFYSTOCK_UAT_RUNTIME_STATE_DIR": str(missing_state),
+                "DATABASE_PATH": str(missing_state / "database.sqlite"),
+            },
+            clear=False,
+        ):
+            ready, payload = api_app._storage_readiness_check()
+        self.assertFalse(ready)
+        self.assertEqual(payload["status"], "not_ready")
+        self.assertIn("runtimeState", payload["missing"])
+
     def test_default_health_alias_uses_readiness_contract(self) -> None:
         app, _, _ = self._make_app()
 
