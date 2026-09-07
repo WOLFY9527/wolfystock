@@ -19,6 +19,7 @@ FastAPI 应用工厂模块
 import mimetypes
 import logging
 import os
+import json
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -220,27 +221,52 @@ def _project_public_readiness_payload(payload: Dict[str, Any]) -> Dict[str, Any]
 def _storage_readiness_check() -> Tuple[bool, Dict[str, Any]]:
     runtime_state_dir = str(os.getenv("WOLFYSTOCK_UAT_RUNTIME_STATE_DIR") or "").strip()
     if runtime_state_dir:
-        state_root = Path(runtime_state_dir).resolve()
-        database_path = Path(str(os.getenv("DATABASE_PATH") or "")).expanduser()
-        if not database_path.is_absolute():
-            database_path = (Path.cwd() / database_path).resolve()
-        required = {
-            "runtimeState": state_root,
-            "databaseParent": database_path.parent,
-            "logDir": Path(str(os.getenv("LOG_DIR") or state_root / "logs")).resolve(),
-            "serviceState": Path(str(os.getenv("WOLFYSTOCK_SERVICE_STATE_DIR") or state_root / "service-state")).resolve(),
-        }
+        raw_root = Path(runtime_state_dir).expanduser()
+        if ".." in raw_root.parts:
+            return False, {"status": "not_ready", "detail": "UAT runtime persistence is invalid", "invalid": ["runtimeState"]}
+        state_root = raw_root.resolve(strict=False)
+        if not state_root.is_dir() or state_root.is_symlink():
+            return False, {"status": "not_ready", "detail": "UAT runtime persistence is invalid", "invalid": ["runtimeState"]}
+        marker = state_root / "runtime-owner.json"
+        if marker.is_symlink() or not marker.is_file():
+            return False, {"status": "not_ready", "detail": "UAT runtime persistence owner is invalid", "invalid": ["runtimeOwner"]}
+        try:
+            owner = json.loads(marker.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            return False, {"status": "not_ready", "detail": "UAT runtime persistence owner is invalid", "invalid": ["runtimeOwner"]}
+        if not isinstance(owner, dict) or owner.get("contract") != "wolfystock_uat_runtime_state_v1" or owner.get("runId") != state_root.name:
+            return False, {"status": "not_ready", "detail": "UAT runtime persistence owner is invalid", "invalid": ["runtimeOwner"]}
+
+        def configured_path(name: str, default: Path) -> tuple[Path | None, str | None]:
+            raw = str(os.getenv(name) or "").strip()
+            candidate = Path(raw).expanduser() if raw else default
+            if ".." in candidate.parts:
+                return None, name
+            if not candidate.is_absolute():
+                candidate = Path.cwd() / candidate
+            resolved = candidate.resolve(strict=False)
+            if not resolved.is_relative_to(state_root):
+                return None, name
+            return resolved, None
+
+        database_path, database_error = configured_path("DATABASE_PATH", state_root / "database.sqlite")
+        log_path, log_error = configured_path("LOG_DIR", state_root / "logs")
+        service_path, service_error = configured_path("WOLFYSTOCK_SERVICE_STATE_DIR", state_root / "service-state")
+        errors = [name for name in (database_error, log_error, service_error) if name]
+        if errors:
+            return False, {"status": "not_ready", "detail": "UAT runtime persistence is invalid", "invalid": errors}
+        assert database_path is not None and log_path is not None and service_path is not None
+        if database_path.is_symlink() or not database_path.is_file():
+            return False, {"status": "not_ready", "detail": "UAT runtime database is invalid", "invalid": ["database"]}
+        directory_paths = {"logDir": log_path, "serviceState": service_path}
+        invalid = [name for name, path in directory_paths.items() if path.is_symlink() or not path.is_dir()]
+        required = {"runtimeState": state_root, "database": database_path, **directory_paths}
         missing = [name for name, path in required.items() if not path.exists()]
-        invalid = [name for name, path in required.items() if path.exists() and not path.is_dir()]
-        unwritable = [name for name, path in required.items() if path.exists() and path.is_dir() and not os.access(path, os.W_OK)]
-        if missing or invalid or unwritable:
-            return False, {
-                "status": "not_ready",
-                "detail": "UAT runtime persistence is missing or not writable",
-                "missing": missing,
-                "invalid": invalid,
-                "unwritable": unwritable,
-            }
+        if invalid or missing:
+            return False, {"status": "not_ready", "detail": "UAT runtime persistence is missing or invalid", "missing": missing, "invalid": invalid}
+        unwritable = [name for name, path in required.items() if not os.access(path, os.W_OK)]
+        if unwritable:
+            return False, {"status": "not_ready", "detail": "UAT runtime persistence is not writable", "unwritable": unwritable}
     try:
         db = get_db()
         session = db.get_session()
@@ -248,17 +274,6 @@ def _storage_readiness_check() -> Tuple[bool, Dict[str, Any]]:
             session.execute(text("SELECT 1"))
         finally:
             session.close()
-        if runtime_state_dir:
-            database_path = Path(str(os.getenv("DATABASE_PATH") or "")).expanduser()
-            if not database_path.is_absolute():
-                database_path = (Path.cwd() / database_path).resolve()
-            if not database_path.exists() or not os.access(database_path, os.W_OK):
-                return False, {
-                    "status": "not_ready",
-                    "detail": "UAT runtime database is missing or not writable",
-                    "missing": ["database"] if not database_path.exists() else [],
-                    "unwritable": ["database"] if database_path.exists() and not os.access(database_path, os.W_OK) else [],
-                }
         return True, {"status": "ok", "detail": "storage session responded to SELECT 1"}
     except Exception:
         return False, {"status": "not_ready", "detail": "storage check failed"}

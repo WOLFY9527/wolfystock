@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import importlib
+import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -209,7 +211,7 @@ class ApiAppHealthTestCase(unittest.TestCase):
             ready, payload = api_app._storage_readiness_check()
         self.assertFalse(ready)
         self.assertEqual(payload["status"], "not_ready")
-        self.assertIn("runtimeState", payload["missing"])
+        self.assertTrue({"runtimeState", "runtimeOwner"} & set(payload.get("missing", []) + payload.get("invalid", [])))
 
     def test_default_health_alias_uses_readiness_contract(self) -> None:
         app, _, _ = self._make_app()
@@ -357,6 +359,122 @@ def test_lifespan_skips_crypto_realtime_startup_when_disabled(monkeypatch, tmp_p
     assert response.status_code == 200
     assert not hasattr(app.state, "crypto_realtime_service")
     assert queue.shutdown_calls == [(False, True)]
+
+
+    def _uat_ready_response(self, root: Path, *, marker_payload=None, database_path=None,
+                            log_path=None, service_state_path=None, access_override=None):
+        root.mkdir(parents=True, exist_ok=True)
+        database = database_path or (root / "database.sqlite")
+        logs = log_path or (root / "logs")
+        service_state = service_state_path or (root / "service-state")
+        if marker_payload is not None:
+            (root / "runtime-owner.json").write_text(json.dumps(marker_payload), encoding="utf-8")
+        if database_path is None:
+            database.touch()
+        if log_path is None:
+            logs.mkdir()
+        if service_state_path is None:
+            service_state.mkdir()
+        env = {
+            "WOLFYSTOCK_UAT_RUNTIME_STATE_DIR": str(root),
+            "DATABASE_PATH": str(database),
+            "LOG_DIR": str(logs),
+            "WOLFYSTOCK_SERVICE_STATE_DIR": str(service_state),
+        }
+        app, _, _ = self._make_app()
+        access_patch = patch("api.app.os.access", side_effect=access_override) if access_override else patch("api.app.os.access", wraps=os.access)
+        with patch.dict(api_app.os.environ, env, clear=False), access_patch:
+            with TestClient(app) as client:
+                return client.get("/api/health/ready")
+
+    def test_uat_readiness_accepts_valid_owned_runtime_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "run-valid"
+            response = self._uat_ready_response(
+                root,
+                marker_payload={"contract": "wolfystock_uat_runtime_state_v1", "runId": root.name},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ready")
+
+    def test_uat_readiness_rejects_invalid_owned_runtime_contracts(self) -> None:
+        cases = ("missing_marker", "malformed_marker", "mismatch", "database_outside",
+                 "logs_outside", "service_state_outside", "lexical_traversal", "db_symlink_escape",
+                 "logs_symlink_escape", "service_symlink_escape", "logs_symlink", "service_symlink",
+                 "database_directory", "logs_file", "missing_path", "unwritable")
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temp_dir:
+                base = Path(temp_dir)
+                root = base / "run-invalid"
+                root.mkdir()
+                marker = {"contract": "wolfystock_uat_runtime_state_v1", "runId": root.name}
+                marker_path = root / "runtime-owner.json"
+                marker_path.write_text(json.dumps(marker), encoding="utf-8")
+                database = root / "database.sqlite"
+                database.touch()
+                logs = root / "logs"
+                logs.mkdir()
+                service = root / "service-state"
+                service.mkdir()
+                if case == "missing_marker":
+                    marker_path.unlink()
+                elif case == "malformed_marker":
+                    marker_path.write_text("{", encoding="utf-8")
+                elif case == "mismatch":
+                    marker_path.write_text(json.dumps({"contract": "wolfystock_uat_runtime_state_v1", "runId": "other"}), encoding="utf-8")
+                elif case == "database_outside":
+                    database = base / "outside.sqlite"
+                    database.touch()
+                elif case == "logs_outside":
+                    logs = base / "outside-logs"
+                    logs.mkdir()
+                elif case == "service_state_outside":
+                    service = base / "outside-service"
+                    service.mkdir()
+                elif case == "lexical_traversal":
+                    database = root / ".." / "traversal.sqlite"
+                    database.resolve().touch()
+                elif case.endswith("symlink_escape"):
+                    outside = base / (case + "-target")
+                    if "logs" in case or "service" in case:
+                        outside.mkdir()
+                    else:
+                        outside.touch()
+                    target = logs if "logs" in case else service if "service" in case else database
+                    target.unlink() if target.is_file() or target.is_symlink() else target.rmdir()
+                    target.symlink_to(outside, target_is_directory=outside.is_dir())
+                elif case in {"logs_symlink", "service_symlink"}:
+                    target = logs if case == "logs_symlink" else service
+                    target.rmdir()
+                    target.symlink_to(root / "database.sqlite", target_is_directory=False)
+                elif case == "database_directory":
+                    database.unlink()
+                    database.mkdir()
+                elif case == "logs_file":
+                    logs.rmdir()
+                    logs.touch()
+                elif case == "missing_path":
+                    service.rmdir()
+                access_override = (lambda path, mode: False) if case == "unwritable" else None
+                response = self._uat_ready_response(
+                    root,
+                    marker_payload=None,
+                    database_path=database,
+                    log_path=logs,
+                    service_state_path=service,
+                    access_override=access_override,
+                )
+                self.assertEqual(response.status_code, 503)
+                self.assertFalse(response.json()["ready"])
+
+    def test_uat_readiness_preserves_ordinary_behavior_without_marker_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            app, _, _ = self._make_app()
+            with patch.dict(api_app.os.environ, {"WOLFYSTOCK_UAT_RUNTIME_STATE_DIR": ""}, clear=False):
+                with TestClient(app) as client:
+                    response = client.get("/api/health/ready")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ready")
 
 
 if __name__ == "__main__":
