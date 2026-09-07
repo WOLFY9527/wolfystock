@@ -335,7 +335,7 @@ def _login_uat_session(client: Any, base_url: str, account: UatSmokeAccount) -> 
         response = client.request(
             "POST",
             clean_base_url(base_url) + "/api/v1/auth/login",
-            json_body={"username": account.username, "password": account.password},
+            json_body={"username": account.username, "password": account.password, "passwordConfirm": account.password},
         )
         payload = response.json() if int(response.status_code) == 200 else None
     except (OSError, TimeoutError, urllib.error.URLError, json.JSONDecodeError, ValueError):
