@@ -229,7 +229,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             )
 
         exc = ctx.exception
-        self.assertEqual(getattr(exc, "status_code", None), 500)
+        self.assertEqual(getattr(exc, "status_code", None), 422)
         self.assertEqual(exc.detail["error"], "llm_model_unavailable")
         self.assertEqual(exc.detail["message"], "AI analysis is temporarily unavailable. Please retry later.")
         self.assertTrue(exc.detail["retryable"])

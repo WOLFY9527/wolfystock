@@ -177,7 +177,7 @@ def _raise_if_llm_model_unavailable(
             detail.get("available_models"),
         )
         raise safe_api_error(
-            status_code=500,
+            status_code=422,
             error="llm_model_unavailable",
             message=public_message,
             retryable=True,
@@ -545,6 +545,7 @@ def _analysis_sync_quota_execution_metadata(
     responses={
         200: {"description": "Guest preview generated"},
         400: {"description": "请求参数错误", "model": ErrorResponse},
+        422: {"description": "请求验证失败或分析模型不可用", "model": ErrorResponse},
         500: {"description": "分析失败", "model": ErrorResponse},
     },
     summary="生成公开分析预览",
@@ -694,6 +695,7 @@ def preview_analysis(
         },
         400: {"description": "请求参数错误", "model": ErrorResponse},
         409: {"description": "股票正在分析中，拒绝重复提交", "model": DuplicateTaskErrorResponse},
+        422: {"description": "请求验证失败或分析模型不可用", "model": ErrorResponse},
         429: {"description": "额度试点限制", "model": ErrorResponse},
         500: {"description": "分析失败", "model": ErrorResponse},
     },

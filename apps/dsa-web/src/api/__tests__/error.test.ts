@@ -54,6 +54,26 @@ describe('parseApiError', () => {
     expect(parsed.rawMessage).toBe('后端返回了 detail 字段文本。');
   });
 
+  it('keeps unavailable analysis distinct from invalid input and duplicate tasks', () => {
+    const parsed = parseApiError({
+      response: {
+        status: 422,
+        data: {
+          error: 'llm_model_unavailable',
+          message: 'AI analysis is temporarily unavailable. Please retry later.',
+          retryable: true,
+        },
+      },
+    });
+
+    expect(parsed.status).toBe(422);
+    expect(parsed.code).toBe('llm_model_unavailable');
+    expect(parsed.category).toBe('upstream_unavailable');
+    expect(parsed.message).toBe('AI 分析暂时不可用，请稍后重试。');
+    expect(parsed.isValidationError).toBe(false);
+    expect(parsed.isAuthError).toBe(false);
+  });
+
   it('parses FastAPI validation detail lists', () => {
     const parsed = parseApiError({
       response: {

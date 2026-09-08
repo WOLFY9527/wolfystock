@@ -26,7 +26,7 @@ except ModuleNotFoundError:
 
 import src.auth as auth
 from api.app import create_app
-from api.deps import CurrentUser
+from api.deps import CurrentUser, get_config_dep
 from api.v1.endpoints.analysis import get_task_list
 from src.admin_rbac import OPS_ADMIN_ROLE
 from src.config import Config
@@ -63,6 +63,10 @@ def _dummy_analysis_result(code: str, *, name: str) -> SimpleNamespace:
 
 class MultiUserAuthorizationApiTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        # Each real app lifecycle must bind its queue/log service to this test's DB.
+        previous_queue = AnalysisTaskQueue._instance
+        AnalysisTaskQueue._instance = None
+        self.addCleanup(setattr, AnalysisTaskQueue, "_instance", previous_queue)
         _reset_auth_globals()
         self.temp_dir = tempfile.TemporaryDirectory()
         self.data_dir = Path(self.temp_dir.name)
@@ -153,6 +157,163 @@ class MultiUserAuthorizationApiTestCase(unittest.TestCase):
 
     def _admin_unlock_headers(self) -> dict[str, str]:
         return {"X-Admin-Unlock-Token": self.admin_unlock_token}
+
+    def test_watchlist_manual_research_unavailable_model_is_domain_error(self) -> None:
+        # Use real authenticated sessions and the real model-selection precheck.
+        self.app.dependency_overrides[get_config_dep] = lambda: Config(
+            stock_list=["AAPL"], litellm_model="", llm_model_list=[],
+        )
+        with patch("api.v1.endpoints.analysis.get_task_queue") as queue, patch(
+            "src.services.analysis_service.AnalysisService.analyze_stock"
+        ) as analyze:
+            for client in (self.user_a_client, self.user_b_client):
+                for async_mode in (True, False):
+                    with self.subTest(owner=client, async_mode=async_mode):
+                        response = client.post(
+                            "/api/v1/analysis/analyze",
+                            json={
+                                "stock_code": "AAPL", "stock_name": "AAPL",
+                                "report_type": "detailed", "async_mode": async_mode,
+                                "original_query": "AAPL", "selection_source": "manual",
+                            },
+                        )
+                        self.assertEqual(response.status_code, 422, response.text)
+                        body = response.json()
+                        self.assertEqual(body["error"], "llm_model_unavailable")
+                        self.assertEqual(body["status"], 422)
+                        self.assertTrue(body["retryable"])
+                        self.assertEqual(body["message"], "AI analysis is temporarily unavailable. Please retry later.")
+                        self.assertNotIn("task_id", body)
+                        self.assertNotIn("report", body)
+            preview = self.user_a_client.post("/api/v1/analysis/preview", json={"stock_code": "AAPL"})
+            self.assertEqual(preview.status_code, 422, preview.text)
+            self.assertEqual(preview.json()["error"], "llm_model_unavailable")
+            queue.assert_not_called()
+            analyze.assert_not_called()
+        for owner_id in (self.user_a_id, self.user_b_id):
+            self.assertEqual(self.db.get_analysis_history(owner_id=owner_id), [])
+
+    def test_watchlist_research_create_read_reopen_preserves_owner_and_lineage(self) -> None:
+        from dataclasses import replace
+        from src.analyzer import AnalysisResult
+
+        configured = Config.get_instance()
+        admission_config = replace(configured, llm_model_list=[{
+            "model_name": configured.litellm_model,
+            "litellm_params": {"model": configured.litellm_model},
+        }])
+        self.app.dependency_overrides[get_config_dep] = lambda: admission_config
+        queue = self.runtime_container.task_queue
+        request = {
+            "stock_code": "AAPL", "stock_name": "AAPL", "async_mode": True,
+            "report_type": "detailed", "original_query": "AAPL", "selection_source": "manual",
+        }
+        # Hold execution to exercise real admission/deduplication without live transport.
+        with patch.object(queue.executor, "submit", side_effect=lambda *args: Future()):
+            accepted = self.user_a_client.post("/api/v1/analysis/analyze", json=request)
+            self.assertEqual(accepted.status_code, 202, accepted.text)
+            task_id = accepted.json()["task_id"]
+            duplicate = self.user_a_client.post(
+                "/api/v1/analysis/analyze", json={**request, "stock_code": "aapl.us"},
+            )
+            self.assertEqual(duplicate.status_code, 409, duplicate.text)
+            self.assertEqual(duplicate.json()["error"], "duplicate_task")
+            self.assertEqual(duplicate.json()["existing_task_id"], task_id)
+            other = self.user_b_client.post("/api/v1/analysis/analyze", json=request)
+            self.assertEqual(other.status_code, 202, other.text)
+            self.assertNotEqual(other.json()["task_id"], task_id)
+            invalid = self.user_a_client.post(
+                "/api/v1/analysis/analyze", json={**request, "stock_code": "BAD!"},
+            )
+            self.assertEqual(invalid.status_code, 400, invalid.text)
+
+        task = queue.get_task(task_id, owner_id=self.user_a_id)
+        self.assertEqual((task.stock_code, task.original_query, task.selection_source), ("AAPL", "AAPL", "manual"))
+        pending = self.user_a_client.get(f"/api/v1/analysis/status/{task_id}")
+        self.assertEqual(pending.status_code, 200)
+        self.assertEqual(pending.json()["status"], "pending")
+        self.assertIsNone(pending.json()["result"])
+        self.assertEqual(self.user_b_client.get(f"/api/v1/analysis/status/{task_id}").status_code, 404)
+
+        quality = {
+            "dataQualityTier": "insufficient", "requiredAvailable": False,
+            "confidenceCap": 40, "missingRequiredDomains": ["price_ohlcv", "technical_history"],
+            "scoreSuppressed": True, "scoreSuppressedReason": "required_evidence_missing",
+            "stanceGuardrail": "no_score", "keyLevelGuardrail": "ungrounded",
+        }
+
+        def complete_observation(pipeline, *, code, analysis_query_id, report_type, **kwargs):
+            # Inject only a supported pipeline completion. Quotes/history/evidence are
+            # absent; real service serialization, report attachment and DB readback run.
+            result = AnalysisResult(
+                code=code, name=code, query_id=analysis_query_id, sentiment_score=None,
+                trend_prediction="数据不足", operation_advice="仅供观察",
+                decision_type="data_insufficient", confidence_level="低",
+                analysis_summary="缺少价格与历史证据，仅供观察。",
+                dashboard={"structured_analysis": {"data_quality_report": quality}},
+                runtime_execution={"data_quality_report": quality, "steps": []},
+            )
+            self.assertEqual(pipeline.owner_id, self.user_a_id)
+            self.assertEqual(self.db.save_analysis_history(
+                result, query_id=analysis_query_id, report_type=report_type.value,
+                news_content=None, owner_id=pipeline.owner_id,
+            ), 1)
+            return result
+
+        with patch("src.core.pipeline.StockAnalysisPipeline.process_single_stock", autospec=True,
+                   side_effect=complete_observation):
+            completed = queue._execute_task(task_id, "AAPL", "detailed", False, self.user_a_id)
+        self.assertIsNotNone(completed)
+        report = completed["report"]
+        self.assertEqual(report["meta"]["query_id"], task_id)
+        self.assertEqual(report["meta"]["stock_code"], "AAPL")
+        self.assertIsNone(report["meta"]["current_price"])
+        self.assertIsNone(report["summary"]["sentiment_score"])
+        self.assertEqual(report["summary"]["sentiment_label"], "数据不足")
+        self.assertTrue(report["singleStockEvidencePacket"]["noAdviceBoundary"])
+
+        save_request = {"symbol": "aapl.us", "market": "us", "source": "scanner", "notes": "仅供观察。"}
+        created = self.user_a_client.post("/api/v1/watchlist/items", json=save_request)
+        self.assertEqual(created.status_code, 200, created.text)
+        item = created.json()
+        self.assertEqual((item["symbol"], item["market"], item["source"]), ("AAPL", "us", "scanner"))
+        self.assertIsNone(item["scanner_score"])
+        self.assertIsNone(item["scanner_run_id"])
+        duplicate_item = self.user_a_client.post("/api/v1/watchlist/items", json=save_request)
+        self.assertEqual(duplicate_item.status_code, 200)
+        self.assertEqual(duplicate_item.json()["id"], item["id"])
+        self.assertEqual(self.user_b_client.get("/api/v1/watchlist/items").json()["items"], [])
+        denied = self.user_b_client.delete(f"/api/v1/watchlist/items/{item['id']}")
+        self.assertEqual(denied.status_code, 404, denied.text)
+        invalid_item = self.user_a_client.post(
+            "/api/v1/watchlist/items", json={**save_request, "symbol": "BAD!"},
+        )
+        self.assertEqual(invalid_item.status_code, 422, invalid_item.text)
+
+        before = self.user_a_client.get(f"/api/v1/history/{task_id}")
+        self.assertEqual(before.status_code, 200, before.text)
+        self.assertEqual(before.json()["meta"]["stock_code"], "AAPL")
+        self.assertIsNone(before.json()["summary"]["sentiment_score"])
+        self.assertIsNone(before.json()["meta"]["current_price"])
+        self.assertEqual(self.user_b_client.get(f"/api/v1/history/{task_id}").status_code, 404)
+
+        # Reopen the same persisted database through a new app and existing sessions.
+        DatabaseManager.reset_instance()
+        with TestClient(create_app(static_dir=self.data_dir / "empty-static")) as reopened:
+            reopened.cookies.update(self.user_a_client.cookies)
+            listed = reopened.get("/api/v1/watchlist/items")
+            self.assertEqual(listed.status_code, 200, listed.text)
+            self.assertEqual(len(listed.json()["items"]), 1)
+            persisted = listed.json()["items"][0]
+            for key in ("id", "symbol", "market", "source", "notes", "scanner_run_id", "scanner_score"):
+                self.assertEqual(persisted[key], item[key])
+            history = reopened.get(f"/api/v1/history/{task_id}")
+            self.assertEqual(history.status_code, 200, history.text)
+            self.assertEqual(history.json(), before.json())
+            reopened.cookies.clear()
+            reopened.cookies.update(self.user_b_client.cookies)
+            self.assertEqual(reopened.get("/api/v1/watchlist/items").json()["items"], [])
+            self.assertEqual(reopened.get(f"/api/v1/history/{task_id}").status_code, 404)
 
     @staticmethod
     def _ibkr_flex_xml_bytes() -> bytes:

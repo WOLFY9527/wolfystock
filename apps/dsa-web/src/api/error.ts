@@ -845,6 +845,15 @@ export function parseApiError(error: unknown, fallbackMessage?: string): ParsedA
     );
   }
 
+  if (code === 'llm_model_unavailable') {
+    return buildError(
+      'AI 分析暂不可用',
+      'AI 分析暂时不可用，请稍后重试。',
+      'upstream_unavailable',
+      { isValidationError: false },
+    );
+  }
+
   if (status === 422 || Array.isArray(responseData) || includesAny(matchText, ['validation', 'invalid parameter', 'unprocessable'])) {
     const validationText = extractValidationDetail(responseData) || payloadText;
     return buildError(

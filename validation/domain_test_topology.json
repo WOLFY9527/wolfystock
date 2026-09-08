@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8390,
-      "sha256": "c24b3500b4892c3325ef36b2cfcc755e44c4e24edb265a226061a14f2fa06888"
+      "count": 8392,
+      "sha256": "84df4b6f011055278d8ae2958e75ea335c6591b1fae14cff6d98538aacf08054"
     },
     "tests": [
       {
@@ -25747,6 +25747,16 @@
         "id": "tests/test_multi_user_phase3.py::MultiUserAuthorizationApiTestCase::test_user_owned_domains_block_cross_user_access",
         "domain": "residual_repository_integration",
         "baseline": true
+      },
+      {
+        "id": "tests/test_multi_user_phase3.py::MultiUserAuthorizationApiTestCase::test_watchlist_manual_research_unavailable_model_is_domain_error",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_multi_user_phase3.py::MultiUserAuthorizationApiTestCase::test_watchlist_research_create_read_reopen_preserves_owner_and_lineage",
+        "domain": "api_schema_contracts",
+        "baseline": false
       },
       {
         "id": "tests/test_multi_user_phase3.py::TaskQueueIsolationTestCase::test_duplicate_detection_is_owner_scoped",

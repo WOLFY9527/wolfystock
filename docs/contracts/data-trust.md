@@ -124,6 +124,17 @@ or grant an admin capability. A data-readiness failure remains a data condition
 with a consumer-safe explanation; it must not be presented as an authorization
 failure. Detailed Scanner operational status remains an admin-only boundary.
 
+### Research And Watchlist
+
+Analysis model preflight rejects an unavailable configured model, including a
+no-live environment with no configured model, with HTTP 422 and the existing
+consumer-safe `llm_model_unavailable` error. The same preflight applies to
+synchronous analysis, asynchronous Watchlist Research, and public preview.
+It creates no task or report and grants no provider or fallback authority.
+HTTP 409 on the analysis submission route remains the duplicate-task contract;
+HTTP 202 means only that a task was accepted. Missing quote, history, score,
+or evidence stays missing in supported observation-only reports and readback.
+
 ### Options
 
 Options Lab is a read-only research console, not execution, strategy ranking,
