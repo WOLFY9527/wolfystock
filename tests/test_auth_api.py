@@ -1413,6 +1413,13 @@ class AuthApiTestCase(unittest.TestCase):
         self.assertIn(b'"passwordSet":true', response.body)
         self.assertIn("dsa_session=", response.headers["set-cookie"])
         self.assertIn("ADMIN_AUTH_ENABLED=true", self.env_path.read_text(encoding="utf-8"))
+        payload = self._json_response_body(response)
+        expected_capabilities = sorted(ADMIN_RBAC_ROLE_CAPABILITIES[SUPER_ADMIN_ROLE])
+        self.assertEqual(self.db.list_admin_user_roles(BOOTSTRAP_ADMIN_USER_ID), [SUPER_ADMIN_ROLE])
+        self.assertEqual(self.db.list_admin_capabilities_for_user(BOOTSTRAP_ADMIN_USER_ID), expected_capabilities)
+        self.assertEqual(payload["currentUser"]["adminCapabilities"], expected_capabilities)
+        self.assertTrue(payload["currentUser"]["canReadUsers"])
+        self.assertTrue(payload["currentUser"]["canReadSystemConfig"])
 
     def test_auth_settings_enable_requires_password_when_missing(self) -> None:
         self.env_path.write_text(

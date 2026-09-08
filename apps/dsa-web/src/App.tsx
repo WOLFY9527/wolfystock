@@ -422,7 +422,7 @@ const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ child
 const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const { language } = useI18n();
-  const { adminCapabilities, isAdminAccount, isGuest } = useProductSurface();
+  const { adminCapabilities, currentUser, isAdminAccount, isGuest } = useProductSurface();
   const routePathname = stripLocalePrefix(location.pathname);
   const routeLocale = parseLocaleFromPathname(location.pathname);
   const currentRoute = `${location.pathname}${location.search}${location.hash}`;
@@ -443,6 +443,37 @@ const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }
         : '当前账号已是管理员，但该前端页面只在 current-user 能力摘要授予对应读写能力时开放。',
     }
     : baseGateCopy;
+  const adminActivationIncomplete = Boolean(
+    isAdminAccount
+    && currentUser?.isAuthenticated
+    && adminCapabilities
+    && !Object.values(adminCapabilities).some(Boolean),
+  );
+  const recoveryGateCopy = adminActivationIncomplete
+    ? {
+      ...gateCopy,
+      eyebrow: language === 'en' ? 'Admin Activation' : '管理员激活',
+      statusLabel: language === 'en' ? 'Admin Session Needs Refresh' : '管理员会话需要刷新',
+      title: language === 'en' ? 'Admin access is still activating' : '管理员权限仍在激活中',
+      description: language === 'en'
+        ? 'Your signed-in admin session does not yet include the persisted administrator capabilities. Sign in again to refresh the canonical role assignment.'
+        : '当前管理员会话还没有载入已持久化的管理员能力。请重新登录，以刷新规范管理员角色分配。',
+      bullets: language === 'en'
+        ? [
+          'The session remains authenticated while this admin surface stays fail-closed.',
+          'Re-authentication refreshes the existing session and role assignment contract.',
+          'If the capability summary is still empty after signing in again, keep this route blocked and contact an operator.',
+        ]
+        : [
+          '当前会话仍已认证，但本管理页面会继续 fail-closed。',
+          '重新登录会刷新现有会话与管理员角色分配契约。',
+          '如果重新登录后能力摘要仍为空，请保持页面阻断并联系运维人员。',
+        ],
+      note: language === 'en'
+        ? 'No admin capability is granted by this page; use the re-authentication action to recover through the existing login flow.'
+        : '本页面不会授予任何管理员能力；请通过重新登录操作，沿用现有登录流程完成恢复。',
+    }
+    : gateCopy;
 
   if (canAccessAdminPath(routePathname, adminCapabilities)) {
     return <>{children}</>;
@@ -450,17 +481,21 @@ const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }
 
   return (
     <AccessGatePage
-      eyebrow={gateCopy.eyebrow}
-      title={gateCopy.title}
-      description={gateCopy.description}
-      bullets={gateCopy.bullets}
-      statusLabel={gateCopy.statusLabel}
-      note={gateCopy.note}
+      eyebrow={recoveryGateCopy.eyebrow}
+      title={recoveryGateCopy.title}
+      description={recoveryGateCopy.description}
+      bullets={recoveryGateCopy.bullets}
+      statusLabel={recoveryGateCopy.statusLabel}
+      note={recoveryGateCopy.note}
       primaryAction={{
-        label: isGuest ? (language === 'en' ? 'Sign in' : '登录') : (language === 'en' ? 'Open personal settings' : '打开个人设置'),
-        to: isGuest ? loginPath : '/settings',
+        label: isGuest
+          ? (language === 'en' ? 'Sign in' : '登录')
+          : adminActivationIncomplete
+            ? (language === 'en' ? 'Re-authenticate admin' : '重新登录管理员账户')
+            : (language === 'en' ? 'Open personal settings' : '打开个人设置'),
+        to: isGuest || adminActivationIncomplete ? loginPath : '/settings',
       }}
-      secondaryAction={gateCopy.secondaryAction}
+      secondaryAction={recoveryGateCopy.secondaryAction}
     />
   );
 };

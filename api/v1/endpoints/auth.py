@@ -1617,6 +1617,12 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
                 if rate_limit_error is not None:
                     return rate_limit_error
 
+    # First-time setup reaches this endpoint through the transitional bootstrap
+    # identity. Persist the same canonical super-admin assignment used by the
+    # normal login path before issuing an authenticated session.
+    if target_enabled and str(current_user.user_id) == BOOTSTRAP_ADMIN_USER_ID:
+        AuthRepository().ensure_bootstrap_admin_role_assignment()
+
     if target_enabled != current_enabled:
         if not _apply_auth_enabled(target_enabled, request=request):
             return JSONResponse(
@@ -1639,11 +1645,12 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
             )
 
     if target_enabled:
+        activated_user = AuthRepository().get_app_user(current_user.user_id) or current_user
         session_val = _persist_session_for_user(
             request=request,
-            user_id=current_user.user_id,
-            username=current_user.username,
-            role=current_user.role,
+            user_id=str(activated_user.id),
+            username=str(activated_user.username),
+            role=str(activated_user.role),
         )
         if not session_val:
             rollback_ok = _apply_auth_enabled(current_enabled, request=request)
@@ -1658,17 +1665,18 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
         # and won't be visible in request.cookies until the NEXT request.
         content = _get_auth_status_dict(request)
         content["loggedIn"] = True
-        capabilities, flags = _current_user_capability_summary(current_user)
+        capabilities = sorted(expand_admin_capabilities(activated_user))
+        flags = _capability_flags(capabilities)
         content["currentUser"] = CurrentUserResponse(
-            id=current_user.user_id,
-            username=current_user.username,
-            displayName=current_user.display_name,
-            role=current_user.role,
-            isAdmin=current_user.is_admin,
+            id=str(activated_user.id),
+            username=str(activated_user.username),
+            displayName=getattr(activated_user, "display_name", None),
+            role=str(activated_user.role),
+            isAdmin=str(activated_user.role) == ROLE_ADMIN,
             isAuthenticated=True,
             transitional=False,
             authEnabled=True,
-            legacyAdmin=current_user.legacy_admin,
+            legacyAdmin=False,
             adminCapabilities=capabilities,
             **flags,
         ).model_dump(by_alias=True)
