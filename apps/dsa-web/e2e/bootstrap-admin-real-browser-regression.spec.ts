@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { closeSync, existsSync, mkdtempSync, openSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdtempSync, openSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -39,8 +39,8 @@ type BrowserDiagnostics = {
 };
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const webRoot = path.join(repoRoot, 'apps/dsa-web');
 const staticRoot = path.join(repoRoot, 'static');
+const webArtifactScript = path.join(repoRoot, 'scripts', 'web_build_artifact.py');
 const python = process.env.PYTHON || path.join(
   repoRoot,
   '.venv',
@@ -55,6 +55,20 @@ let baseUrl = '';
 let bootstrapPassword = '';
 let canonicalSuperAdminCapabilities: string[] = [];
 let taskBuiltStatic = false;
+
+function makeDirectoryTreeWritable(directory: string): void {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      makeDirectoryTreeWritable(path.join(directory, entry.name));
+    }
+  }
+  chmodSync(directory, 0o700);
+}
+
+function removeTaskBuiltStatic(): void {
+  makeDirectoryTreeWritable(staticRoot);
+  rmSync(staticRoot, { recursive: true, force: true });
+}
 
 async function reservePort(): Promise<number> {
   const server = net.createServer();
@@ -163,8 +177,15 @@ test.describe('bootstrap-admin real-browser regression', () => {
     if (existsSync(staticRoot)) {
       throw new Error('Bootstrap-admin browser regression requires an absent canonical static directory');
     }
-    execFileSync('npm', ['exec', '--', 'vite', 'build', '--outDir', '../../static', '--emptyOutDir'], {
-      cwd: webRoot,
+    execFileSync(python, [
+      webArtifactScript,
+      'build',
+      '--repo-root',
+      repoRoot,
+      '--expected-sha',
+      execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim(),
+    ], {
+      cwd: repoRoot,
       stdio: ['ignore', 'ignore', 'inherit'],
     });
     taskBuiltStatic = true;
@@ -229,7 +250,7 @@ test.describe('bootstrap-admin real-browser regression', () => {
     }
     if (runtimeLogFd !== undefined) closeSync(runtimeLogFd);
     if (runtimeDir) rmSync(runtimeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
-    if (taskBuiltStatic) rmSync(staticRoot, { recursive: true, force: true });
+    if (taskBuiltStatic) removeTaskBuiltStatic();
   });
 
   test('persists canonical capabilities from first setup through admin navigation, reload, and logout', async ({ browser }) => {
@@ -287,7 +308,10 @@ test.describe('bootstrap-admin real-browser regression', () => {
 
       const adminNav = page.getByTestId('shell-admin-primary-nav');
       await expect(adminNav).toBeVisible();
-      await adminNav.getByRole('link', { name: 'System Logs' }).click();
+      const adminLogsLink = adminNav.getByRole('link', { name: 'System Logs' });
+      await expect(adminLogsLink).toHaveAttribute('href', '/en/admin/logs');
+      await adminLogsLink.focus();
+      await page.keyboard.press('Enter');
       await expect(page).toHaveURL(/\/en\/admin\/logs$/);
       await expect(page.getByTestId('admin-logs-workspace')).toBeVisible();
 
@@ -308,6 +332,8 @@ test.describe('bootstrap-admin real-browser regression', () => {
       await logoutDialog.getByRole('button', { name: 'Log out' }).click();
       expect((await logoutResponsePromise).status()).toBe(204);
       await expect(page).toHaveURL(/\/en\/guest$/, { timeout: 30_000 });
+      await expect(page.getByTestId('guest-home-clean-search')).toBeVisible();
+      await page.waitForLoadState('networkidle');
       await expect(page.getByRole('button', { name: 'System', exact: true })).toHaveCount(0);
       await expect(page.getByTestId('shell-admin-utility-menu')).toHaveCount(0);
       await expect(page.getByTestId('shell-admin-primary-nav')).toHaveCount(0);
@@ -320,6 +346,20 @@ test.describe('bootstrap-admin real-browser regression', () => {
         setupState: 'enabled',
         currentUser: null,
       });
+
+      await page.goto(`${baseUrl}/en/login?redirect=%2Fen%2Fadmin%2Flogs`);
+      await expect(page.locator('#username')).toBeVisible();
+      await expect(page.locator('#passwordConfirm')).toHaveCount(0);
+      await page.locator('#username').fill('admin');
+      await page.locator('#password').fill(bootstrapPassword);
+      const reloginResponsePromise = page.waitForResponse((response) => (
+        response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST'
+      ));
+      await page.locator('button[type="submit"]').click();
+      expect((await reloginResponsePromise).status()).toBe(200);
+      await expect(page).toHaveURL(/\/en\/admin\/logs$/, { timeout: 30_000 });
+      await expect(page.getByTestId('admin-logs-workspace')).toBeVisible();
+      expectCanonicalCapabilities(await readAuthContracts(page));
 
       for (const endpoint of [
         'POST /api/v1/auth/login 200',
