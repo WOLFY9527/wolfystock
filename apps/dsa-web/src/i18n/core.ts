@@ -1,4 +1,6 @@
 import type { LocaleCatalog } from './catalogs/types';
+import { enCatalog } from './catalogs/en';
+import { zhCatalog } from './catalogs/zh';
 
 export type UiLanguage = 'zh' | 'en';
 
@@ -18,6 +20,12 @@ const testCatalogs: Record<UiLanguage, LocaleCatalog> | null = import.meta.env.M
     en: (await import('./catalogs/en')).enCatalog,
   }
   : null;
+
+// Keep a synchronous canonical fallback for the first render of routes that
+// build copy before the async provider commit (notably the login surface).
+// This prevents raw translation keys from ever reaching the DOM while the
+// requested catalog is loading.
+const synchronousCatalogs: Record<UiLanguage, LocaleCatalog> = { en: enCatalog, zh: zhCatalog };
 
 let activeLanguage: UiLanguage | null = null;
 let activeCatalog: LocaleCatalog | null = null;
@@ -93,7 +101,7 @@ export function translate(language: UiLanguage, key: string, vars?: TranslateVar
     ? getByPath(activeCatalog as Record<string, unknown>, key)
     : testCatalogs
       ? getByPath(testCatalogs[language] as Record<string, unknown>, key)
-      : undefined;
+      : getByPath(synchronousCatalogs[language] as Record<string, unknown>, key);
   return interpolate(localized ?? key, vars);
 }
 

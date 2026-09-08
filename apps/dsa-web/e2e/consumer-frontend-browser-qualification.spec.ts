@@ -1347,3 +1347,71 @@ test.describe('consumer frontend keyboard journey qualification', () => {
     });
   });
 });
+
+// Bounded M9 regression: reuse the isolated consumer transport and route owners.
+test.describe('M9 locale and navigation regression', () => {
+  for (const key of ['home', 'radar', 'watchlist', 'backtest', 'portfolio']) {
+    test(`English ${key} has no product-copy leakage`, async ({ page }) => {
+      const route = routes.find((entry) => entry.key === key)!;
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await installQualificationOverrides(page);
+      await waitForRoute(page, { ...route, path: route.path.replace('/zh', '/en') });
+      const copy = await page.locator('body').innerText();
+      expect(copy.split('\n').filter((line) => /\p{Script=Han}/u.test(line) && line !== '中文')).toEqual([]);
+      expect(copy).not.toMatch(/\b(?:nav|home|common|backtest|portfolio|watchlist|researchRadar|guidance)\.[a-zA-Z][\w.]*/);
+    });
+  }
+  test('group triggers show opaque keyboard focus', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await installQualificationOverrides(page);
+    await waitForRoute(page, { ...routes[0], path: '/en/' });
+    await expect(page.getByTestId('shell-skip-link')).toHaveText('Skip to main content');
+    for (const group of ['market', 'research', 'validate']) {
+      const trigger = page.getByTestId(`shell-nav-group-trigger-${group}`);
+      for (let step = 0; step < 40 && !(await trigger.evaluate((el) => el === document.activeElement)); step++) {
+        await page.keyboard.press('Tab');
+      }
+      await expect(trigger).toBeFocused();
+      const focus = await trigger.evaluate((el) => {
+        const css = getComputedStyle(el);
+        return { visible: el.matches(':focus-visible'), style: css.outlineStyle, width: css.outlineWidth, color: css.outlineColor };
+      });
+      expect(focus.visible).toBe(true);
+      expect(focus.style).toBe('solid');
+      expect(parseFloat(focus.width)).toBeGreaterThanOrEqual(2);
+      expect(focus.color).toMatch(/^rgba?\(/);
+    }
+  });
+
+  test('English login initializes with localized copy and a hidden-until-focus skip link', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.route('**/api/v1/auth/status**', async (route) => {
+      await fulfillJson(route, {
+        authEnabled: true, loggedIn: false, passwordSet: true, passwordChangeable: true,
+        setupState: 'enabled', currentUser: null,
+      });
+    });
+    await page.route('**/api/v1/auth/me**', async (route) => {
+      await fulfillJson(route, null, 401);
+    });
+    await page.goto('/en/login');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.getByRole('heading', { name: /sign in|research/i })).toBeVisible({ timeout: 15_000 });
+    const copy = await page.locator('body').innerText();
+    expect(copy).not.toMatch(/\b(?:auth|nav|common)\.[a-zA-Z][\w.]*/);
+    expect(copy.split('\n').filter((line) => /\p{Script=Han}/u.test(line))).toEqual([]);
+    expect(copy).toContain('Sign in');
+  });
+
+  test('English stock research keeps skip link hidden until focus', async ({ page }) => {
+    await page.setViewportSize({ width: 430, height: 932 });
+    await installQualificationOverrides(page);
+    await waitForRoute(page, { ...routes[3], path: '/en/stocks/AAPL/structure-decision' });
+    const skip = page.getByTestId('shell-skip-link');
+    await expect.poll(async () => page.evaluate(() => getComputedStyle(document.querySelector('[data-testid="shell-skip-link"]')!).transform))
+      .toMatch(/matrix\([^)]*, -\d/);
+    await skip.focus();
+    await expect(skip).toBeFocused();
+    await expect(skip).toBeVisible();
+  });
+});

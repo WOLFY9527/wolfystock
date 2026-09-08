@@ -8372,6 +8372,7 @@ html[data-theme-style='paper'] .shell-skip-link {
   font-weight: 700;
   box-shadow: var(--shadow-tight);
   transform: translateY(-160%);
+  pointer-events: none;
   transition: transform 140ms ease;
 }
 
@@ -8380,12 +8381,13 @@ html[data-theme-style='paper'] .shell-skip-link:focus-visible {
   outline: 2px solid var(--wolfy-border-focus);
   outline-offset: 2px;
   transform: translateY(0);
+  pointer-events: auto;
 }
 
 html[data-theme-style='paper'] :where(.shell-drawer-link, .shell-drawer-action, .shell-nav-item, .shell-header-link):focus-visible {
-  outline: 2px solid var(--wolfy-border-focus);
+  outline: 2px solid var(--wolfy-border-focus) !important;
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--wolfy-accent-focus) 22%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--wolfy-accent-focus) 22%, transparent) !important;
 }
 
 /* Scanner first-use / readiness paper remap for residual dark-theme utility classes */
@@ -8987,13 +8989,6 @@ html[data-theme-style='paper'] .stock-workspace-product-flow {
   min-width: 0;
   gap: 1rem;
   padding-bottom: 1rem;
-}
-
-html[data-theme-style='paper']:has(.stock-structure-decision-page) .shell-skip-link {
-  position: fixed;
-  top: auto;
-  bottom: 0.75rem;
-  transform: none !important;
 }
 
 html[data-theme-style='paper'] .stock-workspace-grid {

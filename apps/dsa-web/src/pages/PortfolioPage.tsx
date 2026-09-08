@@ -98,6 +98,17 @@ const PORTFOLIO_FIELD_LABEL_CLASS = '!mb-1 text-[11px] font-medium tracking-norm
 const PORTFOLIO_FIELD_WRAPPER_CLASS = 'flex flex-col gap-1.5';
 const PORTFOLIO_FORM_GRID_CLASS = 'mt-4 grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2';
 const PORTFOLIO_INPUT_CLASS = 'h-10 rounded-lg border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5 text-sm text-[color:var(--wolfy-text-primary)] placeholder:text-[color:var(--wolfy-text-muted)] outline-none focus:border-[color:var(--wolfy-accent)]';
+
+function localizePortfolioStatusLabel(label: string, language: 'zh' | 'en'): string {
+  if (language === 'zh') return label;
+  const labels: Record<string, string> = {
+    '价格可用': 'Price available', '价格延迟': 'Price delayed', '价格缺失': 'Price missing', '价格待补': 'Price pending',
+    '汇率已确认': 'FX confirmed', '汇率待确认': 'FX needs confirmation', '汇率缺失': 'FX missing',
+    '估值完整': 'Valuation complete', '估值部分可用': 'Valuation partial', '估值不可用': 'Valuation unavailable',
+    '风险视图待生成': 'Risk view pending', '仅观察': 'Observation only', '风险视图可用': 'Risk view available',
+  };
+  return Object.entries(labels).reduce((value, [source, target]) => value.replaceAll(source, target), label);
+}
 const PORTFOLIO_SELECT_CLASS = 'min-w-0';
 const PORTFOLIO_PRIMARY_BUTTON_CLASS = 'border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] text-[color:var(--theme-button-primary-text)] font-medium px-5 py-2.5 rounded-md transition-colors hover:bg-[var(--sage-deep)] disabled:opacity-50 disabled:cursor-not-allowed';
 const PORTFOLIO_SUBMIT_BUTTON_CLASS = 'mt-5 w-full border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] text-[color:var(--theme-button-primary-text)] font-medium px-5 py-2.5 rounded-md transition-colors hover:bg-[var(--sage-deep)] disabled:opacity-50 disabled:cursor-not-allowed';
@@ -692,11 +703,12 @@ function lineagePreviewDetail(
 function lineageTrustItem(
   key: string,
   item: PortfolioLineageStatusSummary | null | undefined,
+  language: PortfolioLanguage = 'zh',
 ): PortfolioTrustChipItem | null {
   if (!item) return null;
   return {
     key: `portfolio-lineage-${key}`,
-    label: item.label,
+    label: localizePortfolioStatusLabel(item.label, language),
     variant: item.variant,
   };
 }
@@ -3106,9 +3118,9 @@ const PortfolioPage: React.FC = () => {
     ),
   );
   const valuationTrustItems = uniqueTrustItems([
-    lineageTrustItem('price', hasDataLineage ? portfolioLineageSummary.price : null),
-    lineageTrustItem('fx', hasDataLineage ? portfolioLineageSummary.fx : null),
-    lineageTrustItem('snapshot', hasDataLineage ? portfolioLineageSummary.snapshot : null),
+    lineageTrustItem('price', hasDataLineage ? portfolioLineageSummary.price : null, language),
+    lineageTrustItem('fx', hasDataLineage ? portfolioLineageSummary.fx : null, language),
+    lineageTrustItem('snapshot', hasDataLineage ? portfolioLineageSummary.snapshot : null, language),
     valuationLineageTrustItem,
     hasPriceFallback
       ? { key: 'valuation-delayed', label: language === 'zh' ? '价格可能延迟' : 'Pricing may be delayed', variant: 'caution' }
@@ -3617,19 +3629,19 @@ const PortfolioPage: React.FC = () => {
     {
       key: 'price-readiness',
       label: hasDataLineage
-        ? portfolioLineageSummary.price.label
+        ? localizePortfolioStatusLabel(portfolioLineageSummary.price.label, language)
         : hasHoldings && (hasPriceFallback || hasUpdatingPrice)
-          ? '价格延迟'
+          ? (language === 'zh' ? '价格延迟' : 'Price delayed')
           : hasHoldings
-            ? '价格缺失'
-            : '价格待补',
+            ? (language === 'zh' ? '价格缺失' : 'Price missing')
+            : (language === 'zh' ? '价格待补' : 'Price pending'),
       value: hasDataLineage
-        ? portfolioLineageSummary.price.label
+        ? localizePortfolioStatusLabel(portfolioLineageSummary.price.label, language)
         : hasHoldings && (hasPriceFallback || hasUpdatingPrice)
-          ? '价格延迟'
+          ? (language === 'zh' ? '价格延迟' : 'Price delayed')
           : hasHoldings
-            ? '价格缺失'
-            : '价格待补',
+            ? (language === 'zh' ? '价格缺失' : 'Price missing')
+            : (language === 'zh' ? '价格待补' : 'Price pending'),
       detail: hasDataLineage
         ? lineagePreviewDetail(portfolioLineageSummary.price, language === 'zh' ? '价格状态待补。' : 'Price readiness pending.')
         : hasHoldings
@@ -3648,12 +3660,14 @@ const PortfolioPage: React.FC = () => {
     {
       key: 'valuation-readiness',
       label: hasDataLineage
-        ? portfolioLineageSummary.snapshot.label
+        ? localizePortfolioStatusLabel(portfolioLineageSummary.snapshot.label, language)
         : hasHoldings
-        ? (hasFxUnavailable ? '估值不可用' : '估值部分可用')
-        : '估值不可用',
+        ? (hasFxUnavailable
+          ? (language === 'zh' ? '估值不可用' : 'Valuation unavailable')
+          : (language === 'zh' ? '估值部分可用' : 'Valuation partial'))
+        : (language === 'zh' ? '估值不可用' : 'Valuation unavailable'),
       value: hasDataLineage
-        ? portfolioLineageSummary.snapshot.label
+        ? localizePortfolioStatusLabel(portfolioLineageSummary.snapshot.label, language)
         : hasHoldings && !hasFxUnavailable
         ? valuationSnapshotNote
         : (language === 'zh' ? '估值不可用' : 'Valuation unavailable'),
@@ -4102,7 +4116,9 @@ const PortfolioPage: React.FC = () => {
                 {shouldShowGlobalErrorAlert ? <ApiErrorAlert error={error!} onDismiss={() => setError(null)} /> : null}
                 {riskWarning ? (
                   <div className="rounded-xl border border-[hsl(var(--accent-warning-hsl)/0.35)] bg-[hsl(var(--accent-warning-hsl)/0.1)] px-4 py-3 text-[hsl(var(--accent-warning-hsl))] text-sm">
-                    {copy.riskDegraded}: {riskWarning}
+                    {copy.riskDegraded}: {language === 'en' && riskWarning === '请求未成功完成，请稍后重试。'
+                      ? 'The risk module could not be loaded; snapshot-only mode remains available.'
+                      : riskWarning}
                   </div>
                 ) : null}
                 {writeWarning ? (
@@ -4641,7 +4657,7 @@ const PortfolioPage: React.FC = () => {
                                 ? 'JSON 仅包含当前页面已展示或可安全派生的估值、价格与汇率证据。'
                                 : 'JSON includes only valuation, price, and FX evidence already visible or safely derived on this page.')
                               : (language === 'zh'
-                                ? '估值证据包暂不可导出：估值不可用或仍待补证。'
+                                ? (language === 'zh' ? '估值证据包暂不可导出：估值不可用或仍待补证。' : 'Valuation evidence is unavailable for export until the valuation is restored or evidence is complete.')
                                 : 'Valuation evidence pack cannot be exported yet: valuation is unavailable or pending evidence.')}
                           </p>
                         </div>

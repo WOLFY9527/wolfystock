@@ -1597,13 +1597,15 @@ function buildWatchlistRowDecisionContext(
   };
 }
 
-function formatBacktestStatus(item: WatchlistItem, failure?: BatchFailure): string {
-  if (failure) return failure.label;
+function formatBacktestStatus(item: WatchlistItem, failure: BatchFailure | undefined, language: 'zh' | 'en'): string {
+  if (failure) return language === 'en'
+    ? ({ '数据不足': 'Insufficient data', '行情缺失': 'Market data missing', '服务暂不可用': 'Service unavailable', '回测失败': 'Backtest failed', '扫描失败': 'Scan failed', '超时': 'Timed out', '未知错误': 'Unknown error' } as Record<FailureReason, string>)[failure.label]
+    : failure.label;
   const simulationStatus = normalizeText(item.intelligence?.strategySimulation?.status).toLowerCase();
-  if (hasBacktestEvidence(item)) return '已回测';
-  if (simulationStatus === 'insufficient_history') return '样本不足';
-  if (['data_failed', 'no_data', 'missing_data'].includes(simulationStatus)) return '数据缺失';
-  return '未回测';
+  if (hasBacktestEvidence(item)) return language === 'en' ? 'Backtested' : '已回测';
+  if (simulationStatus === 'insufficient_history') return language === 'en' ? 'Insufficient sample' : '样本不足';
+  if (['data_failed', 'no_data', 'missing_data'].includes(simulationStatus)) return language === 'en' ? 'Data missing' : '数据缺失';
+  return language === 'en' ? 'Not backtested' : '未回测';
 }
 
 function sanitizeFailureReason(error: unknown, fallback: FailureReason): BatchFailure {
@@ -2751,7 +2753,7 @@ const WatchlistPage: React.FC = () => {
   const activeScannerLineageCue = activeItem ? buildScannerLineageCue(activeItem, language) : null;
   const activeScannerLineageView = activeItem ? buildScannerLineageView(activeScanner?.scannerLineageV1, language) : null;
   const activeScannerStatusLabel = activeItem ? formatScannerStatus(activeItem) : '--';
-  const activeBacktestStatusLabel = activeItem ? formatBacktestStatus(activeItem) : '--';
+  const activeBacktestStatusLabel = activeItem ? formatBacktestStatus(activeItem, undefined, language) : '--';
   const activeScannerReason = activeItem ? formatScannerReason(activeScanner?.reason, language) : null;
   const activeInvestorSignal = activeItem ? buildWatchlistInvestorSignalView(activeScanner?.investorSignal, language) : null;
   const activeCatalystExposures = activeItem ? buildWatchlistCatalystExposureView(activeItem.intelligence?.catalystExposures, language) : null;
@@ -3096,7 +3098,7 @@ const WatchlistPage: React.FC = () => {
                       ? sanitizeFailureReason(item.scoreError || scanner?.reason || '', '扫描失败')
                       : null;
                     const scannerStatusLabel = formatScannerStatus(item);
-                    const backtestStatusLabel = formatBacktestStatus(item, batchFailure);
+                    const backtestStatusLabel = formatBacktestStatus(item, batchFailure, language);
                     const isActive = activeItem?.id === item.id;
                     const rowRiskNote = buildWatchRiskNote(item, language);
                     const scannerLineageCue = buildScannerLineageCue(item, language);
