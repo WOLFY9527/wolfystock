@@ -8,6 +8,7 @@ import importlib
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -135,6 +136,48 @@ def _common_git_dir(path: Path) -> Path:
     if not candidate.is_absolute():
         candidate = path / candidate
     return _resolve(candidate, strict=True)
+
+
+def _worktree_gitdir_pointer(path: Path) -> Path:
+    pointer = path / ".git"
+    if pointer.is_symlink() or not pointer.is_file():
+        raise LifecycleError("worktree_orphan_identity_mismatch", "orphan worktree Git pointer is unavailable")
+    try:
+        value = pointer.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise LifecycleError("worktree_orphan_identity_mismatch", "orphan worktree Git pointer is unreadable") from exc
+    prefix = "gitdir: "
+    if not value.startswith(prefix):
+        raise LifecycleError("worktree_orphan_identity_mismatch", "orphan worktree Git pointer is invalid")
+    target = Path(value[len(prefix):].strip())
+    if not target.is_absolute():
+        target = path / target
+    return _resolve(target, strict=False)
+
+
+def _remove_verified_orphan(path: Path) -> None:
+    """Remove only a lifecycle-verified orphan, without following symlinks."""
+
+    def remove_entry(entry: os.DirEntry[str]) -> None:
+        entry_path = Path(entry.path)
+        mode = entry.stat(follow_symlinks=False).st_mode
+        if stat.S_ISDIR(mode):
+            os.chmod(entry_path, mode | stat.S_IWUSR | stat.S_IXUSR, follow_symlinks=False)
+            with os.scandir(entry_path) as children:
+                for child in children:
+                    remove_entry(child)
+            os.rmdir(entry_path)
+        else:
+            os.unlink(entry_path)
+
+    root_mode = path.stat(follow_symlinks=False).st_mode
+    if not stat.S_ISDIR(root_mode):
+        raise LifecycleError("worktree_orphan_identity_mismatch", "orphan worktree path is not a directory")
+    os.chmod(path, root_mode | stat.S_IWUSR | stat.S_IXUSR, follow_symlinks=False)
+    with os.scandir(path) as entries:
+        for entry in entries:
+            remove_entry(entry)
+    os.rmdir(path)
 
 
 def _record_blocks(output: str) -> list[dict[str, str | bool]]:
@@ -389,13 +432,17 @@ class VerifiedWorktreeLifecycle:
         identity: dict[str, Any] | None = None,
         mutations: list[str] | None = None,
     ) -> LifecycleResult:
+        recovery_state = {
+            "worktree_orphan_identity_mismatch": "orphan_recovery_refused",
+            "worktree_orphan_recovery_failed": "orphan_recovery_failed",
+        }.get(error.code)
         states = {
             "setup": "refused" if operation == "setup" else "not_requested",
             "reuse": "not_requested",
             "validation": request.validation_result,
             "land": request.land_result,
-            "cleanup": "refused" if operation == "cleanup" else "not_requested",
-            "preserved": self._preserved(request),
+            "cleanup": recovery_state if operation == "cleanup" and recovery_state else ("refused" if operation == "cleanup" else "not_requested"),
+            "preserved": "candidate_and_orphan" if recovery_state else self._preserved(request),
         }
         result = self._result(
             request,
@@ -491,6 +538,30 @@ class VerifiedWorktreeLifecycle:
             raise LifecycleError("environment_fingerprint_mismatch", "environment fingerprint does not match")
         return target
 
+    def _recover_verified_orphan(
+        self,
+        *,
+        repository: Path,
+        worktree: Path,
+        expected_gitdir: Path,
+    ) -> None:
+        common_git_dir = _common_git_dir(repository)
+        actual_gitdir = _worktree_gitdir_pointer(worktree)
+        if actual_gitdir != expected_gitdir or actual_gitdir.parent != common_git_dir / "worktrees":
+            raise LifecycleError(
+                "worktree_orphan_identity_mismatch",
+                "remaining worktree directory is not the verified orphan from this repository",
+            )
+        try:
+            _remove_verified_orphan(worktree)
+        except OSError as exc:
+            raise LifecycleError(
+                "worktree_orphan_recovery_failed",
+                "verified orphan directory could not be removed",
+            ) from exc
+        if worktree.exists():
+            raise LifecycleError("worktree_orphan_recovery_failed", "verified orphan directory remains after recovery")
+
     def status(self, request: LifecycleRequest) -> LifecycleResult:
         identity: dict[str, Any] | None = None
         try:
@@ -580,6 +651,9 @@ class VerifiedWorktreeLifecycle:
     def cleanup(self, request: LifecycleRequest) -> LifecycleResult:
         identity: dict[str, Any] | None = None
         mutations: list[str] = []
+        command_failure: str | None = None
+        command_exit_code: int | None = None
+        recovered_orphan = False
         try:
             repository, _, worktree = self._validate(request)
             if request.validation_result != "passed":
@@ -592,13 +666,48 @@ class VerifiedWorktreeLifecycle:
                 self._remote_candidate(request)
             target = self._inspect(request, repository, worktree, records, allow_prune=True, mutations=mutations)
             if target is not None:
-                _git(repository, ["worktree", "remove", str(worktree)], code="worktree_remove_failed")
-                mutations.append("worktree_remove")
-                if worktree.exists() or any(item.path == worktree for item in _worktrees(repository)):
-                    raise LifecycleError("worktree_remove_incomplete", "worktree removal did not complete")
+                expected_gitdir = _worktree_gitdir_pointer(worktree)
+                removal = _git_result(repository, ["worktree", "remove", str(worktree)])
+                if removal.returncode:
+                    command_failure = removal.stderr.strip() or "git worktree remove failed"
+                    command_exit_code = removal.returncode
+                    records = _worktrees(repository)
+                    identity = self._identity(request, repository, records)
+                    registration_remaining = any(item.path == worktree for item in records)
+                    if registration_remaining:
+                        raise LifecycleError(
+                            "worktree_remove_failed",
+                            command_failure,
+                            command_exit_code=command_exit_code,
+                        )
+                    mutations.append("worktree_remove_registration")
+                    if worktree.exists():
+                        try:
+                            self._recover_verified_orphan(
+                                repository=repository,
+                                worktree=worktree,
+                                expected_gitdir=expected_gitdir,
+                            )
+                        except LifecycleError as exc:
+                            raise LifecycleError(
+                                exc.code,
+                                f"{exc.detail}; original worktree remove failure: {command_failure}",
+                                command_exit_code=command_exit_code,
+                            ) from exc
+                        mutations.append("worktree_orphan_recovery_remove")
+                        recovered_orphan = True
+                else:
+                    mutations.append("worktree_remove")
+                    records = _worktrees(repository)
+                    if worktree.exists() or any(item.path == worktree for item in records):
+                        raise LifecycleError("worktree_remove_incomplete", "worktree removal did not complete")
             branch_ref = _branch_ref(request.branch)
             branch_head = _optional_ref(repository, branch_ref)
             cleanup_state = "already_absent" if target is None and branch_head is None else "completed"
+            if recovered_orphan:
+                cleanup_state = "completed_with_orphan_recovery"
+            elif target is not None and command_failure is not None:
+                cleanup_state = "completed_after_remove_command_failure"
             if target is None and branch_head is not None:
                 cleanup_state = (
                     "branch_removed_after_worktree_absent"
@@ -619,6 +728,8 @@ class VerifiedWorktreeLifecycle:
                 operation="cleanup",
                 reason={
                     "completed": "cleanup_completed",
+                    "completed_with_orphan_recovery": "cleanup_completed_with_orphan_recovery",
+                    "completed_after_remove_command_failure": "cleanup_completed_after_remove_command_failure",
                     "branch_removed_after_worktree_absent": "branch_removed_after_worktree_absent",
                     "worktree_absent_branch_preserved": "worktree_absent_branch_preserved",
                     "already_absent": "already_absent",
@@ -627,6 +738,8 @@ class VerifiedWorktreeLifecycle:
                 states={"setup": "not_requested", "reuse": "not_requested", "validation": request.validation_result, "land": request.land_result, "cleanup": cleanup_state, "preserved": "none"},
                 mutations=mutations,
                 identity=identity,
+                command_failure=command_failure,
+                command_exit_code=command_exit_code,
             )
         except LifecycleError as exc:
             return self._error(request, "cleanup", exc, identity, mutations)

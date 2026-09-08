@@ -738,7 +738,9 @@ def test_python_compatibility_entrypoint_delegates_to_wolfy(
     assert calls == [delegated]
 
 
-def test_python_compatibility_entrypoint_rejects_obsolete_commands(tmp_path: Path) -> None:
+def test_python_compatibility_entrypoint_rejects_obsolete_commands(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     module = _load_preflight()
 
     assert module.main(["fingerprint"]) == 2
@@ -1004,6 +1006,96 @@ def test_python_compatibility_entrypoint_rejects_obsolete_commands(tmp_path: Pat
         land_result="succeeded",
     )
     assert authority.cleanup(outside_cleanup).payload["reasonCode"] == "worktree_outside_authorized_root"
+
+    # A normal verified cleanup removes both the worktree and its candidate branch.
+    repository, worktree_root, accepted_base, candidate = scenario("normal-cleanup")
+    environment = _Environment()
+    authority = _authority(module, environment)
+    request = _request(module, repository, worktree_root, accepted_base, candidate)
+    assert authority.setup(request).exit_code == 0
+    cleaned = authority.cleanup(request)
+    assert cleaned.exit_code == 0
+    assert cleaned.payload["states"]["cleanup"] == "completed"
+    assert cleaned.payload["mutations"] == ["worktree_remove", "branch_delete"]
+    assert not request.worktree.exists()
+    assert subprocess.run(
+        ["git", "show-ref", "--verify", "--quiet", "refs/heads/topic"], cwd=repository
+    ).returncode == 1
+
+    # Reproduce Git's non-atomic failure: it drops the registration, then cannot
+    # delete a read-only generated artifact from the remaining worktree directory.
+    repository, worktree_root, accepted_base, candidate = scenario("partial-remove")
+    environment = _Environment()
+    authority = _authority(module, environment)
+    request = _request(module, repository, worktree_root, accepted_base, candidate)
+    assert authority.setup(request).exit_code == 0
+    artifacts = request.worktree / "generated"
+    artifacts.mkdir()
+    (artifacts / "evidence.txt").write_text("artifact\n", encoding="utf-8")
+    artifacts.chmod(0o555)
+    common_git_dir = Path(_git(request.worktree, "rev-parse", "--git-common-dir"))
+    if not common_git_dir.is_absolute():
+        common_git_dir = (request.worktree / common_git_dir).resolve()
+    with (common_git_dir / "info" / "exclude").open("a", encoding="utf-8") as exclude:
+        exclude.write("generated/\n")
+    original_git_result = module._git_result
+    partial_state: dict[str, bool] = {}
+
+    def partial_remove(root: Path, arguments):
+        result = original_git_result(root, arguments)
+        if root == repository and arguments == ["worktree", "remove", str(request.worktree)]:
+            partial_state["registration_removed"] = str(request.worktree) not in _git(
+                repository, "worktree", "list", "--porcelain"
+            )
+            partial_state["orphan_directory_remaining"] = request.worktree.exists()
+        return result
+
+    monkeypatch.setattr(module, "_git_result", partial_remove)
+    recovered = authority.cleanup(request)
+    assert partial_state == {"registration_removed": True, "orphan_directory_remaining": True}
+    assert recovered.exit_code == 0
+    assert recovered.payload["states"]["cleanup"] == "completed_with_orphan_recovery"
+    assert recovered.payload["mutations"] == [
+        "worktree_remove_registration",
+        "worktree_orphan_recovery_remove",
+        "branch_delete",
+    ]
+    assert recovered.payload["commandExitCode"] > 0
+    assert "Permission denied" in recovered.payload["commandFailure"]
+    assert not request.worktree.exists()
+    assert subprocess.run(
+        ["git", "show-ref", "--verify", "--quiet", "refs/heads/topic"], cwd=repository
+    ).returncode == 1
+    monkeypatch.undo()
+
+    # A foreign orphan synthesized after registration removal is never reclaimed.
+    repository, worktree_root, accepted_base, candidate = scenario("foreign-orphan")
+    environment = _Environment()
+    authority = _authority(module, environment)
+    request = _request(module, repository, worktree_root, accepted_base, candidate)
+    assert authority.setup(request).exit_code == 0
+    original_git_result = module._git_result
+
+    def foreign_partial_remove(root: Path, arguments):
+        result = original_git_result(root, arguments)
+        if root == repository and arguments == ["worktree", "remove", str(request.worktree)]:
+            request.worktree.mkdir()
+            (request.worktree / ".git").write_text("gitdir: /foreign/repository/.git/worktrees/topic\n", encoding="utf-8")
+            (request.worktree / "unrelated.txt").write_text("preserve me\n", encoding="utf-8")
+            return subprocess.CompletedProcess(result.args, 1, result.stdout, "failed to delete orphan: Permission denied")
+        return result
+
+    monkeypatch.setattr(module, "_git_result", foreign_partial_remove)
+    refused = authority.cleanup(request)
+    assert refused.exit_code == 1
+    assert refused.payload["reasonCode"] == "worktree_orphan_identity_mismatch"
+    assert refused.payload["states"]["cleanup"] == "orphan_recovery_refused"
+    assert refused.payload["states"]["preserved"] == "candidate_and_orphan"
+    assert refused.payload["mutations"] == ["worktree_remove_registration"]
+    assert request.worktree.exists()
+    assert (request.worktree / "unrelated.txt").read_text(encoding="utf-8") == "preserve me\n"
+    assert _git(repository, "rev-parse", "refs/heads/topic") == candidate
+    monkeypatch.undo()
 
 
 def test_posix_entrypoint_is_a_thin_wolfy_delegate() -> None:
