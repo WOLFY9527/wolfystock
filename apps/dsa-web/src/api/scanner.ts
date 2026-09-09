@@ -280,6 +280,8 @@ export const scannerApi = {
       market: params.market || 'cn',
     };
     if (params.profile) requestData.profile = params.profile;
+    if (params.evaluationMode) requestData.evaluation_mode = params.evaluationMode;
+    if (params.evaluationCutoff) requestData.evaluation_cutoff = params.evaluationCutoff;
     if (params.shortlistSize != null) requestData.shortlist_size = params.shortlistSize;
     if (params.universeLimit != null) requestData.universe_limit = params.universeLimit;
     if (params.detailLimit != null) requestData.detail_limit = params.detailLimit;

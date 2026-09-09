@@ -16,6 +16,8 @@ export type ScannerHistoryDrawerItem = {
   statusVariant: ChipVariant;
   watchlistDateLabel: string | null;
   profileLabel: string;
+  evaluationLabel: string | null;
+  cutoffLabel: string | null;
   title: string;
   detail: string | null;
   shortlistSize: number;
@@ -97,6 +99,8 @@ export function ScannerHistoryDrawer({
                         <PillBadge variant={item.statusVariant}>{item.statusLabel}</PillBadge>
                         {item.watchlistDateLabel ? <PillBadge variant="history">{item.watchlistDateLabel}</PillBadge> : null}
                         <PillBadge variant="history">{item.profileLabel}</PillBadge>
+                        {item.evaluationLabel ? <PillBadge variant="history">{item.evaluationLabel}</PillBadge> : null}
+                        {item.cutoffLabel ? <PillBadge variant="history">{item.cutoffLabel}</PillBadge> : null}
                       </div>
                       <h4 className="mt-3 mb-2 w-full truncate font-bold text-[color:var(--wolfy-text-primary)]">
                         {item.title}

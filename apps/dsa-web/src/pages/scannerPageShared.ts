@@ -7,6 +7,13 @@ export type ScannerSelectOption = {
   label: string;
 };
 
+export const SCANNER_HISTORICAL_PROFILE = 'us_historical_research_v1';
+export const SCANNER_HISTORICAL_EVALUATION_MODE = 'historical_development' as const;
+
+export function isHistoricalScannerProfile(profile: string): boolean {
+  return profile === SCANNER_HISTORICAL_PROFILE;
+}
+
 export const SCANNER_PROFILE_DEFAULTS: Record<ScannerMarket, {
   profile: string;
   shortlistSize: string;
@@ -38,7 +45,10 @@ export function getScannerProfileOptions(
   t: (key: string) => string,
 ): ScannerSelectOption[] {
   if (market === 'us') {
-    return [{ value: 'us_preopen_v1', label: t('scanner.profileOptionUs') }];
+    return [
+      { value: 'us_preopen_v1', label: t('scanner.profileOptionUs') },
+      { value: SCANNER_HISTORICAL_PROFILE, label: t('scanner.profileOptionUsHistorical') },
+    ];
   }
   if (market === 'hk') {
     return [{ value: 'hk_preopen_v1', label: t('scanner.profileOptionHk') }];

@@ -4,6 +4,8 @@ import type { ResearchReadinessV1, ScannerContextFrame } from './researchReadine
 export interface ScannerRunRequest {
   market?: 'cn' | 'us' | 'hk';
   profile?: string;
+  evaluationMode?: 'current' | 'historical_development';
+  evaluationCutoff?: string;
   shortlistSize?: number;
   universeLimit?: number;
   detailLimit?: number;
@@ -478,6 +480,8 @@ export interface ScannerRunDetail {
   market: string;
   profile: string;
   profileLabel?: string | null;
+  evaluationMode?: 'current' | 'historical_development' | string;
+  evaluationCutoff?: string | null;
   status: string;
   runAt?: string | null;
   completedAt?: string | null;
@@ -516,6 +520,8 @@ export interface ScannerRunHistoryItem {
   market: string;
   profile: string;
   profileLabel?: string | null;
+  evaluationMode?: 'current' | 'historical_development' | string;
+  evaluationCutoff?: string | null;
   status: string;
   runAt?: string | null;
   completedAt?: string | null;

@@ -1369,6 +1369,66 @@ describe('UserScannerPage', () => {
     });
   });
 
+  it('launches and reopens historical US research with an explicit cutoff and historical copy', async () => {
+    const historicalRun = makeRunDetail({
+      id: 84,
+      market: 'us',
+      profile: 'us_historical_research_v1',
+      profileLabel: 'US Historical Research',
+      headline: 'Historical research replay through 2024-12-31',
+      watchlistDate: '2024-12-31',
+    });
+    const historicalHistory = makeHistoryResponse([
+      {
+        ...makeHistoryResponse().items[0],
+        id: 84,
+        market: 'us',
+        profile: 'us_historical_research_v1',
+        profileLabel: 'US Historical Research',
+        headline: 'Historical research replay through 2024-12-31',
+        watchlistDate: '2024-12-31',
+      },
+    ]);
+    runScan.mockResolvedValueOnce(historicalRun);
+    getRun.mockResolvedValue(historicalRun);
+    getRuns.mockResolvedValue(historicalHistory);
+
+    renderUserScannerPage({ initialEntry: '/en/scanner', viewportWidth: 390 });
+
+    fireEvent.click(within(await screen.findByTestId('scanner-market-toggle')).getByRole('button', { name: 'US' }));
+    fireEvent.click(screen.getByRole('button', { name: 'US Historical Research' }));
+
+    const cutoffInput = screen.getByTestId('scanner-historical-cutoff-input');
+    expect(cutoffInput).toHaveValue('');
+    expect(screen.getByTestId('scanner-historical-mode-notice')).toHaveTextContent(/development replay/i);
+    expect(screen.getByTestId('scanner-ranking-board-page')).not.toHaveTextContent(/today's watchlist|pre-open discovery layer/i);
+
+    fireEvent.change(cutoffInput, { target: { value: '2024-12-31' } });
+    fireEvent.click(screen.getByTestId('scanner-run-button'));
+
+    await waitFor(() => {
+      expect(runScan).toHaveBeenCalledWith(expect.objectContaining({
+        market: 'us',
+        profile: 'us_historical_research_v1',
+        evaluationMode: 'historical_development',
+        evaluationCutoff: '2024-12-31',
+      }));
+    });
+    await waitFor(() => {
+      expect(getRuns).toHaveBeenCalledWith(expect.objectContaining({
+        market: 'us',
+        profile: 'us_historical_research_v1',
+      }));
+    });
+
+    fireEvent.click(screen.getByTestId('scanner-history-trigger'));
+    const historyDrawer = await screen.findByTestId('user-scanner-bento-drawer');
+    expect(historyDrawer).toHaveTextContent('Historical research replay through 2024-12-31');
+    fireEvent.click(within(historyDrawer).getByRole('button', { name: /Historical research replay through 2024-12-31/i }));
+    await waitFor(() => expect(getRun).toHaveBeenCalledWith(84));
+    expect(screen.getByTestId('scanner-page-profile-label')).toHaveTextContent('US Historical Research');
+  });
+
   it('fetches scanner run history once on the initial zh narrow route load', async () => {
     renderUserScannerPage({ initialEntry: '/zh/scanner', viewportWidth: 390 });
 

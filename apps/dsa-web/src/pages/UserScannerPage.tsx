@@ -124,6 +124,8 @@ import {
   getScannerDetailOptions,
   getScannerProfileOptions,
   getScannerUniverseOptions,
+  isHistoricalScannerProfile,
+  SCANNER_HISTORICAL_EVALUATION_MODE,
   SCANNER_PROFILE_DEFAULTS,
 } from './scannerPageShared';
 import type { CandidateEvidenceFrame } from '../components/scanner/ScannerCandidateEvidenceStrip';
@@ -281,6 +283,7 @@ function sanitizeScannerProfileLabel(label: string | null | undefined, language:
   if (!raw) return '';
   if (raw === 'cn_preopen_v1') return language === 'en' ? 'A-share Pre-open Scanner' : 'A股盘前扫描';
   if (raw === 'us_preopen_v1') return 'US Pre-open Scanner';
+  if (raw === 'us_historical_research_v1') return language === 'en' ? 'US Historical Research' : '美股历史研究回放';
   if (raw === 'hk_preopen_v1') return 'HK Pre-open Scanner';
   if (language === 'en' && raw === 'A股盘前扫描') return 'A-share Pre-open Scanner';
   if (language === 'en' && raw === 'A股盘前扫描 v1') return 'A-share Pre-open Scanner';
@@ -1070,6 +1073,19 @@ function buildScannerRunFactItems(runDetail: ScannerRunDetail | null, language: 
       value: profileLabel || '--',
     },
   ];
+
+  if (runDetail.evaluationMode === SCANNER_HISTORICAL_EVALUATION_MODE) {
+    items.push({
+      label: language === 'en' ? 'Mode' : '模式',
+      value: language === 'en' ? 'Historical development replay' : '历史开发回放',
+    });
+    if (runDetail.evaluationCutoff) {
+      items.push({
+        label: language === 'en' ? 'Cutoff' : '截止日',
+        value: formatDateOnly(runDetail.evaluationCutoff, language),
+      });
+    }
+  }
 
   if (runDetail.runAt) {
     items.push({
@@ -2171,6 +2187,10 @@ function buildScannerRetryRequest(runDetail: ScannerRunDetail | null): ScannerRu
     universeLimit: runDetail.universeSize >= 50 ? runDetail.universeSize : defaultUniverseLimit,
     detailLimit: runDetail.preselectedSize >= 10 ? runDetail.preselectedSize : defaultDetailLimit,
   };
+  if (runDetail.evaluationMode === SCANNER_HISTORICAL_EVALUATION_MODE && runDetail.evaluationCutoff) {
+    request.evaluationMode = SCANNER_HISTORICAL_EVALUATION_MODE;
+    request.evaluationCutoff = runDetail.evaluationCutoff;
+  }
   const universeType = normalizeScannerRunUniverseType(runDetail.universeType);
   if (universeType === 'theme' && runDetail.themeId) {
     request.universeType = 'theme';
@@ -2579,6 +2599,7 @@ const UserScannerPage: React.FC = () => {
   const [shortlistSize, setShortlistSize] = useState('5');
   const [universeLimit, setUniverseLimit] = useState('300');
   const [detailLimit, setDetailLimit] = useState('60');
+  const historicalCutoffRef = useRef<HTMLInputElement>(null);
   const [scanScope, setScanScope] = useState<ScanScope>('default');
   const [themes, setThemes] = useState<ScannerTheme[]>([]);
   const [themeId, setThemeId] = useState('');
@@ -2664,6 +2685,7 @@ const UserScannerPage: React.FC = () => {
     })),
     [language, market, t],
   );
+  const isHistoricalProfile = isHistoricalScannerProfile(profile);
   const universeOptions = useMemo(() => getScannerUniverseOptions(market, language), [language, market]);
   const detailOptions = useMemo(() => getScannerDetailOptions(market, language), [language, market]);
   const marketThemes = useMemo(
@@ -2708,6 +2730,11 @@ const UserScannerPage: React.FC = () => {
     setUniverseLimit(defaults.universeLimit);
     setDetailLimit(defaults.detailLimit);
     setThemeId('');
+    setValidationErrors({});
+  }, []);
+
+  const handleProfileChange = useCallback((nextProfile: string) => {
+    setProfile(nextProfile);
     setValidationErrors({});
   }, []);
 
@@ -2882,6 +2909,7 @@ const UserScannerPage: React.FC = () => {
     const parsedShortlistSize = Number.parseInt(shortlistSize, 10);
     const parsedUniverseLimit = Number.parseInt(universeLimit, 10);
     const parsedDetailLimit = Number.parseInt(detailLimit, 10);
+    const selectedHistoricalCutoff = historicalCutoffRef.current?.value.trim() || '';
     if (!Number.isFinite(parsedShortlistSize) || parsedShortlistSize < 1) {
       nextErrors.run = language === 'en' ? 'Choose a valid shortlist size.' : '请选择有效的入选数量。';
     }
@@ -2890,6 +2918,9 @@ const UserScannerPage: React.FC = () => {
     }
     if (!Number.isFinite(parsedDetailLimit) || parsedDetailLimit < 10) {
       nextErrors.run = language === 'en' ? 'Detail evaluation count must be at least 10.' : '详细评估数量至少为 10。';
+    }
+    if (isHistoricalProfile && !selectedHistoricalCutoff) {
+      nextErrors.run = t('scanner.historicalCutoffRequired');
     }
     if (scanScope === 'theme' && (!selectedTheme || selectedTheme.symbols.length === 0)) {
       nextErrors.theme = language === 'en' ? 'Select a configured theme before running.' : '请先选择已配置成分股的主题。';
@@ -2917,11 +2948,15 @@ const UserScannerPage: React.FC = () => {
       shortlistSize: parsedShortlistSize,
       universeLimit: parsedUniverseLimit,
       detailLimit: parsedDetailLimit,
+      ...(isHistoricalProfile ? {
+        evaluationMode: SCANNER_HISTORICAL_EVALUATION_MODE,
+        evaluationCutoff: selectedHistoricalCutoff,
+      } : {}),
       ...(scanScope !== 'default' ? { universeType: scanScope } : {}),
       ...(scanScope === 'theme' ? { themeId } : {}),
       ...(scanScope === 'symbols' ? { symbols: parsedCustomSymbols } : {}),
     });
-  }, [customSymbolTokenCount, detailLimit, executeScannerRun, language, market, parsedCustomSymbols, profile, runDetail, scanScope, scannerFirstRunSetupLabel, selectedTheme, shortlistSize, themeId, universeLimit]);
+  }, [customSymbolTokenCount, detailLimit, executeScannerRun, isHistoricalProfile, language, market, parsedCustomSymbols, profile, runDetail, scanScope, scannerFirstRunSetupLabel, selectedTheme, shortlistSize, t, themeId, universeLimit]);
 
   const handleGenerateTheme = useCallback(async () => {
     const label = customThemeLabel.trim();
@@ -3069,6 +3104,10 @@ const UserScannerPage: React.FC = () => {
   const scannerDataReadiness = getRunDetailDataReadiness(runDetail)
     || scannerConsumerReadiness?.dataReadiness
     || null;
+  const isHistoricalExperience = isHistoricalProfile
+    || runDetail?.evaluationMode === SCANNER_HISTORICAL_EVALUATION_MODE
+    || isHistoricalScannerProfile(runDetail?.profile || '');
+  const activeHistoricalCutoff = runDetail?.evaluationCutoff || historicalCutoffRef.current?.value || null;
   const scannerDataReadinessView = useMemo(
     () => buildScannerDataReadinessView(scannerDataReadiness, language),
     [language, scannerDataReadiness],
@@ -3277,7 +3316,11 @@ const UserScannerPage: React.FC = () => {
   }, [historyItems, runDetail]);
 
   const historyCards = useMemo(() => historyItems.map((item) => {
-    const fallbackTitle = item.market === 'us'
+    const isHistoricalRun = item.evaluationMode === SCANNER_HISTORICAL_EVALUATION_MODE
+      || isHistoricalScannerProfile(item.profile);
+    const fallbackTitle = isHistoricalRun
+      ? t('scanner.historicalRunFallback')
+      : item.market === 'us'
       ? t('scanner.currentRunFallbackUs')
       : item.market === 'hk'
         ? t('scanner.currentRunFallbackHk')
@@ -3292,6 +3335,12 @@ const UserScannerPage: React.FC = () => {
       statusVariant: statusVariant(item.status),
       watchlistDateLabel: item.watchlistDate ? formatDateOnly(item.watchlistDate, language) : null,
       profileLabel: sanitizeScannerProfileLabel(item.profileLabel || item.profile, language),
+      evaluationLabel: isHistoricalRun
+        ? (language === 'en' ? 'Development replay' : '开发回放')
+        : null,
+      cutoffLabel: isHistoricalRun && item.evaluationCutoff
+        ? `${language === 'en' ? 'Cutoff' : '截止日'} ${formatDateOnly(item.evaluationCutoff, language)}`
+        : null,
       title: historyHeadline.title,
       detail: historyHeadline.detail,
       shortlistSize: item.shortlistSize,
@@ -3885,7 +3934,9 @@ const UserScannerPage: React.FC = () => {
     : isRetryScanState
       ? t('scanner.runAgain')
       : language === 'en' ? t('scanner.run') : '启动扫描';
-  const heroLatestLabel = `${language === 'en' ? 'Latest' : '最近'} ${generatedAt ? formatTimestamp(generatedAt, language) : '--'}`;
+  const heroLatestLabel = `${isHistoricalExperience
+    ? (language === 'en' ? 'Replay run' : '回放运行')
+    : (language === 'en' ? 'Latest' : '最近')} ${generatedAt ? formatTimestamp(generatedAt, language) : '--'}`;
   const showWorkflowNextSteps = !scannerHasPseudoEmptyRun && (!runDetail
     || scannerConclusion.state === 'waiting'
     || scannerConclusion.state === 'no-candidate'
@@ -3943,7 +3994,11 @@ const UserScannerPage: React.FC = () => {
       value: generatedAt ? `${scannerDataStateLabel} · ${formatTimestamp(generatedAt, language)}` : scannerDataStateLabel,
     },
   ];
-  const scannerConsumerStatusSentence = scannerConclusion.state === 'top-candidate'
+  const scannerConsumerStatusSentence = isHistoricalExperience
+    ? (language === 'en'
+      ? `Historical development replay uses evidence through ${activeHistoricalCutoff || 'the explicit cutoff you choose'}; it is not current-market discovery.`
+      : `历史开发回放仅使用 ${activeHistoricalCutoff || '你明确选择的截止日'} 及之前的证据，不代表当前市场发现。`)
+    : scannerConclusion.state === 'top-candidate'
     ? (language === 'en'
       ? `Current setup can inspect ${currentSelectedCount} scanner candidate${currentSelectedCount === 1 ? '' : 's'}; review data limits before downstream validation.`
       : `当前配置可查看 ${currentSelectedCount} 个扫描候选；进入下游验证前先核对数据限制。`)
@@ -3970,9 +4025,15 @@ const UserScannerPage: React.FC = () => {
         || (language === 'en' ? 'Check after scan' : '运行后确认'),
     },
     {
-      label: language === 'en' ? 'Quote freshness' : '报价新鲜度',
-      value: scannerDataReadinessView?.coverageChips.find((item) => item.label === (language === 'en' ? 'Quote' : '报价'))?.value
-        || scannerDataStateLabel,
+      label: isHistoricalExperience
+        ? (language === 'en' ? 'Evidence timing' : '证据时间')
+        : (language === 'en' ? 'Quote freshness' : '报价新鲜度'),
+      value: isHistoricalExperience
+        ? (activeHistoricalCutoff
+          ? (language === 'en' ? `Historical through ${activeHistoricalCutoff}` : `历史证据截至 ${activeHistoricalCutoff}`)
+          : (language === 'en' ? 'Cutoff required' : '必须选择截止日'))
+        : (scannerDataReadinessView?.coverageChips.find((item) => item.label === (language === 'en' ? 'Quote' : '报价'))?.value
+          || scannerDataStateLabel),
     },
     {
       label: language === 'en' ? 'Candidate output' : '候选输出',
@@ -3985,7 +4046,7 @@ const UserScannerPage: React.FC = () => {
   ];
   const scannerRailProfileLabel = runDetail
     ? sanitizeScannerProfileLabel(runDetail.profileLabel || runDetail.profile, language)
-    : sanitizeScannerProfileLabel(SCANNER_PROFILE_DEFAULTS[market]?.profile || profile, language);
+    : sanitizeScannerProfileLabel(profile, language);
   const scannerRailItems = [
     {
       label: language === 'en' ? 'Scope' : '范围',
@@ -4000,7 +4061,9 @@ const UserScannerPage: React.FC = () => {
       value: scannerThemeLabel,
     },
     {
-      label: language === 'en' ? 'Latest' : '最近更新',
+      label: isHistoricalExperience
+        ? (language === 'en' ? 'Replay run' : '回放运行')
+        : (language === 'en' ? 'Latest' : '最近更新'),
       value: generatedAt ? formatTimestamp(generatedAt, language) : '--',
     },
   ];
@@ -4502,7 +4565,7 @@ const UserScannerPage: React.FC = () => {
                   >
                     <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(112px,0.55fr)_minmax(150px,0.72fr)_minmax(106px,0.45fr)_minmax(156px,0.72fr)_minmax(118px,0.5fr)_minmax(118px,0.5fr)] xl:items-end [&_[data-testid='scanner-market-toggle']_button]:min-h-[44px] [&_[data-testid='scanner-market-toggle']_button]:px-3 [&_[data-testid='scanner-market-toggle']_button]:py-2 [&_[data-testid='scanner-scope-selector']_button]:min-h-[44px] [&_[data-testid='scanner-scope-selector']_button]:px-3 [&_[data-testid='scanner-scope-selector']_button]:py-2 md:[&_[data-testid='scanner-market-toggle']_button]:min-h-8 md:[&_[data-testid='scanner-market-toggle']_button]:py-1 md:[&_[data-testid='scanner-scope-selector']_button]:min-h-8 md:[&_[data-testid='scanner-scope-selector']_button]:py-1">
                       <PillTagGroup compact label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} variant="market" testId="scanner-market-toggle" />
-                      <PillTagGroup compact label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
+                      <PillTagGroup compact label={t('scanner.profileLabel')} value={profile} onChange={handleProfileChange} options={profileOptions} />
                       <PillTagGroup compact label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
                       <div data-testid="scanner-launch-controls" className="contents">
                         <PillTagGroup
@@ -4521,6 +4584,38 @@ const UserScannerPage: React.FC = () => {
                         <PillTagGroup compact label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
                       </div>
                     </div>
+                    {isHistoricalProfile ? (
+                      <div
+                        data-testid="scanner-historical-mode-control"
+                        className="mt-3 grid min-w-0 gap-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_8%,var(--wolfy-surface-panel))] p-3 sm:grid-cols-[minmax(180px,0.42fr)_minmax(0,1fr)] sm:items-end"
+                      >
+                        <div className="min-w-0">
+                          <label htmlFor="scanner-historical-cutoff" className="block text-[11px] font-semibold text-[color:var(--wolfy-text-primary)]">
+                            {t('scanner.historicalCutoffLabel')}
+                          </label>
+                          <input
+                            id="scanner-historical-cutoff"
+                            type="date"
+                            data-testid="scanner-historical-cutoff-input"
+                            className="mt-1 h-11 w-full min-w-0 appearance-none rounded-md border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 text-sm font-mono text-[color:var(--wolfy-text-primary)] outline-none focus:border-[color:var(--wolfy-accent)] md:h-9 md:text-xs"
+                            ref={historicalCutoffRef}
+                            defaultValue=""
+                            onChange={() => {
+                              setValidationErrors({});
+                            }}
+                            aria-required="true"
+                            aria-invalid={Boolean(validationErrors.run)}
+                            aria-describedby="scanner-historical-cutoff-hint"
+                          />
+                          <p id="scanner-historical-cutoff-hint" className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+                            {t('scanner.historicalCutoffHint')}
+                          </p>
+                        </div>
+                        <p data-testid="scanner-historical-mode-notice" className="min-w-0 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                          {t('scanner.historicalModeNotice')}
+                        </p>
+                      </div>
+                    ) : null}
                     {scanScope !== 'default' ? (
                       <AdvancedDisclosure
                         testId="scanner-advanced-controls"

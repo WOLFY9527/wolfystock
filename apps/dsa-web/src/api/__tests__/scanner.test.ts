@@ -24,6 +24,39 @@ describe('scannerApi investor signal normalization', () => {
     vi.clearAllMocks();
   });
 
+  it('binds the historical development identity and explicit cutoff in run requests', async () => {
+    const { scannerApi } = await import('../scanner');
+    post.mockResolvedValueOnce({
+      data: {
+        id: 84,
+        market: 'us',
+        profile: 'us_historical_research_v1',
+        evaluation_mode: 'historical_development',
+        evaluation_cutoff: '2024-12-31',
+        status: 'completed',
+        shortlist: [],
+      },
+    });
+
+    await scannerApi.run({
+      market: 'us',
+      profile: 'us_historical_research_v1',
+      evaluationMode: 'historical_development',
+      evaluationCutoff: '2024-12-31',
+    });
+
+    expect(post).toHaveBeenCalledWith(
+      '/api/v1/scanner/run',
+      expect.objectContaining({
+        market: 'us',
+        profile: 'us_historical_research_v1',
+        evaluation_mode: 'historical_development',
+        evaluation_cutoff: '2024-12-31',
+      }),
+      { timeout: 120000 },
+    );
+  });
+
   it('normalizes scanner dataReadiness from run detail and status payloads', async () => {
     const { scannerApi } = await import('../scanner');
     get
