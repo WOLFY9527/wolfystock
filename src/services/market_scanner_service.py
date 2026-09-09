@@ -4054,7 +4054,7 @@ class MarketScannerService:
             if allow_development_replay is None
             else bool(allow_development_replay)
         )
-        if not combined_symbols and replay_allowed:
+        if replay_allowed:
             replay_symbols = [
                 symbol
                 for symbol in self._development_replay_universe_symbols(market="US")
