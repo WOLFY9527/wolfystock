@@ -1392,6 +1392,49 @@ describe('UserScannerPage', () => {
     runScan.mockResolvedValueOnce(historicalRun);
     getRun.mockResolvedValue(historicalRun);
     getRuns.mockResolvedValue(historicalHistory);
+    getReadiness.mockResolvedValue({
+      market: 'us',
+      profile: 'us_historical_research_v1',
+      watchlistDate: '2024-12-31',
+      todayTradingDay: false,
+      scheduleEnabled: false,
+      scheduleRunImmediately: false,
+      notificationEnabled: false,
+      qualitySummary: {
+        available: false,
+        reviewWindowDays: 5,
+        runCount: 0,
+        reviewedRunCount: 0,
+        reviewedCandidateCount: 0,
+        strongCount: 0,
+        mixedCount: 0,
+        weakCount: 0,
+      },
+      dataReadiness: {
+        state: 'blocked',
+        market: 'us',
+        profile: 'us_historical_research_v1',
+        universeSize: 0,
+        blockerBucket: 'universe_missing',
+        quoteCoverage: 'unknown',
+        historyCoverage: 'unknown',
+        freshness: 'unknown',
+        nextDataAction: 'Choose an explicit historical cutoff to run the development replay.',
+        scannerUniverseReadiness: {
+          contractVersion: 'scanner_universe_readiness_v1',
+          status: 'stale',
+          market: 'US',
+          universeSize: 0,
+          freshnessState: 'missing',
+          requiredDataClasses: ['universe', 'historical_ohlcv', 'quote_snapshot'],
+          availableDataClasses: [],
+          missingDataClasses: ['universe', 'historical_ohlcv', 'quote_snapshot'],
+          blockedProductSurfaces: ['Scanner', 'Market Overview', 'Backtest'],
+          consumerSafeMessage: 'Scanner scope is stale and must be refreshed before scanning.',
+          consumerSafe: true,
+        },
+      },
+    });
 
     renderUserScannerPage({ initialEntry: '/en/scanner', viewportWidth: 390 });
 
@@ -1403,8 +1446,16 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-historical-mode-notice')).toHaveTextContent(/development replay/i);
     expect(screen.getByTestId('scanner-ranking-board-page')).not.toHaveTextContent(/today's watchlist|pre-open discovery layer/i);
 
+    const historicalRunButton = await screen.findByTestId('scanner-run-button');
+    fireEvent.click(historicalRunButton);
+    expect(await screen.findByTestId('scanner-run-feedback')).toHaveTextContent(/explicit historical cutoff/i);
+    expect(runScan).not.toHaveBeenCalled();
+
     fireEvent.change(cutoffInput, { target: { value: '2024-12-31' } });
-    fireEvent.click(screen.getByTestId('scanner-run-button'));
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 40));
+    });
+    fireEvent.click(historicalRunButton);
 
     await waitFor(() => {
       expect(runScan).toHaveBeenCalledWith(expect.objectContaining({
@@ -4701,6 +4752,7 @@ describe('UserScannerPage', () => {
     expect(screen.queryByTestId(/^scanner-result-row-/)).not.toBeInTheDocument();
     const emptyState = screen.getByTestId('scanner-workbench-empty-state');
     expect(emptyState).toHaveTextContent(/刷新扫描标的池|标的池已过期/);
+    expect(screen.queryByTestId('scanner-run-button')).not.toBeInTheDocument();
     expect(conclusion).not.toHaveTextContent(/universe|historical_ohlcv|quote_snapshot|provider|raw|cacheKey|traceId|requestId|token|secret|buy|sell|hold|target|stop|position/i);
     expect(emptyState).not.toHaveTextContent(/provider|raw|cacheKey|traceId|requestId|token|secret|buy|sell|hold|target|stop|position/i);
   });

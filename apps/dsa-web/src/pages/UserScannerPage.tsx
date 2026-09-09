@@ -3928,7 +3928,7 @@ const UserScannerPage: React.FC = () => {
     [historyResolution, language, runDetail, scannerDataReadinessView, scannerFirstRunSetupLabel],
   );
   const isRetryScanState = scannerConclusion.state === 'no-candidate' || scannerConclusion.state === 'insufficient';
-  const isScannerRunBlocked = scannerWorkspaceState === 'blocked';
+  const isScannerRunBlocked = scannerWorkspaceState === 'blocked' && !isHistoricalProfile;
   const scannerRunButtonLabel = isRunning
     ? t('scanner.running')
     : isRetryScanState

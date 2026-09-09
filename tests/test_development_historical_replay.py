@@ -902,6 +902,11 @@ def test_scanner_default_us_universe_uses_verified_replay_only_without_local_cov
     second_resolution = second_scan["diagnostics"]["scanner_data"]["universe_resolution"]
     assert first_resolution["resolvedStarterSymbols"] == expected_symbols
     assert first_scan["scannerLineage"]["universeSymbols"] == expected_symbols
+    assert first_scan["headline"].startswith("Historical research replay through 2024-12-31:")
+    assert "today" not in first_scan["headline"].lower()
+    assert "pre-open" not in first_scan["headline"].lower()
+    assert "今日" not in first_scan["headline"]
+    assert "盘前" not in first_scan["headline"]
     assert first_resolution["local_symbol_count"] == 0
     assert first_resolution["development_replay_symbol_count"] == 5
     assert backtest["status"] == "completed"
@@ -910,6 +915,7 @@ def test_scanner_default_us_universe_uses_verified_replay_only_without_local_cov
     assert cached_symbols == ["QQQ", "SPY"]
     assert second_resolution["resolvedStarterSymbols"] == expected_symbols
     assert second_scan["scannerLineage"]["universeSymbols"] == expected_symbols
+    assert second_scan["headline"].startswith("Historical research replay through 2024-12-31:")
     assert second_resolution["source"] == "local_db_us_history+development_historical_replay_manifest"
     assert second_resolution["local_symbol_count"] == 2
     assert second_resolution["development_replay_symbol_count"] == 3

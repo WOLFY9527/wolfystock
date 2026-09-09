@@ -2919,7 +2919,12 @@ class MarketScannerService:
             )
 
         shortlisted_codes = [str(item["symbol"]) for item in shortlist_list]
-        headline = self._build_headline(shortlist_list, market=profile_config.market)
+        headline = self._build_headline(
+            shortlist_list,
+            market=profile_config.market,
+            evaluation_mode=profile_config.evaluation_mode,
+            evaluation_cutoff=(diagnostics or {}).get("evaluationCutoff"),
+        )
         finalized_diagnostics = adapt_scanner_topdown_context_diagnostics(
             diagnostics or {},
             market=profile_config.market,
@@ -9516,7 +9521,19 @@ class MarketScannerService:
         ]
 
     @staticmethod
-    def _build_headline(shortlist: Sequence[Dict[str, Any]], *, market: str = "cn") -> str:
+    def _build_headline(
+        shortlist: Sequence[Dict[str, Any]],
+        *,
+        market: str = "cn",
+        evaluation_mode: str = "current",
+        evaluation_cutoff: Optional[str] = None,
+    ) -> str:
+        if (evaluation_mode or "").strip().lower() == "historical_development":
+            cutoff = str(evaluation_cutoff or "").strip() or "the selected cutoff"
+            if not shortlist:
+                return f"Historical research replay through {cutoff} produced no candidates."
+            names = [f"{item['symbol']} {item['name']}" for item in shortlist[:5]]
+            return f"Historical research replay through {cutoff}: " + " / ".join(names)
         if not shortlist:
             return "本次扫描未生成可执行观察名单。"
         names = [f"{item['symbol']} {item['name']}" for item in shortlist[:5]]

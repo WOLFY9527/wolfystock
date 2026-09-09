@@ -43096,8 +43096,8 @@
       {
         "path": "apps/dsa-web/src/api/__tests__/market.test.ts",
         "owner": "market",
-        "bytes": 52009,
-        "lines": 1358
+        "bytes": 53400,
+        "lines": 1378
       },
       {
         "path": "apps/dsa-web/src/api/__tests__/portfolio.test.ts",
@@ -43120,8 +43120,8 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/BacktestPage.test.tsx",
         "owner": "backtest",
-        "bytes": 116088,
-        "lines": 2592
+        "bytes": 119432,
+        "lines": 2668
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/DeterministicBacktestResultPage.test.tsx",
@@ -43144,8 +43144,8 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/MarketOverviewPage.test.tsx",
         "owner": "market",
-        "bytes": 293761,
-        "lines": 6615
+        "bytes": 296447,
+        "lines": 6657
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/MarketProviderOperationsPage.test.tsx",
@@ -43198,8 +43198,8 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/UserScannerPage.test.tsx",
         "owner": "scanner",
-        "bytes": 215440,
-        "lines": 4767
+        "bytes": 220085,
+        "lines": 4879
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/WatchlistPage.test.tsx",
@@ -43224,13 +43224,13 @@
       "release-real-runtime-mobile"
     ],
     "inventory": {
-      "specCount": 71,
-      "specSha256": "90a5b535109925090a3905f57cdcfbad48886e7116f91f4f2c4f46e7169eae5f",
-      "projectCaseCount": 780,
-      "projectCaseSha256": "724bf3c2b61b182af25d33722a3199023f2ca2666b858dc752fc37612e00bedb",
+      "specCount": 72,
+      "specSha256": "f80ab8e57fa9c7978be088a50d0dc4855539f973ddf1523cd74644ea18b1bb55",
+      "projectCaseCount": 798,
+      "projectCaseSha256": "293f52c8b16d8dcffbaa3163340ca133b2e2854feb20dd86e23770ede0655d2e",
       "projectCaseCounts": {
-        "chromium": 384,
-        "chromium-mobile": 384,
+        "chromium": 393,
+        "chromium-mobile": 393,
         "release-real-runtime": 6,
         "release-real-runtime-mobile": 6
       }
@@ -43445,6 +43445,11 @@
         "path": "apps/dsa-web/e2e/runtime-contract.smoke.spec.ts",
         "owner": "protected_critical",
         "mandatory": true
+      },
+      {
+        "path": "apps/dsa-web/e2e/scanner-historical-research.spec.ts",
+        "owner": "route_owner",
+        "mandatory": false
       },
       {
         "path": "apps/dsa-web/e2e/scanner-launch-surface.spec.ts",
@@ -43941,6 +43946,62 @@
         "spec": "apps/dsa-web/e2e/consumer-copy-regression.smoke.spec.ts",
         "project": "chromium-mobile",
         "owner": "bounded_integration",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English backtest has no product-copy leakage",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English home has no product-copy leakage",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English login initializes with localized copy and a hidden-until-focus skip link",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "protected_critical",
+        "mandatory": true
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English portfolio has no product-copy leakage",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English radar has no product-copy leakage",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English stock research keeps skip link hidden until focus",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English watchlist has no product-copy leakage",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › group triggers show opaque keyboard focus",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "uat",
         "mandatory": false
       },
       {
@@ -45020,6 +45081,13 @@
         "project": "chromium-mobile",
         "owner": "protected_critical",
         "mandatory": true
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/scanner-historical-research.spec.ts::scanner-historical-research.spec.ts › launches, discovers, and reopens cutoff-bound historical Scanner research",
+        "spec": "apps/dsa-web/e2e/scanner-historical-research.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "route_owner",
+        "mandatory": false
       },
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/scanner-launch-surface.spec.ts::scanner-launch-surface.spec.ts › scanner launch surface › candidate and evidence lead the zh scanner first fold",
@@ -46632,6 +46700,62 @@
         "mandatory": false
       },
       {
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English backtest has no product-copy leakage",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English home has no product-copy leakage",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English login initializes with localized copy and a hidden-until-focus skip link",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium",
+        "owner": "protected_critical",
+        "mandatory": true
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English portfolio has no product-copy leakage",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English radar has no product-copy leakage",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English stock research keeps skip link hidden until focus",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English watchlist has no product-copy leakage",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › group triggers show opaque keyboard focus",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
         "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › consumer frontend browser qualification matrix › Backtest qualifies responsive and accessibility boundary at 1024x900",
         "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
         "project": "chromium",
@@ -47708,6 +47832,13 @@
         "project": "chromium",
         "owner": "protected_critical",
         "mandatory": true
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/scanner-historical-research.spec.ts::scanner-historical-research.spec.ts › launches, discovers, and reopens cutoff-bound historical Scanner research",
+        "spec": "apps/dsa-web/e2e/scanner-historical-research.spec.ts",
+        "project": "chromium",
+        "owner": "route_owner",
+        "mandatory": false
       },
       {
         "id": "chromium::apps/dsa-web/e2e/scanner-launch-surface.spec.ts::scanner-launch-surface.spec.ts › scanner launch surface › candidate and evidence lead the zh scanner first fold",
