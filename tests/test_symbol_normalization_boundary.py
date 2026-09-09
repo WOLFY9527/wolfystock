@@ -137,6 +137,13 @@ def test_provider_normalization_exports_delegate_to_pure_utils() -> None:
         "SZ000001",
         "000001.SZ",
     )
+    assert canonical_symbol_storage_values("000001.SH", market="cn") == (
+        "000001",
+        "SH000001",
+        "SS000001",
+        "000001.SH",
+        "000001.SS",
+    )
     assert canonical_symbol_storage_values(
         "000300",
         market="cn",

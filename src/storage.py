@@ -68,6 +68,11 @@ from src.sqlite_foreign_keys import (
     verify_sqlite_foreign_key_schema,
 )
 from src.utils.security import is_sensitive_key, sanitize_message, sanitize_metadata
+from src.utils.symbol_normalization import (
+    CanonicalSymbol,
+    canonical_symbol_storage_values,
+    parse_canonical_symbol,
+)
 from src.multi_user import (
     BOOTSTRAP_ADMIN_DISPLAY_NAME,
     BOOTSTRAP_ADMIN_USER_ID,
@@ -313,6 +318,30 @@ class StockDaily(Base):
             'volume_ratio': self.volume_ratio,
             'data_source': self.data_source,
         }
+
+
+class StockDailyIdentity(Base):
+    """Market identity proven for one spelling in the legacy daily-close store."""
+
+    __tablename__ = 'stock_daily_identities'
+
+    storage_symbol = Column(String(32), primary_key=True)
+    canonical_symbol = Column(String(32), nullable=False, index=True)
+    market = Column(String(8), nullable=False, index=True)
+    venue = Column(String(16), nullable=False)
+    asset_type = Column(String(16), nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    __table_args__ = (
+        Index(
+            'ix_stock_daily_identities_lookup',
+            'market',
+            'venue',
+            'canonical_symbol',
+            'asset_type',
+        ),
+    )
 
 
 class NewsIntel(Base):
@@ -12333,7 +12362,9 @@ class DatabaseManager:
         self, 
         df: pd.DataFrame, 
         code: str,
-        data_source: str = "Unknown"
+        data_source: str = "Unknown",
+        *,
+        symbol_identity: Optional[str] = None,
     ) -> int:
         """
         保存日线数据到数据库
@@ -12346,6 +12377,7 @@ class DatabaseManager:
             df: 包含日线数据的 DataFrame
             code: 股票代码
             data_source: 数据来源名称
+            symbol_identity: 能证明 ``code`` 市场身份的显式规范代码
             
         Returns:
             新增/更新的记录数
@@ -12354,11 +12386,29 @@ class DatabaseManager:
             logger.warning(f"保存数据为空，跳过 {code}")
             return 0
 
-        market = get_market_for_stock(code)
-        if market not in {"cn", "hk", "us"}:
+        storage_symbol = str(code or "").strip().upper()
+        requested_identity = parse_canonical_symbol(
+            symbol_identity if symbol_identity is not None else storage_symbol
+        )
+        if symbol_identity is not None and (
+            requested_identity is None
+            or requested_identity.ambiguous
+            or requested_identity.identity_key is None
+        ):
             raise PortfolioExactNumericError(
-                "stock_daily close ingress requires a supported market"
+                "stock_daily symbol identity must be explicit and unambiguous"
             )
+        if requested_identity is not None and requested_identity.identity_key is not None:
+            storage_values = canonical_symbol_storage_values(
+                requested_identity.symbol,
+                market=requested_identity.market,
+                venue=requested_identity.venue,
+                asset_type=requested_identity.asset_type,
+            )
+            if storage_symbol not in storage_values and storage_symbol != requested_identity.raw_symbol.upper():
+                raise PortfolioExactNumericError(
+                    "stock_daily storage symbol conflicts with its explicit identity"
+                )
         close_tokens = df.attrs.get(STOCK_DAILY_CLOSE_PROVENANCE_ATTR)
         if close_tokens is not None and not isinstance(close_tokens, dict):
             raise PortfolioExactNumericError(
@@ -12369,6 +12419,50 @@ class DatabaseManager:
         
         with self.get_session() as session:
             try:
+                stored_identity_row = session.get(StockDailyIdentity, storage_symbol)
+                stored_identity: CanonicalSymbol | None = None
+                if stored_identity_row is not None:
+                    stored_identity = parse_canonical_symbol(
+                        stored_identity_row.canonical_symbol,
+                        market=stored_identity_row.market,
+                        venue=stored_identity_row.venue,
+                        asset_type=stored_identity_row.asset_type,
+                    )
+                    if stored_identity is None or stored_identity.identity_key is None:
+                        raise PortfolioExactNumericError(
+                            "stock_daily persisted symbol identity is invalid"
+                        )
+                if (
+                    stored_identity is not None
+                    and requested_identity is not None
+                    and requested_identity.identity_key is not None
+                    and stored_identity.identity_key != requested_identity.identity_key
+                ):
+                    raise PortfolioExactNumericError(
+                        "stock_daily storage symbol already belongs to a different identity"
+                    )
+
+                proven_identity = stored_identity or (
+                    requested_identity
+                    if requested_identity is not None and requested_identity.identity_key is not None
+                    else None
+                )
+                market = proven_identity.market if proven_identity is not None else get_market_for_stock(storage_symbol)
+                if market not in {"cn", "hk", "us"}:
+                    raise PortfolioExactNumericError(
+                        "stock_daily close ingress requires a supported market"
+                    )
+                if stored_identity_row is None and proven_identity is not None:
+                    session.add(
+                        StockDailyIdentity(
+                            storage_symbol=storage_symbol,
+                            canonical_symbol=proven_identity.symbol,
+                            market=proven_identity.market,
+                            venue=proven_identity.venue,
+                            asset_type=proven_identity.asset_type,
+                        )
+                    )
+
                 for _, row in df.iterrows():
                     # 解析日期
                     row_date = row.get('date')
@@ -12398,7 +12492,7 @@ class DatabaseManager:
                     existing = session.execute(
                         select(StockDaily).where(
                             and_(
-                                StockDaily.code == code,
+                                StockDaily.code == storage_symbol,
                                 StockDaily.date == row_date
                             )
                         )
@@ -12422,7 +12516,7 @@ class DatabaseManager:
                     else:
                         # 创建新记录
                         record = StockDaily(
-                            code=code,
+                            code=storage_symbol,
                             date=row_date,
                             open=row.get('open'),
                             high=row.get('high'),

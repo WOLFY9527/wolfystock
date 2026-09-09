@@ -7228,7 +7228,7 @@ class PortfolioService:
             raise ValueError("symbol market is ambiguous")
         if normalized_hint is not None and identity.market != normalized_hint:
             raise ValueError("symbol market does not match the supplied market")
-        return identity.symbol, identity.market
+        return identity.transport_symbol, identity.market
 
     @staticmethod
     def _stored_event_symbol(symbol: str, *, market: str) -> str:
@@ -7242,7 +7242,7 @@ class PortfolioService:
             and not identity.ambiguous
             and identity.market == normalized_market
         ):
-            return identity.symbol
+            return identity.transport_symbol
         return raw.upper()
 
     def _event_position_key(self, *, symbol: str, market: str, currency: str) -> Tuple[str, str, str]:
@@ -7261,10 +7261,12 @@ class PortfolioService:
         storage_symbols = canonical_symbol_storage_values(
             identity.symbol,
             market=identity.market,
+            venue=identity.venue,
+            asset_type=identity.asset_type,
         )
         if not storage_symbols:
             raise ValueError("symbol is invalid")
-        return identity.symbol, storage_symbols
+        return identity.transport_symbol, storage_symbols
 
     def _resolve_snapshot_currency(
         self,

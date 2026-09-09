@@ -33,6 +33,7 @@ from src.storage import (
     PortfolioPositionLot,
     PortfolioTrade,
     StockDaily,
+    StockDailyIdentity,
 )
 from src.portfolio_exact_numeric import (
     parse_portfolio_decimal,
@@ -194,10 +195,12 @@ class PortfolioRepository:
         storage_symbols = canonical_symbol_storage_values(
             identity.symbol,
             market=identity.market,
+            venue=identity.venue,
+            asset_type=identity.asset_type,
         )
         if not storage_symbols:
             return None
-        return identity.symbol, storage_symbols
+        return identity.transport_symbol, storage_symbols
 
     @classmethod
     def _market_data_storage_lookups(cls, symbols: Iterable[str]) -> Dict[str, Tuple[str, ...]]:
@@ -209,6 +212,44 @@ class PortfolioRepository:
             canonical_symbol, storage_symbols = lookup
             lookups.setdefault(canonical_symbol, storage_symbols)
         return lookups
+
+    @staticmethod
+    def _stored_market_data_identity_keys(
+        *,
+        storage_symbols: Iterable[str],
+        identity_rows: Iterable[StockDailyIdentity],
+    ) -> Dict[str, Tuple[str, str, str, str]]:
+        persisted = {
+            str(row.storage_symbol).upper(): row
+            for row in identity_rows
+        }
+        identity_keys: Dict[str, Tuple[str, str, str, str]] = {}
+        for storage_symbol in storage_symbols:
+            normalized_symbol = str(storage_symbol).upper()
+            parsed = parse_canonical_symbol(normalized_symbol)
+            parsed_key = parsed.identity_key if parsed is not None else None
+            identity_row = persisted.get(normalized_symbol)
+            persisted_key: Tuple[str, str, str, str] | None = None
+            if identity_row is not None:
+                persisted_identity = parse_canonical_symbol(
+                    identity_row.canonical_symbol,
+                    market=identity_row.market,
+                    venue=identity_row.venue,
+                    asset_type=identity_row.asset_type,
+                )
+                persisted_key = (
+                    persisted_identity.identity_key
+                    if persisted_identity is not None
+                    else None
+                )
+                if persisted_key is None:
+                    continue
+            if parsed_key is not None and persisted_key is not None and parsed_key != persisted_key:
+                continue
+            resolved_key = persisted_key or parsed_key
+            if resolved_key is not None:
+                identity_keys[normalized_symbol] = resolved_key
+        return identity_keys
 
     @staticmethod
     def _mark_phase_f_account_sync_in_session(*, session: Any, account_id: Optional[int]) -> None:
@@ -1689,6 +1730,15 @@ class PortfolioRepository:
                     ),
                 )
             ).all()
+            identity_rows = session.execute(
+                select(StockDailyIdentity).where(
+                    StockDailyIdentity.storage_symbol.in_(storage_symbols)
+                )
+            ).scalars().all()
+        storage_identity_keys = self._stored_market_data_identity_keys(
+            storage_symbols=storage_symbols,
+            identity_rows=identity_rows,
+        )
         closes_by_storage_symbol: Dict[str, Tuple[Decimal, Optional[date]]] = {}
         for code, close, latest_date in rows:
             if code is None or close is None:
@@ -1712,9 +1762,19 @@ class PortfolioRepository:
 
         latest_closes: Dict[str, Tuple[Decimal, Optional[date]]] = {}
         for canonical_symbol, values in lookups.items():
+            requested_identity = parse_canonical_symbol(canonical_symbol)
+            requested_identity_key = (
+                requested_identity.identity_key
+                if requested_identity is not None
+                else None
+            )
+            if requested_identity_key is None:
+                continue
             selected_close: Tuple[Decimal, Optional[date]] | None = None
             selected_date = date.min
             for storage_symbol in values:
+                if storage_identity_keys.get(storage_symbol) != requested_identity_key:
+                    continue
                 latest_close = closes_by_storage_symbol.get(storage_symbol)
                 if latest_close is None:
                     continue
@@ -1743,14 +1803,40 @@ class PortfolioRepository:
         if not storage_symbols:
             return None
         with self.db.get_session() as session:
-            return session.execute(
-                select(func.max(StockDaily.updated_at)).where(
+            rows = session.execute(
+                select(StockDaily.code, StockDaily.updated_at).where(
                     and_(
                         StockDaily.code.in_(storage_symbols),
                         StockDaily.date <= as_of,
                     )
                 )
-            ).scalar_one()
+            ).all()
+            identity_rows = session.execute(
+                select(StockDailyIdentity).where(
+                    StockDailyIdentity.storage_symbol.in_(storage_symbols)
+                )
+            ).scalars().all()
+        storage_identity_keys = self._stored_market_data_identity_keys(
+            storage_symbols=storage_symbols,
+            identity_rows=identity_rows,
+        )
+        requested_identity_keys = {
+            canonical_symbol: identity.identity_key
+            for canonical_symbol in lookups
+            if (identity := parse_canonical_symbol(canonical_symbol)) is not None
+            and identity.identity_key is not None
+        }
+        matching_updates = [
+            updated_at
+            for code, updated_at in rows
+            if updated_at is not None
+            and any(
+                str(code).upper() in storage_values
+                and storage_identity_keys.get(str(code).upper()) == requested_identity_keys.get(canonical_symbol)
+                for canonical_symbol, storage_values in lookups.items()
+            )
+        ]
+        return max(matching_updates) if matching_updates else None
 
     def save_fx_rate(
         self,

@@ -39,6 +39,7 @@ from src.storage import (
     PortfolioPosition,
     PortfolioPositionLot,
     PortfolioTrade,
+    StockDailyIdentity,
 )
 
 
@@ -147,7 +148,14 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self._restore_previous_environment()
         self.temp_dir.cleanup()
 
-    def _save_close(self, symbol: str, on_date: date, close: float) -> None:
+    def _save_close(
+        self,
+        symbol: str,
+        on_date: date,
+        close: float,
+        *,
+        symbol_identity: str | None = None,
+    ) -> None:
         df = pd.DataFrame(
             [
                 {
@@ -162,7 +170,12 @@ class PortfolioServiceTestCase(unittest.TestCase):
                 }
             ]
         )
-        self.db.save_daily_data(df, code=symbol, data_source="unit-test")
+        self.db.save_daily_data(
+            df,
+            code=symbol,
+            data_source="unit-test",
+            symbol_identity=symbol_identity,
+        )
 
     def _ledger_counts(self) -> dict[str, int]:
         with self.db.get_session() as session:
@@ -2259,13 +2272,80 @@ class PortfolioServiceTestCase(unittest.TestCase):
         )
         self.assertTrue(self.service.delete_trade_event(voided["id"]))
         self._save_close("600519", date(2026, 1, 2), Decimal("200.0"))
-        self._save_close("000001", date(2026, 1, 2), Decimal("12.0"))
+        self._save_close(
+            "000001",
+            date(2026, 1, 2),
+            Decimal("12.0"),
+            symbol_identity="000001.SH",
+        )
 
         snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
 
-        self.assertEqual([item["symbol"] for item in snapshot["accounts"][0]["positions"]], ["000001"])
-        self.assertEqual([item["symbol"] for item in snapshot["analytics"]["exposure"]["by_symbol"]], ["000001"])
+        self.assertEqual([item["symbol"] for item in snapshot["accounts"][0]["positions"]], ["000001.SH"])
+        self.assertEqual([item["symbol"] for item in snapshot["analytics"]["exposure"]["by_symbol"]], ["000001.SH"])
         self.assertAlmostEqual(snapshot["analytics"]["pnl"]["unrealized"]["amount"], 10.0, places=6)
+        self.assertEqual(
+            self.service.repo.get_latest_closes_with_dates(
+                symbols=["000001.SH"],
+                as_of=date(2026, 1, 2),
+            ),
+            {"000001.SH": (Decimal("12"), date(2026, 1, 2))},
+        )
+        self.assertEqual(
+            self.service.repo.get_latest_closes_with_dates(
+                symbols=["000001"],
+                as_of=date(2026, 1, 2),
+            ),
+            {},
+        )
+        self.assertEqual(
+            self.service.repo.get_latest_closes_with_dates(
+                symbols=["000001.SZ"],
+                as_of=date(2026, 1, 2),
+            ),
+            {},
+        )
+        with self.db.get_session() as session:
+            stored_identity = session.get(StockDailyIdentity, "000001")
+        self.assertIsNotNone(stored_identity)
+        self.assertEqual(
+            (
+                stored_identity.canonical_symbol,
+                stored_identity.market,
+                stored_identity.venue,
+                stored_identity.asset_type,
+            ),
+            ("000001", "cn", "XSHG", "index"),
+        )
+        with self.assertRaisesRegex(
+            PortfolioPrecisionError,
+            "different identity",
+        ):
+            self._save_close(
+                "000001",
+                date(2026, 1, 2),
+                Decimal("99.0"),
+                symbol_identity="000001.SZ",
+            )
+        self.assertEqual(
+            self.service.repo.get_latest_close(
+                "000001.SH",
+                as_of=date(2026, 1, 2),
+            ),
+            Decimal("12"),
+        )
+        with self.db.get_session() as session:
+            identity_to_remove = session.get(StockDailyIdentity, "000001")
+            self.assertIsNotNone(identity_to_remove)
+            session.delete(identity_to_remove)
+            session.commit()
+        self.assertEqual(
+            self.service.repo.get_latest_closes_with_dates(
+                symbols=["000001.SH"],
+                as_of=date(2026, 1, 2),
+            ),
+            {},
+        )
 
     def test_snapshot_analytics_mark_fx_unavailable_but_keep_native_values(self) -> None:
         account = self.service.create_account(name="HK", broker="Demo", market="hk", base_currency="USD")
@@ -2504,7 +2584,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             create=True,
             return_value={
                 "600519": (Decimal("100"), date(2026, 1, 1)),
-                "000001": (Decimal("20"), date(2026, 1, 1)),
+                "000001.SH": (Decimal("20"), date(2026, 1, 1)),
             },
         ) as batch_lookup:
             snapshot = self.service.get_portfolio_snapshot(
@@ -2515,10 +2595,10 @@ class PortfolioServiceTestCase(unittest.TestCase):
 
         self.assertEqual(
             {item["symbol"] for item in snapshot["accounts"][0]["positions"]},
-            {"600519", "000001"},
+            {"600519", "000001.SH"},
         )
         batch_lookup.assert_called_once()
-        self.assertEqual(set(batch_lookup.call_args.kwargs["symbols"]), {"600519", "000001"})
+        self.assertEqual(set(batch_lookup.call_args.kwargs["symbols"]), {"600519", "000001.SH"})
         self.assertEqual(batch_lookup.call_args.kwargs["as_of"], date(2026, 1, 1))
 
     def test_snapshot_uses_actual_latest_close_date_for_price_as_of(self) -> None:
