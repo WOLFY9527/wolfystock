@@ -97,6 +97,8 @@ def _make_history(
 
 
 class FakeScannerDataManager:
+    SNAPSHOT_AS_OF = datetime.now(timezone.utc).isoformat()
+
     def __init__(self):
         self.daily_history_calls: list[str] = []
         self.stock_list = pd.DataFrame(
@@ -185,6 +187,7 @@ class FakeScannerDataManager:
                 },
             ]
         )
+        self.snapshot.attrs["as_of"] = self.SNAPSHOT_AS_OF
         self.histories = {
             "600001": _make_history(start_price=11.0, slope=0.085, amount_base=9.0e8, volume_base=48_000_000),
             "600002": _make_history(start_price=15.0, slope=0.065, amount_base=7.2e8, volume_base=34_000_000),
@@ -251,6 +254,7 @@ class StructuredScannerDataManager(FakeScannerDataManager):
             "source": "snapshot",
             "data": self.snapshot.copy(),
             "attempts": [{"fetcher": "FakeSnapshotSource", "status": "success", "rows": int(len(self.snapshot))}],
+            "as_of": self.SNAPSHOT_AS_OF,
             "error_code": None,
             "error_message": None,
         }
@@ -670,6 +674,8 @@ class FakeUsScannerDataManager(FakeScannerDataManager):
                 source=SimpleNamespace(value="polygon_us_grouped_daily"),
             ),
         }
+        for quote in self.us_quotes.values():
+            quote.as_of = datetime.now(timezone.utc)
 
     def get_realtime_quote(self, symbol: str):
         normalized = str(symbol or "").upper()
@@ -722,6 +728,8 @@ class FakeHkScannerDataManager(FakeScannerDataManager):
                 source=SimpleNamespace(value="snapshot"),
             ),
         }
+        for quote in self.hk_quotes.values():
+            quote.as_of = datetime.now(timezone.utc)
 
     def get_realtime_quote(self, symbol: str):
         normalized = normalize_stock_code(str(symbol or "")).upper()

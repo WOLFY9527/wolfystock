@@ -163,13 +163,13 @@ def _factor_state(
         return "insufficient", missing_fields
     if missing_fields:
         return "unavailable", missing_fields
-    missing_timestamps = [field for field in ("source.asOf", "source.observedAt") if not source.get(field.split(".", 1)[1])]
-    if missing_timestamps:
-        return "unavailable", missing_timestamps
     if source.get("stale") and not historical_eligible:
         return "stale", []
     if source.get("sourceType") not in _AUTHORIZED_SOURCE_TYPES:
         return "rejected", []
+    missing_timestamps = [field for field in ("source.asOf", "source.observedAt") if not source.get(field.split(".", 1)[1])]
+    if missing_timestamps:
+        return "unavailable", missing_timestamps
     return "valid", []
 
 

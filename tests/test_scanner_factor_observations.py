@@ -384,6 +384,14 @@ def test_factor_evidence_distinguishes_stale_proxy_rejected_and_official_valid_s
     assert proxy_gap["sourceAuthority"] == "proxy"
     assert proxy_gap["asOf"] == "2026-05-16T13:39:00Z"
 
+    proxy_candidate["_diagnostics"]["quote_context"].pop("as_of")
+    proxy_without_as_of = build_scanner_factor_evidence(proxy_candidate, market="us")
+    proxy_gap_without_as_of = next(
+        item for item in proxy_without_as_of["factors"] if item["component"] == "gap_context"
+    )
+    assert proxy_gap_without_as_of["state"] == "rejected"
+    assert proxy_gap_without_as_of["asOf"] is None
+
     official_candidate = _us_candidate()
     official_candidate["_diagnostics"]["history"]["rows"] = 70
     official_candidate["_diagnostics"]["quote_context"] = {

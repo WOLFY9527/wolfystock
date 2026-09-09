@@ -1380,6 +1380,15 @@ class MarketScannerService:
                     }
                 )
                 continue
+            snapshot_as_of = snapshot_resolution.get("as_of") or snapshot_resolution.get("asOf")
+            snapshot_observed_at = snapshot_resolution.get("observed_at") or snapshot_resolution.get("observedAt")
+            if snapshot_as_of or snapshot_observed_at:
+                candidate_diagnostics = dict(candidate.get("_diagnostics") or {})
+                if snapshot_as_of:
+                    candidate_diagnostics["snapshot_as_of"] = str(snapshot_as_of)
+                if snapshot_observed_at:
+                    candidate_diagnostics["snapshot_observed_at"] = str(snapshot_observed_at)
+                candidate["_diagnostics"] = candidate_diagnostics
             candidate_history_diagnostics[symbol].update(
                 {
                     "status": "evaluated",
@@ -7350,6 +7359,8 @@ class MarketScannerService:
                     "source": source,
                     "data": snapshot,
                     "attempts": [{"fetcher": source, "status": "success", "rows": int(len(snapshot))}],
+                    "as_of": snapshot.attrs.get("as_of") if isinstance(snapshot, pd.DataFrame) else None,
+                    "observed_at": snapshot.attrs.get("observed_at") if isinstance(snapshot, pd.DataFrame) else None,
                     "error_code": None,
                     "error_message": None,
                 }
@@ -7370,6 +7381,8 @@ class MarketScannerService:
                 "source": str(realtime_result.get("source") or "realtime_snapshot"),
                 "data": normalized,
                 "attempts": realtime_result.get("attempts") or [],
+                "as_of": realtime_result.get("as_of") or realtime_result.get("asOf"),
+                "observed_at": realtime_result.get("observed_at") or realtime_result.get("observedAt"),
                 "degraded_mode_used": False,
             }
 
