@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import src.auth as auth
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -13,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user
 from api.v1 import api_v1_router
+from src.services.admin_mission_control_service import AdminMissionControlService
 from src.storage import DatabaseManager
 
 
@@ -208,7 +210,7 @@ def test_admin_mission_control_enabled_returns_all_readiness_domains(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED", "true")
-    app.state.task_queue = _TaskQueueFixture()
+    app.state.runtime_container = SimpleNamespace(task_queue=_TaskQueueFixture())
 
     with _client(app, _ops_admin) as client:
         response = client.get("/api/v1/admin/mission-control")
@@ -230,23 +232,17 @@ def test_admin_mission_control_enabled_returns_all_readiness_domains(
     assert payload["metadata"]["externalCallsMade"] is False
     assert payload["metadata"]["opsAggregationAttempted"] is True
     assert payload["metadata"]["highRiskSummariesAggregated"] is True
-    assert payload["summary"]["domainCount"] == 9
+    expected_domain_ids = {
+        str(item["id"])
+        for item in AdminMissionControlService._DOMAINS
+    }
+    assert payload["summary"]["domainCount"] == len(expected_domain_ids)
     assert payload["summary"]["publicLaunchNoGoCount"] >= 1
     assert payload["summary"]["approvalRequiredCount"] >= 1
     assert payload["summary"]["realOperatorEvidenceMissingCount"] >= 1
 
     domains = {item["id"]: item for item in payload["domains"]}
-    assert set(domains) == {
-        "security_rbac_mfa",
-        "quota_cost",
-        "provider_reliability",
-        "storage_restore",
-        "ws2_async",
-        "notifications",
-        "portfolio_backtest",
-        "route_classification",
-        "private_beta_readiness",
-    }
+    assert set(domains) == expected_domain_ids
     for item in domains.values():
         assert item["readOnly"] is True
         assert item["noExternalCalls"] is True

@@ -493,7 +493,7 @@ class TestOrchestratorModes(unittest.TestCase):
         self.assertEqual(ctx.meta["skills_requested"], ["bull_trend"])
 
         for raw_symbol, canonical_symbol in {
-            "600519.SH": "600519",
+            "600519.SH": "600519.SH",
             "0700.HK": "HK00700",
             "HK00700": "HK00700",
             "aapl": "AAPL",

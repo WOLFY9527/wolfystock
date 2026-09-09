@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta
@@ -13,11 +14,12 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import src.auth as auth
 from api.deps import CurrentUser, get_current_user
 from api.v1.schemas.admin_activity import AdminActivityResponse
-from src.auth import is_auth_enabled
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.storage import AnalysisHistory, DatabaseManager
+from tests.conftest import preserve_runtime_test_state
 
 
 def _admin_user(*, admin_capabilities: tuple[str, ...] = ("users:activity:read",)) -> CurrentUser:
@@ -53,6 +55,11 @@ def _regular_user() -> CurrentUser:
 
 class AdminUserActivityApiTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        self.runtime_state = preserve_runtime_test_state()
+        self.runtime_state.__enter__()
+        self.addCleanup(self.runtime_state.__exit__, None, None, None)
+        os.environ["ADMIN_AUTH_ENABLED"] = "true"
+        auth._auth_enabled = None
         DatabaseManager.reset_instance()
         self.temp_dir = tempfile.TemporaryDirectory()
         self.db_path = Path(self.temp_dir.name) / "admin_user_activity.db"
@@ -196,7 +203,7 @@ class AdminUserActivityApiTestCase(unittest.TestCase):
 
     def test_admin_required_for_activity_routes(self) -> None:
         unauthenticated = self.client.get("/api/v1/admin/users/user-1/activity")
-        self.assertEqual(unauthenticated.status_code, 401 if is_auth_enabled() else 200)
+        self.assertEqual(unauthenticated.status_code, 401)
 
         self._as_user()
         forbidden = self.client.get("/api/v1/admin/activity")

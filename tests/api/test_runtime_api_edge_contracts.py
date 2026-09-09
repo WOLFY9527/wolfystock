@@ -229,6 +229,9 @@ def _assert_json_response(response, *, expected_status: int = 200) -> dict[str, 
 @pytest.fixture(autouse=True)
 def _runtime_edge_auth_disabled() -> Iterator[None]:
     with preserve_runtime_test_state():
+        from src.config import Config
+
+        Config.reset_instance()
         os.environ["ADMIN_AUTH_ENABLED"] = "false"
         auth._auth_enabled = None
         yield

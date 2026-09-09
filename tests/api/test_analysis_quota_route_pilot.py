@@ -13,6 +13,7 @@ from api.v1.endpoints import analysis
 from api.v1.schemas.analysis import AnalyzeRequest
 from src.services.quota_policy_service import QuotaPolicyService as RealQuotaPolicyService
 from src.storage import DatabaseManager, LLMCostLedger, QuotaReservation, QuotaUsageWindow
+from src.utils.symbol_normalization import parse_canonical_symbol
 
 
 PILOT_ENABLED_ENV = "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED"
@@ -162,7 +163,9 @@ def _enable_pilot(monkeypatch: pytest.MonkeyPatch, *, owners: str = "pilot-user"
 
 def _fresh_quota_db() -> DatabaseManager:
     DatabaseManager.reset_instance()
-    return DatabaseManager(db_url="sqlite:///:memory:")
+    db = DatabaseManager(db_url="sqlite:///:memory:")
+    db.create_or_update_app_user(user_id="pilot-user", username="pilot-user")
+    return db
 
 
 def _install_real_quota_service(monkeypatch: pytest.MonkeyPatch, db: DatabaseManager) -> None:
@@ -758,7 +761,9 @@ def test_idempotency_key_uses_only_sanitized_route_fields(monkeypatch: pytest.Mo
     assert "route_key:api.v1.analysis.analyze" in idempotency_key
     assert "mode:sync" in idempotency_key
     assert "owner:pilot-user" in idempotency_key
-    assert "stock:AAPL" in idempotency_key
+    identity = parse_canonical_symbol("AAPL")
+    assert identity is not None and identity.identity_key is not None
+    assert f"stock:{':'.join(identity.identity_key)}" in idempotency_key
     assert "report_type:brief" in idempotency_key
     assert "force_refresh:1" in idempotency_key
     assert "research_mode:deep" in idempotency_key

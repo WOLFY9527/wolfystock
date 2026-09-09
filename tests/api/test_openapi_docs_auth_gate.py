@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 import src.auth as auth
 from api.app import create_app
 from src.auth import create_session
+from src.config import Config
 from src.multi_user import ROLE_ADMIN, ROLE_USER
 from src.storage import DatabaseManager
 
@@ -49,6 +50,7 @@ def docs_auth_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setenv("DATABASE_PATH", str(db_path))
     monkeypatch.setenv("ENV_FILE", str(env_path))
+    monkeypatch.setattr(Config, "_instance", None)
     monkeypatch.setattr(auth, "_get_data_dir", lambda: tmp_path)
     monkeypatch.setattr(auth, "_is_auth_enabled_from_env", lambda: True)
     auth._auth_enabled = True
@@ -91,6 +93,7 @@ def docs_auth_disabled_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setenv("DATABASE_PATH", str(db_path))
     monkeypatch.setenv("ENV_FILE", str(env_path))
+    monkeypatch.setattr(Config, "_instance", None)
     monkeypatch.setattr(auth, "_get_data_dir", lambda: tmp_path)
     monkeypatch.setattr(auth, "_is_auth_enabled_from_env", lambda: False)
     auth._auth_enabled = False
@@ -187,6 +190,7 @@ def test_root_docs_share_production_ingress_fail_closed_invariant(
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("ADMIN_AUTH_ENABLED", "false")
     monkeypatch.setenv("CORS_ORIGINS", "https://app.example.invalid")
+    monkeypatch.setattr(Config, "_instance", None)
     _reset_auth_globals()
 
     with pytest.raises(RuntimeError, match="Production requires ADMIN_AUTH_ENABLED=true"):

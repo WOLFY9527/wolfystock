@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 import src.auth as auth
 from api.app import create_app
 from api.deps import resolve_current_user
+from src.config import Config
 from src.runtime.composition import RuntimeContainer
 from src.storage import DatabaseManager
 
@@ -70,6 +71,7 @@ def _configure_environment(
         monkeypatch.delenv("ADMIN_AUTH_ENABLED", raising=False)
     else:
         monkeypatch.setenv("ADMIN_AUTH_ENABLED", auth_value)
+    monkeypatch.setattr(Config, "_instance", None)
     auth._auth_enabled = None
 
 

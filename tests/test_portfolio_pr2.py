@@ -1210,7 +1210,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
         )
         self.service.record_trade(
             account_id=aid,
-            symbol="000001",
+            symbol="000001.SZ",
             trade_date=date(2026, 1, 1),
             side="buy",
             quantity=100,
@@ -1220,11 +1220,11 @@ class PortfolioPr2TestCase(unittest.TestCase):
         )
 
         self._save_close("600519", date(2026, 1, 1), Decimal("100.0"))
-        self._save_close("000001", date(2026, 1, 1), Decimal("20.0"))
+        self._save_close("000001.SZ", date(2026, 1, 1), Decimal("20.0"))
         self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 1), cost_method="fifo")
 
         self._save_close("600519", date(2026, 1, 2), Decimal("70.0"))
-        self._save_close("000001", date(2026, 1, 2), Decimal("20.0"))
+        self._save_close("000001.SZ", date(2026, 1, 2), Decimal("20.0"))
         report = self.risk_service.get_risk_report(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
 
         self.assertTrue(report["concentration"]["alert"])

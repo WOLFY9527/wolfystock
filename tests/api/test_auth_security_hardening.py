@@ -20,6 +20,7 @@ from src.admin_rbac import SECURITY_ADMIN_ROLE
 from src.auth import hash_password_for_storage
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.storage import AdminUserRole, AppUserSession, DatabaseManager, ExecutionLogSession
+from tests.conftest import preserve_runtime_test_state
 
 
 def _reset_auth_globals() -> None:
@@ -418,6 +419,11 @@ class AuthSecurityHardeningTestCase(unittest.TestCase):
 
 
 class CorsProductionGuardrailTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.runtime_state = preserve_runtime_test_state()
+        self.runtime_state.__enter__()
+        self.addCleanup(self.runtime_state.__exit__, None, None, None)
+
     def test_production_rejects_wildcard_cors(self) -> None:
         from api.app import create_app
         from src.runtime.composition import RuntimeContainer

@@ -9,13 +9,17 @@ from collections import defaultdict
 from pathlib import Path
 
 from api.app import create_app
+from src.config import Config
 from tests.api.route_table_helpers import iter_effective_api_routes
+from tests.conftest import preserve_runtime_test_state
 
 
 class ApiRouteUniquenessTestCase(unittest.TestCase):
     def test_registered_api_routes_have_unique_method_and_path(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            app = create_app(static_dir=Path(temp_dir))
+        with preserve_runtime_test_state():
+            Config.reset_instance()
+            with tempfile.TemporaryDirectory() as temp_dir:
+                app = create_app(static_dir=Path(temp_dir))
 
         routes_by_method_path: dict[tuple[str, str], list[str]] = defaultdict(list)
         for route in iter_effective_api_routes(app.routes):
