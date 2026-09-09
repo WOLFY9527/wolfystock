@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 from src.core.scanner_profile import get_scanner_profile
+from src.core.trading_calendar import is_market_open
 from src.services.backtest_service import BacktestService
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
 from src.services.development_historical_replay import (
@@ -947,6 +948,11 @@ def test_scanner_default_us_universe_uses_verified_replay_only_without_local_cov
 
 
 def test_rule_backtest_persists_verified_replay_for_instrument_and_benchmark_without_provider_fallback(tmp_path) -> None:
+    replay_rows = [
+        row
+        for row in _daily_rows(count=560)
+        if is_market_open("us", date.fromisoformat(str(row["sessionDate"])))
+    ]
     manifest_path, _, _ = _write_manifest_observations(
         tmp_path,
         [
@@ -956,7 +962,7 @@ def test_rule_backtest_persists_verified_replay_for_instrument_and_benchmark_wit
                 canonical_symbol="AAPL",
                 provider="stooq_archive",
                 source="stooq_historical",
-                rows=_daily_rows(count=540),
+                rows=replay_rows,
             ),
             _payload(
                 market="US",
@@ -964,7 +970,7 @@ def test_rule_backtest_persists_verified_replay_for_instrument_and_benchmark_wit
                 canonical_symbol="SPY",
                 provider="stooq_archive",
                 source="stooq_historical",
-                rows=_daily_rows(count=540),
+                rows=replay_rows,
             ),
         ],
     )
@@ -987,12 +993,48 @@ def test_rule_backtest_persists_verified_replay_for_instrument_and_benchmark_wit
     spy_stored = service.stock_repo.get_range("SPY", date(2023, 9, 1), date(2024, 12, 31))
     assert response["status"] == "completed"
     assert response["data_quality"]["source"] == "development_historical_replay"
+    assert response["data_quality"]["bar_count"] == 252
     assert response["data_quality"]["expected_bar_count"] == 252
     assert response["data_quality"]["missing_bar_count"] == 0
     assert response["professionalReadiness"]["provider_calls"] is False
     assert aapl_stored and spy_stored
     assert {row.data_source for row in aapl_stored} == {"development_historical_replay"}
     assert {row.data_source for row in spy_stored} == {"development_historical_replay"}
+
+    stored_response = service.get_run(response["id"])
+    assert stored_response is not None
+    for result in (response, stored_response):
+        readiness = result["data_quality"]["historicalOhlcvReadiness"]
+        assert result["data_quality"]["bar_count"] == 252
+        assert result["data_quality"]["expected_bar_count"] == 252
+        assert result["data_quality"]["source"] == "development_historical_replay"
+        assert result["data_quality"]["authority_status"] == "degraded_fill_only"
+        assert result["data_quality"]["authority_source_type"] == "cache_snapshot"
+        assert result["data_quality"]["authority_reason_codes"] == [
+            "development_replay_not_production_authoritative"
+        ]
+        assert readiness["usableRange"]["end"] == "2024-12-31"
+        assert readiness["missingDateCoverage"] == {"missingBarCount": 0, "state": "covered"}
+        assert readiness["freshness"] == "stale"
+        assert readiness["sourceReadiness"]["freshnessState"] == "stale"
+        assert result["data_status"] == "stale_or_cached"
+        assert result["execution_readiness"]["observation_only"] is True
+        assert result["professionalReadiness"]["professional_quant_ready"] is False
+        assert result["status"] == "completed"
+        assert result["trade_count"] == response["trade_count"]
+        assert result["benchmark_mode"] == "custom_code"
+        assert result["benchmark_code"] == "SPY"
+        assert result["benchmark_summary"]["resolved_mode"] == "custom_code"
+    for field in (
+        "total_return_pct",
+        "annualized_return_pct",
+        "sharpe_ratio",
+        "max_drawdown_pct",
+        "final_equity",
+        "benchmark_return_pct",
+        "excess_return_vs_benchmark_pct",
+    ):
+        assert stored_response[field] == response[field]
 
 
 def test_historical_mode_cannot_reuse_preopen_profile() -> None:

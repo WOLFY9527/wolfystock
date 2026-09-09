@@ -303,6 +303,15 @@ def test_backtest_projection_distinguishes_insufficient_coverage_stale_adjustmen
     assert available_projection["reason"] == "ready"
     assert available_projection["blockingModules"] == []
 
+    replay_projection = build_backtest_historical_ohlcv_readiness(
+        base_readiness,
+        source_freshness_state="stale",
+    )
+    assert replay_projection["status"] == "available"
+    assert replay_projection["executable"] is True
+    assert replay_projection["freshness"] == "stale"
+    assert replay_projection["sourceReadiness"]["freshnessState"] == "stale"
+
 
 def test_fake_provider_with_sufficient_bars_returns_normalized_available_payload() -> None:
     request = HistoricalOhlcvReadinessRequest(

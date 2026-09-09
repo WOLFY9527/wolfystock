@@ -346,8 +346,9 @@ def build_backtest_historical_ohlcv_readiness(
     *,
     runtime_status: str | None = None,
     operator_next_action: str | None = None,
+    source_freshness_state: str | None = None,
 ) -> dict[str, Any]:
-    """Project generic OHLCV readiness into a consumer-safe Backtest contract."""
+    """Project readiness while keeping source freshness separate from range eligibility."""
 
     source = dict(readiness or {})
     missing_requirements = _safe_text_list(source.get("missingRequirements"))
@@ -357,6 +358,7 @@ def build_backtest_historical_ohlcv_readiness(
     missing_bars = _safe_int(source.get("missingBars"))
     provider_state = _safe_code(source.get("providerState"))
     freshness_state = _safe_code(source.get("freshnessState"))
+    reported_freshness_state = _safe_code(source_freshness_state) or freshness_state
     adjustment_state = _safe_code(source.get("adjustmentState"))
     benchmark_state = _safe_code(source.get("benchmarkState")) or "not_requested"
     benchmark_adjustment_state = _safe_code(source.get("benchmarkAdjustmentState"))
@@ -394,6 +396,10 @@ def build_backtest_historical_ohlcv_readiness(
         status,
         missing_classes=missing_classes,
     )
+    source_readiness = _sanitize_source_readiness(source)
+    if source_freshness_state is not None:
+        source_readiness["freshness"] = reported_freshness_state or "unknown"
+        source_readiness["freshnessState"] = reported_freshness_state or "unknown"
     return {
         "contractVersion": BACKTEST_HISTORICAL_OHLCV_READINESS_CONTRACT_VERSION,
         "status": status,
@@ -410,7 +416,7 @@ def build_backtest_historical_ohlcv_readiness(
             "end": _clean_public_text(requested_range.get("end")),
         },
         "usableRange": _sanitize_range(source.get("usableRange")),
-        "freshness": freshness_state or "unknown",
+        "freshness": reported_freshness_state or "unknown",
         "asOf": _clean_public_text(source.get("asOf")) or _sanitize_range(source.get("usableRange")).get("end"),
         "requiredBarCount": required_bars,
         "availableBarCount": available_bars,
@@ -443,7 +449,7 @@ def build_backtest_historical_ohlcv_readiness(
         "blockingModules": [] if status == "available" else ["Backtest"],
         "missingDataClasses": missing_classes,
         "missingDataFamilies": list(missing_classes),
-        "sourceReadiness": _sanitize_source_readiness(source),
+        "sourceReadiness": source_readiness,
         "consumerSafe": True,
     }
 

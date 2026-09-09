@@ -3225,7 +3225,8 @@ class RuleBacktestService:
                 benchmark_summary=self._decorate_benchmark_summary({}, benchmark_selection) if benchmark_required else {},
                 benchmark_bars=benchmark_rows,
                 benchmark_required=benchmark_required,
-            )
+            ),
+            source_freshness_state=self._historical_source_freshness_state(data_gate_bars),
         )
         if len(bars) < required_bars or not historical_readiness.get("executable", False):
             blocked_reason = str(historical_readiness.get("blockedExecutionReason") or "")
@@ -3258,7 +3259,8 @@ class RuleBacktestService:
                     benchmark_summary=self._decorate_benchmark_summary({}, benchmark_selection) if benchmark_required else {},
                     benchmark_bars=benchmark_rows,
                     benchmark_required=benchmark_required,
-                )
+                ),
+                source_freshness_state=self._historical_source_freshness_state(data_gate_bars),
             )
             result = self._build_empty_result(
                 parsed=parsed,
@@ -4390,6 +4392,16 @@ class RuleBacktestService:
             unavailable_reason="provider_missing" if not bars else None,
         )
         return result.readiness
+
+    @staticmethod
+    def _historical_source_freshness_state(bars: List[Any]) -> Optional[str]:
+        if any(
+            str(getattr(bar, "data_source", "") or "").strip().lower()
+            == DEVELOPMENT_HISTORICAL_REPLAY_SOURCE
+            for bar in bars
+        ):
+            return "stale"
+        return None
 
     def _resolve_data_gate_window(
         self,

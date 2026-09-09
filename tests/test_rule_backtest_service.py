@@ -2862,6 +2862,11 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertTrue(history_readiness["executable"])
         self.assertEqual(history_readiness["adjustedDataRequirement"]["state"], "available")
         self.assertEqual(response["data_quality"]["historicalOhlcvReadiness"]["asOf"], "2024-01-24")
+        self.assertEqual(response["data_quality"]["historicalOhlcvReadiness"]["freshness"], "current")
+        self.assertEqual(
+            response["data_quality"]["historicalOhlcvReadiness"]["sourceReadiness"]["freshnessState"],
+            "current",
+        )
         self.assertEqual(response["data_quality"]["source"], "local_us_parquet")
 
         with self.db.get_session() as session:
