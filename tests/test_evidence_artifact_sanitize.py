@@ -180,6 +180,7 @@ def test_sanitized_output_can_reach_review_state_through_provider_validator(tmp_
         "circuitState": {"state": "closed", "summary": "No forced circuit override recorded."},
         "fallbackState": {"state": "unchanged", "summary": "Runtime fallback policy was observed only."},
         "outcome": "needs-review",
+        "qualificationStatus": "NOT_QUALIFIED",
         "evidenceRedactionVersion": "provider_operator_redaction_v1",
         "notes": "token=provider-note-value-should-not-leak",
     }

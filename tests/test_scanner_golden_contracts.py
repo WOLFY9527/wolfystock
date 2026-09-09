@@ -247,6 +247,7 @@ def test_all_scanner_golden_fixtures_exclude_raw_secrets_and_provider_payloads()
     fixture_paths = sorted(FIXTURE_DIR.glob("*.json"))
 
     assert {path.name for path in fixture_paths} == {
+        "r06_nonlive_us_data_ready_v1.json",
         "scanner_candidate_dto.json",
         "scanner_run_summary_dto.json",
         "scanner_to_backtest_handoff_dto.json",

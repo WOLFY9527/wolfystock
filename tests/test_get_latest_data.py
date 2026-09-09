@@ -29,6 +29,7 @@ class GetLatestDataTestCase(unittest.TestCase):
         """Initialize an isolated database for each test case."""
         self._temp_dir = tempfile.TemporaryDirectory()
         self._db_path = os.path.join(self._temp_dir.name, "test_get_latest_data.db")
+        self._original_database_path = os.environ.get("DATABASE_PATH")
         os.environ["DATABASE_PATH"] = self._db_path
 
         Config._instance = None
@@ -38,6 +39,11 @@ class GetLatestDataTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         """Clean up resources."""
         DatabaseManager.reset_instance()
+        Config.reset_instance()
+        if self._original_database_path is None:
+            os.environ.pop("DATABASE_PATH", None)
+        else:
+            os.environ["DATABASE_PATH"] = self._original_database_path
         self._temp_dir.cleanup()
 
     def _insert_stock_data(self, code: str, days_ago: int, close: Decimal) -> None:

@@ -9,6 +9,7 @@ import os
 import tempfile
 import unittest
 from datetime import date, timedelta
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -94,7 +95,7 @@ def _seed_history(db: DatabaseManager, code: str = "600519", *, days: int = 60) 
                     open=close - 0.1,
                     high=close + 0.2,
                     low=max(0.01, close - 0.3),
-                    close=close,
+                    close=Decimal(str(round(float(close), 8))),
                     volume=1000.0 + index,
                 )
             )

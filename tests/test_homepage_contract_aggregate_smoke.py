@@ -241,7 +241,6 @@ def test_dashboard_overview_default_composition_stays_aligned_with_standalone_de
     market_pulse = MarketPulseService().build_snapshot().model_dump(mode="json")
     money_flow = MoneyFlowService().build_homepage_money_flow_proxy()
     sector_theme = SectorThemeStrengthService().build_summary().model_dump(mode="json")
-    research_queue = ResearchQueueService().build_queue().model_dump(mode="json")
 
     assert overview["status"] == "partial"
     assert overview["marketPulse"]["sp500"]["label"] == market_pulse["indices"][0]["label"]
@@ -253,8 +252,6 @@ def test_dashboard_overview_default_composition_stays_aligned_with_standalone_de
     assert overview["sectorThemeRotation"]["status"] == sector_theme["status"] == "no_evidence"
     assert overview["sectorThemeRotation"]["leadingThemes"] == []
     assert overview["sectorThemeRotation"]["laggingThemes"] == []
-    assert overview["researchQueue"]["status"] == research_queue["status"] == "no_evidence"
-    assert overview["researchQueue"]["items"] == []
     assert overview["liquidityRisk"]["status"] == "no_evidence"
     assert overview["marketBrief"]["status"] == "ready"
     assert overview["dataQuality"]["sections"] == {
@@ -263,5 +260,4 @@ def test_dashboard_overview_default_composition_stays_aligned_with_standalone_de
         "moneyFlow": "no_evidence",
         "liquidityRisk": "ready",
         "sectorThemeRotation": "no_evidence",
-        "researchQueue": "no_evidence",
     }

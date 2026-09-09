@@ -41,6 +41,8 @@ class TestAgentConfig(unittest.TestCase):
     def test_default_agent_config(self, _mock_setup_env):
         """Agent mode should be disabled by default."""
         from src.config import Config
+        self._previous_config_instance = Config._instance
+        self.addCleanup(setattr, Config, "_instance", self._previous_config_instance)
         Config._instance = None
         config = Config._load_from_env()
         self.assertEqual(config.agent_litellm_model, "")
@@ -56,6 +58,8 @@ class TestAgentConfig(unittest.TestCase):
     def test_agent_config_from_env(self):
         """Agent config should be loaded from environment."""
         from src.config import Config
+        self._previous_config_instance = Config._instance
+        self.addCleanup(setattr, Config, "_instance", self._previous_config_instance)
         Config._instance = None
         config = Config._load_from_env()
         self.assertTrue(config.agent_mode)
@@ -66,6 +70,8 @@ class TestAgentConfig(unittest.TestCase):
     def test_agent_mode_disabled(self):
         """Explicitly disabled agent mode."""
         from src.config import Config
+        self._previous_config_instance = Config._instance
+        self.addCleanup(setattr, Config, "_instance", self._previous_config_instance)
         Config._instance = None
         config = Config._load_from_env()
         self.assertFalse(config.agent_mode)
@@ -74,6 +80,8 @@ class TestAgentConfig(unittest.TestCase):
     def test_empty_skills_list(self):
         """Empty AGENT_SKILLS should produce empty list."""
         from src.config import Config
+        self._previous_config_instance = Config._instance
+        self.addCleanup(setattr, Config, "_instance", self._previous_config_instance)
         Config._instance = None
         config = Config._load_from_env()
         self.assertEqual(config.agent_skills, [])
@@ -82,6 +90,8 @@ class TestAgentConfig(unittest.TestCase):
     def test_skills_whitespace_handling(self):
         """Skills should have whitespace trimmed."""
         from src.config import Config
+        self._previous_config_instance = Config._instance
+        self.addCleanup(setattr, Config, "_instance", self._previous_config_instance)
         Config._instance = None
         config = Config._load_from_env()
         self.assertEqual(config.agent_skills, ['dragon_head', 'shrink_pullback'])
@@ -90,6 +100,8 @@ class TestAgentConfig(unittest.TestCase):
     def test_agent_is_available_when_agent_primary_model_is_configured(self):
         """Agent availability auto-detection should use effective Agent primary model."""
         from src.config import Config
+        self._previous_config_instance = Config._instance
+        self.addCleanup(setattr, Config, "_instance", self._previous_config_instance)
         Config._instance = None
         config = Config._load_from_env()
         self.assertEqual(config.agent_litellm_model, 'openai/gpt-4o-mini')

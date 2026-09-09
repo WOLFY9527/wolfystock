@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
 from api.app import create_app
+from src.config import Config
 
 
 class AppCorsConfigTestCase(unittest.TestCase):
@@ -19,6 +20,11 @@ class AppCorsConfigTestCase(unittest.TestCase):
     def _build_app(self):
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
+        # create_app snapshots process env through the Config singleton, so
+        # each test must rebuild it to observe its own CORS env patch.
+        previous_config = Config._instance
+        self.addCleanup(setattr, Config, "_instance", previous_config)
+        Config._instance = None
         return create_app(static_dir=Path(temp_dir.name))
 
     def test_allow_all_disables_credentials(self):
@@ -54,6 +60,7 @@ class AppCorsConfigTestCase(unittest.TestCase):
     def test_hsts_is_only_set_for_production_https_context(self):
         production_env = {
             "APP_ENV": "production",
+            "ADMIN_AUTH_ENABLED": "true",
             "CORS_ALLOW_ALL": "false",
             "CORS_ORIGINS": "https://app.example.test",
             "TRUST_X_FORWARDED_FOR": "true",

@@ -579,9 +579,15 @@ def _frontend_route_id(path: str) -> str:
 
 
 def _collect_admin_surface_paths(app_source: str) -> list[str]:
+    # Route declarations moved from JSX <Route> tags to data-driven route
+    # entries, so match both declaration styles.
     paths = {
         match.group(1)
         for match in re.finditer(r'<Route\s+path="([^"]+)"\s+element=\{<AdminSurfaceRoute>', app_source)
+    }
+    paths |= {
+        match.group(1)
+        for match in re.finditer(r"path:\s*'([^']+)',\s*element:\s*<AdminSurfaceRoute>", app_source)
     }
     return sorted(path for path in paths if path.startswith("/"))
 

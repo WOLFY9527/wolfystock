@@ -255,6 +255,7 @@ class BacktestServiceTestCase(unittest.TestCase):
             self._history_fetch_patch.stop()
             self._history_fetch_patch_active = False
         DatabaseManager.reset_instance()
+        Config.reset_instance()
         if self._original_database_path is None:
             os.environ.pop("DATABASE_PATH", None)
         else:

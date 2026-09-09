@@ -1112,7 +1112,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         resolve_mock.assert_not_called()
         queue.submit_tasks_batch.assert_called_once_with(
-            stock_codes=["AAPL.US"],
+            stock_codes=["AAPL"],
             stock_name=None,
             original_query="AAPL.US",
             selection_source="manual",
@@ -1231,7 +1231,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             response = trigger_analysis(
                 request=SimpleNamespace(
                     stock_code=None,
-                    stock_codes=["600519", "000001"],
+                    stock_codes=["600519", "000001.SH"],
                     stock_name=None,
                     original_query="uploaded.csv",
                     selection_source="import",
@@ -1244,7 +1244,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 202)
         queue.submit_tasks_batch.assert_called_once_with(
-            stock_codes=["600519", "000001"],
+            stock_codes=["600519", "000001.SH"],
             stock_name=None,
             original_query="uploaded.csv",
             selection_source="import",
@@ -1296,7 +1296,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             self.assertEqual(first.status_code, 202)
             self.assertEqual(second.status_code, 409)
             self.assertEqual(json.loads(second.body)["error"], "duplicate_task")
-            self.assertEqual(json.loads(second.body)["stock_code"], "600519")
+            self.assertEqual(json.loads(second.body)["stock_code"], "600519.SH")
             self.assertEqual(
                 json.loads(second.body)["existing_task_id"],
                 json.loads(first.body)["task_id"],
@@ -1322,7 +1322,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             response = trigger_analysis(
                 request=SimpleNamespace(
                     stock_code=None,
-                    stock_codes=["600519", "000001"],
+                    stock_codes=["600519", "000001.SH"],
                     stock_name="贵州茅台",
                     original_query="茅台,平安银行",
                     selection_source="import",
@@ -1335,7 +1335,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 202)
         queue.submit_tasks_batch.assert_called_once_with(
-            stock_codes=["600519", "000001"],
+            stock_codes=["600519", "000001.SH"],
             stock_name=None,
             original_query="茅台,平安银行",
             selection_source="import",
@@ -1435,7 +1435,7 @@ class BatchTaskQueueContractTestCase(unittest.TestCase):
 
         self.assertEqual(accepted_again, [])
         self.assertEqual(len(duplicates_again), 1)
-        self.assertEqual(duplicates_again[0].stock_code, "600519")
+        self.assertEqual(duplicates_again[0].stock_code, "600519.SH")
         self.assertEqual(duplicates_again[0].existing_task_id, accepted[0].task_id)
 
         accepted_hk, duplicates_hk = queue.submit_tasks_batch(["0700.HK"], report_type="detailed")

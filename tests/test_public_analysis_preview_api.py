@@ -29,7 +29,9 @@ def _reset_auth_globals() -> None:
     auth._session_secret = None
     auth._password_hash_salt = None
     auth._password_hash_stored = None
+    auth._password_hash_value = None
     auth._rate_limit = {}
+    auth._admin_reauth_markers = {}
 
 
 class PublicAnalysisPreviewApiTestCase(unittest.TestCase):
@@ -51,6 +53,10 @@ class PublicAnalysisPreviewApiTestCase(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
+        self._previous_environment = {
+            key: os.environ.get(key)
+            for key in ("ENV_FILE", "DATABASE_PATH")
+        }
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.db_path)
         Config.reset_instance()
@@ -63,8 +69,12 @@ class PublicAnalysisPreviewApiTestCase(unittest.TestCase):
         self.client.close()
         DatabaseManager.reset_instance()
         Config.reset_instance()
-        os.environ.pop("ENV_FILE", None)
-        os.environ.pop("DATABASE_PATH", None)
+        _reset_auth_globals()
+        for key, value in self._previous_environment.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
         self.temp_dir.cleanup()
 
     def test_guest_preview_is_public_and_does_not_request_persistence(self) -> None:
@@ -269,7 +279,7 @@ class PublicAnalysisPreviewApiTestCase(unittest.TestCase):
                 json={"stock_code": "AAPL", "stock_name": "Apple"},
             )
 
-        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 422)
         analyze_stock.assert_not_called()
         payload = response.json()
         detail = payload.get("detail", payload)

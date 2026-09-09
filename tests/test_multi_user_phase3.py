@@ -42,7 +42,9 @@ def _reset_auth_globals() -> None:
     auth._session_secret = None
     auth._password_hash_salt = None
     auth._password_hash_stored = None
+    auth._password_hash_value = None
     auth._rate_limit = {}
+    auth._admin_reauth_markers = {}
 
 
 def _dummy_analysis_result(code: str, *, name: str) -> SimpleNamespace:
@@ -84,6 +86,10 @@ class MultiUserAuthorizationApiTestCase(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
+        self._previous_environment = {
+            key: os.environ.get(key)
+            for key in ("ENV_FILE", "DATABASE_PATH")
+        }
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.db_path)
         Config.reset_instance()
@@ -115,8 +121,12 @@ class MultiUserAuthorizationApiTestCase(unittest.TestCase):
         self.assertFalse(self.runtime_container.is_started)
         DatabaseManager.reset_instance()
         Config.reset_instance()
-        os.environ.pop("ENV_FILE", None)
-        os.environ.pop("DATABASE_PATH", None)
+        _reset_auth_globals()
+        for key, value in self._previous_environment.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
         self.temp_dir.cleanup()
 
     def _login_admin(self) -> None:

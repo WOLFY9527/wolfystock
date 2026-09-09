@@ -26,6 +26,8 @@ def _fresh_db() -> DatabaseManager:
 class LlmCostLedgerServiceTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.db = _fresh_db()
+        for user_id in ("user-a", "user-b"):
+            self.db.create_or_update_app_user(user_id=user_id, username=user_id)
         self.service = LlmCostLedgerService(db=self.db)
 
     def tearDown(self) -> None:

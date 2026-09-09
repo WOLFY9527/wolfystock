@@ -146,7 +146,7 @@ def _broker_currency_and_fx_evidence() -> dict[str, Any]:
             encoding="utf-8"
         )
     )
-    fx = PortfolioLiveFxRateResponse(**fixture["live_fx_rate"]).model_dump()
+    fx = PortfolioLiveFxRateResponse(**fixture["live_fx_rate"]).model_dump(mode="json")
     return {
         "unknownBrokerCurrency": unknown["currency"],
         "explicitBrokerCurrency": explicit_usd["currency"],
@@ -165,31 +165,41 @@ def _broker_currency_and_fx_evidence() -> dict[str, Any]:
 
 def _startup_failure_vs_static_degradation() -> dict[str, Any]:
     from api.app import create_app
+    from src.config import Config
 
     missing_static = ROOT / "tests" / "golden" / "missing-static-fixture"
-    with patch.dict(
-        os.environ,
-        {"APP_ENV": "development", "CORS_ALLOW_ALL": "false", "CORS_ORIGINS": ""},
-        clear=False,
-    ):
-        degraded_app = create_app(static_dir=missing_static)
+    previous_config = Config._instance
+    try:
+        with patch.dict(
+            os.environ,
+            {"APP_ENV": "development", "CORS_ALLOW_ALL": "false", "CORS_ORIGINS": ""},
+            clear=False,
+        ):
+            # create_app snapshots env through the Config singleton; rebuild it
+            # so each probe observes its own patched environment.
+            Config._instance = None
+            degraded_app = create_app(static_dir=missing_static)
 
-    failure_type = None
-    failure_message = None
-    with patch.dict(
-        os.environ,
-        {
-            "APP_ENV": "production",
-            "CORS_ALLOW_ALL": "true",
-            "CORS_ORIGINS": "https://public.example.test",
-        },
-        clear=False,
-    ):
-        try:
-            create_app(static_dir=missing_static)
-        except RuntimeError as exc:
-            failure_type = type(exc).__name__
-            failure_message = str(exc)
+        failure_type = None
+        failure_message = None
+        with patch.dict(
+            os.environ,
+            {
+                "APP_ENV": "production",
+                "ADMIN_AUTH_ENABLED": "true",
+                "CORS_ALLOW_ALL": "true",
+                "CORS_ORIGINS": "https://public.example.test",
+            },
+            clear=False,
+        ):
+            Config._instance = None
+            try:
+                create_app(static_dir=missing_static)
+            except RuntimeError as exc:
+                failure_type = type(exc).__name__
+                failure_message = str(exc)
+    finally:
+        Config._instance = previous_config
 
     return {
         "staticAssetDegradation": {

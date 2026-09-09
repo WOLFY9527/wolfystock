@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import unittest
 from datetime import datetime
+from decimal import Decimal
 from unittest.mock import patch
 
 import pandas as pd
@@ -24,7 +25,7 @@ def _daily_frame(rows: list[tuple[str, float]]) -> pd.DataFrame:
             "open": [item[1] for item in rows],
             "high": [item[1] for item in rows],
             "low": [item[1] for item in rows],
-            "close": [item[1] for item in rows],
+            "close": [Decimal(str(item[1])) for item in rows],
             "volume": [1_000_000] * len(rows),
             "amount": [10_000_000] * len(rows),
             "pct_chg": pd.Series([item[1] for item in rows]).pct_change().fillna(0.0) * 100.0,

@@ -7,6 +7,7 @@ import os
 import tempfile
 import unittest
 from datetime import date, timedelta
+from decimal import Decimal
 from unittest.mock import patch
 
 from src.config import Config
@@ -37,7 +38,7 @@ class RuleBacktestUniverseServiceTestCase(unittest.TestCase):
                         open=float(close) - 0.1,
                         high=float(close) + 0.2,
                         low=max(0.01, float(close) - 0.3),
-                        close=float(close),
+                        close=Decimal(str(round(float(close), 8))),
                     )
                 )
             session.commit()

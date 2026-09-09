@@ -8,6 +8,7 @@ import os
 import tempfile
 import unittest
 from datetime import date, timedelta
+from decimal import Decimal
 from unittest.mock import patch
 
 import pandas as pd
@@ -46,6 +47,7 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
             "WOLFYSTOCK_HISTORICAL_OHLCV_CACHE_SEED_ENABLED",
             "LOCAL_US_PARQUET_DIR",
             "US_STOCK_PARQUET_DIR",
+            "DATABASE_PATH",
         ]
         self._env_snapshot = {key: os.environ.get(key) for key in self._env_keys}
         for key in self._env_keys:
@@ -90,7 +92,7 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
                         open=close - 0.1,
                         high=close + 0.2,
                         low=max(0.01, close - 0.3),
-                        close=close,
+                        close=Decimal(str(close)),
                         data_source="local_us_parquet",
                     )
                 )
@@ -122,7 +124,7 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
                         open=close - 0.1,
                         high=close + 0.2,
                         low=max(0.01, close - 0.3),
-                        close=close,
+                        close=Decimal(str(close)),
                         volume=1000.0 + index,
                         data_source="local_us_parquet",
                     )

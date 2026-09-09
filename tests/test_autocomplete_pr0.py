@@ -169,7 +169,7 @@ class TestTaskQueue:
         """Test support for new fields during batch submission"""
         queue = self._build_queue()
         tasks, _duplicates = queue.submit_tasks_batch(
-            stock_codes=["600519", "000001"],
+            stock_codes=["600519", "000001.SH"],
             stock_name="批量股票",
             original_query="600519,000001",
             selection_source="import",

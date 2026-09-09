@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from src.config import Config
 from src.core.backtest_engine import BacktestEngine, EvaluationConfig
@@ -35,6 +36,7 @@ class BacktestGoldenMetricsTestCase(unittest.TestCase):
         Config._instance = None
         DatabaseManager.reset_instance()
         self.db = DatabaseManager.get_instance()
+        self.db.ensure_bootstrap_admin_user()
 
     def tearDown(self) -> None:
         DatabaseManager.reset_instance()
@@ -59,7 +61,7 @@ class BacktestGoldenMetricsTestCase(unittest.TestCase):
                 date=start + timedelta(days=index + 1),
                 high=float(highs[index]),
                 low=float(lows[index]),
-                close=float(closes[index]),
+                close=Decimal(str(round(float(closes[index]), 8))),
             )
             for index in range(len(closes))
         ]
@@ -195,13 +197,13 @@ class BacktestGoldenMetricsTestCase(unittest.TestCase):
                     open=95.0,
                     high=111.0,
                     low=89.0,
-                    close=100.0,
+                    close=Decimal("100.0"),
                 )
             )
             session.add_all([
-                StockDaily(code="GOLDEN", date=date(2024, 1, 2), open=101.0, high=106.0, low=99.0, close=105.0),
-                StockDaily(code="GOLDEN", date=date(2024, 1, 3), open=105.0, high=107.0, low=96.0, close=102.0),
-                StockDaily(code="GOLDEN", date=date(2024, 1, 4), open=102.0, high=108.0, low=101.0, close=104.0),
+                StockDaily(code="GOLDEN", date=date(2024, 1, 2), open=101.0, high=106.0, low=99.0, close=Decimal("105.0")),
+                StockDaily(code="GOLDEN", date=date(2024, 1, 3), open=105.0, high=107.0, low=96.0, close=Decimal("102.0")),
+                StockDaily(code="GOLDEN", date=date(2024, 1, 4), open=102.0, high=108.0, low=101.0, close=Decimal("104.0")),
             ])
             session.commit()
 

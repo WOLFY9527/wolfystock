@@ -236,6 +236,13 @@ def _runtime_edge_auth_disabled() -> Iterator[None]:
 
 @pytest.fixture()
 def runtime_edge_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    from src.config import Config
+
+    # Earlier suites can leave a production-mode Config snapshot cached;
+    # rebuild it so this fixture observes the current test environment.
+    # monkeypatch restores the previous singleton on teardown.
+    monkeypatch.setattr(Config, "_instance", None)
+
     from api.v1.endpoints import backtest, market, market_overview, research, scanner, watchlist
     from tests.api.test_market_decision_cockpit_endpoint import _payload as cockpit_payload
 

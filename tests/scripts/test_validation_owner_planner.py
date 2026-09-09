@@ -439,7 +439,7 @@ def test_overlapping_rules_union_all_owners_and_tiers() -> None:
     previous: set[str] = set()
     for level in planner.RISK_CLASSES:
         cumulative = risk_plan_for(
-            ["docs/audit-note.md"],
+            ["docs/README.md"],
             requested_risk=level,
             accepted_integration=level in {"R3", "R4", "R5"},
             frozen_release=level == "R5",
@@ -449,7 +449,7 @@ def test_overlapping_rules_union_all_owners_and_tiers() -> None:
             expected.add("backend.canonical")
         actual = {gate["id"] for gate in cumulative["gates"]}
         diagnostic = scenario_diagnostic(
-            f"cumulative-{level}", "docs/audit-note.md", level, expected, cumulative
+            f"cumulative-{level}", "docs/README.md", level, expected, cumulative
         )
         assert cumulative["risk"]["class"] == level, diagnostic
         assert actual == expected, diagnostic
@@ -951,7 +951,7 @@ def test_deterministic_ordering_and_stable_output_hash(
     )
 
     risk_cases = (
-        ("r0-docs", "docs/audit-note.md", "R0", set()),
+        ("r0-docs", "docs/README.md", "R0", set()),
         ("r1-backend-test", "tests/test_local_helper.py", "R1", {"topology.verify"}),
         ("r2-frontend-owner", "apps/dsa-web/src/pages/MarketPage.tsx", "R2", set()),
         (
@@ -977,7 +977,7 @@ def test_deterministic_ordering_and_stable_output_hash(
             {key: value for key, value in second_risk.items() if key != "planHash"}
         ), diagnostic
 
-    failure_plan = risk_plan_for(["docs/audit-note.md"])
+    failure_plan = risk_plan_for(["docs/README.md"])
     calls: list[list[str]] = []
 
     def failing_runner(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
@@ -993,7 +993,7 @@ def test_deterministic_ordering_and_stable_output_hash(
     )
     diagnostic = scenario_diagnostic(
         "selected-command-failure-propagates",
-        "docs/audit-note.md",
+        "docs/README.md",
         "R0",
         cumulative_gate_ids("R0"),
         failure_plan,
@@ -1053,7 +1053,7 @@ def test_t437_t438_locale_corpus_adds_bounded_and_browser_owners_to_current_clas
     assert "--project=release-real-runtime" not in gates["browser.full"]["command"], diagnostic
     assert "--project=release-real-runtime" in gates["release.real_runtime"]["command"], diagnostic
     risk_plan = risk_plan_for(
-        ["docs/audit-note.md"],
+        ["docs/README.md"],
         requested_risk="R3",
         accepted_integration=True,
     )
@@ -1114,8 +1114,8 @@ def test_t437_t438_locale_corpus_adds_bounded_and_browser_owners_to_current_clas
     release_ids = set(release["execution"]["nodeIds"])
     assert canonical_ids.isdisjoint(release_only_ids)
     assert canonical_ids | release_only_ids == release_ids
-    assert len(canonical_ids) == 7_946
-    assert len(release_ids) == 7_964
+    assert len(canonical_ids) == 8_374
+    assert len(release_ids) == 8_392
     assert set(canonical["execution"]["nodeIds"]) < release_ids
     assert release["stages"][1]["required"] is True
     assert release["releaseQualificationRequired"] is True
@@ -1124,7 +1124,7 @@ def test_t437_t438_locale_corpus_adds_bounded_and_browser_owners_to_current_clas
         ("validation-authority", ["scripts/validation_changed_files.py"], {}),
         ("unknown", ["unknown-zone/new-validation-input.xyz"], {}),
         ("protected-runtime", ["src/runtime/settings.py"], {}),
-        ("user-facing", ["docs/audit-note.md"], {"user_facing": True, "requested_risk": "R3"}),
+        ("user-facing", ["docs/README.md"], {"user_facing": True, "requested_risk": "R3"}),
     )
     for scenario, paths, kwargs in scenarios:
         risk_plan = risk_plan_for(paths, accepted_integration=True, **kwargs)
@@ -1134,7 +1134,7 @@ def test_t437_t438_locale_corpus_adds_bounded_and_browser_owners_to_current_clas
         assert stage_plan["execution"] == stage_plan["releaseInventory"], scenario
         assert stage_plan["releaseReady"] is False, scenario
     risk_plan = risk_plan_for(
-        ["docs/audit-note.md"],
+        ["docs/README.md"],
         requested_risk="R3",
         accepted_integration=True,
     )

@@ -14,6 +14,7 @@ UNSAFE_REJECTED = FIXTURE_ROOT / "unsafe_rejected"
 
 EXPECTED_CATEGORIES = {
     "api-abuse-request-safety",
+    "candidate-binding",
     "provider",
     "provider-sla-licensing",
     "notification-delivery-rehearsal",

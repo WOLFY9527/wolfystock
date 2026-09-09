@@ -2249,7 +2249,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
         )
         self.service.record_trade(
             account_id=aid,
-            symbol="000001",
+            symbol="000001.SH",
             trade_date=date(2026, 1, 1),
             side="buy",
             quantity=5,
@@ -2485,7 +2485,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
         )
         self.service.record_trade(
             account_id=aid,
-            symbol="000001",
+            symbol="000001.SH",
             trade_date=date(2026, 1, 1),
             side="buy",
             quantity=5,

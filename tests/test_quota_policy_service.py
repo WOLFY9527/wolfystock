@@ -25,6 +25,8 @@ def _fresh_db() -> DatabaseManager:
 class QuotaPolicyServiceTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.db = _fresh_db()
+        for user_id in ("user-1", "user-2", "other-user", "pilot-user"):
+            self.db.create_or_update_app_user(user_id=user_id, username=user_id)
         self.service = QuotaPolicyService(db=self.db, enforcement_enabled=True)
 
     def tearDown(self) -> None:

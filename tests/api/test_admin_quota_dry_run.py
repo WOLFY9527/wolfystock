@@ -72,6 +72,8 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.db_path = Path(self.temp_dir.name) / "admin_quota.db"
         self.db = DatabaseManager(db_url=f"sqlite:///{self.db_path}")
+        for user_id in ("user-1", "user-2"):
+            self.db.create_or_update_app_user(user_id=user_id, username=user_id)
 
         from api.v1.endpoints import admin_cost
 

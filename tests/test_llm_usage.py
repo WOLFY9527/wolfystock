@@ -77,8 +77,11 @@ class TestRecordLLMUsage(unittest.TestCase):
 class TestGetLLMUsageSummary(unittest.TestCase):
     def setUp(self):
         self.db = _fresh_db()
+        # Capture one clock reading and derive every seeded row and the
+        # query window from it, so the range can never straddle midnight.
         now = datetime.now()
         yesterday = now - timedelta(days=1)
+        self._seeded_now = now
 
         # 3 analysis calls today
         for _ in range(3):
@@ -122,7 +125,7 @@ class TestGetLLMUsageSummary(unittest.TestCase):
         DatabaseManager.reset_instance()
 
     def _today_range(self):
-        now = datetime.now()
+        now = self._seeded_now
         return now.replace(hour=0, minute=0, second=0, microsecond=0), now
 
     def test_total_calls_and_tokens(self):
@@ -164,6 +167,7 @@ class TestPersistUsageHelper(unittest.TestCase):
 
     def setUp(self):
         self.db = _fresh_db()
+        self.db.create_or_update_app_user(user_id="user-owner", username="user-owner")
 
     def tearDown(self):
         DatabaseManager.reset_instance()

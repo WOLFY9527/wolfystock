@@ -81,6 +81,8 @@ class AdminCostSummaryApiTestCase(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.db_path = Path(self.temp_dir.name) / "admin_cost.db"
         self.db = DatabaseManager(db_url=f"sqlite:///{self.db_path}")
+        for user_id in ("user-a", "user-1"):
+            self.db.create_or_update_app_user(user_id=user_id, username=user_id)
 
         from api.v1.endpoints import admin_cost
 

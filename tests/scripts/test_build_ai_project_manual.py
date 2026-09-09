@@ -71,7 +71,6 @@ def test_ai_assets_check_invokes_manual_freshness_guard(monkeypatch) -> None:
     monkeypatch.setattr(ai_assets, "ensure_symlink", lambda: calls.append("symlink"))
     monkeypatch.setattr(ai_assets, "ensure_copilot_entry", lambda: calls.append("copilot"))
     monkeypatch.setattr(ai_assets, "ensure_instruction_files", lambda: calls.append("instructions"))
-    monkeypatch.setattr(ai_assets, "ensure_skill_files", lambda: calls.append("skills"))
     monkeypatch.setattr(ai_assets, "ensure_gitignore_rules", lambda: calls.append("gitignore"))
     monkeypatch.setattr(ai_assets, "ensure_no_tracked_claude_artifacts", lambda: calls.append("claude"))
     monkeypatch.setattr(ai_assets, "ensure_ai_project_manual_fresh", lambda: calls.append("manual"))
@@ -87,7 +86,6 @@ def test_ai_assets_check_invokes_manual_freshness_guard(monkeypatch) -> None:
         "symlink",
         "copilot",
         "instructions",
-        "skills",
         "gitignore",
         "claude",
         "manual",

@@ -474,6 +474,8 @@ def test_helper_runtime_integration_is_limited_to_home_response_assembly() -> No
             "-n",
             "--glob",
             "!validation/domain_test_topology.json",
+            "--glob",
+            "!validation/t569_*.json",
             "build_home_source_provenance_sidecar_v1|home_source_provenance_sidecar",
         ],
         cwd=REPO_ROOT,

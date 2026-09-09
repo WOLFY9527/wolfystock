@@ -45,7 +45,7 @@
         "fxEvidence": {
           "baseCurrency": "USD",
           "quoteCurrency": "CNY",
-          "rate": 7.12,
+          "rate": "7.12000000",
           "provider": "fixture_manual_rate",
           "fetchedAt": "2026-05-10T16:00:00+08:00",
           "cacheHit": true,

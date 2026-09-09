@@ -32,6 +32,8 @@ def _fresh_db() -> DatabaseManager:
 class LlmOwnerContextPropagationTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.db = _fresh_db()
+        for user_id in ("user-id-123", "actual-user-id", "user-owner-1", "scanner-user-id"):
+            self.db.create_or_update_app_user(user_id=user_id, username=user_id)
 
     def tearDown(self) -> None:
         DatabaseManager.reset_instance()

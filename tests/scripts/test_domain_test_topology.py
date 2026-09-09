@@ -72,10 +72,10 @@ def test_manifest_schema_preserves_baseline_and_complete_surface_counts() -> Non
 
     assert result["status"] == "valid"
     assert result["baselineBackendTests"] == 7_609
-    assert result["backendTests"] == 8_369
+    assert result["backendTests"] == 8_392
     assert result["vitestFiles"] == 178
-    assert result["playwrightSpecs"] == 71
-    assert result["playwrightProjectCases"] == 780
+    assert result["playwrightSpecs"] == 72
+    assert result["playwrightProjectCases"] == 798
     assert manifest["backend"]["baselineCapture"] == {
         "baseSha": topology.BASE_SHA,
         "count": 7_609,
@@ -208,11 +208,11 @@ def test_playwright_ownership_retains_projects_and_mandatory_auth_cases() -> Non
     specs = playwright["specs"]
     cases = playwright["projectCases"]
 
-    assert len(specs) == 71
-    assert len(cases) == 780
+    assert len(specs) == 72
+    assert len(cases) == 798
     assert playwright["inventory"]["projectCaseCounts"] == {
-        "chromium": 384,
-        "chromium-mobile": 384,
+        "chromium": 393,
+        "chromium-mobile": 393,
         "release-real-runtime": 6,
         "release-real-runtime-mobile": 6,
     }
@@ -547,7 +547,7 @@ def test_first_attempts_and_retries_are_never_coalesced(
     risk_plan = planner.build_validation_plan_from_changes(
         [
             {
-                "path": "docs/audit-note.md",
+                "path": "docs/README.md",
                 "changeTypes": ["modified"],
                 "sources": ["committed"],
                 "ownershipTrees": ["base_and_candidate"],
@@ -581,8 +581,8 @@ def test_first_attempts_and_retries_are_never_coalesced(
     assert canonical["schemaVersion"] == full["schemaVersion"]
     assert canonical["structuredResultAuthority"] == topology.TEST_RESULT_SCHEMA_VERSION
     assert canonical["topology"] == load_manifest()["backend"]["currentInventory"]
-    assert canonical["selection"]["count"] == 8_351
-    assert release["selection"]["count"] == 8_369
+    assert canonical["selection"]["count"] == 8_374
+    assert release["selection"]["count"] == 8_392
     assert release["selection"] == full["selection"]
     assert set(canonical["validationStages"]["execution"]["nodeIds"]) == {
         node_id for item in canonical["shards"] for node_id in item["nodeIds"]

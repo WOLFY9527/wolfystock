@@ -11,6 +11,7 @@ import os
 import tempfile
 import unittest
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
@@ -151,7 +152,9 @@ def _reset_auth_globals() -> None:
     auth._session_secret = None
     auth._password_hash_salt = None
     auth._password_hash_stored = None
+    auth._password_hash_value = None
     auth._rate_limit = {}
+    auth._admin_reauth_markers = {}
 
 
 class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
@@ -236,7 +239,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                         open=close - 0.1,
                         high=close + 0.2,
                         low=close - 0.3,
-                        close=float(close),
+                        close=Decimal(str(close)),
                         data_source="local_us_parquet",
                     )
                 )

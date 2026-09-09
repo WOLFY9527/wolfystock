@@ -8,6 +8,7 @@ import os
 import tempfile
 import unittest
 from datetime import date, timedelta
+from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
@@ -71,7 +72,7 @@ class BacktestJobContractsTestCase(unittest.TestCase):
                         open=float(close) - 0.1,
                         high=float(close) + 0.2,
                         low=max(0.01, float(close) - 0.3),
-                        close=float(close),
+                        close=Decimal(str(round(float(close), 8))),
                     )
                 )
             session.commit()

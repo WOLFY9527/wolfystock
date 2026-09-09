@@ -6,6 +6,7 @@ import os
 import tempfile
 import unittest
 from datetime import date
+from decimal import Decimal
 from unittest.mock import patch
 
 from src.config import Config
@@ -41,7 +42,7 @@ class RuleBacktestReopenAcceptanceTestCase(unittest.TestCase):
                         open=close - 0.1,
                         high=close + 0.2,
                         low=close - 0.3,
-                        close=float(close),
+                        close=Decimal(str(close)),
                     )
                 )
             session.commit()

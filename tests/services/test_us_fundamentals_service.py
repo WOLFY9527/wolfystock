@@ -3,10 +3,18 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from src.services.us_fundamentals_service import USFundamentalsService
 
 
+def _current_utc_iso() -> str:
+    """Bind now_fn to the real clock so the 45-day staleness gate stays current."""
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
 def test_us_fundamentals_service_normalizes_provider_fields_without_network() -> None:
+    as_of = _current_utc_iso()
     service = USFundamentalsService(
         fundamentals_fetcher=lambda symbol: {
             "companyName": "Apple Inc.",
@@ -34,7 +42,7 @@ def test_us_fundamentals_service_normalizes_provider_fields_without_network() ->
                 },
             },
         },
-        now_fn=lambda: "2026-07-01T00:00:00+00:00",
+        now_fn=lambda: as_of,
     )
 
     payload = service.get_us_fundamentals("aapl")
@@ -49,7 +57,7 @@ def test_us_fundamentals_service_normalizes_provider_fields_without_network() ->
     assert payload["profitabilityMargin"] == 0.31
     assert payload["valuationRatio"] == 29.4
     assert payload["fiscalPeriod"] == "mixed"
-    assert payload["asOf"] == "2026-07-01T00:00:00+00:00"
+    assert payload["asOf"] == as_of
     assert payload["source"] == "yfinance"
     assert payload["freshness"] == "current"
     assert payload["fieldsAvailable"] == [
@@ -73,7 +81,7 @@ def test_us_fundamentals_service_returns_partial_with_missing_reasons() -> None:
             "marketCap": 2_900_000_000_000,
             "_meta": {"field_periods": {"marketCap": "latest"}, "field_sources": {"marketCap": "yfinance"}},
         },
-        now_fn=lambda: "2026-07-01T00:00:00+00:00",
+        now_fn=lambda: _current_utc_iso(),
     )
 
     payload = service.get_us_fundamentals("NVDA")
@@ -97,7 +105,7 @@ def test_us_fundamentals_service_fail_closes_provider_exception_without_raw_text
 
     service = USFundamentalsService(
         fundamentals_fetcher=_raise,
-        now_fn=lambda: "2026-07-01T00:00:00+00:00",
+        now_fn=lambda: _current_utc_iso(),
     )
 
     payload = service.get_us_fundamentals("MSFT")
@@ -114,7 +122,7 @@ def test_us_fundamentals_service_fail_closes_provider_exception_without_raw_text
 def test_us_fundamentals_service_marks_non_us_symbol_unsupported() -> None:
     service = USFundamentalsService(
         fundamentals_fetcher=lambda symbol: {"companyName": "Should not be called"},
-        now_fn=lambda: "2026-07-01T00:00:00+00:00",
+        now_fn=lambda: _current_utc_iso(),
     )
 
     payload = service.get_us_fundamentals("600519")

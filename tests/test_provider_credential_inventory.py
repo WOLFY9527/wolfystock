@@ -48,12 +48,12 @@ def test_provider_credential_inventory_freezes_configured_and_wired_sources_with
     configured_and_wired = {
         "tushare": {
             "env_names": ("TUSHARE_TOKEN",),
-            "config_markers": ("tushare_token=os.getenv('TUSHARE_TOKEN')",),
+            "config_markers": ("tushare_token=environment.get('TUSHARE_TOKEN')",),
             "runtime_markers": ("config.tushare_token", "TushareFetcher"),
         },
         "tickflow": {
             "env_names": ("TICKFLOW_API_KEY",),
-            "config_markers": ("tickflow_api_key=os.getenv('TICKFLOW_API_KEY')",),
+            "config_markers": ("tickflow_api_key=environment.get('TICKFLOW_API_KEY')",),
             "runtime_markers": (
                 'getattr(config, "tickflow_api_key", None)',
                 "project_tickflow_entitlement_health(",
@@ -61,7 +61,7 @@ def test_provider_credential_inventory_freezes_configured_and_wired_sources_with
         },
         "fred": {
             "env_names": ("FRED_API_KEY",),
-            "config_markers": ("fred_api_key=os.getenv('FRED_API_KEY') or None",),
+            "config_markers": ("fred_api_key=environment.get('FRED_API_KEY') or None",),
             "runtime_markers": (
                 'return _text(getattr(Config.get_instance(), "fred_api_key", None)) or None',
                 'api_key=_resolve_fred_api_key(api_key)',
@@ -71,9 +71,9 @@ def test_provider_credential_inventory_freezes_configured_and_wired_sources_with
         "twelve_data": {
             "env_names": ("TWELVE_DATA_API_KEY", "TWELVE_DATA_API_KEYS"),
             "config_markers": (
-                "twelve_data_keys_str = os.getenv('TWELVE_DATA_API_KEYS', '') or os.getenv('TWELVEDATA_API_KEYS', '')",
-                "os.getenv('TWELVE_DATA_API_KEY', '').strip()",
-                "os.getenv('TWELVEDATA_API_KEY', '').strip()",
+                "twelve_data_keys_str = environment.get('TWELVE_DATA_API_KEYS', '') or environment.get('TWELVEDATA_API_KEYS', '')",
+                "environment.get('TWELVE_DATA_API_KEY', '').strip()",
+                "environment.get('TWELVEDATA_API_KEY', '').strip()",
                 "twelve_data_api_keys=twelve_data_api_keys",
                 "twelve_data_api_key=single_twelve_data or (twelve_data_api_keys[0] if twelve_data_api_keys else None)",
             ),
@@ -86,9 +86,9 @@ def test_provider_credential_inventory_freezes_configured_and_wired_sources_with
         "alpaca": {
             "env_names": ("ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY", "ALPACA_DATA_FEED"),
             "config_markers": (
-                "alpaca_api_key_id=os.getenv('ALPACA_API_KEY_ID') or None",
-                "alpaca_api_secret_key=os.getenv('ALPACA_API_SECRET_KEY') or None",
-                "alpaca_data_feed=(os.getenv('ALPACA_DATA_FEED', 'iex').strip().lower() or 'iex')",
+                "alpaca_api_key_id=environment.get('ALPACA_API_KEY_ID') or None",
+                "alpaca_api_secret_key=environment.get('ALPACA_API_SECRET_KEY') or None",
+                "alpaca_data_feed=(environment.get('ALPACA_DATA_FEED', 'iex').strip().lower() or 'iex')",
             ),
             "runtime_markers": (
                 'get_provider_credentials("alpaca")',
@@ -98,8 +98,8 @@ def test_provider_credential_inventory_freezes_configured_and_wired_sources_with
         "fmp": {
             "env_names": ("FMP_API_KEY", "FMP_API_KEYS"),
             "config_markers": (
-                "fmp_keys_str = os.getenv('FMP_API_KEYS', '')",
-                "single_fmp = os.getenv('FMP_API_KEY', '').strip()",
+                "fmp_keys_str = environment.get('FMP_API_KEYS', '')",
+                "single_fmp = environment.get('FMP_API_KEY', '').strip()",
                 "fmp_api_keys=fmp_api_keys",
             ),
             "runtime_markers": (
@@ -110,8 +110,8 @@ def test_provider_credential_inventory_freezes_configured_and_wired_sources_with
         "finnhub": {
             "env_names": ("FINNHUB_API_KEY", "FINNHUB_API_KEYS"),
             "config_markers": (
-                "finnhub_keys_str = os.getenv('FINNHUB_API_KEYS', '')",
-                "single_finnhub = os.getenv('FINNHUB_API_KEY', '').strip()",
+                "finnhub_keys_str = environment.get('FINNHUB_API_KEYS', '')",
+                "single_finnhub = environment.get('FINNHUB_API_KEY', '').strip()",
                 "finnhub_api_keys=finnhub_api_keys",
             ),
             "runtime_markers": (

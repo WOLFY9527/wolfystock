@@ -7,6 +7,7 @@ import os
 import tempfile
 import unittest
 from datetime import date, timedelta
+from decimal import Decimal
 from unittest.mock import patch
 
 from src.config import Config
@@ -58,7 +59,7 @@ class BacktestProfessionalReadinessTestCase(unittest.TestCase):
                         open=close - 0.1,
                         high=close + 0.2,
                         low=close - 0.3,
-                        close=close,
+                        close=Decimal(str(close)),
                         volume=1000.0,
                     )
                 )

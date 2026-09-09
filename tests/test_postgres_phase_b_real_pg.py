@@ -38,7 +38,9 @@ def _reset_auth_globals() -> None:
     auth._session_secret = None
     auth._password_hash_salt = None
     auth._password_hash_stored = None
+    auth._password_hash_value = None
     auth._rate_limit = {}
+    auth._admin_reauth_markers = {}
 
 
 def _build_result(code: str, *, name: str) -> AnalysisResult:
@@ -69,10 +71,11 @@ class PostgresPhaseBRealPgTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         DatabaseManager.reset_instance()
         Config.reset_instance()
-        os.environ.pop("ENV_FILE", None)
-        os.environ.pop("DATABASE_PATH", None)
-        os.environ.pop("POSTGRES_PHASE_A_URL", None)
-        os.environ.pop("POSTGRES_PHASE_A_APPLY_SCHEMA", None)
+        for key, value in self._previous_environment.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
         self._drop_phase_b_tables()
         self.pg_engine.dispose()
         self.temp_dir.cleanup()
@@ -87,6 +90,10 @@ class PostgresPhaseBRealPgTestCase(unittest.TestCase):
             "POSTGRES_PHASE_A_APPLY_SCHEMA=true",
         ]
         self.env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        self._previous_environment = {
+            key: os.environ.get(key)
+            for key in ("ENV_FILE", "DATABASE_PATH", "POSTGRES_PHASE_A_URL", "POSTGRES_PHASE_A_APPLY_SCHEMA")
+        }
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.sqlite_db_path)
         os.environ["POSTGRES_PHASE_A_URL"] = self.real_pg_dsn

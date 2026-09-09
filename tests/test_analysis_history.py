@@ -15,6 +15,7 @@ import sys
 import tempfile
 import unittest
 from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -980,7 +981,7 @@ class AnalysisHistoryTestCase(unittest.TestCase):
                         open=169.99,
                         high=170.97,
                         low=167.55,
-                        close=168.99,
+                        close=Decimal("168.99"),
                         volume=107549476,
                         data_source="yfinance_realtime_snapshot",
                     ),
@@ -990,7 +991,7 @@ class AnalysisHistoryTestCase(unittest.TestCase):
                         open=176.17,
                         high=176.50,
                         low=171.14,
-                        close=171.24,
+                        close=Decimal("171.24"),
                         volume=182162282,
                         data_source="yfinance",
                     ),
@@ -1000,7 +1001,7 @@ class AnalysisHistoryTestCase(unittest.TestCase):
                         open=174.00,
                         high=177.00,
                         low=173.50,
-                        close=175.00,
+                        close=Decimal("175.00"),
                         volume=150000000,
                         data_source="yfinance",
                     ),
@@ -1019,8 +1020,8 @@ class AnalysisHistoryTestCase(unittest.TestCase):
 
         self.assertIsNotNone(context)
         self.assertEqual(context["date"], "2026-03-27")
-        self.assertEqual(context["today"]["close"], 171.24)
-        self.assertEqual(context["yesterday"]["close"], 175.00)
+        self.assertEqual(context["today"]["close"], Decimal("171.24"))
+        self.assertEqual(context["yesterday"]["close"], Decimal("175.00"))
 
     def test_merge_dashboard_from_context_replaces_placeholder_zero_values(self) -> None:
         merged = HistoryService._merge_dashboard_from_context(
