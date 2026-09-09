@@ -28,10 +28,13 @@ from data_provider.base import (
     BaseFetcher,
     DataFetchError,
     DataFetcherManager,
-    attach_stock_daily_close_tokens,
     normalize_stock_code,
 )
-from src.portfolio_exact_numeric import PortfolioExactNumericError, STOCK_DAILY_CLOSE_PROVENANCE_ATTR
+from src.portfolio_exact_numeric import (
+    PortfolioExactNumericError,
+    STOCK_DAILY_CLOSE_PROVENANCE_ATTR,
+    attach_stock_daily_close_tokens,
+)
 from src.repositories.stock_repo import StockRepository
 from src.core.scanner_profile import get_scanner_profile
 from src.core.scanner_theme_registry import create_ai_scanner_theme, get_scanner_theme

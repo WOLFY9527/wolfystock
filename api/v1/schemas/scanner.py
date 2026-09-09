@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.core.scanner_skip_reason import normalize_scanner_skip_reason
-from src.services.scanner_ohlcv_readiness import sanitize_historical_ohlcv_readiness
+from src.contracts.scanner_ohlcv_readiness import sanitize_historical_ohlcv_readiness
 
 
 SCANNER_CONSUMER_DATA_QUALITY_LABELS = {"ready", "delayed", "cached", "partial", "no_evidence", "unavailable"}

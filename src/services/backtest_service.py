@@ -14,19 +14,19 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 from sqlalchemy import and_, select
 
-from data_provider.base import attach_stock_daily_close_tokens
 from src.config import get_config
+from src.contracts.backtest_status import effective_backtest_run_status
 from src.core.backtest_engine import OVERALL_SENTINEL_CODE, BacktestEngine, EvaluationConfig
 from src.core.trading_calendar import MARKET_EXCHANGE, MARKET_TIMEZONE, get_market_for_stock
 from src.repositories.backtest_repo import BacktestRepository
 from src.repositories.stock_repo import StockRepository
+from src.portfolio_exact_numeric import attach_stock_daily_close_tokens
 from src.services.backtest_response_contract import (
     build_execution_readiness_contract,
     build_performance_contract,
     build_standard_result_contract,
     build_standard_run_contract,
 )
-from src.services.backtest_status import effective_backtest_run_status
 from src.services.backtest_data_sufficiency import assess_backtest_data_sufficiency
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
 from src.services.backtest_reproducibility_manifest import (

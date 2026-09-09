@@ -15,6 +15,7 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Any, Mapping, Optional
 
+import pandas as pd
 from sqlalchemy import Numeric, Text
 from sqlalchemy.types import TypeDecorator, TypeEngine
 
@@ -24,6 +25,33 @@ PORTFOLIO_STORAGE_SCALE = 8
 PORTFOLIO_STORAGE_QUANTUM = Decimal("0.00000001")
 PORTFOLIO_ROUNDING = ROUND_HALF_EVEN
 STOCK_DAILY_CLOSE_PROVENANCE_ATTR = "wolfystock.stock_daily.close_tokens.v1"
+
+
+def attach_stock_daily_close_tokens(
+    frame: pd.DataFrame,
+    raw_close_tokens: list[Any],
+) -> pd.DataFrame:
+    """Attach verified textual/Decimal daily-close provenance for strict storage."""
+
+    result = frame.copy()
+    result.attrs.pop(STOCK_DAILY_CLOSE_PROVENANCE_ATTR, None)
+    if "date" not in result.columns or len(result) != len(raw_close_tokens):
+        return result
+
+    token_by_date: dict[str, Any] = {}
+    for row_date, token in zip(result["date"].tolist(), raw_close_tokens):
+        if not isinstance(token, (Decimal, str)):
+            return result
+        parsed_date = pd.to_datetime(row_date, errors="coerce")
+        if pd.isna(parsed_date):
+            return result
+        date_key = parsed_date.date().isoformat()
+        if date_key in token_by_date:
+            return result
+        token_by_date[date_key] = token
+
+    result.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] = token_by_date
+    return result
 
 # These aliases preserve the existing storage decorator contract while callers
 # are migrated to the explicit policy functions below.

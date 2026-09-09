@@ -12,10 +12,11 @@ from typing import Mapping, Optional, Tuple, Union
 
 import pandas as pd
 
-from data_provider.base import DataFetcherManager, attach_stock_daily_close_tokens
+from data_provider.base import DataFetcherManager
 from src.portfolio_exact_numeric import (
     PortfolioExactNumericError,
     STOCK_DAILY_CLOSE_PROVENANCE_ATTR,
+    attach_stock_daily_close_tokens,
     parse_portfolio_decimal,
 )
 from src.utils.symbol_classification import is_us_stock_code

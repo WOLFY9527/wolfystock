@@ -9,8 +9,11 @@ from typing import Any
 
 import pandas as pd
 
-from data_provider.base import attach_stock_daily_close_tokens
-from src.portfolio_exact_numeric import STOCK_DAILY_CLOSE_PROVENANCE_ATTR, parse_portfolio_decimal
+from src.portfolio_exact_numeric import (
+    STOCK_DAILY_CLOSE_PROVENANCE_ATTR,
+    attach_stock_daily_close_tokens,
+    parse_portfolio_decimal,
+)
 from src.repositories.stock_repo import StockRepository
 
 

@@ -40,7 +40,7 @@ from src.postgres_store_utils import (
     load_baseline_sql_statements,
     managed_session_scope,
 )
-from src.services.backtest_status import effective_backtest_run_status
+from src.contracts.backtest_status import effective_backtest_run_status
 
 logger = logging.getLogger(__name__)
 

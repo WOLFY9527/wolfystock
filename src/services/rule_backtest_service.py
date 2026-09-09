@@ -20,7 +20,6 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 import pandas as pd
 
-from data_provider.base import attach_stock_daily_close_tokens
 from src.core.rule_backtest_engine import ExecutionModelConfig, ParsedStrategy, RuleBacktestEngine, RuleBacktestParser, _safe_float
 from src.core.trading_calendar import get_market_for_stock, is_market_open
 from src.repositories.rule_backtest_repo import RuleBacktestRepository
@@ -61,7 +60,10 @@ from src.services.rule_backtest_support_exports import (
     resolve_stored_robustness_evidence_payload,
 )
 from src.services.rule_backtest_text_completion import RuleBacktestTextCompletion, create_rule_backtest_text_completion
-from src.portfolio_exact_numeric import STOCK_DAILY_CLOSE_PROVENANCE_ATTR
+from src.portfolio_exact_numeric import (
+    STOCK_DAILY_CLOSE_PROVENANCE_ATTR,
+    attach_stock_daily_close_tokens,
+)
 from src.utils.symbol_classification import is_us_index_code, is_us_stock_code
 from src.utils.symbol_normalization import normalize_stock_code, parse_canonical_symbol
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback

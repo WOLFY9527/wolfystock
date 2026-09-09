@@ -7,7 +7,8 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.v1.schemas.portfolio import PortfolioTransportDecimal, PortfolioTruth
+from api.v1.schemas.portfolio import PortfolioTransportDecimal
+from src.contracts.portfolio_truth import PortfolioTruth
 
 
 PersonalSummaryStatus = Literal["ready", "partial", "no_evidence", "unavailable"]

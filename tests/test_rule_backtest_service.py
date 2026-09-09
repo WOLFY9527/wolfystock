@@ -18,7 +18,7 @@ import pandas as pd
 from sqlalchemy import select
 
 from src.config import Config
-from data_provider.base import attach_stock_daily_close_tokens
+from src.portfolio_exact_numeric import attach_stock_daily_close_tokens
 from src.core.rule_backtest_engine import ParsedStrategy, RuleBacktestEngine, RuleBacktestParser
 from src.services.backtest_parameter_stability import build_parameter_stability_plan
 from src.services.backtest_professional_readiness import build_backtest_professional_readiness

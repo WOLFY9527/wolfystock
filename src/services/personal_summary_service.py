@@ -8,7 +8,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from pydantic import ValidationError
 
-from api.v1.schemas.portfolio import PortfolioTruth
+from src.contracts.portfolio_truth import PortfolioTruth
 
 from api.v1.schemas.personal_summary import (
     PERSONAL_SUMMARY_NO_ADVICE_DISCLOSURE,

@@ -49,12 +49,12 @@
       ]
     },
     {
-      "edgeCount": 6,
+      "edgeCount": 5,
       "from": "persistence",
       "reason": "Repositories and storage bridges still import upper-layer research helpers.",
       "retireWhen": "Persistence consumes only inert value contracts and runtime utilities.",
       "reviewOwner": "architecture_validation",
-      "sha256": "6fd11fdc258f7ef3de62c6e30b2b217d44244ea27ddac6ebdf3fc2c99cb22b5d",
+      "sha256": "73c810f49c17c1a06ced6edf581acb0330550832e3be351577fa85b2e742cc6f",
       "to": "research-services",
       "validationOwners": [
         "complete.database.contracts"
@@ -352,6 +352,7 @@
           "src.logging_config",
           "src.scheduler",
           "src.services.uat_provider_isolation",
+          "src.web_artifact",
           "src.webui_frontend"
         ],
         "pythonPackages": [
@@ -372,7 +373,8 @@
           "server",
           "src.config",
           "src.runtime.settings",
-          "src.services.uat_provider_isolation"
+          "src.services.uat_provider_isolation",
+          "src.web_artifact"
         ],
         "pythonPackages": []
       },
@@ -624,6 +626,8 @@
         "pythonModules": [
           "src.database_doctor",
           "src.database_doctor_smoke",
+          "src.durable_task_retention",
+          "src.sqlite_foreign_keys",
           "src.storage"
         ],
         "pythonPackages": [
@@ -636,6 +640,8 @@
       "publicBoundary": {
         "pathPrefixes": [],
         "pythonModules": [
+          "src.durable_task_retention",
+          "src.sqlite_foreign_keys",
           "src.storage"
         ],
         "pythonPackages": []
@@ -743,7 +749,8 @@
           "src.services.provider_circuit_observer",
           "src.services.provider_plan_advisor",
           "src.services.provider_usage_ledger",
-          "src.services.quota_policy_service"
+          "src.services.quota_policy_service",
+          "src.utils.yfinance_symbol"
         ],
         "pythonPackages": [
           "data_provider",
@@ -760,9 +767,11 @@
           "src.providers.types",
           "src.services.data_source_router",
           "src.services.market_cache",
+          "src.services.market_data_source_registry",
           "src.services.provider_capability_matrix",
           "src.services.provider_usage_ledger",
-          "src.services.quota_policy_service"
+          "src.services.quota_policy_service",
+          "src.utils.yfinance_symbol"
         ],
         "pythonPackages": [
           "src.providers.ports"
@@ -819,6 +828,7 @@
         "pathPrefixes": [],
         "pythonModules": [
           "src.services.analysis_service",
+          "src.services.development_historical_replay",
           "src.services.history_service",
           "src.services.market_overview_service",
           "src.services.options_lab_service",
@@ -912,10 +922,14 @@
         "pathPrefixes": [],
         "pythonModulePrefixes": [],
         "pythonModules": [
+          "src.portfolio_exact_numeric",
           "src.services.ai_evidence_packet",
           "src.services.ai_evidence_packet_validator",
           "src.services.data_quality_contract_validator",
-          "src.services.data_quality_contracts"
+          "src.services.data_quality_contracts",
+          "src.services.historical_market_data_foundation",
+          "src.utils.symbol_normalization",
+          "src.utils.symbol_validation"
         ],
         "pythonPackages": [
           "api.v1.schemas",
@@ -925,13 +939,19 @@
       },
       "protectedSemantics": [
         "api-contracts",
-        "consumer-truth-projection"
+        "consumer-truth-projection",
+        "portfolio-accounting",
+        "provider-source-authority"
       ],
       "publicBoundary": {
         "pathPrefixes": [],
         "pythonModules": [
+          "src.portfolio_exact_numeric",
           "src.services.ai_evidence_packet",
-          "src.services.data_quality_contracts"
+          "src.services.data_quality_contracts",
+          "src.services.historical_market_data_foundation",
+          "src.utils.symbol_normalization",
+          "src.utils.symbol_validation"
         ],
         "pythonPackages": [
           "api.v1.schemas",
@@ -992,11 +1012,11 @@
     }
   ],
   "privateImportDebt": {
-    "edgeCount": 404,
+    "edgeCount": 373,
     "reason": "Existing cross-module imports reach implementation paths outside declared public boundaries.",
     "retireWhen": "All cross-module callers use a declared public boundary or a reviewed dependency contract.",
     "reviewOwner": "architecture_validation",
-    "sha256": "2e70fab536baaed3dde9335a18b34e0d103a34bbd5a08fa692213017c4fa0847",
+    "sha256": "2ecdba9bbc39d15cba61aea4229cf7d05ea6740212e7541e454e45a24bd80a54",
     "validationOwners": [
       "complete.repository.validation"
     ]

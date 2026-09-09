@@ -14,10 +14,10 @@ from .base import (
     BaseFetcher,
     DataFetchError,
     STANDARD_COLUMNS,
-    attach_stock_daily_close_tokens,
 )
 from .realtime_types import RealtimeSource, UnifiedRealtimeQuote, safe_float, safe_int
 from .us_index_mapping import is_us_stock_code
+from src.portfolio_exact_numeric import attach_stock_daily_close_tokens
 from src.services.uat_provider_isolation import require_uat_provider_transport_allowed
 from src.utils.symbol_normalization import parse_canonical_symbol
 

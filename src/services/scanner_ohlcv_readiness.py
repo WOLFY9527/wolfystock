@@ -6,6 +6,7 @@ from typing import Any
 
 import pandas as pd
 
+from src.contracts.scanner_ohlcv_readiness import sanitize_historical_ohlcv_readiness
 from src.core.scanner_profile import ScannerMarketProfile
 from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvAcquisitionResult,
@@ -33,30 +34,6 @@ SCANNER_OHLCV_DEGRADED_REQUIREMENTS = frozenset(
         "missing_factor_inputs",
     }
 )
-SAFE_HISTORICAL_OHLCV_READINESS_KEYS = frozenset(
-    {
-        "contractVersion",
-        "symbol",
-        "market",
-        "timeframe",
-        "requestedRange",
-        "lookbackBars",
-        "requiredBars",
-        "usableBars",
-        "missingBars",
-        "freshnessState",
-        "adjustmentState",
-        "benchmarkState",
-        "providerState",
-        "runtimeStatus",
-        "overallState",
-        "asOf",
-        "missingRequirements",
-        "consumerSafe",
-    }
-)
-
-
 def build_scanner_historical_ohlcv_readiness(
     *,
     symbol: str,
@@ -95,24 +72,6 @@ def historical_ohlcv_readiness_blocks_scanner(readiness: Mapping[str, Any]) -> b
     if any(item in SCANNER_OHLCV_BLOCKING_REQUIREMENTS for item in missing_requirements):
         return True
     return _text(readiness.get("overallState")).lower() == "blocked"
-
-
-def sanitize_historical_ohlcv_readiness(readiness: Mapping[str, Any] | None) -> dict[str, Any]:
-    if not isinstance(readiness, Mapping) or not readiness:
-        return {}
-    sanitized = {
-        key: value
-        for key, value in readiness.items()
-        if key in SAFE_HISTORICAL_OHLCV_READINESS_KEYS
-    }
-    if not sanitized:
-        return {}
-    sanitized["missingRequirements"] = _dedupe(_text_list(sanitized.get("missingRequirements")))
-    for key in ("requiredBars", "usableBars", "missingBars", "lookbackBars"):
-        if key in sanitized:
-            sanitized[key] = _safe_int(sanitized.get(key))
-    sanitized["consumerSafe"] = True
-    return sanitized
 
 
 def summarize_scanner_ohlcv_readiness(
