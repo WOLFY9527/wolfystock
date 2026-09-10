@@ -37,8 +37,8 @@ class TestAgentConfig(unittest.TestCase):
     """Test agent-related configuration fields load correctly."""
 
     @patch.dict(os.environ, {}, clear=True)
-    @patch('src.config.setup_env')
-    def test_default_agent_config(self, _mock_setup_env):
+    @patch('src.runtime.settings.setup_environment')
+    def test_default_agent_config(self, _mock_setup_environment):
         """Agent mode should be disabled by default."""
         from src.config import Config
         self._previous_config_instance = Config._instance

@@ -109,7 +109,7 @@ def test_runtime_settings_preserves_complete_default_value_and_type_contract(
 ) -> None:
     from src.runtime.composition import RuntimeContainer
 
-    monkeypatch.setattr("src.config.setup_env", lambda override=False: None)
+    monkeypatch.setattr("src.runtime.settings.setup_environment", lambda: None)
     with patch.dict(os.environ, {}, clear=True):
         snapshot = _load_snapshot()
         config = snapshot.to_config(Config)
@@ -223,7 +223,7 @@ def test_runtime_settings_preserves_process_over_file_over_default_precedence(
 def test_runtime_settings_owns_validated_portfolio_import_limits(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("src.config.setup_env", lambda override=False: None)
+    monkeypatch.setattr("src.runtime.settings.setup_environment", lambda: None)
     with patch.dict(
         os.environ,
         {
@@ -255,7 +255,7 @@ def test_runtime_settings_owns_validated_portfolio_import_limits(
 def test_runtime_settings_rejects_invalid_portfolio_import_limits(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("src.config.setup_env", lambda override=False: None)
+    monkeypatch.setattr("src.runtime.settings.setup_environment", lambda: None)
     with patch.dict(
         os.environ,
         {"PORTFOLIO_IMPORT_MAX_BYTES": "not-an-integer"},
@@ -298,7 +298,7 @@ def test_runtime_settings_rejects_invalid_portfolio_import_limits(
 def test_runtime_settings_preserves_profile_matrix_and_environment_overrides(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("src.config.setup_env", lambda override=False: None)
+    monkeypatch.setattr("src.runtime.settings.setup_environment", lambda: None)
 
     for profile, expected_days in {
         "ultra_short": 1,
@@ -368,7 +368,7 @@ def test_runtime_settings_preserves_env_file_provenance_after_startup_preload(
 def test_runtime_settings_records_alias_origin_when_values_agree(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("src.config.setup_env", lambda override=False: None)
+    monkeypatch.setattr("src.runtime.settings.setup_environment", lambda: None)
     with patch.dict(
         os.environ,
         {
@@ -393,7 +393,7 @@ def test_runtime_settings_records_alias_origin_when_values_agree(
 def test_runtime_settings_reports_bounded_alias_conflicts_without_changing_precedence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("src.config.setup_env", lambda override=False: None)
+    monkeypatch.setattr("src.runtime.settings.setup_environment", lambda: None)
     with patch.dict(
         os.environ,
         {
@@ -423,7 +423,7 @@ def test_runtime_settings_reports_bounded_alias_conflicts_without_changing_prece
 def test_runtime_settings_is_deeply_immutable_and_diagnostics_are_secret_safe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("src.config.setup_env", lambda override=False: None)
+    monkeypatch.setattr("src.runtime.settings.setup_environment", lambda: None)
     secrets = {
         "OPENAI_API_KEY": "runtime-secret-sentinel",
         "WECHAT_WEBHOOK_URL": "https://example.invalid/private-hook",
