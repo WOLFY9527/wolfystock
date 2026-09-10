@@ -42373,8 +42373,8 @@
       }
     },
     "inventory": {
-      "count": 178,
-      "sha256": "30276b8efe1b1484a5da5cfa263380604d68ada7f55bb6ae945073cc25f46086"
+      "count": 179,
+      "sha256": "6d7eaa40ca1ee69ffa90507d0ad86768c2bf6e64f65ba6364556b76a29a4587b"
     },
     "files": [
       {
@@ -43074,6 +43074,10 @@
         "owner": "frontend_shared"
       },
       {
+        "path": "apps/dsa-web/src/utils/__tests__/researchWorkspaceRoute.test.ts",
+        "owner": "frontend_shared"
+      },
+      {
         "path": "apps/dsa-web/src/utils/__tests__/taskQueue.test.ts",
         "owner": "runtime_operator_tooling"
       },
@@ -43197,14 +43201,14 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/StockStructureDecisionPage.test.tsx",
         "owner": "market",
-        "bytes": 129669,
-        "lines": 3041
+        "bytes": 138819,
+        "lines": 3267
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/UserScannerPage.test.tsx",
         "owner": "scanner",
-        "bytes": 220085,
-        "lines": 4879
+        "bytes": 220880,
+        "lines": 4897
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/WatchlistPage.test.tsx",

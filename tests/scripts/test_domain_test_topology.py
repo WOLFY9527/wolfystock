@@ -72,8 +72,8 @@ def test_manifest_schema_preserves_baseline_and_complete_surface_counts() -> Non
 
     assert result["status"] == "valid"
     assert result["baselineBackendTests"] == 7_609
-    assert result["backendTests"] == 8_392
-    assert result["vitestFiles"] == 178
+    assert result["backendTests"] == 8_393
+    assert result["vitestFiles"] == 179
     assert result["playwrightSpecs"] == 72
     assert result["playwrightProjectCases"] == 798
     assert manifest["backend"]["baselineCapture"] == {
@@ -194,7 +194,7 @@ def test_vitest_ownership_has_explicit_milestones_and_identifies_large_files() -
     manifest = load_manifest()
     entries = manifest["vitest"]["files"]
 
-    assert len(entries) == len({entry["path"] for entry in entries}) == 178
+    assert len(entries) == len({entry["path"] for entry in entries}) == 179
     assert {entry["owner"] for entry in entries} <= set(manifest["vitest"]["owners"])
     assert any(entry["owner"] == "milestone_t448_consumer_product" for entry in entries)
     assert any(entry["owner"] == "milestone_t451_auth_session" for entry in entries)
@@ -581,8 +581,8 @@ def test_first_attempts_and_retries_are_never_coalesced(
     assert canonical["schemaVersion"] == full["schemaVersion"]
     assert canonical["structuredResultAuthority"] == topology.TEST_RESULT_SCHEMA_VERSION
     assert canonical["topology"] == load_manifest()["backend"]["currentInventory"]
-    assert canonical["selection"]["count"] == 8_374
-    assert release["selection"]["count"] == 8_392
+    assert canonical["selection"]["count"] == 8_375
+    assert release["selection"]["count"] == 8_393
     assert release["selection"] == full["selection"]
     assert set(canonical["validationStages"]["execution"]["nodeIds"]) == {
         node_id for item in canonical["shards"] for node_id in item["nodeIds"]
