@@ -379,6 +379,11 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _optional_float(value: Any) -> Optional[float]:
+    number = _safe_float(value, default=np.nan)
+    return None if np.isnan(number) else number
+
+
 def _persisted_json_value(
     raw: Optional[str],
     *,
@@ -438,9 +443,10 @@ def _candidate_persisted_json_values(
 
 
 def _format_pct(value: Optional[float], digits: int = 1) -> str:
-    if value is None:
+    number = _optional_float(value)
+    if number is None:
         return "--"
-    return f"{float(value):.{digits}f}%"
+    return f"{number:.{digits}f}%"
 
 
 def _is_fallback_score_cap_source(source: str, *, source_type: str = "") -> bool:
@@ -455,6 +461,13 @@ def _format_price(value: Optional[float], digits: int = 2) -> str:
     if value is None:
         return "--"
     return f"{float(value):.{digits}f}"
+
+
+def _format_ratio(value: Optional[float], digits: int = 2) -> str:
+    number = _optional_float(value)
+    if number is None:
+        return "--"
+    return f"{number:.{digits}f}x"
 
 
 def _format_amount(value: Optional[float]) -> str:
@@ -549,6 +562,12 @@ def _pct_change(base: Optional[float], value: Optional[float]) -> Optional[float
     if np.isnan(base_value) or np.isnan(target_value) or abs(base_value) < 1e-9:
         return None
     return ((target_value / base_value) - 1.0) * 100.0
+
+
+def _latest_history_change_pct(history_df: pd.DataFrame) -> Optional[float]:
+    if len(history_df) < 2:
+        return None
+    return _pct_change(history_df["close"].iloc[-2], history_df["close"].iloc[-1])
 
 
 def _round_optional(value: Optional[float], digits: int = 2) -> Optional[float]:
@@ -3875,7 +3894,7 @@ class MarketScannerService:
                     "name": symbol,
                     "price": close,
                     "close": close,
-                    "change_pct": _safe_float(features.get("latest_pct_chg")),
+                    "change_pct": _optional_float(features.get("latest_pct_chg")),
                     "amount": avg_amount_20,
                     "avg_amount_20": avg_amount_20,
                     "avg_volume_20": avg_volume_20,
@@ -4360,7 +4379,7 @@ class MarketScannerService:
                     "name": symbol,
                     "price": close,
                     "close": close,
-                    "change_pct": _safe_float(features.get("latest_pct_chg")),
+                    "change_pct": _optional_float(features.get("latest_pct_chg")),
                     "amount": avg_amount_20,
                     "avg_amount_20": avg_amount_20,
                     "avg_volume_20": avg_volume_20,
@@ -4498,7 +4517,7 @@ class MarketScannerService:
             "atr20_pct": _safe_float(df["range_pct"].tail(20).mean()),
             "recent_up_days_10": int((df["pct_chg"].tail(10).fillna(0.0) > 0).sum()),
             "last_trade_date": latest["date"].date().isoformat() if pd.notna(latest["date"]) else None,
-            "latest_pct_chg": _safe_float(latest.get("pct_chg")),
+            "latest_pct_chg": _latest_history_change_pct(df),
             "latest_volume": _safe_float(latest.get("volume")),
             "latest_amount": _safe_float(latest.get("amount")),
         }
@@ -4681,7 +4700,9 @@ class MarketScannerService:
             return None
 
         live_price = _safe_float(quote_context.get("price"), default=_safe_float(features.get("close")))
-        live_change_pct = _safe_float(quote_context.get("change_pct"), default=_safe_float(features.get("latest_pct_chg")))
+        live_change_pct = _optional_float(quote_context.get("change_pct"))
+        if live_change_pct is None:
+            live_change_pct = _optional_float(features.get("latest_pct_chg"))
         avg_amount_20 = _safe_float(features.get("avg_amount_20"))
         avg_volume_20 = _safe_float(features.get("avg_volume_20"))
         amount = _safe_float(quote_context.get("amount"), default=avg_amount_20)
@@ -7478,7 +7499,7 @@ class MarketScannerService:
                     "code": code,
                     "name": names.get(code, code),
                     "price": close,
-                    "change_pct": _safe_float(latest.get("pct_chg")),
+                    "change_pct": _latest_history_change_pct(history_df),
                     "volume": recent_volume,
                     "amount": recent_amount,
                     "turnover_rate": np.nan,
@@ -8574,10 +8595,13 @@ class MarketScannerService:
             "symbol": str(snapshot_row["code"]),
             "name": str(snapshot_row.get("name") or snapshot_row["code"]),
             "price": _safe_float(snapshot_row.get("price"), default=close),
-            "change_pct": _safe_float(snapshot_row.get("change_pct")),
+            "change_pct": _optional_float(snapshot_row.get("change_pct")),
             "turnover_rate": _safe_float(snapshot_row.get("turnover_rate")),
             "volume_ratio": _safe_float(snapshot_row.get("volume_ratio")),
             "amount": _safe_float(snapshot_row.get("amount")),
+            "_key_metric_turnover_rate": _optional_float(snapshot_row.get("turnover_rate")),
+            "_key_metric_volume_ratio": _optional_float(snapshot_row.get("volume_ratio")),
+            "_key_metric_amount": _optional_float(snapshot_row.get("amount")),
             "amplitude": _safe_float(snapshot_row.get("amplitude")),
             "pre_rank_score": _safe_float(snapshot_row.get("pre_rank_score")),
             "close": close,
@@ -9349,9 +9373,18 @@ class MarketScannerService:
             {"label": "最新价", "value": _format_price(candidate.get("price"))},
             {"label": "日涨跌幅", "value": _format_pct(candidate.get("change_pct"))},
             {"label": "20日动量", "value": _format_pct(candidate.get("ret_20d"))},
-            {"label": "换手率", "value": _format_pct(candidate.get("turnover_rate"))},
-            {"label": "成交额", "value": _format_amount(candidate.get("amount"))},
-            {"label": "量比", "value": f"{_safe_float(candidate.get('volume_ratio')):.2f}x"},
+            {
+                "label": "换手率",
+                "value": _format_pct(candidate.get("_key_metric_turnover_rate", candidate.get("turnover_rate"))),
+            },
+            {
+                "label": "成交额",
+                "value": _format_amount(candidate.get("_key_metric_amount", candidate.get("amount"))),
+            },
+            {
+                "label": "量比",
+                "value": _format_ratio(candidate.get("_key_metric_volume_ratio", candidate.get("volume_ratio"))),
+            },
         ]
 
     def _build_feature_signals(self, candidate: Dict[str, Any]) -> List[Dict[str, str]]:

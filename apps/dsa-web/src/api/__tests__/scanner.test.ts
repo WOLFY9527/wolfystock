@@ -57,6 +57,42 @@ describe('scannerApi investor signal normalization', () => {
     );
   });
 
+  it('preserves missing and genuine-zero Scanner key metrics from run readback', async () => {
+    const { scannerApi } = await import('../scanner');
+    get.mockResolvedValueOnce({
+      data: {
+        id: 84,
+        market: 'us',
+        profile: 'us_historical_research_v1',
+        status: 'completed',
+        diagnostics: {},
+        shortlist: [
+          {
+            symbol: 'AAPL',
+            key_metrics: [
+              { label: 'Day change', value: '--' },
+              { label: 'Gap vs prev close', value: '--' },
+            ],
+          },
+          {
+            symbol: 'FLAT',
+            key_metrics: [{ label: 'Day change', value: '0.0%' }],
+          },
+        ],
+      },
+    });
+
+    const detail = await scannerApi.getRun(84);
+
+    expect(detail.shortlist[0].keyMetrics).toEqual([
+      { label: 'Day change', value: '--' },
+      { label: 'Gap vs prev close', value: '--' },
+    ]);
+    expect(detail.shortlist[1].keyMetrics).toEqual([
+      { label: 'Day change', value: '0.0%' },
+    ]);
+  });
+
   it('normalizes scanner dataReadiness from run detail and status payloads', async () => {
     const { scannerApi } = await import('../scanner');
     get

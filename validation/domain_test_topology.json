@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8392,
-      "sha256": "84df4b6f011055278d8ae2958e75ea335c6591b1fae14cff6d98538aacf08054"
+      "count": 8393,
+      "sha256": "3cf9d478527893e8ce848a305764c9e698de99538dfe39c0692aa943083bae84"
     },
     "tests": [
       {
@@ -24882,6 +24882,11 @@
         "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_scanner_context_frame_keeps_us_persisted_signature_and_history_readback_projection_only",
         "domain": "scanner",
         "baseline": true
+      },
+      {
+        "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_scanner_key_metrics_keep_missing_distinct_from_true_zero",
+        "domain": "scanner",
+        "baseline": false
       },
       {
         "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_scanner_ohlcv_readiness_maps_insufficient_stale_adjustments_entitlement_and_exception",

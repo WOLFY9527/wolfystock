@@ -903,6 +903,71 @@ class MarketScannerServiceTestCase(unittest.TestCase):
 
         self.assertTrue(normalized.empty)
 
+    def test_scanner_key_metrics_keep_missing_distinct_from_true_zero(self) -> None:
+        history = _make_history(
+            start_price=10.0,
+            slope=0.1,
+            amount_base=3.0e8,
+            volume_base=2_000_000,
+            bars=80,
+        )
+        history["pct_chg"] = np.nan
+        history.loc[history.index[-2], "close"] = 0.0
+        history.loc[history.index[-1], "close"] = 100.0
+        history.loc[history.index[-1], "pct_chg"] = 0.0
+        features = self.service._extract_history_features(history)
+
+        self.assertIsNone(features["latest_pct_chg"])
+
+        candidate = self.service._build_candidate_from_history(
+            snapshot_row={
+                "code": "600001",
+                "name": "缺失指标样本",
+                "price": 100.0,
+                "change_pct": None,
+                "turnover_rate": None,
+                "volume_ratio": None,
+                "amount": None,
+            },
+            history_df=history,
+            history_diag={"source": "local_db"},
+            profile=get_scanner_profile(market="cn", profile="cn_preopen_v1"),
+            snapshot_source="local_history_degraded",
+            degraded_mode_used=True,
+        )
+        self.assertIsNotNone(candidate)
+        self.assertIsNone(candidate["change_pct"])
+        self.assertEqual(candidate["turnover_rate"], 0.0)
+        self.assertEqual(candidate["volume_ratio"], 0.0)
+        self.assertEqual(candidate["amount"], 0.0)
+        missing_metrics = {item["label"]: item["value"] for item in self.service._build_key_metrics(candidate)}
+        self.assertEqual(missing_metrics["日涨跌幅"], "--")
+        self.assertEqual(missing_metrics["换手率"], "--")
+        self.assertEqual(missing_metrics["成交额"], "--")
+        self.assertEqual(missing_metrics["量比"], "--")
+
+        zero_history = history.copy()
+        zero_history.loc[zero_history.index[-2]:, "close"] = 100.0
+        zero_features = self.service._extract_history_features(zero_history)
+        self.assertEqual(zero_features["latest_pct_chg"], 0.0)
+        zero_metrics = {
+            item["label"]: item["value"]
+            for item in self.service._build_key_metrics(
+                {
+                    "price": 100.0,
+                    "change_pct": zero_features["latest_pct_chg"],
+                    "ret_20d": 0.0,
+                    "turnover_rate": 0.0,
+                    "amount": 0.0,
+                    "volume_ratio": 0.0,
+                }
+            )
+        }
+        self.assertEqual(zero_metrics["日涨跌幅"], "0.0%")
+        self.assertEqual(zero_metrics["换手率"], "0.0%")
+        self.assertEqual(zero_metrics["成交额"], "0")
+        self.assertEqual(zero_metrics["量比"], "0.00x")
+
     def test_remote_float_history_remains_analytics_available_and_reports_not_persisted(self) -> None:
         history = self.data_manager.histories["600002"].copy()
         history.attrs.pop(STOCK_DAILY_CLOSE_PROVENANCE_ATTR, None)

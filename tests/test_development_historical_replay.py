@@ -823,9 +823,35 @@ def test_scanner_loads_explicit_replay_after_local_us_cache_selection(tmp_path) 
 
 def test_scanner_default_us_universe_uses_verified_replay_only_without_local_coverage(tmp_path, request) -> None:
     expected_symbols = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"]
+    expected_day_changes = {
+        "AAPL": -0.71,
+        "QQQ": -0.85,
+        "MSFT": -0.78,
+        "NVDA": -2.33,
+    }
     replay_rows = _daily_rows(count=540)
     for row in replay_rows:
         row["volume"] = 2_000_000
+
+    def replay_rows_for(symbol: str) -> list[dict[str, object]]:
+        rows = [dict(row) for row in replay_rows]
+        expected_change = expected_day_changes.get(symbol)
+        if expected_change is None:
+            return rows
+        cutoff_index = next(index for index, row in enumerate(rows) if row["sessionDate"] == "2024-12-31")
+        previous_close = float(rows[cutoff_index - 1]["close"])
+        cutoff_close = previous_close * (1.0 + expected_change / 100.0)
+        rows[cutoff_index].update(
+            {
+                "open": cutoff_close,
+                "high": cutoff_close + 0.3,
+                "low": cutoff_close - 0.4,
+                "close": cutoff_close,
+                "adjustedClose": cutoff_close,
+            }
+        )
+        return rows
+
     manifest_path, _, _ = _write_manifest_observations(
         tmp_path,
         [
@@ -835,7 +861,7 @@ def test_scanner_default_us_universe_uses_verified_replay_only_without_local_cov
                 canonical_symbol=symbol,
                 provider="stooq_archive",
                 source="stooq_historical",
-                rows=replay_rows,
+                rows=replay_rows_for(symbol),
             )
             for symbol in expected_symbols
         ],
@@ -886,13 +912,15 @@ def test_scanner_default_us_universe_uses_verified_replay_only_without_local_cov
         )
         cached_symbols = sorted(RuleBacktestService(db).stock_repo.list_distinct_codes())
 
-        second_scan = MarketScannerService(db, data_manager=data_manager).run_scan(
+        second_service = MarketScannerService(db, data_manager=data_manager)
+        second_scan = second_service.run_scan(
             market="us",
             profile="us_historical_research_v1",
             scope="system",
             evaluation_mode="historical_development",
             evaluation_cutoff=cutoff,
         )
+        second_readback = second_service.get_run_detail(second_scan["id"], scope="system")
         current_resolution = MarketScannerService(db, data_manager=data_manager)._resolve_us_stock_universe(
             profile=get_scanner_profile(market="us"),
             allow_development_replay=False,
@@ -940,6 +968,14 @@ def test_scanner_default_us_universe_uses_verified_replay_only_without_local_cov
         symbol: second_scan["diagnostics"]["candidate_diagnostics"][symbol]["status"]
         for symbol in ("AAPL", "MSFT", "NVDA")
     } == {"AAPL": "evaluated", "MSFT": "evaluated", "NVDA": "evaluated"}
+    assert second_readback is not None
+    for result in (first_scan, second_scan, second_readback):
+        shortlist_by_symbol = {candidate["symbol"]: candidate for candidate in result["shortlist"]}
+        assert set(expected_day_changes).issubset(shortlist_by_symbol)
+        for symbol, expected_change in expected_day_changes.items():
+            metrics = {item["label"]: item["value"] for item in shortlist_by_symbol[symbol]["key_metrics"]}
+            assert metrics["Day change"] == f"{expected_change:.1f}%"
+            assert metrics["Gap vs prev close"] == "--"
     assert second_scan["diagnostics"]["candidate_diagnostics"]["SPY"]["status"] == "skipped"
     assert second_scan["diagnostics"]["candidate_diagnostics"]["SPY"]["reason"] == "benchmark_symbol_skipped"
     assert data_manager.get_realtime_quote.call_count == 0
