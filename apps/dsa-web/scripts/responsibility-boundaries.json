@@ -359,11 +359,11 @@
     {
       "path": "src/pages/StockStructureDecisionPage.tsx",
       "profile": "cohesive-owner",
-      "maxSignals": { "stateCalls": 18, "effects": 1, "apiCalls": 10, "effectApiCalls": 0, "truthCalls": 34, "domainCalls": 13 },
+      "maxSignals": { "stateCalls": 19, "effects": 1, "apiCalls": 11, "effectApiCalls": 0, "truthCalls": 35, "domainCalls": 14 },
       "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection", "domain-calculation", "cross-domain-dependency"],
-      "allowedDependencies": ["options", "research"],
+      "allowedDependencies": ["options", "research", "scanner"],
       "staleProtection": "not-applicable",
-      "rationale": "Accepted-tree responsibility concentration recorded for bounded regression detection.",
+      "rationale": "The stock Research route owns a bounded owner-scoped Scanner run readback so historical candidate evidence survives navigation without entering current stock-data contracts.",
       "retirementCondition": "Remove after the owning controller, projection, or presentation boundary is qualified with focused tests."
     },
     {

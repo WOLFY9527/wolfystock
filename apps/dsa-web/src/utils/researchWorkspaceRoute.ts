@@ -13,6 +13,7 @@ export type ResearchWorkspaceRouteContext = {
   symbol?: string | null;
   market?: string | null;
   source?: ResearchWorkspaceSource | null;
+  scannerRunId?: number | null;
 };
 
 const SOURCE_VALUES = new Set<ResearchWorkspaceSource>([
@@ -57,12 +58,22 @@ export function normalizeResearchWorkspaceSource(value: unknown): ResearchWorksp
   return SOURCE_VALUES.has(source as ResearchWorkspaceSource) ? source as ResearchWorkspaceSource : null;
 }
 
+export function normalizeResearchWorkspaceScannerRunId(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? value : null;
+  }
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 export function parseResearchWorkspaceSearch(search: string): ResearchWorkspaceRouteContext {
   const params = new URLSearchParams(search);
   return {
     symbol: normalizeResearchWorkspaceSymbol(params.get('symbol')),
     market: normalizeResearchWorkspaceMarket(params.get('market')),
     source: normalizeResearchWorkspaceSource(params.get('source')),
+    scannerRunId: normalizeResearchWorkspaceScannerRunId(params.get('scannerRunId')),
   };
 }
 
@@ -75,10 +86,12 @@ export function buildResearchWorkspacePath(
   const symbol = normalizeResearchWorkspaceSymbol(context.symbol);
   const market = normalizeResearchWorkspaceMarket(context.market);
   const source = normalizeResearchWorkspaceSource(context.source);
+  const scannerRunId = normalizeResearchWorkspaceScannerRunId(context.scannerRunId);
 
   if (symbol) params.set('symbol', symbol);
   if (market) params.set('market', market);
   if (source) params.set('source', source);
+  if (scannerRunId) params.set('scannerRunId', String(scannerRunId));
 
   const basePath = surface === 'stock-structure' && symbol
     ? `/stocks/${encodeURIComponent(symbol)}/structure-decision`

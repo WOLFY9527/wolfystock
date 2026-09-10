@@ -22,6 +22,7 @@ type ResearchWorkspaceFlowPanelProps = {
   symbol?: string | null;
   market?: string | null;
   source?: ResearchWorkspaceSource | null;
+  scannerRunId?: number | null;
   title?: string;
   summary?: string;
   knownEvidence?: Array<string | null | undefined>;
@@ -135,6 +136,7 @@ export default function ResearchWorkspaceFlowPanel({
   symbol,
   market,
   source,
+  scannerRunId,
   title,
   summary,
   knownEvidence,
@@ -152,6 +154,7 @@ export default function ResearchWorkspaceFlowPanel({
     symbol: normalizedSymbol,
     market: normalizedMarket,
     source: normalizedSource,
+    scannerRunId,
   };
   const knownLines = safeEvidenceLines(knownEvidence, ui.noKnown, language);
   const missingLines = safeEvidenceLines(missingEvidence, ui.noMissing, language);

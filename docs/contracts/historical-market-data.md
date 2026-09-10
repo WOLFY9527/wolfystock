@@ -99,6 +99,14 @@ decision-grade signal。Watchlist 的 `scanner_lineage_v1` 保留
 `evaluation_mode`、`evaluation_cutoff` 和 `historical_research=true`，同时继续执行
 原有的 owner scope 与 no-advice 边界。
 
+Scanner 候选进入单股 Research 时，路由只携带持久化 `scannerRunId` 作为 lookup
+pointer；Research 必须通过既有 owner-scoped Scanner run readback 重新读取证据，并将
+canonical symbol、market、完成状态、历史模式和 cutoff 与候选逐项匹配。URL 中的
+symbol、market 或 source 不构成 evidence authority。匹配成功后，Research 可以单独
+展示该 run 已持久化的 cutoff 与历史就绪度；current quote、consumer history 和 chart
+仍由 `/stocks/*` 合同独立决定，不得由 development replay 补齐。缺失、不可访问、
+格式错误或身份不匹配的 lineage 一律不展示 Scanner 历史证据，也不得回退到其他 run。
+
 ## Persistence
 
 `src.repositories.historical_market_data_repo.HistoricalMarketDataRepository`

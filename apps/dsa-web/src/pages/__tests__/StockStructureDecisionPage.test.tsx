@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StockStructureDecisionEntryPage from '../StockStructureDecisionEntryPage';
 import StockStructureDecisionPage from '../StockStructureDecisionPage';
 import { findConsumerRawLeakage, textContentWithoutObservationBoundary } from '../../test-utils/consumerRawLeakageGuard';
+import type { ScannerRunDetail } from '../../types/scanner';
 
 const {
   languageState,
@@ -18,6 +19,7 @@ const {
   getResearchPacketMock,
   getOptionsStructureMock,
   getStructureDecisionsBatchMock,
+  getScannerRunMock,
 } = vi.hoisted(() => ({
   languageState: { value: 'zh' as 'zh' | 'en' },
   productSurfaceState: { isAdmin: false },
@@ -30,6 +32,7 @@ const {
   getResearchPacketMock: vi.fn(),
   getOptionsStructureMock: vi.fn(),
   getStructureDecisionsBatchMock: vi.fn(),
+  getScannerRunMock: vi.fn(),
 }));
 
 vi.mock('../../contexts/UiLanguageContext', () => ({
@@ -72,6 +75,12 @@ vi.mock('../../api/optionsLab', () => ({
 vi.mock('../../api/stockEvidence', () => ({
   stockEvidenceApi: {
     getStockEvidence: (...args: unknown[]) => getStockEvidenceMock(...args),
+  },
+}));
+
+vi.mock('../../api/scanner', () => ({
+  scannerApi: {
+    getRun: (...args: unknown[]) => getScannerRunMock(...args),
   },
 }));
 
@@ -332,6 +341,81 @@ const baseHistory = (symbol = 'AAPL', bars = 60) => ({
     close: 100.5 + index,
     volume: 1000 + index * 10,
   })),
+});
+
+const historicalScannerRun = (overrides: Partial<ScannerRunDetail> = {}): ScannerRunDetail => ({
+  id: 84,
+  market: 'us',
+  profile: 'us_historical_research_v1',
+  profileLabel: 'US Historical Research Scanner v1',
+  evaluationMode: 'historical_development',
+  evaluationCutoff: '2024-12-31',
+  status: 'completed',
+  runAt: '2026-09-08T10:30:00Z',
+  completedAt: '2026-09-08T10:31:00Z',
+  watchlistDate: '2024-12-31',
+  triggerMode: 'manual',
+  universeName: 'us_historical_research_v1',
+  shortlistSize: 1,
+  universeSize: 1,
+  preselectedSize: 1,
+  evaluatedSize: 1,
+  universeNotes: [],
+  scoringNotes: [],
+  universeType: 'default',
+  requestedSymbolsCount: 0,
+  acceptedSymbolsCount: 0,
+  rejectedSymbols: [],
+  diagnostics: {},
+  notification: { attempted: false, status: 'not_attempted', channels: [] },
+  comparisonToPrevious: {
+    available: false,
+    newCount: 0,
+    retainedCount: 0,
+    droppedCount: 0,
+    newSymbols: [],
+    retainedSymbols: [],
+    droppedSymbols: [],
+  },
+  reviewSummary: {
+    available: false,
+    reviewWindowDays: 5,
+    reviewStatus: 'pending',
+    candidateCount: 1,
+    reviewedCount: 0,
+    pendingCount: 1,
+    strongCount: 0,
+    mixedCount: 0,
+    weakCount: 0,
+  },
+  shortlist: [{
+    symbol: 'AAPL',
+    name: 'Apple',
+    rank: 1,
+    score: 74.3,
+    reasons: [],
+    keyMetrics: [],
+    featureSignals: [],
+    riskNotes: [],
+    watchContext: [],
+    boards: [],
+    appearedInRecentRuns: 1,
+    aiInterpretation: { available: false, status: 'unavailable' },
+    realizedOutcome: {
+      reviewStatus: 'pending',
+      outcomeLabel: 'Pending',
+      thesisMatch: 'unknown',
+      reviewWindowDays: 5,
+    },
+    diagnostics: {},
+    historicalOhlcvReadiness: {
+      asOf: '2024-12-31',
+      requiredBars: 180,
+      usableBars: 180,
+      missingBars: 0,
+    },
+  }],
+  ...overrides,
 });
 
 const technicalIndicatorsAvailable = () => ({
@@ -747,6 +831,148 @@ describe('StockStructureDecisionPage', () => {
     getTechnicalIndicatorsMock.mockResolvedValue(technicalIndicatorsAvailable());
     getStockEvidenceMock.mockResolvedValue(stockEvidenceResponse());
     getOptionsStructureMock.mockResolvedValue(optionsStructureNotAvailable());
+  });
+
+  it('re-reads Scanner historical evidence while current quote and history remain independently unavailable across refresh', async () => {
+    languageState.value = 'en';
+    getScannerRunMock.mockResolvedValue(historicalScannerRun());
+    getQuoteMock.mockRejectedValue(new Error('current quote unavailable'));
+    getHistoryMock.mockRejectedValue(new Error('current history unavailable'));
+    getResearchPacketMock.mockResolvedValue({
+      ...partialResearchPacket(),
+      symbol: 'AAPL',
+      quote: { state: 'unavailable', price: null, changePercent: null, asOf: null },
+      history: { state: 'unavailable', bars: 0, period: 'daily', asOf: null },
+    });
+    getStructureDecisionMock.mockResolvedValue({
+      ...baseStructureDecision(),
+      structureState: 'low_confidence',
+      confidence: 'low',
+      dataQuality: {
+        status: 'unavailable',
+        source: null,
+        period: 'daily',
+        requestedDays: 90,
+        observedBars: 0,
+        usableBars: 0,
+        reason: 'history_unavailable',
+      },
+      historicalOhlcvReadiness: {
+        ...baseStructureDecision().historicalOhlcvReadiness,
+        requiredBars: 90,
+        usableBars: 0,
+        missingBars: 90,
+        providerState: 'unavailable',
+        overallState: 'blocked',
+      },
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/en/stocks/AAPL/structure-decision?symbol=AAPL&market=US&source=scanner&scannerRunId=84',
+      '/en/stocks/:stockCode/structure-decision',
+    );
+
+    const scannerPanel = await screen.findByTestId('scanner-historical-evidence-panel');
+    expect(getScannerRunMock).toHaveBeenCalledWith(84);
+    expect(scannerPanel).toHaveTextContent('Scanner historical evidence');
+    expect(scannerPanel).toHaveTextContent('2024-12-31');
+    expect(scannerPanel).toHaveTextContent('74.3');
+    expect(scannerPanel).toHaveTextContent(/Usable historical bars\s*180/);
+    expect(scannerPanel).toHaveTextContent(/Missing historical bars\s*0/);
+    expect(scannerPanel).toHaveTextContent('Development replay');
+    expect(scannerPanel).toHaveTextContent('Not current data');
+    expect(screen.getByTestId('scanner-historical-current-separation')).toHaveTextContent(/never filled from this replay/i);
+
+    const currentHistoryPanel = screen.getByTestId('stock-history-readiness-panel');
+    expect(currentHistoryPanel).toHaveTextContent(/Available bars\s*0/);
+    expect(currentHistoryPanel).toHaveTextContent(/Required bars\s*90/);
+    expect(currentHistoryPanel).toHaveTextContent(/Missing bars\s*90/);
+    expect(screen.getByTestId('stock-history-empty-chart-state')).toHaveTextContent('Chart unavailable');
+    expect(screen.getByTestId('stock-quote-boundary-panel')).toHaveTextContent(/unavailable/i);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh stock research' }));
+    await waitFor(() => expect(getScannerRunMock).toHaveBeenCalledTimes(2));
+    expect(await screen.findByTestId('scanner-historical-evidence-panel')).toHaveTextContent(/Usable historical bars\s*180/);
+  });
+
+  it('renders the Scanner historical evidence boundary in Chinese without raw lineage fields', async () => {
+    languageState.value = 'zh';
+    getScannerRunMock.mockResolvedValue(historicalScannerRun());
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision?symbol=AAPL&market=US&source=scanner&scannerRunId=84',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const scannerPanel = await screen.findByTestId('scanner-historical-evidence-panel');
+    expect(scannerPanel).toHaveTextContent('Scanner 历史证据');
+    expect(scannerPanel).toHaveTextContent('有历史证据的候选');
+    expect(scannerPanel).toHaveTextContent(/可用历史 K 线\s*180/);
+    expect(scannerPanel).toHaveTextContent('不是当前数据');
+    expect(scannerPanel).not.toHaveTextContent(/historical_development|us_historical_research_v1|source_summary|provider/i);
+  });
+
+  it.each([
+    ['returned run id', historicalScannerRun({ id: 85 })],
+    ['run market', historicalScannerRun({ market: 'hk' })],
+    ['candidate symbol', historicalScannerRun({ shortlist: [{ ...historicalScannerRun().shortlist[0], symbol: 'MSFT' }] })],
+    ['evaluation mode', historicalScannerRun({ evaluationMode: 'current' })],
+    ['cutoff', historicalScannerRun({ evaluationCutoff: '2024-02-30' })],
+  ])('fails closed when Scanner lineage mismatches %s', async (_label, run) => {
+    getScannerRunMock.mockResolvedValue(run);
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision?symbol=AAPL&market=US&source=scanner&scannerRunId=84',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    await screen.findByTestId('stock-structure-decision-page');
+    await waitFor(() => expect(getScannerRunMock).toHaveBeenCalledWith(84));
+    expect(screen.queryByTestId('scanner-historical-evidence-panel')).not.toBeInTheDocument();
+  });
+
+  it('fails closed for malformed or inaccessible Scanner lineage without blocking current Research', async () => {
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    const malformed = renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision?symbol=AAPL&market=US&source=scanner&scannerRunId=not-a-run',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+    await screen.findByTestId('stock-structure-decision-page');
+    expect(getScannerRunMock).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('scanner-historical-evidence-panel')).not.toBeInTheDocument();
+    malformed.unmount();
+
+    getScannerRunMock.mockRejectedValue(new Error('not found'));
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision?symbol=AAPL&market=US&source=scanner&scannerRunId=84',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+    await waitFor(() => expect(getScannerRunMock).toHaveBeenCalledWith(84));
+    expect(await screen.findByTestId('stock-structure-decision-page')).toBeInTheDocument();
+    expect(screen.queryByTestId('scanner-historical-evidence-panel')).not.toBeInTheDocument();
+  });
+
+  it('rejects a route-market mismatch before exposing authorized Scanner evidence', async () => {
+    getScannerRunMock.mockResolvedValue(historicalScannerRun());
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision?symbol=AAPL&market=HK&source=scanner&scannerRunId=84',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    await waitFor(() => expect(getScannerRunMock).toHaveBeenCalledWith(84));
+    expect(await screen.findByTestId('stock-structure-decision-page')).toBeInTheDocument();
+    expect(screen.queryByTestId('scanner-historical-evidence-panel')).not.toBeInTheDocument();
   });
 
   it('uses the API canonical HK symbol for the route, display, and every single-symbol request', async () => {

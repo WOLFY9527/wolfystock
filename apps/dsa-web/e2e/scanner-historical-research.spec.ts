@@ -13,11 +13,11 @@ function fulfillJson(route: Route, body: Record<string, unknown>) {
 
 function historicalCandidate() {
   return {
-    symbol: 'NVDA',
-    name: 'NVIDIA',
-    company_name: 'NVIDIA Corp',
+    symbol: 'AAPL',
+    name: 'Apple',
+    company_name: 'Apple Inc.',
     rank: 1,
-    score: 82,
+    score: 74.3,
     quality_hint: 'Historical evidence available through the cutoff.',
     reason_summary: 'Cutoff-bound trend and liquidity evidence passed the research screen.',
     reasons: ['Historical trend and liquidity evidence passed the research screen.'],
@@ -35,6 +35,12 @@ function historicalCandidate() {
       outcome_label: 'Pending',
       thesis_match: 'unknown',
       review_window_days: 5,
+    },
+    historical_ohlcv_readiness: {
+      as_of: cutoff,
+      required_bars: 180,
+      usable_bars: 180,
+      missing_bars: 0,
     },
     diagnostics: {},
   };
@@ -120,7 +126,14 @@ function historicalRun() {
     },
     shortlist: [candidate],
     selected: [candidate],
-    candidates: [{ symbol: 'NVDA', name: 'NVIDIA', rank: 1, status: 'selected', score: 82 }],
+    candidates: [{
+      symbol: 'AAPL',
+      name: 'Apple',
+      rank: 1,
+      status: 'selected',
+      score: 74.3,
+      historical_ohlcv_readiness: candidate.historical_ohlcv_readiness,
+    }],
   };
 }
 
@@ -132,17 +145,149 @@ function historicalRuns() {
     limit: 8,
     items: [{
       ...run,
-      top_symbols: ['NVDA'],
+      top_symbols: ['AAPL'],
       notification_status: 'not_attempted',
       change_summary: run.comparison_to_previous,
     }],
   };
 }
 
+async function installCurrentResearchUnavailableRoutes(page: Page) {
+  await page.route('**/api/v1/stocks/AAPL/validate', (route) => fulfillJson(route, {
+    stock_code: 'AAPL',
+    normalized_symbol: 'AAPL',
+    market: 'us',
+    status: 'valid',
+    valid: true,
+    exists: true,
+    stock_name: 'Apple',
+  }));
+  await page.route('**/api/v1/stocks/AAPL/quote', (route) => fulfillJson(route, {
+    stock_code: 'AAPL',
+    stock_name: 'Apple',
+    current_price: null,
+    update_time: null,
+    availability_state: 'unavailable',
+    is_unavailable: true,
+    unavailable_reason: 'Current quote is unavailable.',
+    missing_requirements: ['current_quote'],
+  }));
+  await page.route('**/api/v1/stocks/AAPL/research-packet', (route) => fulfillJson(route, {
+    symbol: 'AAPL',
+    market: 'us',
+    identity: { name: 'Apple', exchange: 'NASDAQ', sector: 'Technology', industry: 'Hardware' },
+    quote: { state: 'unavailable', price: null, change_percent: null, as_of: null },
+    history: { state: 'unavailable', bars: 0, period: 'daily', as_of: null },
+    structure: { state: 'unavailable', label: null, confidence: 'low', as_of: null },
+    missing_data: ['Current quote and history are unavailable.'],
+    research_status: 'partial',
+    observation_only: true,
+    decision_grade: false,
+    no_advice_disclosure: 'Research observation only.',
+  }));
+  await page.route('**/api/v1/stocks/AAPL/structure-decision', (route) => fulfillJson(route, {
+    schema_version: 'stock_structure_decision_api_v1',
+    ticker: 'AAPL',
+    structure_state: 'low_confidence',
+    confidence: 'low',
+    confidence_cap: { value: 20, label: 'Low', reasons: ['Current history is unavailable.'] },
+    confidence_state: { status: 'evidence incomplete', label: 'Low', reasons: ['Current history is unavailable.'] },
+    component_scores: {},
+    explanation: {
+      why_this_structure: 'Current structure cannot be established.',
+      what_confirms_it: [],
+      what_invalidates_it: [],
+      key_levels: [],
+    },
+    research_notes: {
+      watch_next: ['Refresh current data separately.'],
+      needs_more_evidence: ['Current quote and history.'],
+      risk_flags: [],
+    },
+    data_quality: {
+      status: 'unavailable',
+      period: 'daily',
+      requested_days: 90,
+      observed_bars: 0,
+      usable_bars: 0,
+      reason: 'history_unavailable',
+    },
+    historical_ohlcv_readiness: {
+      required_bars: 90,
+      usable_bars: 0,
+      missing_bars: 90,
+      overall_state: 'blocked',
+      consumer_safe: true,
+    },
+    missing_evidence: [{ kind: 'history', message: 'Current history is unavailable.' }],
+    no_advice_disclosure: 'Research observation only.',
+    observation_only: true,
+    decision_grade: false,
+  }));
+  await page.route('**/api/v1/stocks/AAPL/history**', (route) => fulfillJson(route, {
+    stock_code: 'AAPL',
+    stock_name: 'Apple',
+    period: 'daily',
+    diagnostics: {
+      status: 'unavailable',
+      reason: 'current_history_unavailable',
+      message: 'Current history is unavailable.',
+      requested_days: 90,
+      rows: 0,
+    },
+    source_confidence: {
+      is_unavailable: true,
+      coverage: 0,
+    },
+    data: [],
+  }));
+  await page.route('**/api/v1/stocks/AAPL/technical-indicators', (route) => fulfillJson(route, {
+    contract_version: 'stock_technical_indicators_v1',
+    symbol: 'AAPL',
+    status: 'missing_cache',
+    timeframe: 'daily',
+    as_of: null,
+    freshness: 'unknown',
+    data_quality: { status: 'missing', required_bars: 90, observed_bars: 0, usable_bars: 0, missing_bars: 90 },
+    indicators: {},
+    observation_only: true,
+    decision_grade: false,
+  }));
+  await page.route('**/api/v1/stocks/AAPL/evidence**', (route) => fulfillJson(route, {
+    stock_evidence_packet: {
+      not_investment_advice: true,
+      confidence_cap: { value: 20 },
+      claim_boundaries: [],
+      source_refs: [],
+      data_gaps: ['Current evidence unavailable.'],
+    },
+  }));
+  await page.route('**/api/v1/options/underlyings/AAPL/structure', (route) => fulfillJson(route, {
+    contract_version: 'options-structure-summary-v1',
+    symbol: 'AAPL',
+    status: 'not_available',
+    calculation_state: 'not_available',
+    observation_only: true,
+    decision_grade: false,
+    spot_price: null,
+    as_of: null,
+    freshness: 'unknown',
+    snapshot: { symbol: 'AAPL', spot_price: null, as_of: null, freshness: 'unknown', contracts: [] },
+    strike_summaries: [],
+    expiration_summaries: [],
+    nearest_expirations: [],
+    blocking_reasons: [],
+    warnings: [],
+    next_evidence_needed: [],
+  }));
+}
+
 async function installHistoricalRoutes(page: Page) {
   let historicalRunAvailable = false;
   let submittedRequest: Record<string, unknown> | null = null;
   const historyUrls: string[] = [];
+
+  await installCurrentResearchUnavailableRoutes(page);
 
   await page.route('**/api/v1/auth/status', (route) => fulfillJson(route, {
     authEnabled: true,
@@ -200,6 +345,15 @@ async function installHistoricalRoutes(page: Page) {
 }
 
 test('launches, discovers, and reopens cutoff-bound historical Scanner research', async ({ page }, testInfo) => {
+  const passiveResearchRequests: Array<{ method: string; path: string }> = [];
+  let recordPassiveResearch = false;
+  page.on('request', (request) => {
+    if (!recordPassiveResearch) return;
+    passiveResearchRequests.push({
+      method: request.method(),
+      path: new URL(request.url()).pathname,
+    });
+  });
   const evidence = await installHistoricalRoutes(page);
   await page.goto('/en/scanner');
 
@@ -244,6 +398,41 @@ test('launches, discovers, and reopens cutoff-bound historical Scanner research'
   await historyDrawer.getByRole('button', { name: new RegExp(`Historical research replay through ${cutoff}`) }).click();
   await expect(page.getByTestId('scanner-page-profile-label')).toContainText('US Historical Research');
 
+  recordPassiveResearch = true;
+  const candidateRow = page.getByTestId('scanner-result-row-AAPL');
+  await candidateRow.getByRole('button', { name: 'Detail' }).click();
+  await page.getByTestId('scanner-result-detail-AAPL').getByRole('button', { name: 'Analyze' }).click();
+
+  await expect(page).toHaveURL(/\/en\/stocks\/AAPL\/structure-decision\?symbol=AAPL&market=US&source=scanner&scannerRunId=84$/);
+  const scannerEvidence = page.getByTestId('scanner-historical-evidence-panel');
+  await expect(scannerEvidence).toBeVisible();
+  await expect(scannerEvidence).toContainText('Scanner historical evidence');
+  await expect(scannerEvidence).toContainText('74.3');
+  await expect(scannerEvidence).toContainText('Usable historical bars');
+  await expect(scannerEvidence).toContainText('180');
+  await expect(scannerEvidence).toContainText('Missing historical bars');
+  await expect(scannerEvidence).toContainText('Development replay');
+  await expect(scannerEvidence).toContainText('Not current data');
+  await expect(page.getByTestId('scanner-historical-current-separation')).toContainText('never filled from this replay');
+
+  const currentHistory = page.getByTestId('stock-history-readiness-panel');
+  await expect(currentHistory).toContainText('Available bars');
+  await expect(currentHistory).toContainText('Required bars');
+  await expect(currentHistory).toContainText('Missing bars');
+  await expect(currentHistory).toContainText('90');
+  await expect(page.getByTestId('stock-quote-boundary-panel')).toContainText('unavailable');
+  await expect(page.getByTestId('stock-history-empty-chart-state')).toContainText('Chart unavailable');
+
+  await page.reload();
+  await expect(page.getByTestId('scanner-historical-evidence-panel')).toContainText('Usable historical bars');
+  await expect.poll(() => passiveResearchRequests.filter((request) => request.method === 'GET' && request.path === '/api/v1/scanner/runs/84').length).toBeGreaterThanOrEqual(2);
+  expect(passiveResearchRequests.filter((request) => (
+    request.method !== 'GET'
+    && (/^\/api\/v1\/scanner\//.test(request.path)
+      || /^\/api\/v1\/watchlist/.test(request.path)
+      || /^\/api\/v1\/research\/queue/.test(request.path))
+  ))).toEqual([]);
+
   const layout = await page.evaluate(() => ({
     viewport: window.innerWidth,
     documentWidth: document.documentElement.scrollWidth,
@@ -252,6 +441,7 @@ test('launches, discovers, and reopens cutoff-bound historical Scanner research'
   expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewport + 1);
   expect(layout.controlRight).toBeLessThanOrEqual(layout.viewport + 1);
 
+  recordPassiveResearch = false;
   await page.goto('/zh/scanner');
   await page.getByTestId('scanner-market-toggle').getByRole('button', { name: '美股' }).click();
   await page.getByRole('button', { name: '美股历史研究回放' }).click();

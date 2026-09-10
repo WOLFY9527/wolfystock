@@ -3423,8 +3423,9 @@ const UserScannerPage: React.FC = () => {
       symbol,
       market: normalizeScannerMarket(runDetail?.market || market),
       source: 'scanner',
+      scannerRunId: runDetail?.id,
     }));
-  }, [language, market, navigate, runDetail?.market]);
+  }, [language, market, navigate, runDetail?.id, runDetail?.market]);
 
   const handleAnalyzeManualRecoverySymbol = useCallback(async () => {
     const symbol = manualRecoveryParsedSymbol;
@@ -5372,6 +5373,7 @@ const UserScannerPage: React.FC = () => {
                 symbol={researchWorkflowSymbol}
                 market={researchWorkflowMarket}
                 source="scanner"
+                scannerRunId={runDetail?.id}
                 knownEvidence={researchWorkflowKnownEvidence}
                 missingEvidence={researchWorkflowMissingEvidence}
                 stateNotes={researchWorkflowStateNotes}

@@ -29,8 +29,10 @@ import {
   type StockSymbolCompareFreshness,
 } from '../api/stocks';
 import { stockEvidenceApi } from '../api/stockEvidence';
+import { scannerApi } from '../api/scanner';
 import { optionsLabApi, type OptionsStructureSummary, type OptionContractStructureRow } from '../api/optionsLab';
 import type { StockEvidenceItem, StockEvidenceResponse } from '../types/stockEvidence';
+import type { ScannerRunDetail } from '../types/scanner';
 import { EvidenceGapExplanationList } from '../components/research/EvidenceGapExplanation';
 import ResearchWorkspaceFlowPanel from '../components/research/ResearchWorkspaceFlowPanel';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -38,6 +40,7 @@ import { useProductSurface } from '../hooks/useProductSurface';
 import { getConsumerStatusLabel, mapConsumerStatusText } from '../utils/consumerStatusLabels';
 import { consumerPresentationText } from '../utils/consumerPresentationBoundary';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
+import { parseResearchWorkspaceSearch } from '../utils/researchWorkspaceRoute';
 import {
   productReadClassificationDisplayState,
   productReadFreshnessLabel,
@@ -228,6 +231,84 @@ function parsePositiveInteger(value: string | null): number | undefined {
   if (!value) return undefined;
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+type ScannerHistoricalEvidence = {
+  symbol: string;
+  market: string;
+  cutoff: string;
+  sourceAsOf: string | null;
+  rank: number | null;
+  score: number | null;
+  requiredBars: number | null;
+  usableBars: number;
+  missingBars: number;
+};
+
+function normalizedIdentityToken(value: string | null | undefined): string {
+  return String(value || '').trim().toUpperCase();
+}
+
+function validIsoCalendarDate(value: string | null | undefined): string | null {
+  const text = String(value || '').trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!match) return null;
+  const [year, month, day] = match.slice(1).map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day
+    ? text
+    : null;
+}
+
+function scannerReadinessCount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function resolveScannerHistoricalEvidence(
+  run: ScannerRunDetail | null,
+  lookup: { scannerRunId: number; symbol: string; market: string; routeMarket: string },
+): ScannerHistoricalEvidence | null {
+  if (!run || run.id !== lookup.scannerRunId || run.status !== 'completed') return null;
+  if (run.evaluationMode !== 'historical_development') return null;
+  const cutoff = validIsoCalendarDate(run.evaluationCutoff);
+  const requestedSymbol = normalizedIdentityToken(lookup.symbol);
+  const requestedMarket = normalizedIdentityToken(lookup.market);
+  const routeMarket = normalizedIdentityToken(lookup.routeMarket);
+  const runMarket = normalizedIdentityToken(run.market);
+  if (!cutoff || !requestedSymbol || !requestedMarket || routeMarket !== requestedMarket || runMarket !== requestedMarket) {
+    return null;
+  }
+
+  const matches = (Array.isArray(run.shortlist) ? run.shortlist : []).filter((candidate) => {
+    if (normalizedIdentityToken(candidate.symbol) !== requestedSymbol) return false;
+    const candidateMarket = normalizedIdentityToken((candidate as { market?: string | null }).market);
+    return !candidateMarket || candidateMarket === requestedMarket;
+  });
+  if (matches.length !== 1) return null;
+
+  const candidate = matches[0];
+  const readiness = candidate.historicalOhlcvReadiness;
+  const usableBars = scannerReadinessCount(readiness?.usableBars);
+  const missingBars = scannerReadinessCount(readiness?.missingBars);
+  if (!readiness || usableBars === null || missingBars === null) return null;
+
+  const requiredBars = scannerReadinessCount(readiness.requiredBars);
+  const sourceAsOf = readiness.asOf == null ? null : validIsoCalendarDate(readiness.asOf);
+  if (readiness.asOf != null && !sourceAsOf) return null;
+
+  return {
+    symbol: candidate.symbol,
+    market: run.market,
+    cutoff,
+    sourceAsOf,
+    rank: Number.isSafeInteger(candidate.rank) && candidate.rank > 0 ? candidate.rank : null,
+    score: typeof candidate.score === 'number' && Number.isFinite(candidate.score) ? candidate.score : null,
+    requiredBars,
+    usableBars,
+    missingBars,
+  };
 }
 
 function evidenceKindLabel(kind: string | null | undefined, language: 'zh' | 'en'): string {
@@ -2871,6 +2952,88 @@ function StockHistoryReadinessPanel({
   );
 }
 
+function ScannerHistoricalEvidencePanel({
+  evidence,
+  language,
+}: {
+  evidence: ScannerHistoricalEvidence;
+  language: 'zh' | 'en';
+}) {
+  const isEnglish = language === 'en';
+  const rows = [
+    {
+      key: 'cutoff',
+      label: isEnglish ? 'Historical cutoff' : '历史截止日',
+      value: evidence.cutoff,
+    },
+    {
+      key: 'candidate',
+      label: isEnglish ? 'Evidenced candidate' : '有历史证据的候选',
+      value: `${evidence.market.toUpperCase()} · ${evidence.symbol}`,
+    },
+    ...(evidence.rank !== null ? [{
+      key: 'rank',
+      label: isEnglish ? 'Scanner rank' : '扫描排名',
+      value: formatCompactNumber(evidence.rank, language),
+    }] : []),
+    ...(evidence.score !== null ? [{
+      key: 'score',
+      label: isEnglish ? 'Scanner score' : '扫描评分',
+      value: formatCompactNumber(evidence.score, language),
+    }] : []),
+    {
+      key: 'usable-bars',
+      label: isEnglish ? 'Usable historical bars' : '可用历史 K 线',
+      value: formatCompactNumber(evidence.usableBars, language),
+    },
+    ...(evidence.requiredBars !== null ? [{
+      key: 'required-bars',
+      label: isEnglish ? 'Required historical bars' : '所需历史 K 线',
+      value: formatCompactNumber(evidence.requiredBars, language),
+    }] : []),
+    {
+      key: 'missing-bars',
+      label: isEnglish ? 'Missing historical bars' : '缺口历史 K 线',
+      value: formatCompactNumber(evidence.missingBars, language),
+    },
+    ...(evidence.sourceAsOf ? [{
+      key: 'source-as-of',
+      label: isEnglish ? 'Evidence through' : '证据截至',
+      value: evidence.sourceAsOf,
+    }] : []),
+  ];
+
+  return (
+    <section
+      className="mx-3 mb-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3 md:mx-4 md:p-4"
+      data-testid="scanner-historical-evidence-panel"
+      aria-label={isEnglish ? 'Scanner historical evidence' : 'Scanner 历史证据'}
+    >
+      <RoughSectionCard
+        eyebrow={isEnglish ? 'Scanner historical evidence' : 'Scanner 历史证据'}
+        title={isEnglish ? 'Cutoff-bound candidate evidence' : '有截止边界的候选证据'}
+      >
+        <div className="mb-3 flex flex-wrap gap-2">
+          <StatusBadge status="warning" label={isEnglish ? 'Development replay' : '开发回放'} size="sm" />
+          <TerminalChip variant="neutral">{isEnglish ? 'Observation only' : '仅供观察'}</TerminalChip>
+          <TerminalChip variant="neutral">{isEnglish ? 'Not current data' : '不是当前数据'}</TerminalChip>
+        </div>
+        <p className="mb-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+          {isEnglish
+            ? 'This context was re-read from the originating Scanner run and establishes why this candidate reached Research at that historical cutoff.'
+            : '此上下文从原始 Scanner 运行中重新读取，用于说明该候选为何在对应历史截止日进入研究。'}
+        </p>
+        <RoughKeyValueRows rows={rows} />
+        <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]" data-testid="scanner-historical-current-separation">
+          {isEnglish
+            ? 'Historical development evidence remains cutoff-bound and cannot establish current-market conditions. Current quote, current consumer history, and chart availability are loaded independently below and are never filled from this replay.'
+            : '历史开发证据始终受截止日约束，不能说明当前市场状况。下方当前报价、当前消费者历史与图表可用性会独立加载，绝不会用该回放补齐。'}
+        </p>
+      </RoughSectionCard>
+    </section>
+  );
+}
+
 function isUnavailableStructureState(value: string | null | undefined): boolean {
   const normalized = String(value || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
   return !normalized
@@ -3693,6 +3856,7 @@ export default function StockStructureDecisionPage() {
   const routeLocale = parseLocaleFromPathname(location.pathname);
   const localize = useCallback((path: string) => (routeLocale ? buildLocalizedPath(path, routeLocale) : path), [routeLocale]);
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const researchRouteContext = useMemo(() => parseResearchWorkspaceSearch(location.search), [location.search]);
   const symbolSegment = stockCode || symbolSegmentFromPathname(location.pathname);
   const requestedSymbols = useMemo(
     () => parseStockStructureSymbols(searchParams.get('symbols') || symbolSegment),
@@ -3719,6 +3883,7 @@ export default function StockStructureDecisionPage() {
   const [optionsStructure, setOptionsStructure] = useState<OptionsStructureSummary | null>(null);
   const [optionsStructureFailed, setOptionsStructureFailed] = useState(false);
   const [comparePacket, setComparePacket] = useState<StockSymbolCompareEvidencePacket | null>(null);
+  const [scannerHistoricalEvidence, setScannerHistoricalEvidence] = useState<ScannerHistoricalEvidence | null>(null);
   const [symbolNotFound, setSymbolNotFound] = useState<SymbolNotFoundState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
@@ -3741,6 +3906,7 @@ export default function StockStructureDecisionPage() {
     setStockEvidenceFailed(false);
     setOptionsStructure(null);
     setOptionsStructureFailed(false);
+    setScannerHistoricalEvidence(null);
     try {
       if (!requestedSymbols.length) {
         setData(null);
@@ -3817,6 +3983,7 @@ export default function StockStructureDecisionPage() {
       }
 
       const canonicalPrimarySymbol = validatedSymbols[0];
+      const canonicalPrimaryMarket = canonicalInputs[0]?.market || '';
       const canonicalIsCompareRequest = validatedSymbols.length > 1;
       if (canonicalIsCompareRequest) {
         const [packetResult, responseResult] = await Promise.allSettled([
@@ -3841,7 +4008,7 @@ export default function StockStructureDecisionPage() {
         setOptionsStructure(null);
         setOptionsStructureFailed(false);
       } else {
-        const [quoteResult, packetResult, responseResult, optionsResult, historyResult, technicalResult, stockEvidenceResult] = await Promise.allSettled([
+        const [quoteResult, packetResult, responseResult, optionsResult, historyResult, technicalResult, stockEvidenceResult, scannerRunResult] = await Promise.allSettled([
           stocksApi.getQuote(canonicalPrimarySymbol),
           stocksApi.getResearchPacket(canonicalPrimarySymbol),
           stocksApi.getStructureDecision(canonicalPrimarySymbol),
@@ -3849,6 +4016,9 @@ export default function StockStructureDecisionPage() {
           stocksApi.getHistory(canonicalPrimarySymbol, { period: 'daily', days: 180 }),
           stocksApi.getTechnicalIndicators(canonicalPrimarySymbol),
           stockEvidenceApi.getStockEvidence(canonicalPrimarySymbol),
+          researchRouteContext.scannerRunId && researchRouteContext.market
+            ? scannerApi.getRun(researchRouteContext.scannerRunId)
+            : Promise.resolve(null),
         ]);
         if (quoteResult.status === 'fulfilled') {
           setQuote(quoteResult.value);
@@ -3885,6 +4055,18 @@ export default function StockStructureDecisionPage() {
         } else {
           setStockEvidenceFailed(true);
         }
+        if (
+          scannerRunResult.status === 'fulfilled'
+          && researchRouteContext.scannerRunId
+          && researchRouteContext.market
+        ) {
+          setScannerHistoricalEvidence(resolveScannerHistoricalEvidence(scannerRunResult.value, {
+            scannerRunId: researchRouteContext.scannerRunId,
+            symbol: canonicalPrimarySymbol,
+            market: canonicalPrimaryMarket,
+            routeMarket: researchRouteContext.market,
+          }));
+        }
         if (responseResult.status === 'rejected') {
           throw responseResult.reason;
         }
@@ -3902,7 +4084,7 @@ export default function StockStructureDecisionPage() {
     } finally {
       setLoading(false);
     }
-  }, [benchmark, locale, localize, location.pathname, location.search, maxItems, navigate, requestedSymbols]);
+  }, [benchmark, locale, localize, location.pathname, location.search, maxItems, navigate, requestedSymbols, researchRouteContext.market, researchRouteContext.scannerRunId]);
 
   useEffect(() => {
     void load();
@@ -4152,6 +4334,13 @@ export default function StockStructureDecisionPage() {
                   language={locale}
                   localize={localize}
                 />
+
+                {scannerHistoricalEvidence ? (
+                  <ScannerHistoricalEvidencePanel
+                    evidence={scannerHistoricalEvidence}
+                    language={locale}
+                  />
+                ) : null}
 
                 <details className="group stock-deep-evidence-disclosure" data-testid="stock-deep-evidence-disclosure">
                   <summary className="mx-3 flex min-h-12 cursor-pointer list-none items-center justify-between border-t border-[color:var(--wolfy-divider)] text-sm font-semibold text-[color:var(--wolfy-text-primary)] marker:hidden md:mx-4">
@@ -4457,7 +4646,9 @@ export default function StockStructureDecisionPage() {
                     language={locale}
                     current="stock-structure"
                     symbol={data.ticker || primarySymbol}
+                    market={scannerHistoricalEvidence?.market || researchRouteContext.market}
                     source="stock-structure"
+                    scannerRunId={researchRouteContext.scannerRunId}
                     title={locale === 'en' ? 'Beta research journey' : 'Beta 研究旅程'}
                     summary={locale === 'en'
                       ? 'Investigate this symbol, compare evidence, track only as a research record, then continue with validation surfaces.'

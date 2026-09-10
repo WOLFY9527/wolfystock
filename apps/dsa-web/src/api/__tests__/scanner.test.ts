@@ -222,6 +222,7 @@ describe('scannerApi investor signal normalization', () => {
           historical_ohlcv_readiness: {
             as_of: '2026-08-01', fixture_id: 'r06-nonlive-us-data-ready', fixture_version: 'v1',
             expected_session: '2026-08-03', no_external_calls: true, provider_calls_enabled: false,
+            required_bars: 180, usable_bars: 180, missing_bars: 0,
           },
         }],
         candidates: [{
@@ -235,7 +236,12 @@ describe('scannerApi investor signal normalization', () => {
 
     const detail = await scannerApi.getRun(46);
 
-    expect(detail.shortlist[0].historicalOhlcvReadiness).toEqual({ asOf: '2026-08-01' });
+    expect(detail.shortlist[0].historicalOhlcvReadiness).toEqual({
+      asOf: '2026-08-01',
+      requiredBars: 180,
+      usableBars: 180,
+      missingBars: 0,
+    });
     expect(detail.candidates?.[0].historicalOhlcvReadiness).toBeUndefined();
     expect(detail.diagnostics.dataReadiness?.candidateGenerationLimitations).toEqual(['fixture_evidence']);
     expect(JSON.stringify(detail)).not.toMatch(/fixtureId|fixtureVersion|expectedSession|noExternalCalls|providerCallsEnabled|operatorOverride/i);

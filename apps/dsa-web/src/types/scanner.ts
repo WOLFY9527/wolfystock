@@ -346,6 +346,9 @@ export type ScannerCandidateDiagnosticStatus = 'selected' | 'rejected' | 'data_f
 
 export interface ScannerHistoricalOhlcvReadiness {
   asOf?: string;
+  requiredBars?: number;
+  usableBars?: number;
+  missingBars?: number;
 }
 
 export interface ScannerCandidateDiagnostic {

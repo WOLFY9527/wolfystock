@@ -136,18 +136,40 @@ function asStringArray(value: unknown): string[] {
     : [];
 }
 
-function normalizeScannerHistoricalOhlcvReadiness(value: unknown): { asOf: string } | undefined {
-  if (!isRecord(value) || typeof value.asOf !== 'string') return undefined;
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.asOf);
-  if (!match) return undefined;
-  const [year, month, day] = match.slice(1).map(Number);
-  const sourceDate = new Date(Date.UTC(year, month - 1, day));
-  if (
-    sourceDate.getUTCFullYear() !== year
-    || sourceDate.getUTCMonth() !== month - 1
-    || sourceDate.getUTCDate() !== day
-  ) return undefined;
-  return { asOf: value.asOf };
+function normalizeScannerHistoricalOhlcvReadiness(value: unknown): {
+  asOf?: string;
+  requiredBars?: number;
+  usableBars?: number;
+  missingBars?: number;
+} | undefined {
+  if (!isRecord(value)) return undefined;
+  const readiness: {
+    asOf?: string;
+    requiredBars?: number;
+    usableBars?: number;
+    missingBars?: number;
+  } = {};
+  if (typeof value.asOf === 'string') {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.asOf);
+    if (match) {
+      const [year, month, day] = match.slice(1).map(Number);
+      const sourceDate = new Date(Date.UTC(year, month - 1, day));
+      if (
+        sourceDate.getUTCFullYear() === year
+        && sourceDate.getUTCMonth() === month - 1
+        && sourceDate.getUTCDate() === day
+      ) {
+        readiness.asOf = value.asOf;
+      }
+    }
+  }
+  (['requiredBars', 'usableBars', 'missingBars'] as const).forEach((key) => {
+    const count = value[key];
+    if (typeof count === 'number' && Number.isSafeInteger(count) && count >= 0) {
+      readiness[key] = count;
+    }
+  });
+  return Object.keys(readiness).length ? readiness : undefined;
 }
 
 function normalizeScannerCandidates(candidates: unknown): ScannerCandidate[] {

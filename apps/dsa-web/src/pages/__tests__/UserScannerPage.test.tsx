@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApiError, createParsedApiError } from '../../api/error';
 import UserScannerPage from '../UserScannerPage';
@@ -939,6 +939,16 @@ function LanguageSwitch() {
   );
 }
 
+function StockResearchLanding() {
+  const location = useLocation();
+  return (
+    <div>
+      Stock Research Landing
+      <span data-testid="stock-research-location">{`${location.pathname}${location.search}`}</span>
+    </div>
+  );
+}
+
 type RenderUserScannerPageOptions = {
   withLanguageSwitch?: boolean;
   initialEntry?: string;
@@ -974,8 +984,8 @@ function renderUserScannerPage(options: boolean | RenderUserScannerPageOptions =
           <Route path="/:locale/watchlist" element={<div>Watchlist Landing</div>} />
           <Route path="/market-overview" element={<div>Market Overview Landing</div>} />
           <Route path="/:locale/market-overview" element={<div>Market Overview Landing</div>} />
-          <Route path="/stocks/:symbol/structure-decision" element={<div>Stock Research Landing</div>} />
-          <Route path="/:locale/stocks/:symbol/structure-decision" element={<div>Stock Research Landing</div>} />
+          <Route path="/stocks/:symbol/structure-decision" element={<StockResearchLanding />} />
+          <Route path="/:locale/stocks/:symbol/structure-decision" element={<StockResearchLanding />} />
           <Route path="/backtest" element={<div>Backtest Landing</div>} />
           <Route path="/:locale/backtest" element={<div>Backtest Landing</div>} />
           <Route path="/backtest/results/:runId" element={<div>Backtest Result</div>} />
@@ -2539,6 +2549,9 @@ describe('UserScannerPage', () => {
     fireEvent.click(within(nextSteps).getByRole('button', { name: /打开 TSLA|Open TSLA/ }));
 
     expect(await screen.findByText('Stock Research Landing')).toBeInTheDocument();
+    expect(screen.getByTestId('stock-research-location')).toHaveTextContent(
+      '/zh/stocks/TSLA/structure-decision?symbol=TSLA&market=US&source=scanner',
+    );
     expect(analyzeAsync).not.toHaveBeenCalled();
     expect(container).not.toHaveTextContent(/provider|reasonCode|fallback_source|below_liquidity_threshold|raw diagnostics|JSON/i);
   });
@@ -3282,6 +3295,9 @@ describe('UserScannerPage', () => {
     fireEvent.click(within(detail).getByRole('button', { name: /分析|Analyze/i }));
 
     expect(await screen.findByText('Stock Research Landing')).toBeInTheDocument();
+    expect(screen.getByTestId('stock-research-location')).toHaveTextContent(
+      '/zh/stocks/NVDA/structure-decision?symbol=NVDA&market=CN&source=scanner&scannerRunId=11',
+    );
     expect(analyzeAsync).not.toHaveBeenCalled();
   });
 
@@ -4248,7 +4264,7 @@ describe('UserScannerPage', () => {
     expect(addWatchlistItem).not.toHaveBeenCalled();
   });
 
-  it('exposes scanner research handoff links without raw IDs or internal metadata', async () => {
+  it('carries only the Scanner run pointer in research handoff links without other internal metadata', async () => {
     const themedRun = makeCryptoDiagnosticsRun({ id: 42 });
     getRun.mockResolvedValue(themedRun);
 
@@ -4269,9 +4285,11 @@ describe('UserScannerPage', () => {
     expect(stockStructureLink).toHaveAttribute('href', expect.stringContaining('symbol=WULF'));
     expect(stockStructureLink).toHaveAttribute('href', expect.stringContaining('market=US'));
     expect(stockStructureLink).toHaveAttribute('href', expect.stringContaining('source=scanner'));
+    expect(stockStructureLink).toHaveAttribute('href', expect.stringContaining('scannerRunId=42'));
 
     for (const link of within(panel).getAllByRole('link')) {
-      expect(link).toHaveAttribute('href', expect.not.stringMatching(/scannerRunId|scannerRank|watchlistItemId|themeId|universeType|provider|cache|runtime|debug/i));
+      expect(link).toHaveAttribute('href', expect.stringContaining('scannerRunId=42'));
+      expect(link).toHaveAttribute('href', expect.not.stringMatching(/scannerRank|watchlistItemId|themeId|universeType|provider|cache|runtime|debug|score|cutoff|authority/i));
     }
   });
 
