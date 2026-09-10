@@ -182,7 +182,7 @@ EXPECTED_API_SCHEMA_UPWARD_IMPORTS = {
     "src/services/market_session_status_service.py": {"api.v1.schemas.market_session_status"},
     "src/services/money_flow_service.py": {"api.v1.schemas.money_flow"},
     "src/services/options_structure_service.py": {"api.v1.schemas.options"},
-    "src/services/personal_summary_service.py": {"api.v1.schemas.personal_summary", "api.v1.schemas.portfolio"},
+    "src/services/personal_summary_service.py": {"api.v1.schemas.personal_summary"},
     "src/services/public_data_quality_service.py": {"api.v1.schemas.public_data_quality"},
     "src/services/research_queue_service.py": {"api.v1.schemas.research_queue"},
     "src/services/research_stock_service.py": {"api.v1.schemas.research_stock"},
@@ -207,9 +207,7 @@ MARKET_OVERVIEW_RUNTIME_DIRECT_IMPORT_PREFIXES = ("requests", "yfinance")
 # Transitional provider-runtime touch points. Owners are the domain listed in
 # the importing path plus provider-runtime; new entries need architecture review.
 EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
-    "src/services/akshare_cn_ohlcv_cache.py": {"data_provider.akshare_fetcher", "data_provider.base"},
-    "src/services/backtest_service.py": {"data_provider.base"},
-    "src/services/rule_backtest_service.py": {"data_provider.base"},
+    "src/services/akshare_cn_ohlcv_cache.py": {"data_provider.akshare_fetcher"},
     "src/services/cn_provider_health_service.py": {
         "data_provider.akshare_fetcher",
         "data_provider.baostock_fetcher",
