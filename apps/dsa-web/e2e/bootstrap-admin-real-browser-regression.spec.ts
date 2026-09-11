@@ -38,6 +38,12 @@ type BrowserDiagnostics = {
   observedEndpoints: Set<string>;
 };
 
+type UserActorFixture = {
+  eventId: string;
+  label: string;
+  userId: string;
+};
+
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const staticRoot = path.join(repoRoot, 'static');
 const webArtifactScript = path.join(repoRoot, 'scripts', 'web_build_artifact.py');
@@ -55,6 +61,7 @@ let baseUrl = '';
 let bootstrapPassword = '';
 let canonicalSuperAdminCapabilities: string[] = [];
 let taskBuiltStatic = false;
+let userActorFixture: UserActorFixture | undefined;
 
 function makeDirectoryTreeWritable(directory: string): void {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -116,6 +123,33 @@ function readCanonicalSuperAdminCapabilities(): string[] {
     throw new Error('Canonical super-admin capability contract is invalid');
   }
   return [...capabilities].sort();
+}
+
+function seedUserActorFixture(runtimeEnvironment: NodeJS.ProcessEnv): UserActorFixture {
+  const output = execFileSync(python, [
+    '-c',
+    [
+      'import json, os',
+      'from src.auth import hash_password_for_storage',
+      'from src.services.execution_log_service import ExecutionLogService',
+      'from src.storage import DatabaseManager',
+      'DatabaseManager.reset_instance()',
+      'db = DatabaseManager(db_url=f"sqlite:///{os.environ[\'DATABASE_PATH\']}")',
+      'user_id = "browser-member-actor"',
+      'label = "Browser Member Actor"',
+      'db.create_or_update_app_user(user_id=user_id, username="browser_member_actor", display_name=label, role="user", password_hash=hash_password_for_storage(os.environ["WOLFYSTOCK_BROWSER_FIXTURE_PASSWORD"]), is_active=True)',
+      'event_id = ExecutionLogService().record_user_write_action(event_type="portfolio.account_created", message="Browser member created a portfolio account", actor={"user_id": user_id, "username": "untrusted-log-username", "display_name": "Untrusted Log Label", "role": "user", "actor_type": "user"}, domain="portfolio", target_type="portfolio_account", target_id="browser-fixture-account")',
+      'print(json.dumps({"eventId": event_id, "label": label, "userId": user_id}))',
+    ].join('\n'),
+  ], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: {
+      ...runtimeEnvironment,
+      WOLFYSTOCK_BROWSER_FIXTURE_PASSWORD: randomBytes(24).toString('base64url'),
+    },
+  });
+  return JSON.parse(output) as UserActorFixture;
 }
 
 function captureBrowserDiagnostics(page: Page): BrowserDiagnostics {
@@ -238,6 +272,7 @@ test.describe('bootstrap-admin real-browser regression', () => {
     );
     await waitForRuntime();
     expect(existsSync(databasePath)).toBe(true);
+    userActorFixture = seedUserActorFixture(runtimeEnv);
   });
 
   test.afterAll(async () => {
@@ -313,6 +348,70 @@ test.describe('bootstrap-admin real-browser regression', () => {
       await adminLogsLink.focus();
       await page.keyboard.press('Enter');
       await expect(page).toHaveURL(/\/en\/admin\/logs$/);
+      await expect(page.getByTestId('admin-logs-workspace')).toBeVisible();
+
+      const fixture = userActorFixture;
+      expect(fixture).toBeDefined();
+      if (!fixture) throw new Error('User actor fixture was not seeded');
+
+      const listResponse = await page.request.get(
+        `${baseUrl}/api/v1/admin/logs?query=portfolio.account_created&since=24h`,
+      );
+      expect(listResponse.status()).toBe(200);
+      const listPayload = await listResponse.json() as {
+        items: Array<{ actorLabel?: string | null; id: string; userId?: string | null }>;
+      };
+      const listItem = listPayload.items.find((item) => item.id === fixture.eventId);
+      expect(listItem).toMatchObject({ actorLabel: fixture.label, userId: fixture.userId });
+
+      const detailResponse = await page.request.get(`${baseUrl}/api/v1/admin/logs/${fixture.eventId}`);
+      expect(detailResponse.status()).toBe(200);
+      expect(await detailResponse.json()).toMatchObject({ actorLabel: fixture.label, userId: fixture.userId });
+
+      const pageListResponsePromise = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return response.request().method() === 'GET'
+          && url.pathname === '/api/v1/admin/logs'
+          && url.searchParams.get('query') === 'portfolio.account_created';
+      });
+      await page.getByRole('textbox', { name: 'Search logs' }).fill('portfolio.account_created');
+      const pageListResponse = await pageListResponsePromise;
+      expect(pageListResponse.status()).toBe(200);
+      const pageListPayload = await pageListResponse.json() as {
+        items: Array<{ actorLabel?: string | null; id: string; userId?: string | null }>;
+      };
+      expect(pageListPayload.items.find((item) => item.id === fixture.eventId)).toMatchObject({
+        actorLabel: fixture.label,
+        userId: fixture.userId,
+      });
+      const eventRow = page.getByTestId('business-event-row').filter({ hasText: fixture.label });
+      await expect(eventRow).toHaveCount(1, { timeout: 30_000 });
+      await eventRow.getByRole('button', { name: 'View details' }).click();
+
+      const actorDialog = page.getByRole('dialog');
+      await expect(actorDialog).toContainText(fixture.label);
+      const filterLink = actorDialog.getByRole('link', { name: 'Filter this user’s logs' });
+      await expect(filterLink).toHaveAttribute(
+        'href',
+        `/zh/admin/logs?tab=business&since=24h&userId=${fixture.userId}`,
+      );
+      await expect(actorDialog.getByRole('link', { name: 'View user details' })).toHaveAttribute(
+        'href',
+        `/zh/admin/users/${fixture.userId}`,
+      );
+
+      const filteredResponsePromise = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return response.request().method() === 'GET'
+          && url.pathname === '/api/v1/admin/logs'
+          && url.searchParams.get('user_id') === fixture.userId;
+      });
+      await filterLink.click();
+      expect((await filteredResponsePromise).status()).toBe(200);
+      await expect(page).toHaveURL(new RegExp(`userId=${fixture.userId}`));
+      await expect(page.getByTestId('business-event-row').filter({ hasText: fixture.label })).toHaveCount(1);
+
+      await page.goto(`${baseUrl}/en/admin/logs`);
       await expect(page.getByTestId('admin-logs-workspace')).toBeVisible();
 
       await page.reload({ waitUntil: 'domcontentloaded' });

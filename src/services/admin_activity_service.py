@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from src.repositories.auth_repo import AuthRepository
+from src.services.admin_user_service import AdminUserService
 from src.services.execution_log_service import ExecutionLogService
 from src.storage import AnalysisHistory, AppUserSession, DatabaseManager
 from src.utils.security import sanitize_metadata, sanitize_message
@@ -137,9 +138,17 @@ class AdminActivityService:
             limit=200,
             offset=0,
         )
+        actor_references = AdminUserService(repo=self.auth_repo).resolve_user_actor_references(
+            item.get("_rawUserId")
+            for item in items
+            if str(item.get("actorType") or "").strip().lower() == "user"
+        )
         events: list[dict[str, Any]] = []
         for item in items:
-            user_id = str(item.get("userId") or target_user_id or "").strip() or None
+            actor_type = str(item.get("actorType") or "unknown").strip().lower() or "unknown"
+            raw_user_id = str(item.get("_rawUserId") or "").strip()
+            actor_reference = actor_references.get(raw_user_id) if actor_type == "user" else None
+            user_id = actor_reference.get("id") if actor_reference else None
             if target_user_id and user_id != target_user_id:
                 continue
             started_at = str(item.get("startedAt") or item.get("finishedAt") or "")
@@ -156,9 +165,10 @@ class AdminActivityService:
                     "id": hash_reference(f"execution:{raw_event_id}") or "sha256:unknown",
                     "timestamp": started_at,
                     "actor": {
-                        "type": str(item.get("actorType") or "unknown"),
-                        "user_id": user_id if item.get("actorType") == "user" else None,
-                        "label": item.get("actorLabel"),
+                        "type": actor_type,
+                        "user_id": user_id,
+                        "label": actor_reference.get("label") if actor_reference else item.get("actorLabel"),
+                        "role": actor_reference.get("role") if actor_reference else None,
                         "request_id_hash": request_hash,
                     },
                     "target_user": {"id": user_id, "label": None},

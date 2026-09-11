@@ -212,7 +212,7 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertNotIn("SECRET", str(detail))
         self.assertEqual(detail["events"][0]["detail"]["raw_response"]["provider"], "finnhub")
         self.assertEqual(business["actorType"], "user")
-        self.assertEqual(business["actorLabel"], "alice")
+        self.assertIsNone(business["actorLabel"])
         self.assertEqual(business["contextLabel"], "VolatilityCard")
         self.assertEqual(business["component"], "VolatilityCard")
         self.assertEqual(business["endpoint"], "/api/v1/market-overview/volatility")

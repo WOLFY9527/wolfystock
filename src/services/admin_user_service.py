@@ -117,6 +117,36 @@ class AdminUserService:
         ]
         return item, summaries[:max(1, int(session_limit))]
 
+    def resolve_user_actor_references(self, user_ids: Iterable[Any]) -> dict[str, dict[str, str]]:
+        """Resolve ordinary-user actor IDs through the canonical user directory.
+
+        Persisted log metadata is correlation evidence only.  A reference is
+        presentable when the ID still maps to a current ordinary user; admin
+        identities and missing/deleted directory rows stay redacted.
+        """
+        requested_ids = {
+            str(user_id or "").strip()
+            for user_id in user_ids
+            if str(user_id or "").strip()
+        }
+        if not requested_ids:
+            return {}
+
+        references: dict[str, dict[str, str]] = {}
+        for user in self.repo.list_app_users():
+            user_id = str(getattr(user, "id", "") or "").strip()
+            role = str(getattr(user, "role", "") or "").strip().lower()
+            if user_id not in requested_ids or role != "user":
+                continue
+            username = str(getattr(user, "username", "") or "").strip()
+            display_name = str(getattr(user, "display_name", "") or "").strip()
+            references[user_id] = {
+                "id": user_id,
+                "label": display_name or username,
+                "role": role,
+            }
+        return references
+
     def _project_user(self, user: Any, sessions: list[Any]) -> dict[str, Any]:
         password_hash = str(getattr(user, "password_hash", "") or "")
         session_summary = self._session_summary(sessions)

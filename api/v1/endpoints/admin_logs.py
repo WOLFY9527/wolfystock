@@ -23,9 +23,39 @@ from api.v1.schemas.admin_logs import (
 )
 from src.services.admin_incident_timeline_service import AdminIncidentTimelineService
 from src.services.admin_logs_service import AdminDataMissingDrilldownService, AdminLogsRetentionService, AdminOperatorIssueRollupService
+from src.services.admin_user_service import AdminUserService
 from src.services.execution_log_service import ExecutionLogService
 
 router = APIRouter()
+
+
+def _can_project_user_actor_identity(current_user: CurrentUser) -> bool:
+    return "users:read" in set(getattr(current_user, "admin_capabilities", ()) or ())
+
+
+def _project_authorized_user_actor_identity(
+    items: list[dict],
+    *,
+    current_user: CurrentUser,
+) -> list[dict]:
+    """Add canonical ordinary-user references at the authorized API boundary."""
+    if not _can_project_user_actor_identity(current_user):
+        return items
+    references = AdminUserService().resolve_user_actor_references(
+        item.get("_rawUserId")
+        for item in items
+        if str(item.get("actorType") or "").strip().lower() == "user"
+    )
+    projected: list[dict] = []
+    for item in items:
+        next_item = dict(item)
+        raw_user_id = str(item.get("_rawUserId") or "").strip()
+        reference = references.get(raw_user_id)
+        if str(item.get("actorType") or "").strip().lower() == "user" and reference:
+            next_item["userId"] = reference["id"]
+            next_item["actorLabel"] = reference["label"]
+        projected.append(next_item)
+    return projected
 
 
 def _parse_optional_datetime(value: Optional[str]) -> Optional[datetime]:
@@ -268,6 +298,7 @@ def list_execution_logs_root(
         limit=effective_limit,
         offset=effective_offset,
     )
+    items = _project_authorized_user_actor_identity(items, current_user=_)
     return BusinessEventListResponse(
         items=items,
         total=total,
@@ -447,4 +478,5 @@ def get_business_event_detail(
                 "message": f"Business event not found: {event_id}",
             },
         )
-    return BusinessEventDetailModel(**detail)
+    projected = _project_authorized_user_actor_identity([detail], current_user=_)[0]
+    return BusinessEventDetailModel(**projected)

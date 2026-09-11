@@ -13,7 +13,7 @@ const { listBusinessEvents, getBusinessEventDetail, listSessions, getSessionDeta
   listDataMissingDrilldown: vi.fn(),
   listOperatorIssueRollup: vi.fn(),
   getIncidentTimeline: vi.fn(),
-  capabilityState: { canReadOpsLogs: true },
+  capabilityState: { canReadOpsLogs: true, canReadUsers: true, canReadUserActivity: true },
 }));
 
 vi.mock('../../api/adminLogs', () => ({
@@ -80,6 +80,7 @@ const businessEvents = [
     symbol: 'TSLA',
     market: 'US',
     actorType: 'user',
+    userId: 'user-123',
     actorLabel: 'alice',
     contextLabel: 'TSLA',
     provider: 'newsapi',
@@ -564,6 +565,8 @@ describe('AdminLogsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     capabilityState.canReadOpsLogs = true;
+    capabilityState.canReadUsers = true;
+    capabilityState.canReadUserActivity = true;
     Object.assign(navigator, {
       clipboard: {
         writeText: vi.fn().mockResolvedValue(undefined),
@@ -1436,6 +1439,12 @@ describe('AdminLogsPage', () => {
     expect(screen.queryByText('Root Cause')).not.toBeInTheDocument();
     expect(screen.getByText('降级摘要')).toBeInTheDocument();
     expect(screen.getAllByText(/alice/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: '筛选此用户日志' })).toHaveAttribute(
+      'href',
+      '/zh/admin/logs?tab=business&since=24h&userId=user-123',
+    );
+    expect(screen.getByRole('link', { name: '查看用户详情' })).toHaveAttribute('href', '/zh/admin/users/user-123');
+    expect(screen.getByRole('link', { name: '查看用户活动' })).toHaveAttribute('href', '/zh/admin/users/user-123/activity');
     expect(screen.getByText(/trace-tsla-abcdef/)).toBeInTheDocument();
     expect(screen.getByText(/获取行情/)).toBeInTheDocument();
     expect(screen.getByText(/获取新闻/)).toBeInTheDocument();
@@ -1832,7 +1841,7 @@ describe('AdminLogsPage', () => {
   });
 
   it('initializes safe query params and renders sanitized drill-through controls for issue triage', async () => {
-    window.history.replaceState({}, '', '/zh/admin/logs?tab=data_source&query=fallback%20market&since=24h&eventId=market-card-failed&token=SECRET');
+    window.history.replaceState({}, '', '/zh/admin/logs?tab=data_source&query=fallback%20market&userId=user-123&since=24h&eventId=market-card-failed&token=SECRET');
 
     render(<AdminLogsPage />);
 
@@ -1844,6 +1853,7 @@ describe('AdminLogsPage', () => {
     expect(screen.getByRole('link', { name: /查看数据源维护/i })).toHaveAttribute('href', '/zh/admin/market-providers?surface=market_overview');
     expect(screen.getByRole('link', { name: /查看熔断与配额/i })).toHaveAttribute('href', '/zh/admin/provider-circuits?since=24h');
     expect(screen.getByRole('link', { name: /查看成本观测/i })).toHaveAttribute('href', '/zh/admin/cost-observability?window=24h&area=provider');
+    await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ userId: 'user-123' })));
     expect(document.body).not.toHaveTextContent('SECRET');
   });
 });

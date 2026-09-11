@@ -3519,12 +3519,6 @@ class ExecutionLogService:
             business_metadata.get("actor_type"),
             business_metadata.get("actorRole"),
         )
-        explicit_actor_label = _first_text(
-            business_metadata.get("actorSafeLabel"),
-            business_metadata.get("actor_safe_label"),
-            market_overview.get("actor_safe_label"),
-            top_detail.get("actor_safe_label"),
-        )
         actor_label = _first_text(
             meta.get("actor_display"),
             meta.get("actor_username"),
@@ -3726,7 +3720,7 @@ class ExecutionLogService:
         return {
             "eventType": event_type,
             "actorType": actor_type or "unknown",
-            "actorLabel": explicit_actor_label or _safe_actor_label(actor_label, actor_type),
+            "actorLabel": _safe_actor_label(actor_label, actor_type),
             "actorHash": actor_hash,
             "targetHash": target_hash,
             "level": level,

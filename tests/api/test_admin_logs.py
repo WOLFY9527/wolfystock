@@ -373,6 +373,14 @@ class AdminLogsApiTestCase(unittest.TestCase):
         raw_actor_id = "admin-raw-123"
         raw_target_id = "target-user-raw-456"
         raw_reason = "private beta onboarding for beta-user beta@example.com"
+        self.db.create_or_update_app_user(
+            user_id=raw_actor_id,
+            username="raw-admin-username",
+            display_name="Raw Admin Name",
+            role="admin",
+            password_hash="pbkdf2:admin-secret-hash",
+            is_active=True,
+        )
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()
             event_id = service.record_admin_action(
@@ -408,9 +416,12 @@ class AdminLogsApiTestCase(unittest.TestCase):
                 level="INFO",
                 query="duplicate_email",
                 since="",
-                _=_admin_user(),
+                _=_admin_user_with_capabilities("ops:logs:read", "users:read"),
             )
-            detail = admin_logs.get_business_event_detail(event_id, _=_admin_user())
+            detail = admin_logs.get_business_event_detail(
+                event_id,
+                _=_admin_user_with_capabilities("ops:logs:read", "users:read"),
+            )
 
         self.assertEqual(payload.total, 1)
         item = payload.items[0]
@@ -453,9 +464,17 @@ class AdminLogsApiTestCase(unittest.TestCase):
             self.assertNotIn(forbidden, dumped)
 
     def test_root_level_filter_returns_info_user_action_audit_by_default_projection(self) -> None:
+        self.db.create_or_update_app_user(
+            user_id="user-raw-123",
+            username="alice",
+            display_name="Alice",
+            role="user",
+            password_hash="pbkdf2:user-secret-hash",
+            is_active=True,
+        )
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()
-            service.record_user_write_action(
+            event_id = service.record_user_write_action(
                 event_type="portfolio.account_created",
                 message="portfolio account created",
                 actor={"user_id": "user-raw-123", "username": "alice", "display_name": "Alice"},
@@ -477,14 +496,61 @@ class AdminLogsApiTestCase(unittest.TestCase):
                 overall_status="failed",
                 detail={"category": "security", "level": "WARNING", "reason_code": "operator_review"},
             )
-
-            payload = admin_logs.list_execution_logs_root(
-                category="user_action",
-                level="INFO",
-                query="portfolio.account_created",
-                since="",
-                _=_admin_user(),
+            missing_event_id = service.record_user_write_action(
+                event_type="portfolio.account_updated",
+                message="missing-directory user updated a portfolio account",
+                actor={"user_id": "missing-user-404", "username": "untrusted-missing-user"},
+                domain="portfolio",
+                target_type="portfolio_account",
+                target_id="raw-missing-account-789",
             )
+            absent_event_id = service.record_user_write_action(
+                event_type="portfolio.account_deleted",
+                message="user actor without source identity deleted a portfolio account",
+                actor={"actor_type": "user", "role": "user", "username": "must-not-be-inferred"},
+                domain="portfolio",
+                target_type="portfolio_account",
+                target_id="raw-absent-account-999",
+            )
+
+            with (
+                patch.object(self.db, "create_execution_log_session", side_effect=AssertionError("passive read wrote a log session")),
+                patch.object(self.db, "append_execution_log_event", side_effect=AssertionError("passive read wrote a log event")),
+                patch.object(self.db, "finalize_execution_log_session", side_effect=AssertionError("passive read finalized a log session")),
+                patch.object(self.db, "create_or_update_app_user", side_effect=AssertionError("passive read mutated the user directory")),
+            ):
+                ops_only = admin_logs.list_execution_logs_root(
+                    category="user_action",
+                    level="INFO",
+                    query="portfolio.account_created",
+                    since="",
+                    _=_admin_user_with_capabilities("ops:logs:read"),
+                )
+                payload = admin_logs.list_execution_logs_root(
+                    category="user_action",
+                    level="INFO",
+                    query="portfolio.account_created",
+                    since="",
+                    _=_admin_user_with_capabilities("ops:logs:read", "users:read"),
+                )
+                detail = admin_logs.get_business_event_detail(
+                    event_id,
+                    _=_admin_user_with_capabilities("ops:logs:read", "users:read"),
+                )
+                missing_payload = admin_logs.list_execution_logs_root(
+                    category="user_action",
+                    query="portfolio.account_updated",
+                    since="",
+                    _=_admin_user_with_capabilities("ops:logs:read", "users:read"),
+                )
+                missing_detail = admin_logs.get_business_event_detail(
+                    missing_event_id,
+                    _=_admin_user_with_capabilities("ops:logs:read", "users:read"),
+                )
+                absent_detail = admin_logs.get_business_event_detail(
+                    absent_event_id,
+                    _=_admin_user_with_capabilities("ops:logs:read", "users:read"),
+                )
 
         self.assertEqual(payload.total, 1)
         item = payload.items[0]
@@ -494,12 +560,32 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(item.severity, "info")
         self.assertEqual(item.route_family, "portfolio")
         self.assertEqual(item.domain, "portfolio")
+        self.assertEqual(item.userId, "user-raw-123")
+        self.assertEqual(item.actorLabel, "Alice")
+        self.assertEqual(detail.userId, item.userId)
+        self.assertEqual(detail.actorLabel, item.actorLabel)
+        self.assertIsNone(ops_only.items[0].userId)
+        self.assertIsNone(ops_only.items[0].actorLabel)
+        self.assertEqual(missing_payload.total, 1)
+        self.assertIsNone(missing_payload.items[0].userId)
+        self.assertIsNone(missing_payload.items[0].actorLabel)
+        self.assertIsNone(missing_detail.userId)
+        self.assertIsNone(missing_detail.actorLabel)
+        self.assertEqual(absent_detail.actorType, "user")
+        self.assertIsNone(absent_detail.userId)
+        self.assertIsNone(absent_detail.actorLabel)
         _assert_hashed_diagnostic_handle(self, item.actorHash, "actor")
         _assert_hashed_diagnostic_handle(self, item.targetHash, "target")
         dumped = str(payload.model_dump())
-        self.assertNotIn("user-raw-123", dumped)
+        self.assertNotIn("pbkdf2:user-secret-hash", dumped)
         self.assertNotIn("raw-account-id-456", dumped)
         self.assertNotIn("raw-account-name-must-not-leak", dumped)
+        self.assertNotIn("user-raw-123", str(ops_only.model_dump()))
+        self.assertNotIn("missing-user-404", str(missing_payload.model_dump()))
+        self.assertNotIn("untrusted-missing-user", str(missing_payload.model_dump()))
+        self.assertNotIn("raw-missing-account-789", str(missing_detail.model_dump()))
+        self.assertNotIn("must-not-be-inferred", str(absent_detail.model_dump()))
+        self.assertNotIn("raw-absent-account-999", str(absent_detail.model_dump()))
 
     def test_root_exposes_market_overview_triage_fields_without_steps(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):

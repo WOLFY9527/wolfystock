@@ -173,7 +173,10 @@ class BusinessEventModel(BaseModel):
     strategyId: Optional[str] = None
     scannerId: Optional[str] = None
     backtestId: Optional[str] = None
-    userId: Optional[str] = None
+    userId: Optional[str] = Field(
+        default=None,
+        description="Canonical ordinary-user reference, present only when the caller may read the admin user directory.",
+    )
     requestId: Optional[str] = Field(
         default=None,
         description="Bounded admin diagnostic request handle; unsafe raw request values are hashed or omitted.",

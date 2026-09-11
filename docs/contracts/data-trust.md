@@ -191,6 +191,15 @@ process-local limiter. Risky authentication fails closed with a bounded error,
 while authorized admin diagnostics may report only sanitized process-local
 health observations and never claim those observations are durable state.
 
+Persisted audit actor identifiers are correlation evidence, not presentation
+authority. Admin Logs may project an ordinary user's canonical identifier and
+directory label only when the caller has both `ops:logs:read` and `users:read`;
+Admin Activity applies the same canonical-directory resolution inside its
+`users:activity:read` boundary. Admin, security, guest, system, deleted,
+role-mismatched, and unresolved identities retain their existing redacted or
+explicit non-user representation. List, detail, and filter reads are passive and
+must not create sessions, events, or user records.
+
 ## Consumer Projection
 
 Consumer copy communicates the visible state and a bounded explanation. It

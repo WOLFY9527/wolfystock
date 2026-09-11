@@ -144,11 +144,17 @@ class AdminUserActivityApiTestCase(unittest.TestCase):
             overall_status="completed",
             truth_level="actual",
             summary={
+                "meta": {
+                    "actor_user_id": "user-1",
+                    "actor_username": "alice-from-log-metadata",
+                    "actor_display": "Untrusted Alice Label",
+                    "actor_role": "user",
+                    "actor_type": "user",
+                },
                 "business_event": {
                     "category": "analysis",
                     "type": "analysis.completed",
                     "status": "success",
-                    "userId": "user-1",
                     "summary": "Completed AAPL request Authorization: Bearer raw-token-value",
                     "requestId": "raw-request-id-user-1",
                 }
@@ -176,11 +182,17 @@ class AdminUserActivityApiTestCase(unittest.TestCase):
             overall_status="completed",
             truth_level="actual",
             summary={
+                "meta": {
+                    "actor_user_id": "user-1",
+                    "actor_username": "alice-from-log-metadata",
+                    "actor_display": "Untrusted Alice Label",
+                    "actor_role": "user",
+                    "actor_type": "user",
+                },
                 "business_event": {
                     "category": "analysis",
                     "type": "analysis.completed",
                     "status": "success",
-                    "userId": "user-1",
                     "summary": "Completed AAPL request Authorization: Bearer raw-token-value",
                     "requestId": "raw-request-id-user-1",
                 }
@@ -257,6 +269,21 @@ class AdminUserActivityApiTestCase(unittest.TestCase):
 
     def test_global_timeline_filters_and_limit_validation(self) -> None:
         self._as_admin()
+        default_response = self.client.get("/api/v1/admin/activity")
+        self.assertEqual(default_response.status_code, 200)
+        execution_event = next(
+            item
+            for item in default_response.json()["items"]
+            if item["source"]["kind"] == "execution_log_business_event"
+        )
+        self.assertEqual(execution_event["actor"]["type"], "user")
+        self.assertEqual(execution_event["actor"]["userId"], "user-1")
+        self.assertEqual(execution_event["actor"]["label"], "Alice")
+        self.assertEqual(execution_event["targetUser"]["id"], "user-1")
+        self.assertEqual(execution_event["source"]["confidence"], "confirmed")
+        self.assertNotIn("alice-from-log-metadata", self._json_text(default_response))
+        self.assertNotIn("Untrusted Alice Label", self._json_text(default_response))
+
         response = self.client.get(
             "/api/v1/admin/activity",
             params={"target_user": "user-1", "family": "analysis", "status": "success", "entity_type": "analysis_history"},

@@ -82,6 +82,7 @@ function adminLogsTabPanelId(tab: LogsTab): string {
 type AdminLogsQueryState = {
   activeTab: LogsTab;
   searchQuery: string;
+  userIdFilter: string | null;
   sinceFilter: (typeof SINCE_OPTIONS)[number];
   eventId: string | null;
 };
@@ -103,7 +104,7 @@ function levelChipVariant(level: LogLevel): TerminalChipVariant {
 
 function readAdminLogsQuery(): AdminLogsQueryState {
   if (typeof window === 'undefined') {
-    return { activeTab: 'business', searchQuery: '', sinceFilter: '24h', eventId: null };
+    return { activeTab: 'business', searchQuery: '', userIdFilter: null, sinceFilter: '24h', eventId: null };
   }
   const query = new URLSearchParams(window.location.search);
   const tab = String(query.get('tab') || '').trim();
@@ -111,7 +112,6 @@ function readAdminLogsQuery(): AdminLogsQueryState {
   const combinedQuery = [
     query.get('query'),
     query.get('requestId'),
-    query.get('userId'),
   ]
     .map((value) => String(value || '')
       .replace(/https?:\/\/\S+|www\.\S+/gi, ' ')
@@ -125,9 +125,13 @@ function readAdminLogsQuery(): AdminLogsQueryState {
     .trim()
     .slice(0, 80);
   const eventId = String(query.get('eventId') || '').replace(/[^a-zA-Z0-9:_-]/g, '').slice(0, 80);
+  const userIdFilter = String(query.get('userId') || query.get('user_id') || '')
+    .replace(/[^a-zA-Z0-9:_-]/g, '')
+    .slice(0, 80) || null;
   return {
     activeTab: (['business', 'analysis', 'scanner', 'backtest', 'data_source', 'security', 'raw'] as LogsTab[]).includes(tab as LogsTab) ? tab as LogsTab : 'business',
     searchQuery: combinedQuery,
+    userIdFilter,
     sinceFilter: (['15m', '1h', '24h', '7d'] as const).includes(since as (typeof SINCE_OPTIONS)[number]) ? since as (typeof SINCE_OPTIONS)[number] : '24h',
     eventId: eventId || null,
   };
@@ -1462,7 +1466,7 @@ async function copyTextValue(value: unknown): Promise<void> {
 
 const AdminLogsPage: React.FC = () => {
   const { language, t } = useI18n();
-  const { canReadOpsLogs } = useProductSurface();
+  const { canReadOpsLogs, canReadUsers, canReadUserActivity } = useProductSurface();
   const locale = language as AdminLogsLanguage;
   const [drillQuery] = useState(readAdminLogsQuery);
   const [activeTab, setActiveTab] = useState<LogsTab>(drillQuery.activeTab);
@@ -1470,6 +1474,7 @@ const AdminLogsPage: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState<'all' | LogCategory>('all');
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTER_OPTIONS)[number]>('all');
   const [searchQuery, setSearchQuery] = useState(drillQuery.searchQuery);
+  const userIdFilter = drillQuery.userIdFilter;
   const [sinceFilter, setSinceFilter] = useState<(typeof SINCE_OPTIONS)[number]>(drillQuery.sinceFilter);
   const [showDebugLogs, setShowDebugLogs] = useState(false);
   const [businessEvents, setBusinessEvents] = useState<BusinessEvent[]>([]);
@@ -1588,6 +1593,7 @@ const AdminLogsPage: React.FC = () => {
           symbol: activeTab === 'analysis' ? searchQuery.trim() || undefined : undefined,
           status: statusFilter === 'all' ? undefined : statusFilter,
           query: activeTab === 'analysis' ? undefined : searchQuery.trim() || undefined,
+          userId: userIdFilter || undefined,
           since: sinceFilter,
           limit: PAGE_SIZE,
           offset: pageOffset,
@@ -1632,7 +1638,7 @@ const AdminLogsPage: React.FC = () => {
       setHasLoadedList(true);
       setIsLoadingList(false);
     }
-  }, [activeTab, canReadOpsLogs, categoryFilter, levelFilter, pageOffset, searchQuery, showDebugLogs, sinceFilter, statusFilter]);
+  }, [activeTab, canReadOpsLogs, categoryFilter, levelFilter, pageOffset, searchQuery, showDebugLogs, sinceFilter, statusFilter, userIdFilter]);
 
   const previewCleanup = useCallback(async () => {
     if (!canReadOpsLogs) return;
@@ -1717,7 +1723,7 @@ const AdminLogsPage: React.FC = () => {
 
   useEffect(() => {
     setPageOffset(0);
-  }, [activeTab, searchQuery, sinceFilter, statusFilter]);
+  }, [activeTab, searchQuery, sinceFilter, statusFilter, userIdFilter]);
 
   useEffect(() => {
     void loadSessions();
@@ -2996,6 +3002,41 @@ const AdminLogsPage: React.FC = () => {
                     <p className="mt-3 text-xs text-muted-text">{locale === 'zh' ? '原因未确认：该事件没有附加结构化 reason。' : 'Reason unknown: no structured reason was attached to this event.'}</p>
                   ) : null}
                 </TerminalPanel>
+                {businessDetail.actorType === 'user' && businessDetail.userId ? (
+                  <AdminDrillThroughStrip
+                    dataTestId="admin-logs-user-actor-actions"
+                    className="mt-3"
+                    title={locale === 'zh' ? '用户归因' : 'User attribution'}
+                    items={[
+                      ...(canReadUsers ? [
+                        {
+                          label: locale === 'zh' ? '筛选此用户日志' : 'Filter this user’s logs',
+                          target: 'logs' as const,
+                          evidenceType: 'canonical user reference',
+                          reason: locale === 'zh' ? '使用已验证的用户目录引用筛选相关事件。' : 'Filter related events with the verified directory reference.',
+                          params: { tab: 'business', userId: businessDetail.userId, since: sinceFilter },
+                          redacted: false,
+                        },
+                        {
+                          label: locale === 'zh' ? '查看用户详情' : 'View user details',
+                          target: 'userDetail' as const,
+                          evidenceType: 'canonical user reference',
+                          reason: locale === 'zh' ? '在用户目录中核对当前账号身份。' : 'Verify the current account identity in the user directory.',
+                          userId: businessDetail.userId,
+                          redacted: false,
+                        },
+                      ] : []),
+                      ...(canReadUserActivity ? [{
+                        label: locale === 'zh' ? '查看用户活动' : 'View user activity',
+                        target: 'userActivity' as const,
+                        evidenceType: 'canonical user reference',
+                        reason: locale === 'zh' ? '继续查看该用户的安全活动时间线。' : 'Continue to the user’s safe activity timeline.',
+                        userId: businessDetail.userId,
+                        redacted: false,
+                      }] : []),
+                    ]}
+                  />
+                ) : null}
               </div>
               <div className="mt-4">
                 <AdminLogsTerminalSection title={locale === 'zh' ? '元数据' : 'Metadata'} defaultOpen={false} locale={locale} className="bg-[var(--wolfy-surface-input)] px-3 py-3">
