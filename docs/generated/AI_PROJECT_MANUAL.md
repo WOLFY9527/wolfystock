@@ -68,9 +68,9 @@ This manual is a generated navigation and integrity catalog. It does not copy do
 | [docs/audits/t570-official-macro-provider-order-decision.md](../audits/t570-official-macro-provider-order-decision.md) | temporary_evidence | temporary | yes | Official macro provider-order decision evidence | 0e6766d8d36b |
 | [docs/audits/t575-backend-production-simplification-audit.md](../audits/t575-backend-production-simplification-audit.md) | temporary_evidence | temporary | yes | Backend simplification evidence and T612-T629 roadmap | cd1f8bc827a8 |
 | [docs/audits/t576-frontend-production-simplification-audit.md](../audits/t576-frontend-production-simplification-audit.md) | temporary_evidence | temporary | yes | Frontend simplification evidence and T600-T611 roadmap | 9081512345ee |
-| [docs/contracts/data-trust.md](../contracts/data-trust.md) | canonical | active | yes | Cross-domain truth, source, readiness, no-advice, and protected semantics | a6a2cadb7dc4 |
+| [docs/contracts/data-trust.md](../contracts/data-trust.md) | canonical | active | yes | Cross-domain truth, source, readiness, no-advice, and protected semantics | 153944761cd9 |
 | [docs/contracts/historical-market-data.md](../contracts/historical-market-data.md) | canonical | active | yes | Historical OHLCV foundation contract | d3767d52a921 |
-| [docs/design/frontend.md](../design/frontend.md) | canonical | active | yes | Consumer frontend design and implementation contract | f1296186ca62 |
+| [docs/design/frontend.md](../design/frontend.md) | canonical | active | yes | Consumer frontend design and implementation contract | 8d343ceca2c8 |
 | [docs/development/environment.md](../development/environment.md) | canonical | active | yes | Dependency, bootstrap, target, snapshot, runtime, and configuration authority | eaba2d40fec1 |
 | [docs/development/validation.md](../development/validation.md) | canonical | active | yes | Validation command routing and evidence reference | 7bbd0701c0c8 |
 | [docs/generated/AI_PROJECT_MANUAL.md](AI_PROJECT_MANUAL.md) | generated | generated | no | Generated complete documentation catalog | generated |

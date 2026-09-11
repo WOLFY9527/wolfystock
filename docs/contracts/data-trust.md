@@ -136,14 +136,19 @@ snapshot date.
 
 ### Research And Watchlist
 
-Analysis model preflight rejects an unavailable configured model, including a
-no-live environment with no configured model, with HTTP 422 and the existing
-consumer-safe `llm_model_unavailable` error. The same preflight applies to
-synchronous analysis, asynchronous Watchlist Research, and public preview.
-It creates no task or report and grants no provider or fallback authority.
-HTTP 409 on the analysis submission route remains the duplicate-task contract;
-HTTP 202 means only that a task was accepted. Missing quote, history, score,
-or evidence stays missing in supported observation-only reports and readback.
+Analysis model preflight rejects an absent or unusable configured capability
+with HTTP 503 and the existing consumer-safe `llm_model_unavailable` error.
+The envelope is explicitly non-retryable and distinguishes bounded
+`not_configured` from `selection_unusable` state without exposing configured or
+available model names. A declared model is not silently selected when no
+primary model is configured. The same preflight applies to synchronous
+analysis, asynchronous Watchlist Research, and public preview. It creates no
+task or report and grants no provider or fallback authority. HTTP 422 remains
+request-validation semantics, HTTP 409 remains the duplicate-task contract,
+and HTTP 202 means only that a task was accepted. Later provider, network, or
+timeout failures retain their separate transient/retryable semantics. Missing
+quote, history, score, or evidence stays missing in supported observation-only
+reports and readback.
 
 ### Options
 

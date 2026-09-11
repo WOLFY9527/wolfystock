@@ -170,6 +170,15 @@ class MultiUserAuthorizationApiTestCase(unittest.TestCase):
 
     def test_watchlist_manual_research_unavailable_model_is_domain_error(self) -> None:
         # Use real authenticated sessions and the real model-selection precheck.
+        watchlist_snapshots = {}
+        for client in (self.user_a_client, self.user_b_client):
+            saved = client.post(
+                "/api/v1/watchlist/items",
+                json={"symbol": "AAPL", "market": "us", "source": "scanner", "notes": "仅供观察。"},
+            )
+            self.assertEqual(saved.status_code, 200, saved.text)
+            watchlist_snapshots[client] = client.get("/api/v1/watchlist/items").json()
+
         self.app.dependency_overrides[get_config_dep] = lambda: Config(
             stock_list=["AAPL"], litellm_model="", llm_model_list=[],
         )
@@ -187,19 +196,25 @@ class MultiUserAuthorizationApiTestCase(unittest.TestCase):
                                 "original_query": "AAPL", "selection_source": "manual",
                             },
                         )
-                        self.assertEqual(response.status_code, 422, response.text)
+                        self.assertEqual(response.status_code, 503, response.text)
                         body = response.json()
                         self.assertEqual(body["error"], "llm_model_unavailable")
-                        self.assertEqual(body["status"], 422)
-                        self.assertTrue(body["retryable"])
-                        self.assertEqual(body["message"], "AI analysis is temporarily unavailable. Please retry later.")
+                        self.assertEqual(body["status"], 503)
+                        self.assertFalse(body["retryable"])
+                        self.assertEqual(body["message"], "AI analysis capability is unavailable in this environment.")
+                        self.assertEqual(body["detail"]["capabilityState"], "not_configured")
+                        self.assertEqual(body["detail"]["reasonCode"], "analysis_model_not_configured")
                         self.assertNotIn("task_id", body)
                         self.assertNotIn("report", body)
             preview = self.user_a_client.post("/api/v1/analysis/preview", json={"stock_code": "AAPL"})
-            self.assertEqual(preview.status_code, 422, preview.text)
+            self.assertEqual(preview.status_code, 503, preview.text)
             self.assertEqual(preview.json()["error"], "llm_model_unavailable")
+            self.assertFalse(preview.json()["retryable"])
+            self.assertEqual(preview.json()["detail"]["capabilityState"], "not_configured")
             queue.assert_not_called()
             analyze.assert_not_called()
+        for client, snapshot in watchlist_snapshots.items():
+            self.assertEqual(client.get("/api/v1/watchlist/items").json(), snapshot)
         for owner_id in (self.user_a_id, self.user_b_id):
             self.assertEqual(self.db.get_analysis_history(owner_id=owner_id), [])
 

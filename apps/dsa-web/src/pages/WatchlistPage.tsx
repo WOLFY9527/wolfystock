@@ -60,7 +60,12 @@ import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 type SortKey = 'newest' | 'scannerScore' | 'backtestReturn' | 'historicalHitRate' | 'recentlyScored' | 'recentlyBacktested' | 'symbol' | 'market';
 type EvidenceFilter = 'all' | 'hasScanner' | 'hasBacktest' | 'scannerSelected' | 'staleIntelligence';
 type BatchStatus = 'requested' | 'running' | 'completed' | 'failed' | 'skipped';
-type Notice = { tone: 'success' | 'warning' | 'danger'; message: string } | null;
+type Notice = {
+  tone: 'success' | 'warning' | 'danger';
+  message: string;
+  actionLabel?: string;
+  actionPath?: string;
+} | null;
 type FailureReason = '数据不足' | '行情缺失' | '服务暂不可用' | '回测失败' | '扫描失败' | '超时' | '未知错误';
 type BatchFailure = { label: FailureReason; detail?: string };
 type WatchlistTrustState = 'fresh' | 'stale' | 'unknown';
@@ -2398,7 +2403,20 @@ const WatchlistPage: React.FC = () => {
         if (path) navigate(path);
         return;
       }
-      setNotice({ tone: 'danger', message: getParsedApiError(err).message });
+      const parsedError = getParsedApiError(err);
+      const researchPath = buildStockStructurePath(item, language);
+      if (parsedError.category === 'capability_unavailable' && parsedError.retryable === false && researchPath) {
+        setNotice({
+          tone: 'warning',
+          message: language === 'en'
+            ? 'AI analysis is not available in this environment. You can still review the saved research evidence for this symbol.'
+            : '当前环境未提供 AI 分析能力。你仍可继续查看该标的已保存的研究证据。',
+          actionLabel: language === 'en' ? 'Review research evidence' : '查看研究证据',
+          actionPath: researchPath,
+        });
+        return;
+      }
+      setNotice({ tone: 'danger', message: parsedError.message });
     } finally {
       setPendingAnalyzeId((current) => (current === item.id ? null : current));
     }
@@ -2888,7 +2906,20 @@ const WatchlistPage: React.FC = () => {
 
         {notice ? (
           <TerminalNotice className={noticeClassName} role="status">
-            {notice.message}
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+              <span>{notice.message}</span>
+              {notice.actionLabel && notice.actionPath ? (
+                <TerminalButton
+                  type="button"
+                  variant="compact"
+                  data-testid="watchlist-analysis-continuation"
+                  onClick={() => navigate(notice.actionPath as string)}
+                >
+                  <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                  {notice.actionLabel}
+                </TerminalButton>
+              ) : null}
+            </div>
           </TerminalNotice>
         ) : null}
 

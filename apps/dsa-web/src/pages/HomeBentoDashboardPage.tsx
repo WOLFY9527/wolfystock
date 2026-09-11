@@ -6553,7 +6553,13 @@ function HomeAnalysisSoftTimeoutNotice({
   );
 }
 
-function GuestPreviewUnavailableState({ locale }: { locale: DashboardLocale }) {
+function GuestPreviewUnavailableState({
+  locale,
+  capabilityUnavailable,
+}: {
+  locale: DashboardLocale;
+  capabilityUnavailable: boolean;
+}) {
   const isEnglish = locale === 'en';
   return (
     <section
@@ -6563,12 +6569,18 @@ function GuestPreviewUnavailableState({ locale }: { locale: DashboardLocale }) {
       aria-live="polite"
     >
       <p className="text-sm font-semibold">
-        {isEnglish ? 'Public preview is temporarily unavailable' : '公开预览暂时不可用'}
+        {capabilityUnavailable
+          ? (isEnglish ? 'Public AI preview is not available in this environment' : '当前环境未提供公开 AI 预览')
+          : (isEnglish ? 'Public preview is temporarily unavailable' : '公开预览暂时不可用')}
       </p>
       <p className="mt-1 text-xs leading-5 text-[color:var(--state-warning-text)]">
-        {isEnglish
-          ? 'No public research preview is available right now. Try again later, or sign in to continue with saved research workflows.'
-          : '当前没有可用的公开研究预览。可以稍后再试，或登录后继续使用已保存的研究流程。'}
+        {capabilityUnavailable
+          ? (isEnglish
+            ? 'AI preview requires an operator configuration change. You can continue with the available non-AI market and research pages.'
+            : 'AI 预览需要管理员完成运行配置。你仍可继续使用现有的非 AI 市场与研究页面。')
+          : (isEnglish
+            ? 'No public research preview is available right now. Try again later, or sign in to continue with saved research workflows.'
+            : '当前没有可用的公开研究预览。可以稍后再试，或登录后继续使用已保存的研究流程。')}
       </p>
     </section>
   );
@@ -6649,6 +6661,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [searchFieldError, setSearchFieldError] = useState<string | null>(null);
   const [guestPreview, setGuestPreview] = useState<PublicAnalysisPreviewResponse | null>(null);
   const [isGuestPreviewUnavailable, setGuestPreviewUnavailable] = useState(false);
+  const [isGuestPreviewCapabilityUnavailable, setGuestPreviewCapabilityUnavailable] = useState(false);
   const [guestMarketBriefing, setGuestMarketBriefing] = useState<MarketBriefingResponse | null>(null);
   const [isGuestMarketBriefingLoading, setGuestMarketBriefingLoading] = useState(false);
   const [isGuestMarketBriefingUnavailable, setGuestMarketBriefingUnavailable] = useState(false);
@@ -7302,6 +7315,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       setHasHydratedInitialTicker(true);
       setSearchQuery('');
       setGuestPreviewUnavailable(false);
+      setGuestPreviewCapabilityUnavailable(false);
       setGuestPreview(null);
 
       try {
@@ -7319,10 +7333,15 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         setActiveTicker(canonicalSymbol);
         setGuestPreview(response);
         setGuestPreviewUnavailable(false);
+        setGuestPreviewCapabilityUnavailable(false);
         return canonicalSymbol;
-      } catch {
+      } catch (error) {
+        const parsedError = getParsedApiError(error);
         setGuestPreview(null);
         setGuestPreviewUnavailable(true);
+        setGuestPreviewCapabilityUnavailable(
+          parsedError.category === 'capability_unavailable' && parsedError.retryable === false,
+        );
         return null;
       } finally {
         setPendingAnalysisTicker(null);
@@ -7651,7 +7670,10 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         </p>
       ) : null}
       {isGuest && isGuestPreviewUnavailable ? (
-        <GuestPreviewUnavailableState locale={locale} />
+        <GuestPreviewUnavailableState
+          locale={locale}
+          capabilityUnavailable={isGuestPreviewCapabilityUnavailable}
+        />
       ) : null}
     </div>
   );

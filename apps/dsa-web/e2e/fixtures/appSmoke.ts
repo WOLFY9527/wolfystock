@@ -11,6 +11,8 @@ type AppSmokeFixtures = {
 const timestamp = '2026-05-02T09:00:00Z';
 const knownGuestPreviewRejectionConsole = 'Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)';
 const knownGuestPreviewRejectionTestTitle = 'home stock search reaches the canonical route through keyboard, button, and suggestions';
+const knownCapabilityUnavailableConsole = 'Failed to load resource: the server responded with a status of 503 (Service Unavailable)';
+const knownCapabilityUnavailableTestTitle = 'renders the filled-pool readiness matrix without provenance collapse';
 
 function createScannerCandidate(index: number, overrides: Partial<Record<string, unknown>> = {}) {
   const symbol = typeof overrides.symbol === 'string' ? overrides.symbol : `MOCK${index}`;
@@ -1742,6 +1744,15 @@ export const test = base.extend<AppSmokeFixtures>({
       expect(testInfo.title).toBe(knownGuestPreviewRejectionTestTitle);
       expect(consoleErrors.filter((message) => message === knownGuestPreviewRejectionConsole)).toHaveLength(1);
       expect(consoleErrors.filter((message) => message !== knownGuestPreviewRejectionConsole)).toEqual([]);
+      return;
+    }
+
+    if (
+      testInfo.file.endsWith('/apps/dsa-web/e2e/t727-watchlist-readiness-truth.spec.ts')
+      && testInfo.title === knownCapabilityUnavailableTestTitle
+    ) {
+      expect(consoleErrors.filter((message) => message === knownCapabilityUnavailableConsole)).toHaveLength(1);
+      expect(consoleErrors.filter((message) => message !== knownCapabilityUnavailableConsole)).toEqual([]);
       return;
     }
 

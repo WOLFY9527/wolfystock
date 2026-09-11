@@ -1651,6 +1651,14 @@ Preserve:
 - no passive refresh side effects;
 - real research handoff context.
 
+When an explicit AI Analysis action reports a non-retryable unavailable
+capability, Watchlist must not present that state as invalid input or offer a
+retry-only dead end. Keep the saved row unchanged, state that AI analysis is
+not available in the current environment, and offer the existing stock
+structure route as the bounded observation-only continuation for reviewing
+saved evidence. Retry affordances remain appropriate only for errors whose
+structured contract is retryable.
+
 Empty watchlist:
 
 - remain on the canonical Watchlist route;
@@ -2290,6 +2298,7 @@ A migrated consumer route is not complete until all applicable checks pass.
 - [ ] freshness honesty;
 - [ ] handoff to stock research;
 - [ ] owner isolation preserved.
+- [ ] non-retryable AI capability absence continues to saved evidence without a Retry CTA;
 
 ## Scanner
 

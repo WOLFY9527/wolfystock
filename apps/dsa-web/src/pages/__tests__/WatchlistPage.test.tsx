@@ -2785,6 +2785,44 @@ describe('WatchlistPage', () => {
     expect(screen.getByText('home')).toBeInTheDocument();
   });
 
+  it('offers saved research evidence when AI capability is not configured', async () => {
+    analyzeAsync.mockRejectedValueOnce({
+      response: {
+        status: 503,
+        data: {
+          error: 'llm_model_unavailable',
+          code: 'llm_model_unavailable',
+          message: 'AI analysis capability is unavailable in this environment.',
+          retryable: false,
+          detail: {
+            capabilityState: 'not_configured',
+            reasonCode: 'analysis_model_not_configured',
+          },
+        },
+      },
+    });
+    renderWatchlist();
+    const row = await screen.findByTestId('watchlist-row-NVDA');
+
+    fireEvent.click(within(row).getByRole('button', { name: '更多操作 NVDA' }));
+    fireEvent.click(within(row).getByRole('menuitem', { name: /分析/ }));
+
+    const notice = await screen.findByRole('status');
+    expect(notice).toHaveTextContent('当前环境未提供 AI 分析能力');
+    expect(notice).toHaveTextContent('仍可继续查看该标的已保存的研究证据');
+    expect(notice).not.toHaveTextContent('稍后重试');
+    expect(screen.queryByRole('button', { name: /重试/ })).not.toBeInTheDocument();
+    const continuation = within(notice).getByRole('button', { name: '查看研究证据' });
+
+    fireEvent.click(continuation);
+
+    expect(await screen.findByText('stock structure')).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent(
+      '/zh/stocks/NVDA/structure-decision?symbol=NVDA&market=US&source=watchlist',
+    );
+    expect(analyzeAsync).toHaveBeenCalledTimes(1);
+  });
+
   it('renders score freshness and manually refreshes scores', async () => {
     const refreshedItems = [
       makeItem({

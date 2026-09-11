@@ -342,6 +342,29 @@ describe('GuestHomePage', () => {
     expect((screen.getByTestId('guest-home-clean-search').textContent || '')).not.toMatch(GUEST_PREVIEW_FAILURE_FORBIDDEN_COPY_PATTERN);
     expect(unavailable).toHaveClass('text-[color:var(--state-warning-text)]');
     expect(unavailable).toHaveClass('bg-[color:var(--state-warning-bg)]');
+
+    previewMock.mockRejectedValueOnce({
+      response: {
+        status: 503,
+        data: {
+          error: 'llm_model_unavailable',
+          retryable: false,
+          detail: {
+            capabilityState: 'not_configured',
+            reasonCode: 'analysis_model_not_configured',
+          },
+        },
+      },
+    });
+    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'AAPL' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+
+    await waitFor(() => {
+      expect(unavailable).toHaveTextContent('Public AI preview is not available in this environment');
+    });
+    expect(unavailable).toHaveTextContent('requires an operator configuration change');
+    expect(unavailable).toHaveTextContent('non-AI market and research pages');
+    expect(unavailable).not.toHaveTextContent('Try again later');
   });
 
   it('localizes canonical market warning and observation copy for the English guest route', async () => {

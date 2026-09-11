@@ -57,19 +57,27 @@ describe('parseApiError', () => {
   it('keeps unavailable analysis distinct from invalid input and duplicate tasks', () => {
     const parsed = parseApiError({
       response: {
-        status: 422,
+        status: 503,
         data: {
           error: 'llm_model_unavailable',
-          message: 'AI analysis is temporarily unavailable. Please retry later.',
-          retryable: true,
+          message: 'AI analysis capability is unavailable in this environment.',
+          retryable: false,
+          detail: {
+            capabilityState: 'not_configured',
+            reasonCode: 'analysis_model_not_configured',
+          },
         },
       },
     });
 
-    expect(parsed.status).toBe(422);
+    expect(parsed.status).toBe(503);
     expect(parsed.code).toBe('llm_model_unavailable');
-    expect(parsed.category).toBe('upstream_unavailable');
-    expect(parsed.message).toBe('AI 分析暂时不可用，请稍后重试。');
+    expect(parsed.category).toBe('capability_unavailable');
+    expect(parsed.message).toBe('当前环境未提供 AI 分析能力。需要完成运行配置后才能使用。');
+    expect(parsed.retryable).toBe(false);
+    expect(parsed.reasonCode).toBe('analysis_model_not_configured');
+    expect(parsed.capabilityState).toBe('not_configured');
+    expect(parsed.isNetworkError).toBe(false);
     expect(parsed.isValidationError).toBe(false);
     expect(parsed.isAuthError).toBe(false);
   });
@@ -185,6 +193,23 @@ describe('parseApiError', () => {
 
     expect(parsed.category).toBe('upstream_unavailable');
     expect(parsed.message).toBe('服务器暂时不可用，请稍后重试。');
+  });
+
+  it('preserves retryability for a genuinely transient service failure', () => {
+    const parsed = parseApiError({
+      response: {
+        status: 503,
+        data: {
+          error: 'upstream_temporarily_unavailable',
+          message: 'Service temporarily unavailable.',
+          retryable: true,
+        },
+      },
+    });
+
+    expect(parsed.category).toBe('upstream_unavailable');
+    expect(parsed.retryable).toBe(true);
+    expect(parsed.isNetworkError).toBe(true);
   });
 
   it('maps network failures to the network guidance', () => {

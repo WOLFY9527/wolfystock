@@ -136,7 +136,7 @@
     "docsIndex": "docs/README.md",
     "docsIndexSha256": "b9e676ba0d1699818d5cc63efb24a21980440082e3619c2ebccdd08dacb6ac6b",
     "manual": "docs/generated/AI_PROJECT_MANUAL.md",
-    "manualSha256": "2933cf186831297fd8f7579b772c61bcdbdbe10cfb496eccb5c79cbaf0151920",
+    "manualSha256": "723c354ca9591e6cdc5f066023e0bfbb28de0df0622816c6796dc9618c04b246",
     "sourceManifest": "docs/generated/AI_PROJECT_MANUAL_SOURCES.json"
   },
   "registry": {
@@ -351,13 +351,13 @@
       "title": "T576 Frontend Production Simplification Audit"
     },
     {
-      "bytes": 12985,
+      "bytes": 13303,
       "editable": true,
       "id": "data-trust",
       "kind": "canonical",
-      "lineCount": 254,
+      "lineCount": 259,
       "path": "docs/contracts/data-trust.md",
-      "sha256": "a6a2cadb7dc4398f7757702a3077a46df05744e9d735503da29deb30b4e5115e",
+      "sha256": "153944761cd997136f6bf22847890cc7cfcb13947d02d388154ebf6d068ee956",
       "status": "active",
       "summary": "Cross-domain truth, source, readiness, no-advice, and protected semantics",
       "title": "Data Trust And Protected Semantics"
@@ -375,13 +375,13 @@
       "title": "Historical Market Data Foundation v1"
     },
     {
-      "bytes": 55376,
+      "bytes": 55950,
       "editable": true,
       "id": "frontend-design",
       "kind": "canonical",
-      "lineCount": 2347,
+      "lineCount": 2356,
       "path": "docs/design/frontend.md",
-      "sha256": "f1296186ca62affc4cd411f4350bfc7f429b555f6797a0b1595e6e700d75589b",
+      "sha256": "8d343ceca2c809ef60fecd80fe116b4b6a0a3d83b13e6e1116d54a84b2d9997c",
       "status": "active",
       "summary": "Consumer frontend design and implementation contract",
       "title": "Consumer Frontend Design Contract"

@@ -279,12 +279,15 @@ class PublicAnalysisPreviewApiTestCase(unittest.TestCase):
                 json={"stock_code": "AAPL", "stock_name": "Apple"},
             )
 
-        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.status_code, 503)
         analyze_stock.assert_not_called()
         payload = response.json()
-        detail = payload.get("detail", payload)
-        self.assertEqual(detail["error"], "llm_model_unavailable")
-        self.assertEqual(detail["message"], "公开分析预览暂时不可用，请稍后重试。")
+        envelope = payload if "error" in payload else payload["detail"]
+        self.assertEqual(envelope["error"], "llm_model_unavailable")
+        self.assertEqual(envelope["message"], "当前环境未提供公开 AI 分析预览。")
+        self.assertFalse(envelope["retryable"])
+        self.assertEqual(envelope["detail"]["capabilityState"], "selection_unusable")
+        self.assertEqual(envelope["detail"]["reasonCode"], "analysis_selection_unusable")
         serialized = json.dumps(payload, ensure_ascii=False)
         for forbidden in (
             "openai/gpt-5-ghost",

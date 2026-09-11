@@ -6,6 +6,7 @@ export type ApiErrorCategory =
   | 'missing_params'
   | 'validation_error'
   | 'analysis_conflict'
+  | 'capability_unavailable'
   | 'llm_not_configured'
   | 'model_tool_incompatible'
   | 'invalid_tool_call'
@@ -26,6 +27,9 @@ export interface ParsedApiError {
   rawMessage: string;
   status?: number;
   code?: string;
+  retryable?: boolean;
+  reasonCode?: string;
+  capabilityState?: string;
   details?: unknown;
   category: ApiErrorCategory;
   isAuthError?: boolean;
@@ -68,6 +72,9 @@ type CreateParsedApiErrorOptions = {
   rawMessage?: string;
   status?: number;
   code?: string;
+  retryable?: boolean;
+  reasonCode?: string;
+  capabilityState?: string;
   details?: unknown;
   category?: ApiErrorCategory;
   isAuthError?: boolean;
@@ -313,6 +320,28 @@ function extractErrorCode(data: unknown): string | null {
   return pickString(data.error, data.code);
 }
 
+function extractErrorContractMetadata(data: unknown): {
+  retryable?: boolean;
+  reasonCode?: string;
+  capabilityState?: string;
+} {
+  if (!isRecord(data)) return {};
+  const detail = isRecord(data.detail) ? data.detail : undefined;
+  const retryable = typeof data.retryable === 'boolean'
+    ? data.retryable
+    : typeof detail?.retryable === 'boolean'
+      ? detail.retryable
+      : undefined;
+  const reasonCode = pickString(detail?.reasonCode, detail?.reason_code, data.reasonCode, data.reason_code) ?? undefined;
+  const capabilityState = pickString(
+    detail?.capabilityState,
+    detail?.capability_state,
+    data.capabilityState,
+    data.capability_state,
+  ) ?? undefined;
+  return { retryable, reasonCode, capabilityState };
+}
+
 function extractErrorPayloadText(data: unknown): string | null {
   if (typeof data === 'string') {
     const trimmed = data.trim();
@@ -374,6 +403,9 @@ export function createParsedApiError(options: CreateParsedApiErrorOptions): Pars
     rawMessage: sanitizeText(options.rawMessage?.trim() || options.message),
     status,
     code: options.code,
+    retryable: options.retryable,
+    reasonCode: options.reasonCode,
+    capabilityState: options.capabilityState,
     details: sanitizeUnknown(options.details),
     category,
     isAuthError: options.isAuthError ?? flags.isAuthError,
@@ -496,6 +528,9 @@ export function parseApiError(error: unknown, fallbackMessage?: string): ParsedA
       rawMessage: error.rawMessage,
       status: error.status,
       code: error.code,
+      retryable: error.retryable,
+      reasonCode: error.reasonCode,
+      capabilityState: error.capabilityState,
       details: error.details,
       category: error.category,
       isAuthError: error.isAuthError,
@@ -519,6 +554,7 @@ export function parseApiError(error: unknown, fallbackMessage?: string): ParsedA
     payloadText,
     responseData,
   } = extractCommonParsedErrorMetadata(error);
+  const { retryable, reasonCode, capabilityState } = extractErrorContractMetadata(responseData);
 
   const matchText = buildMatchText([
     rawMessage,
@@ -543,6 +579,9 @@ export function parseApiError(error: unknown, fallbackMessage?: string): ParsedA
     rawMessage,
     status,
     code,
+    retryable,
+    reasonCode,
+    capabilityState,
     details,
     category,
     ...overrides,
@@ -644,6 +683,18 @@ export function parseApiError(error: unknown, fallbackMessage?: string): ParsedA
       AUTH_FALLBACK_MESSAGE,
       'auth_required',
       { isAuthError: true },
+    );
+  }
+
+  if (code === 'llm_model_unavailable') {
+    const message = capabilityState === 'not_configured'
+      ? '当前环境未提供 AI 分析能力。需要完成运行配置后才能使用。'
+      : '当前配置的 AI 分析能力不可用。需要调整运行配置后才能使用。';
+    return buildError(
+      'AI 分析能力不可用',
+      message,
+      'capability_unavailable',
+      { isNetworkError: false, isValidationError: false },
     );
   }
 
@@ -842,15 +893,6 @@ export function parseApiError(error: unknown, fallbackMessage?: string): ParsedA
       '请求的资源不存在',
       NOT_FOUND_FALLBACK_MESSAGE,
       'http_error',
-    );
-  }
-
-  if (code === 'llm_model_unavailable') {
-    return buildError(
-      'AI 分析暂不可用',
-      'AI 分析暂时不可用，请稍后重试。',
-      'upstream_unavailable',
-      { isValidationError: false },
     );
   }
 

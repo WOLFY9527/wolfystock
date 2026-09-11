@@ -229,16 +229,49 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             )
 
         exc = ctx.exception
-        self.assertEqual(getattr(exc, "status_code", None), 422)
+        self.assertEqual(getattr(exc, "status_code", None), 503)
         self.assertEqual(exc.detail["error"], "llm_model_unavailable")
-        self.assertEqual(exc.detail["message"], "AI analysis is temporarily unavailable. Please retry later.")
-        self.assertTrue(exc.detail["retryable"])
+        self.assertEqual(exc.detail["message"], "AI analysis capability is unavailable in this environment.")
+        self.assertFalse(exc.detail["retryable"])
+        self.assertEqual(
+            exc.detail["detail"],
+            {
+                "capabilityState": "selection_unusable",
+                "reasonCode": "analysis_selection_unusable",
+            },
+        )
         serialized = json.dumps(exc.detail, ensure_ascii=False)
         self.assertNotIn("openai/gpt-5-ghost", serialized)
         self.assertNotIn("openai/gpt-4.1-free", serialized)
         self.assertNotIn("openai/gpt-4o-free", serialized)
         self.assertNotIn("available_models", serialized)
         self.assertNotIn("configured_model", serialized)
+
+        no_primary_config = Config(
+            stock_list=["AAPL"],
+            llm_model_list=[{
+                "model_name": "openai/gpt-4.1-free",
+                "litellm_params": {"model": "openai/gpt-4.1-free", "api_key": "sk-test"},
+            }],
+            litellm_model="",
+        )
+
+        with patch("api.v1.endpoints.analysis._handle_async_analysis_batch") as submit_batch:
+            with self.assertRaises(Exception) as no_primary_ctx:
+                trigger_analysis(
+                    AnalyzeRequest(stock_code="AAPL", async_mode=True),
+                    config=no_primary_config,
+                    current_user=SimpleNamespace(user_id="user-1"),
+                )
+
+        submit_batch.assert_not_called()
+        no_primary_exc = no_primary_ctx.exception
+        self.assertEqual(getattr(no_primary_exc, "status_code", None), 503)
+        self.assertEqual(no_primary_exc.detail["error"], "llm_model_unavailable")
+        self.assertFalse(no_primary_exc.detail["retryable"])
+        self.assertEqual(no_primary_exc.detail["detail"]["capabilityState"], "not_configured")
+        self.assertEqual(no_primary_exc.detail["detail"]["reasonCode"], "analysis_model_not_configured")
+        self.assertNotIn("openai/gpt-4.1-free", json.dumps(no_primary_exc.detail))
 
     def test_model_unavailable_detail_is_sanitized_and_actionable(self) -> None:
         if _build_llm_model_unavailable_detail is None:
@@ -1001,9 +1034,8 @@ class AnalysisApiContractTestCase(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             app = create_app(static_dir=Path(temp_dir))
-            schema = app.openapi()["paths"]["/api/v1/analysis/analyze"]["post"]["responses"]["202"][
-                "content"
-            ]["application/json"]["schema"]
+            responses = app.openapi()["paths"]["/api/v1/analysis/analyze"]["post"]["responses"]
+            schema = responses["202"]["content"]["application/json"]["schema"]
 
         refs = {item["$ref"] for item in schema["anyOf"]}
         self.assertEqual(
@@ -1013,6 +1045,8 @@ class AnalysisApiContractTestCase(unittest.TestCase):
                 "#/components/schemas/BatchTaskAcceptedResponse",
             },
         )
+        self.assertIn("422", responses)
+        self.assertIn("503", responses)
 
     def test_format_sse_event_accepts_enum_payload(self) -> None:
         if _format_sse_event is None:

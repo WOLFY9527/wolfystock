@@ -139,7 +139,7 @@ def _build_llm_model_unavailable_detail(config: Config) -> Optional[Dict[str, An
         return None
     selection = resolve_litellm_model_selection(
         config,
-        allow_default_fallback=True,
+        allow_default_fallback=False,
     )
     if selection.is_usable:
         return None
@@ -159,28 +159,39 @@ def _build_llm_model_unavailable_detail(config: Config) -> Optional[Dict[str, An
     }
 
 
+_ANALYSIS_CAPABILITY_UNAVAILABLE_MESSAGE = "AI analysis capability is unavailable in this environment."
 _ANALYSIS_UNAVAILABLE_MESSAGE = "AI analysis is temporarily unavailable. Please retry later."
 _ANALYSIS_STATUS_UNAVAILABLE_MESSAGE = "Analysis task status is temporarily unavailable. Please retry later."
-_PUBLIC_PREVIEW_UNAVAILABLE_MESSAGE = "公开分析预览暂时不可用，请稍后重试。"
+_PUBLIC_PREVIEW_CAPABILITY_UNAVAILABLE_MESSAGE = "当前环境未提供公开 AI 分析预览。"
 
 
 def _raise_if_llm_model_unavailable(
     config: Config,
     *,
-    public_message: str = _ANALYSIS_UNAVAILABLE_MESSAGE,
+    public_message: str = _ANALYSIS_CAPABILITY_UNAVAILABLE_MESSAGE,
 ) -> None:
     detail = _build_llm_model_unavailable_detail(config)
     if detail:
+        capability_state = "selection_unusable" if detail.get("configured_model") else "not_configured"
+        reason_code = (
+            "analysis_selection_unusable"
+            if capability_state == "selection_unusable"
+            else "analysis_model_not_configured"
+        )
         logger.warning(
             "LLM model unavailable: configured_model=%s available_models=%s",
             detail.get("configured_model"),
             detail.get("available_models"),
         )
         raise safe_api_error(
-            status_code=422,
+            status_code=503,
             error="llm_model_unavailable",
             message=public_message,
-            retryable=True,
+            retryable=False,
+            detail={
+                "capabilityState": capability_state,
+                "reasonCode": reason_code,
+            },
         )
 
 
@@ -545,7 +556,8 @@ def _analysis_sync_quota_execution_metadata(
     responses={
         200: {"description": "Guest preview generated"},
         400: {"description": "请求参数错误", "model": ErrorResponse},
-        422: {"description": "请求验证失败或分析模型不可用", "model": ErrorResponse},
+        422: {"description": "请求验证失败", "model": ErrorResponse},
+        503: {"description": "当前运行环境不具备 AI 分析能力", "model": ErrorResponse},
         500: {"description": "分析失败", "model": ErrorResponse},
     },
     summary="生成公开分析预览",
@@ -556,7 +568,10 @@ def preview_analysis(
         http_request: Request,
         config: Config = Depends(get_config_dep),
 ) -> AnalysisPreviewResponse:
-    _raise_if_llm_model_unavailable(config, public_message=_PUBLIC_PREVIEW_UNAVAILABLE_MESSAGE)
+    _raise_if_llm_model_unavailable(
+        config,
+        public_message=_PUBLIC_PREVIEW_CAPABILITY_UNAVAILABLE_MESSAGE,
+    )
     stock_code = _resolve_and_normalize_input(request.stock_code)
     guest_session_id, is_new_guest_session = _resolve_guest_session_id(http_request)
     query_id = f"guest:{guest_session_id}:{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
@@ -695,8 +710,9 @@ def preview_analysis(
         },
         400: {"description": "请求参数错误", "model": ErrorResponse},
         409: {"description": "股票正在分析中，拒绝重复提交", "model": DuplicateTaskErrorResponse},
-        422: {"description": "请求验证失败或分析模型不可用", "model": ErrorResponse},
+        422: {"description": "请求验证失败", "model": ErrorResponse},
         429: {"description": "额度试点限制", "model": ErrorResponse},
+        503: {"description": "当前运行环境不具备 AI 分析能力", "model": ErrorResponse},
         500: {"description": "分析失败", "model": ErrorResponse},
     },
     summary="触发股票分析",

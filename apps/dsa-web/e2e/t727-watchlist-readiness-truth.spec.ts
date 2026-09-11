@@ -306,6 +306,37 @@ appTest.describe('T727 Watchlist research readiness and provenance truth', () =>
 
   appTest('renders the filled-pool readiness matrix without provenance collapse', async ({ page, unhandledApiRoutes }) => {
     await installWatchlistRoutes(page, rows);
+    await page.route('**/api/v1/**', async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (request.method() === 'POST' && path === '/api/v1/analysis/analyze') {
+        return fulfillJson(route, {
+          error: 'llm_model_unavailable',
+          code: 'llm_model_unavailable',
+          message: 'AI analysis capability is unavailable in this environment.',
+          status: 503,
+          retryable: false,
+          detail: {
+            capabilityState: 'not_configured',
+            reasonCode: 'analysis_model_not_configured',
+          },
+        }, 503);
+      }
+      if (request.method() === 'GET' && path === '/api/v1/stocks/OBS/validate') {
+        return fulfillJson(route, {
+          stockCode: 'OBS',
+          normalizedSymbol: 'OBS',
+          market: 'us',
+          status: 'valid',
+          valid: true,
+          exists: true,
+        });
+      }
+      if (path.includes('/OBS')) {
+        return fulfillJson(route, {});
+      }
+      return route.fallback();
+    });
     await openSignedInRoute(page, '/zh/watchlist');
     await appExpect(page.getByTestId('watchlist-page')).toBeVisible();
 
@@ -339,6 +370,18 @@ appTest.describe('T727 Watchlist research readiness and provenance truth', () =>
     const contradictoryRow = page.getByTestId('watchlist-row-CONTRA');
     await contradictoryRow.getByRole('button', { name: '更多操作 CONTRA' }).click();
     await appExpect(contradictoryRow.getByRole('menuitem', { name: '结果 703' })).toHaveCount(0);
+
+    const observableRow = page.getByTestId('watchlist-row-OBS');
+    await observableRow.getByRole('button', { name: '更多操作 OBS' }).click();
+    await observableRow.getByRole('menuitem', { name: '分析' }).click();
+    const capabilityNotice = page.getByRole('status').filter({ hasText: '当前环境未提供 AI 分析能力' });
+    await appExpect(capabilityNotice).toContainText('仍可继续查看该标的已保存的研究证据');
+    await appExpect(capabilityNotice.getByRole('button', { name: '查看研究证据' })).toBeVisible();
+    await appExpect(capabilityNotice.getByRole('button', { name: /重试/ })).toHaveCount(0);
+    await appExpect(page).toHaveURL(/\/zh\/watchlist$/);
+
+    await capabilityNotice.getByRole('button', { name: '查看研究证据' }).click();
+    await appExpect(page).toHaveURL(/\/zh\/stocks\/OBS\/structure-decision\?symbol=OBS&market=US&source=watchlist$/);
     await expectNoHorizontalOverflow(page);
     pwExpect(unhandledApiRoutes).toEqual([]);
   });

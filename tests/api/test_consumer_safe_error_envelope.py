@@ -24,7 +24,7 @@ except ModuleNotFoundError:
 
 import src.auth as auth
 from api.app import create_app
-from api.deps import CurrentUser, get_current_user
+from api.deps import CurrentUser, get_config_dep, get_current_user
 from api.v1.errors import safe_error_identifier
 from src.config import Config
 from src.storage import DatabaseManager
@@ -486,3 +486,24 @@ def test_validation_error_response_is_consumer_safe_for_body_query_and_path(clie
             message="请求参数验证失败",
             retryable=False,
         )
+
+    client.app.dependency_overrides[get_config_dep] = lambda: Config(
+        stock_list=["AAPL"],
+        litellm_model="",
+        llm_model_list=[],
+    )
+    capability_response = client.post(
+        "/api/v1/analysis/analyze",
+        json={"stock_code": "AAPL", "async_mode": True},
+    )
+    _assert_safe_error_payload(
+        capability_response,
+        status_code=503,
+        error="llm_model_unavailable",
+        message="AI analysis capability is unavailable in this environment.",
+        retryable=False,
+        expected_detail={
+            "capabilityState": "not_configured",
+            "reasonCode": "analysis_model_not_configured",
+        },
+    )
