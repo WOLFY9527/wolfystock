@@ -1709,6 +1709,17 @@ Do not:
 
 Membership readiness, market-data readiness, and candidate-generation readiness must remain distinct.
 
+For persisted historical results, presentation order is also a truth boundary:
+
+1. state the terminal outcome of that run and its selected-candidate count;
+2. show the persisted snapshot/cutoff evidence and freshness separately;
+3. frame refresh as the action before a future current-market run.
+
+A stale universe warning must remain visible, but it must not override a
+completed historical outcome. Failed, data-failed, partial, zero-candidate, and
+freshness-unavailable states remain explicit. Viewing the result must not
+refresh data, rerun Scanner, or mutate Watchlist state.
+
 ## 21.7 Backtest
 
 Purpose:

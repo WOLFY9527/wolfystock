@@ -77,19 +77,33 @@ function historicalRun() {
     rejected_symbols: [],
     diagnostics: {
       data_readiness: {
-        state: 'ready',
+        state: 'blocked',
         market: 'us',
         profile: 'us_historical_research_v1',
         universe_size: 180,
         quote_coverage: 'unknown',
         history_coverage: 'available',
-        freshness: 'historical',
+        freshness: 'stale',
         selected_count: 1,
         rejected_count: 39,
         failed_count: 0,
-        blocker_bucket: 'unknown',
+        blocker_bucket: 'stale_universe',
         consumer_summary: 'Historical research evidence is available through the selected cutoff.',
-        next_data_action: 'Review the cutoff-bound evidence; refresh separately for current-market research.',
+        next_data_action: 'Refresh the scanner scope before scanning again.',
+        scanner_universe_readiness: {
+          contract_version: 'scanner_universe_readiness_v1',
+          status: 'stale',
+          market: 'US',
+          universe_size: 180,
+          last_updated_at: `${cutoff}T00:00:00+00:00`,
+          freshness_state: `universe_modified:${cutoff}`,
+          required_data_classes: ['universe', 'historical_ohlcv', 'quote_snapshot'],
+          available_data_classes: ['universe', 'historical_ohlcv'],
+          missing_data_classes: ['quote_snapshot'],
+          blocked_product_surfaces: ['Scanner'],
+          consumer_safe_message: 'Scanner scope is stale and must be refreshed before scanning.',
+          consumer_safe: true,
+        },
       },
     },
     summary: {
@@ -384,8 +398,13 @@ test('launches, discovers, and reopens cutoff-bound historical Scanner research'
   })).toBe(true);
 
   await expect(page.getByTestId('scanner-page-profile-label')).toContainText('US Historical Research');
-  await expect(page.getByTestId('scanner-consumer-status-sentence')).toContainText(`through ${cutoff}`);
+  await expect(page.getByTestId('scanner-consumer-status-sentence')).toContainText('completed with 1 candidate');
   await expect(page.getByTestId('scanner-consumer-status-sentence')).not.toContainText(/today|pre-open/i);
+  await expect(page.getByTestId('scanner-consumer-readiness-summary')).toContainText('Universe snapshot 12/31/2024 is stale for a new current-market run');
+  await expect(page.getByTestId('scanner-consumer-next-action')).toContainText('Refresh the universe before a new current-market run');
+  await expect(page.getByTestId('scanner-conclusion-band')).toContainText('Historical run completed');
+  await expect(page.getByTestId('scanner-conclusion-band')).toContainText('Candidates 1');
+  await expect(page.getByTestId('scanner-conclusion-band')).not.toContainText('must be refreshed before scanning');
   await expect(page.getByTestId('scanner-run-facts')).toContainText('Historical development replay');
   await expect(cutoffInput).toHaveValue(cutoff);
   await expect(page.getByTestId('scanner-run-facts')).toContainText('12/31/2024');

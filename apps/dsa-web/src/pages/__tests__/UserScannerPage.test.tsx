@@ -399,6 +399,37 @@ function makeRunDetail(overrides: Partial<ScannerRunDetail> = {}): ScannerRunDet
   };
 }
 
+function makeHistoricalDataReadiness(overrides: Record<string, unknown> = {}) {
+  return {
+    state: 'blocked',
+    market: 'us',
+    profile: 'us_historical_research_v1',
+    universeSize: 300,
+    candidateEvaluationCount: 40,
+    selectedCount: 3,
+    rejectedCount: 37,
+    failedCount: 0,
+    blockerBucket: 'stale_universe',
+    freshness: 'stale',
+    nextDataAction: 'Refresh the scanner scope before scanning again.',
+    scannerUniverseReadiness: {
+      contractVersion: 'scanner_universe_readiness_v1',
+      status: 'stale',
+      market: 'US',
+      universeSize: 300,
+      lastUpdatedAt: '2024-12-31T00:00:00+00:00',
+      freshnessState: 'universe_modified:2024-12-31',
+      requiredDataClasses: ['universe', 'historical_ohlcv', 'quote_snapshot'],
+      availableDataClasses: ['universe', 'historical_ohlcv'],
+      missingDataClasses: ['quote_snapshot'],
+      blockedProductSurfaces: ['Scanner'],
+      consumerSafeMessage: 'Scanner scope is stale and must be refreshed before scanning.',
+      consumerSafe: true,
+    },
+    ...overrides,
+  };
+}
+
 function makeCryptoDiagnosticsRun(overrides: Partial<ScannerRunDetail> = {}): ScannerRunDetail {
   return makeRunDetail({
     market: 'us',
@@ -4707,6 +4738,258 @@ describe('UserScannerPage', () => {
     expect(pageError).toHaveTextContent(/扫描未完成|Scan did not complete/i);
     expect(pageError).toHaveTextContent(/登录|Sign in/i);
     expect(pageError).not.toHaveTextContent(/Unauthorized|token|provider_trace|raw|provider|trace/i);
+  });
+
+  it('separates a completed historical run outcome from stale universe freshness', async () => {
+    const historicalRun = makeRunDetail({
+      id: 84,
+      market: 'us',
+      profile: 'us_historical_research_v1',
+      profileLabel: 'US Historical Research',
+      evaluationMode: 'historical_development',
+      evaluationCutoff: '2024-12-31',
+      watchlistDate: '2024-12-31',
+      diagnostics: {
+        dataReadiness: {
+          state: 'blocked',
+          market: 'us',
+          profile: 'us_historical_research_v1',
+          universeSize: 300,
+          candidateEvaluationCount: 40,
+          selectedCount: 3,
+          rejectedCount: 37,
+          failedCount: 0,
+          blockerBucket: 'stale_universe',
+          freshness: 'stale',
+          nextDataAction: 'Refresh the scanner scope before scanning again.',
+          scannerUniverseReadiness: {
+            contractVersion: 'scanner_universe_readiness_v1',
+            status: 'stale',
+            market: 'US',
+            universeSize: 300,
+            lastUpdatedAt: '2024-12-31T00:00:00+00:00',
+            freshnessState: 'universe_modified:2024-12-31',
+            requiredDataClasses: ['universe', 'historical_ohlcv', 'quote_snapshot'],
+            availableDataClasses: ['universe', 'historical_ohlcv'],
+            missingDataClasses: ['quote_snapshot'],
+            blockedProductSurfaces: ['Scanner'],
+            consumerSafeMessage: 'Scanner scope is stale and must be refreshed before scanning.',
+            consumerSafe: true,
+          },
+        },
+      },
+    });
+    getRuns.mockResolvedValue(makeHistoryResponse([makeHistoryItem({
+      id: 84,
+      market: 'us',
+      profile: 'us_historical_research_v1',
+      profileLabel: 'US Historical Research',
+      evaluationMode: 'historical_development',
+      evaluationCutoff: '2024-12-31',
+      watchlistDate: '2024-12-31',
+    })]));
+    getRun.mockResolvedValue(historicalRun);
+
+    renderUserScannerPage({ initialEntry: '/en/scanner' });
+
+    expect(await screen.findByTestId('scanner-consumer-status-sentence')).toHaveTextContent(
+      'Historical development replay completed with 3 candidates',
+    );
+    expect(screen.getByTestId('scanner-consumer-readiness-summary')).toHaveTextContent(
+      'Universe snapshot 12/31/2024 is stale for a new current-market run',
+    );
+    expect(screen.getByTestId('scanner-consumer-next-action')).toHaveTextContent(
+      'Refresh the universe before a new current-market run',
+    );
+    expect(screen.getByTestId('scanner-run-facts')).toHaveTextContent('Historical development replay');
+    expect(screen.getByTestId('scanner-run-facts')).toHaveTextContent('12/31/2024');
+    expect(screen.getByTestId('scanner-consumer-control-value-output')).toHaveTextContent('3');
+    expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent('Historical run completed');
+    expect(screen.getByTestId('scanner-conclusion-band')).not.toHaveTextContent(
+      'must be refreshed before scanning',
+    );
+    expect(runScan).not.toHaveBeenCalled();
+    expect(addWatchlistItem).not.toHaveBeenCalled();
+    expect(removeWatchlistItem).not.toHaveBeenCalled();
+  });
+
+  it('keeps a completed historical zero-candidate result separate from stale universe freshness', async () => {
+    getRun.mockResolvedValue(makeRunDetail({
+      id: 85,
+      market: 'us',
+      profile: 'us_historical_research_v1',
+      profileLabel: 'US Historical Research',
+      evaluationMode: 'historical_development',
+      evaluationCutoff: '2024-12-31',
+      watchlistDate: '2024-12-31',
+      summary: {
+        universeCount: 300,
+        submittedCount: 300,
+        evaluatedCount: 40,
+        selectedCount: 0,
+        rejectedCount: 40,
+        dataFailedCount: 0,
+        skippedCount: 0,
+        errorCount: 0,
+        limitedByResultCap: false,
+      },
+      shortlist: [],
+      selected: [],
+      candidates: [],
+      diagnostics: { dataReadiness: makeHistoricalDataReadiness({ selectedCount: 0, rejectedCount: 40 }) },
+    }));
+
+    renderUserScannerPage({ initialEntry: '/en/scanner' });
+
+    expect(await screen.findByTestId('scanner-consumer-status-sentence')).toHaveTextContent(
+      'completed with no selected candidates',
+    );
+    expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent(
+      'Historical run completed with no selected candidates',
+    );
+    expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent('Candidates 0');
+    expect(screen.getByTestId('scanner-consumer-readiness-summary')).toHaveTextContent(
+      'is stale for a new current-market run',
+    );
+    expect(screen.getByTestId('scanner-consumer-next-action')).toHaveTextContent(
+      'This completed historical result remains available for review',
+    );
+  });
+
+  it.each([
+    {
+      name: 'failed run status',
+      run: makeRunDetail({
+        id: 86,
+        market: 'us',
+        profile: 'us_historical_research_v1',
+        evaluationMode: 'historical_development',
+        evaluationCutoff: '2024-12-31',
+        status: 'failed',
+        failureReason: 'Historical evaluation failed.',
+      }),
+    },
+    {
+      name: 'data-failed completed payload',
+      run: makeRunDetail({
+        id: 87,
+        market: 'us',
+        profile: 'us_historical_research_v1',
+        evaluationMode: 'historical_development',
+        evaluationCutoff: '2024-12-31',
+        summary: {
+          universeCount: 300,
+          submittedCount: 40,
+          evaluatedCount: 40,
+          selectedCount: 0,
+          rejectedCount: 0,
+          dataFailedCount: 40,
+          skippedCount: 0,
+          errorCount: 0,
+          limitedByResultCap: false,
+        },
+        shortlist: [],
+        selected: [],
+        candidates: [],
+      }),
+    },
+  ])('does not upgrade a historical $name to success', async ({ run }) => {
+    run.diagnostics = { dataReadiness: makeHistoricalDataReadiness({ selectedCount: 0, rejectedCount: 0, failedCount: 40 }) };
+    getRun.mockResolvedValue(run);
+
+    renderUserScannerPage({ initialEntry: '/en/scanner' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('scanner-consumer-status-sentence')).toHaveTextContent(
+        'Historical development replay failed',
+      );
+    });
+    expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent('Historical run failed');
+    expect(screen.getByTestId('scanner-conclusion-band')).not.toHaveTextContent('Historical run completed');
+    expect(screen.getByTestId('scanner-consumer-next-action')).toHaveTextContent(
+      "Review this run's incomplete evidence",
+    );
+  });
+
+  it('keeps a historical partial run partial while showing freshness separately', async () => {
+    getRun.mockResolvedValue(makeRunDetail({
+      id: 88,
+      market: 'us',
+      profile: 'us_historical_research_v1',
+      evaluationMode: 'historical_development',
+      evaluationCutoff: '2024-12-31',
+      status: 'partial',
+      diagnostics: { dataReadiness: makeHistoricalDataReadiness() },
+    }));
+
+    renderUserScannerPage({ initialEntry: '/en/scanner' });
+
+    expect(await screen.findByTestId('scanner-consumer-status-sentence')).toHaveTextContent(
+      'Historical development replay remains partial',
+    );
+    expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent('Historical run remains partial');
+    expect(screen.getByTestId('scanner-conclusion-band')).not.toHaveTextContent('Historical run completed');
+    expect(screen.getByTestId('scanner-consumer-readiness-summary')).toHaveTextContent('is stale');
+  });
+
+  it('does not invent a stale warning for a fresh historical universe snapshot', async () => {
+    getRun.mockResolvedValue(makeRunDetail({
+      id: 89,
+      market: 'us',
+      profile: 'us_historical_research_v1',
+      evaluationMode: 'historical_development',
+      evaluationCutoff: '2024-12-31',
+      diagnostics: {
+        dataReadiness: makeHistoricalDataReadiness({
+          state: 'ready',
+          blockerBucket: 'unknown',
+          freshness: 'fresh',
+          scannerUniverseReadiness: {
+            ...makeHistoricalDataReadiness().scannerUniverseReadiness,
+            status: 'available',
+            consumerSafeMessage: 'Scanner scope is available.',
+          },
+        }),
+      },
+    }));
+
+    renderUserScannerPage({ initialEntry: '/en/scanner' });
+
+    const summary = await screen.findByTestId('scanner-consumer-readiness-summary');
+    expect(summary).toHaveTextContent('is current for a new run');
+    expect(summary).not.toHaveTextContent(/stale/i);
+    expect(screen.getByTestId('scanner-consumer-next-action')).not.toHaveTextContent(/refresh the universe/i);
+  });
+
+  it('keeps missing historical universe freshness unavailable instead of inferring fresh', async () => {
+    getRun.mockResolvedValue(makeRunDetail({
+      id: 90,
+      market: 'us',
+      profile: 'us_historical_research_v1',
+      evaluationMode: 'historical_development',
+      evaluationCutoff: null,
+      diagnostics: {
+        dataReadiness: makeHistoricalDataReadiness({
+          state: 'unknown',
+          blockerBucket: 'unknown',
+          freshness: 'unknown',
+          scannerUniverseReadiness: {
+            ...makeHistoricalDataReadiness().scannerUniverseReadiness,
+            status: 'unavailable',
+            lastUpdatedAt: null,
+            freshnessState: 'unknown',
+            consumerSafeMessage: 'Scanner scope freshness is unavailable.',
+          },
+        }),
+      },
+    }));
+
+    renderUserScannerPage({ initialEntry: '/en/scanner' });
+
+    const summary = await screen.findByTestId('scanner-consumer-readiness-summary');
+    expect(summary).toHaveTextContent('Universe snapshot freshness is unavailable');
+    expect(summary).toHaveTextContent('No current state is assumed');
+    expect(summary).not.toHaveTextContent('12/31/2024');
   });
 
   it('shows stale scanner universe readiness without fake candidates or internal leakage', async () => {

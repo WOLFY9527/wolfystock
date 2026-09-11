@@ -124,6 +124,16 @@ or grant an admin capability. A data-readiness failure remains a data condition
 with a consumer-safe explanation; it must not be presented as an authorization
 failure. Detailed Scanner operational status remains an admin-only boundary.
 
+Persisted Scanner result readback must keep the completed run outcome separate
+from the current universe or snapshot freshness projection. The result first
+states what that run produced, then identifies the snapshot/cutoff evidence and
+its freshness, and finally gives a future-run action. A stale universe remains
+visible and may still block a new run, but it does not retroactively turn a
+completed historical result into a failed run. Failed, data-failed, partial,
+and zero-candidate outcomes retain their own explicit semantics; unavailable
+freshness is not inferred as fresh, and a cutoff date is not fabricated into a
+snapshot date.
+
 ### Research And Watchlist
 
 Analysis model preflight rejects an unavailable configured model, including a
