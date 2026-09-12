@@ -20,6 +20,7 @@ import type {
   WatchlistScoreRefreshRequest,
   WatchlistScoreRefreshResponse,
   WatchlistScoreRefreshStatus,
+  WatchlistScannerLineageV1,
 } from '../types/watchlist';
 
 const SAFE_CATALYST_CATEGORY_CODES = new Set([
@@ -65,6 +66,11 @@ const SAFE_RESEARCH_PROVENANCE_STATES = new Set<WatchlistResearchProvenanceState
 const SAFE_RESEARCH_SOURCE_CLASSES = new Set<WatchlistResearchSourceClass>([
   'market_observation', 'scanner_run', 'rule_backtest_result', 'simulated', 'example', 'fixture', 'unknown',
 ]);
+const SAFE_SCANNER_EVALUATION_MODES = new Set(['current', 'historical_development']);
+const SAFE_SCANNER_LINEAGE_DATA_STATES = new Set([
+  'available', 'limited', 'observation_only', 'insufficient', 'updating', 'unavailable',
+  'ready', 'delayed', 'cached', 'partial', 'no_evidence',
+]);
 
 function normalizeOptionalText(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -105,6 +111,95 @@ function normalizeOptionalNumber(value: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
+}
+
+function normalizeOptionalIsoDateTime(value: unknown): string | null {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) return null;
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(normalized);
+  if (!dateMatch || Number.isNaN(Date.parse(normalized))) return null;
+  const [, yearText, monthText, dayText] = dateMatch;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const calendarDate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    calendarDate.getUTCFullYear() !== year
+    || calendarDate.getUTCMonth() !== month - 1
+    || calendarDate.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return normalized;
+}
+
+function normalizeWatchlistScannerLineage(value: unknown): WatchlistScannerLineageV1 | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const contractVersion = normalizeOptionalText(record.contractVersion);
+  const source = normalizeOptionalText(record.source)?.toLowerCase();
+  const symbol = normalizeOptionalText(record.symbol)?.toUpperCase();
+  const market = normalizeOptionalText(record.market)?.toLowerCase();
+  const scoreSnapshotKind = normalizeOptionalText(record.scoreSnapshotKind)?.toLowerCase();
+  const evaluationMode = normalizeOptionalText(record.evaluationMode)?.toLowerCase() ?? null;
+  const historicalResearch = normalizeOptionalBoolean(record.historicalResearch);
+  const rawEvaluationCutoff = normalizeOptionalText(record.evaluationCutoff);
+  const evaluationCutoff = normalizeOptionalIsoDateTime(record.evaluationCutoff);
+  const dataState = normalizeOptionalText(record.dataState)?.toLowerCase();
+  const researchReason = normalizeOptionalText(record.researchReason);
+  const researchNextStep = normalizeOptionalText(record.researchNextStep);
+  const freshnessLabel = normalizeOptionalText(record.freshnessLabel);
+
+  if (
+    contractVersion !== 'scanner_watchlist_lineage_v1'
+    || source !== 'scanner'
+    || !symbol
+    || !market
+    || (scoreSnapshotKind !== 'saved_at_add' && scoreSnapshotKind !== 'post_add_refresh')
+    || !dataState
+    || !SAFE_SCANNER_LINEAGE_DATA_STATES.has(dataState)
+    || !researchReason
+    || !researchNextStep
+    || !freshnessLabel
+    || record.noAdviceBoundary !== true
+  ) {
+    return null;
+  }
+
+  if (
+    (evaluationMode !== null && !SAFE_SCANNER_EVALUATION_MODES.has(evaluationMode))
+    || (evaluationMode === null && historicalResearch !== null)
+    || (evaluationMode === 'historical_development' && historicalResearch !== true)
+    || (evaluationMode === 'current' && (historicalResearch !== false || rawEvaluationCutoff !== null))
+  ) {
+    return null;
+  }
+
+  return {
+    contractVersion,
+    source: 'scanner',
+    scannerRunId: normalizeOptionalNumber(record.scannerRunId),
+    symbol,
+    market,
+    rankAtScan: normalizeOptionalNumber(record.rankAtScan),
+    scoreAtScan: normalizeOptionalNumber(record.scoreAtScan),
+    scoreSnapshotKind,
+    runProfile: normalizeOptionalText(record.runProfile),
+    evaluationMode: evaluationMode as 'current' | 'historical_development' | null,
+    evaluationCutoff,
+    historicalResearch,
+    runCompletedAt: normalizeOptionalIsoDateTime(record.runCompletedAt),
+    watchlistAddedAt: normalizeOptionalIsoDateTime(record.watchlistAddedAt),
+    themeId: normalizeOptionalText(record.themeId),
+    universeType: normalizeOptionalText(record.universeType),
+    researchReason,
+    researchNextStep,
+    dataState,
+    freshnessLabel,
+    noAdviceBoundary: true,
+    observationOnly: record.observationOnly === true,
+    scoreGradeAllowed: record.scoreGradeAllowed === true,
+  };
 }
 
 function normalizeConsumerTextList(value: unknown): string[] {
@@ -305,6 +400,7 @@ function normalizeWatchlistItem(item: WatchlistItem): WatchlistItem {
   const researchReadiness = item.researchReadiness && typeof item.researchReadiness === 'object'
     ? item.researchReadiness as unknown as Record<string, unknown>
     : null;
+  const scannerLineageV1 = normalizeWatchlistScannerLineage(item.intelligence?.scanner?.scannerLineageV1);
 
   return {
     ...item,
@@ -323,6 +419,12 @@ function normalizeWatchlistItem(item: WatchlistItem): WatchlistItem {
     intelligence: item.intelligence
       ? {
         ...item.intelligence,
+        scanner: item.intelligence.scanner
+          ? {
+            ...item.intelligence.scanner,
+            scannerLineageV1,
+          }
+          : item.intelligence.scanner,
         catalystExposures,
       }
       : item.intelligence,

@@ -234,22 +234,26 @@ class WatchlistApiTestCase(unittest.TestCase):
     def test_watchlist_add_list_is_owner_scoped_and_preserves_scanner_metadata(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
 
-        add_resp = self.client.post(
-            "/api/v1/watchlist/items",
-            json={
-                "symbol": "NVDA",
-                "market": "us",
-                "name": "NVIDIA",
-                "source": "scanner",
-                "scanner_run_id": 11,
-                "scanner_rank": 1,
-                "scanner_score": 94,
-                "theme_id": "crypto_miners",
-                "universe_type": "default",
-                "notes": "Backend reason: momentum and liquidity improved.",
-            },
-        )
+        with self.assertLogs("api.request_context", level="INFO") as request_logs:
+            add_resp = self.client.post(
+                "/api/v1/watchlist/items",
+                json={
+                    "symbol": "NVDA",
+                    "market": "us",
+                    "name": "NVIDIA",
+                    "source": "scanner",
+                    "scanner_run_id": 11,
+                    "scanner_rank": 1,
+                    "scanner_score": 94,
+                    "theme_id": "crypto_miners",
+                    "universe_type": "default",
+                    "notes": "Backend reason: momentum and liquidity improved.",
+                },
+            )
         self.assertEqual(add_resp.status_code, 200)
+        request_id = add_resp.headers["X-Request-ID"]
+        self.assertRegex(request_id, r"^[a-f0-9]{32}$")
+        self.assertTrue(any(request_id in line for line in request_logs.output))
         payload = add_resp.json()
         self.assertEqual(payload["symbol"], "NVDA")
         self.assertEqual(payload["market"], "us")
@@ -280,6 +284,8 @@ class WatchlistApiTestCase(unittest.TestCase):
         logs, total = self.db.list_execution_log_sessions(task_id="portfolio:watchlist_add", limit=10)
         self.assertEqual(total, 1)
         self.assertEqual(logs[0]["code"], "NVDA")
+        self.assertEqual(logs[0]["summary"]["business_event"]["requestId"], request_id)
+        self.assertEqual(logs[0]["summary"]["meta"]["actor_request_id"], request_id)
         self.assertEqual(logs[0]["summary"]["portfolio_event"]["category"], "watchlist")
         self.assertEqual(logs[0]["summary"]["portfolio_event"]["scanner_run_id"], 11)
 

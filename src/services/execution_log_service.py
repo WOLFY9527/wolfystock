@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, ROLE_ADMIN, ROLE_USER
+from src.request_context import get_request_id
 from src.storage import get_db
 from src.utils.security import sanitize_message, sanitize_metadata, sanitize_url
 
@@ -133,6 +134,11 @@ def _masked_message(text: Optional[str]) -> Optional[str]:
 
 def _as_str(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _effective_request_id(explicit: Any = None, actor_value: Any = None) -> str:
+    """Prefer the active API lifecycle identity over legacy caller metadata."""
+    return _as_str(get_request_id()) or _as_str(explicit) or _as_str(actor_value)
 
 
 def _status_from_attempt_result(value: Any) -> str:
@@ -838,6 +844,11 @@ class ExecutionLogService:
         normalized_category = _normalize_log_category(category)
         symbol_text = _as_str(symbol).upper() or None
         subject_text = _as_str(subject) or symbol_text or _as_str(event) or None
+        actor_payload = self._resolve_actor(
+            user_id,
+            actor or ({"user_id": user_id} if user_id else None),
+        )
+        effective_request_id = _effective_request_id(request_id, actor_payload.get("request_id"))
         business = {
             "id": execution_id,
             "event": _as_str(event) or subject_text or execution_id,
@@ -852,7 +863,7 @@ class ExecutionLogService:
             "scannerId": _as_str(scanner_id) or None,
             "backtestId": _as_str(backtest_id) or None,
             "recordId": _as_str(record_id) or None,
-            "requestId": _as_str(request_id) or None,
+            "requestId": effective_request_id or None,
             "userId": _as_str(user_id) or None,
             "startedAt": started_at.isoformat(),
             "finishedAt": None,
@@ -868,7 +879,7 @@ class ExecutionLogService:
             {"business_event": business},
             self._summary_meta(
                 owner_id=user_id,
-                actor=actor or ({"user_id": user_id} if user_id else None),
+                actor=actor_payload,
                 session_kind="business_event",
                 subsystem=normalized_category,
                 action_name=business["type"],
@@ -1088,6 +1099,11 @@ class ExecutionLogService:
         execution_id = uuid.uuid4().hex
         started_at = datetime.now()
         symbol_text = _as_str(symbol).upper()
+        actor_payload = self._resolve_actor(
+            user_id,
+            actor or ({"user_id": user_id} if user_id else None),
+        )
+        effective_request_id = _effective_request_id(request_id, actor_payload.get("request_id"))
         business = {
             "id": execution_id,
             "event": symbol_text,
@@ -1100,7 +1116,7 @@ class ExecutionLogService:
             "market": _as_str(market).upper() or None,
             "analysisType": _as_str(analysis_type) or None,
             "userId": _as_str(user_id) or None,
-            "requestId": _as_str(request_id) or None,
+            "requestId": effective_request_id or None,
             "recordId": None,
             "startedAt": started_at.isoformat(),
             "finishedAt": None,
@@ -1116,7 +1132,7 @@ class ExecutionLogService:
             {"business_event": business},
             self._summary_meta(
                 owner_id=user_id,
-                actor=actor or ({"user_id": user_id} if user_id else None),
+                actor=actor_payload,
                 session_kind="business_event",
                 subsystem="analysis",
                 action_name="analysis_execution",
@@ -1353,7 +1369,7 @@ class ExecutionLogService:
         role = _as_str(actor_payload.get("role")).lower()
         actor_type = _as_str(actor_payload.get("actor_type") or actor_payload.get("type")).lower()
         session_id = _as_str(actor_payload.get("session_id"))
-        request_id = _as_str(actor_payload.get("request_id"))
+        request_id = _effective_request_id(actor_value=actor_payload.get("request_id"))
 
         if user_id:
             user_row = self.db.get_app_user(user_id)
@@ -1900,6 +1916,7 @@ class ExecutionLogService:
         record_id: Optional[Any] = None,
         detail: Optional[Dict[str, Any]] = None,
     ) -> str:
+        actor_payload = self._resolve_actor(None, actor)
         session_id = uuid.uuid4().hex
         started_at = datetime.now()
         normalized_status = _normalize_business_status(status)
@@ -1931,7 +1948,7 @@ class ExecutionLogService:
             "scannerId": None,
             "backtestId": None,
             "recordId": _as_str(record_id) or None,
-            "requestId": None,
+            "requestId": actor_payload.get("request_id"),
             "userId": None,
             "startedAt": started_at.isoformat(),
             "finishedAt": started_at.isoformat(),
@@ -1946,7 +1963,7 @@ class ExecutionLogService:
         summary = self._merge_summary(
             {"business_event": business_event, "portfolio_event": safe_detail},
             self._summary_meta(
-                actor=actor,
+                actor=actor_payload,
                 session_kind="user_activity",
                 subsystem="portfolio",
                 action_name=action_name,
@@ -2032,7 +2049,7 @@ class ExecutionLogService:
             "component": domain_name,
             "feature": domain_name,
             "recordId": safe_target_id,
-            "requestId": None,
+            "requestId": actor_payload.get("request_id"),
             "userId": actor_payload.get("user_id"),
             "startedAt": started_at.isoformat(),
             "finishedAt": started_at.isoformat(),
@@ -2059,7 +2076,7 @@ class ExecutionLogService:
                     "actor_role": actor_payload.get("role"),
                     "actor_type": actor_payload.get("actor_type"),
                     "actor_session_id": None,
-                    "actor_request_id": None,
+                    "actor_request_id": actor_payload.get("request_id"),
                     "session_kind": "user_activity",
                     "subsystem": "user_action",
                     "action_name": event_name,
@@ -2115,6 +2132,7 @@ class ExecutionLogService:
     ) -> str:
         if int(status_code) < 400 and float(duration_ms) < 2000:
             return ""
+        effective_request_id = _effective_request_id(request_id)
         level = "ERROR" if int(status_code) >= 500 else "WARNING"
         event_name = "RequestFailed" if int(status_code) >= 400 else "SlowRequest"
         session_id = uuid.uuid4().hex
@@ -2128,7 +2146,7 @@ class ExecutionLogService:
             "method": method,
             "status_code": status_code,
             "duration_ms": duration_ms,
-            "request_id": request_id,
+            "request_id": effective_request_id or None,
             "outcome": "failed" if int(status_code) >= 400 else "partial",
         }
         summary = self._merge_summary(

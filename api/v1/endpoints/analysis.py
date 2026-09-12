@@ -32,6 +32,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from api.deps import CurrentUser, get_config_dep, get_current_user, get_current_user_id, get_system_config_service
+from api.request_context import get_request_id
 from api.v1.errors import safe_api_error, safe_error_identifier
 from api.v1.schemas.analysis import (
     AnalyzeRequest,
@@ -279,12 +280,12 @@ def _set_guest_session_cookie(response: Response, request: Request, guest_sessio
     )
 
 
-def _guest_actor(guest_session_id: str, query_id: str) -> Dict[str, Any]:
+def _guest_actor(guest_session_id: str) -> Dict[str, Any]:
     return {
         "actor_type": "guest",
         "role": "guest",
         "session_id": guest_session_id,
-        "request_id": query_id,
+        "request_id": get_request_id(),
         "display_name": "Guest",
     }
 
@@ -582,10 +583,10 @@ def preview_analysis(
     execution_id = execution_logs.start_analysis_execution(
         symbol=stock_code,
         analysis_type=request.report_type,
-        request_id=query_id,
+        request_id=get_request_id(),
         task_id=query_id,
         stock_name=request.stock_name,
-        actor=_guest_actor(guest_session_id, query_id),
+        actor=_guest_actor(guest_session_id),
         metadata={
             "preview_scope": "guest",
             "guest_session_id": guest_session_id,
@@ -953,7 +954,7 @@ def _handle_sync_analysis(
             symbol=stock_code,
             analysis_type=request.report_type,
             user_id=owner_id,
-            request_id=query_id,
+            request_id=get_request_id(),
             task_id=query_id,
             stock_name=getattr(request, "stock_name", None),
             metadata=_analysis_sync_quota_execution_metadata(
@@ -1079,7 +1080,7 @@ def _handle_sync_analysis(
             message=_ANALYSIS_UNAVAILABLE_MESSAGE,
             retryable=True,
             detail=_analysis_error_detail(
-                request_id=query_id,
+                request_id=get_request_id(),
                 task_id=query_id,
                 reason_code="analysis_internal_error",
             ),

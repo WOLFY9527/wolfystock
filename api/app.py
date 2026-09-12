@@ -36,6 +36,7 @@ from api.deps import resolve_current_user
 from api.v1.errors import build_safe_error_payload
 from api.middlewares.auth import add_auth_middleware
 from api.middlewares.error_handler import add_error_handlers
+from api.request_context import REQUEST_ID_HEADER, RequestCorrelationMiddleware
 from api.security_headers import apply_security_headers
 from api.v1.schemas.common import HealthResponse
 from src.storage import get_db
@@ -434,10 +435,12 @@ def create_app(
         allow_credentials=allow_credentials,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=[REQUEST_ID_HEADER],
     )
 
     _add_security_headers(app)
     add_auth_middleware(app)
+    app.add_middleware(RequestCorrelationMiddleware)
     
     # ============================================================
     # 注册路由

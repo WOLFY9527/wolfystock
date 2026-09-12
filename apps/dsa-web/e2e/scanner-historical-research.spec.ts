@@ -2,6 +2,7 @@ import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures/appSmoke';
 
 const cutoff = '2024-12-31';
+const savedAt = '2026-09-09T09:00:00Z';
 
 function fulfillJson(route: Route, body: Record<string, unknown>) {
   return route.fulfill({
@@ -166,6 +167,53 @@ function historicalRuns() {
   };
 }
 
+function persistedHistoricalWatchlistItem() {
+  return {
+    id: 501,
+    symbol: 'AAPL',
+    market: 'us',
+    name: 'Apple',
+    source: 'scanner',
+    scanner_run_id: 84,
+    scanner_rank: 1,
+    scanner_score: 74.3,
+    last_scored_at: '2026-09-08T10:31:00Z',
+    score_status: 'cached',
+    score_profile: 'us_historical_research_v1',
+    created_at: savedAt,
+    updated_at: savedAt,
+    intelligence: {
+      scanner: {
+        last_score: 74.3,
+        last_rank: 1,
+        status: 'preview',
+        last_scanned_at: '2026-09-08T10:31:00Z',
+        scanner_lineage_v1: {
+          contract_version: 'scanner_watchlist_lineage_v1',
+          source: 'scanner',
+          scanner_run_id: 84,
+          symbol: 'AAPL',
+          market: 'us',
+          rank_at_scan: 1,
+          score_at_scan: 74.3,
+          score_snapshot_kind: 'saved_at_add',
+          run_profile: 'us_historical_research_v1',
+          evaluation_mode: 'historical_development',
+          evaluation_cutoff: cutoff,
+          historical_research: true,
+          run_completed_at: '2026-09-08T10:31:00Z',
+          watchlist_added_at: savedAt,
+          research_reason: 'Cutoff-bound historical evidence entered the research queue.',
+          research_next_step: 'Review the same cutoff-bound evidence.',
+          data_state: 'cached',
+          freshness_label: 'Historical evidence through cutoff',
+          no_advice_boundary: true,
+        },
+      },
+    },
+  };
+}
+
 async function installCurrentResearchUnavailableRoutes(page: Page) {
   await page.route('**/api/v1/stocks/AAPL/validate', (route) => fulfillJson(route, {
     stock_code: 'AAPL',
@@ -298,6 +346,7 @@ async function installCurrentResearchUnavailableRoutes(page: Page) {
 
 async function installHistoricalRoutes(page: Page) {
   let historicalRunAvailable = false;
+  let historicalWatchlistItemSaved = false;
   let submittedRequest: Record<string, unknown> | null = null;
   const historyUrls: string[] = [];
 
@@ -351,10 +400,27 @@ async function installHistoricalRoutes(page: Page) {
     historicalRunAvailable = true;
     await fulfillJson(route, historicalRun());
   });
+  await page.route(/\/api\/v1\/watchlist\/items(?:\?.*)?$/, async (route) => {
+    if (route.request().method() === 'POST') {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      expect(body).toEqual(expect.objectContaining({
+        symbol: 'AAPL',
+        market: 'us',
+        scanner_run_id: 84,
+      }));
+      historicalWatchlistItemSaved = true;
+      await fulfillJson(route, persistedHistoricalWatchlistItem());
+      return;
+    }
+    await fulfillJson(route, {
+      items: historicalWatchlistItemSaved ? [persistedHistoricalWatchlistItem()] : [],
+    });
+  });
 
   return {
     getSubmittedRequest: () => submittedRequest,
     getHistoryUrls: () => historyUrls,
+    isHistoricalWatchlistItemSaved: () => historicalWatchlistItemSaved,
   };
 }
 
@@ -417,10 +483,34 @@ test('launches, discovers, and reopens cutoff-bound historical Scanner research'
   await historyDrawer.getByRole('button', { name: new RegExp(`Historical research replay through ${cutoff}`) }).click();
   await expect(page.getByTestId('scanner-page-profile-label')).toContainText('US Historical Research');
 
-  recordPassiveResearch = true;
   const candidateRow = page.getByTestId('scanner-result-row-AAPL');
   await candidateRow.getByRole('button', { name: 'Detail' }).click();
-  await page.getByTestId('scanner-result-detail-AAPL').getByRole('button', { name: 'Analyze' }).click();
+  await page.getByTestId('scanner-result-detail-AAPL').getByRole('button', { name: 'Track' }).click();
+  await expect.poll(evidence.isHistoricalWatchlistItemSaved).toBe(true);
+  await expect(page.getByText('Saved to your watchlist.')).toBeVisible();
+
+  recordPassiveResearch = true;
+  await page.goto('/en/watchlist');
+  const watchlistLineage = page.getByTestId('watchlist-scanner-lineage');
+  await expect(watchlistLineage).toContainText('Historical research workflow');
+  await watchlistLineage.click();
+  await expect(watchlistLineage).toHaveAttribute('open', '');
+  await watchlistLineage.getByRole('button', { name: 'Expand Research workflow context' }).click();
+  await expect(watchlistLineage).toContainText('Historical evidence cutoff · 12/31/2024');
+  await expect(watchlistLineage).toContainText('Run time · 09/08/2026');
+  await expect(watchlistLineage).toContainText('Saved · 09/09/2026');
+  await expect(watchlistLineage).not.toContainText('Historical evidence cutoff · 09/09/2026');
+
+  await page.reload();
+  const restoredWatchlistLineage = page.getByTestId('watchlist-scanner-lineage');
+  await expect(restoredWatchlistLineage).toContainText('Historical research workflow');
+  await restoredWatchlistLineage.click();
+  await expect(restoredWatchlistLineage).toHaveAttribute('open', '');
+  await restoredWatchlistLineage.getByRole('button', { name: 'Expand Research workflow context' }).click();
+  await expect(restoredWatchlistLineage).toContainText('Historical evidence cutoff · 12/31/2024');
+  await expect(restoredWatchlistLineage).toContainText('Saved · 09/09/2026');
+
+  await page.goto('/en/stocks/AAPL/structure-decision?symbol=AAPL&market=US&source=scanner&scannerRunId=84');
 
   await expect(page).toHaveURL(/\/en\/stocks\/AAPL\/structure-decision\?symbol=AAPL&market=US&source=scanner&scannerRunId=84$/);
   const scannerEvidence = page.getByTestId('scanner-historical-evidence-panel');

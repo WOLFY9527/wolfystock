@@ -1798,6 +1798,151 @@ describe('WatchlistPage', () => {
     expect(screen.getByTestId('watchlist-page')).not.toHaveTextContent(/sourceAuthorityAllowed|scoreContributionAllowed|sourceType|sourceTier|authorized_licensed_feed|internal_source_tier|reasonCode|source_confidence|reason_families|raw diagnostics|JSON|provider_down|internal-provider|providerObservation/i);
   });
 
+  it('keeps historical cutoff, run time, and later save time distinct in Watchlist lineage', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          id: 23,
+          symbol: 'AAPL',
+          source: 'scanner',
+          scannerRunId: 84,
+          createdAt: '2026-09-09T09:00:00Z',
+          intelligence: {
+            scanner: {
+              scannerLineageV1: {
+                contractVersion: 'scanner_watchlist_lineage_v1',
+                source: 'scanner',
+                scannerRunId: 84,
+                symbol: 'AAPL',
+                market: 'us',
+                rankAtScan: 1,
+                scoreAtScan: 74.3,
+                scoreSnapshotKind: 'saved_at_add',
+                runProfile: 'us_historical_research_v1',
+                evaluationMode: 'historical_development',
+                evaluationCutoff: '2024-12-31',
+                historicalResearch: true,
+                runCompletedAt: '2026-09-08T10:31:00Z',
+                watchlistAddedAt: '2026-09-09T09:00:00Z',
+                researchReason: '历史证据进入观察队列。',
+                researchNextStep: '继续核对同一截止日内的证据。',
+                dataState: 'cached',
+                freshnessLabel: '历史截止日内证据',
+                noAdviceBoundary: true,
+                observationOnly: true,
+                scoreGradeAllowed: false,
+              },
+            },
+          },
+        }),
+      ],
+    });
+
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-AAPL');
+    const lineageBlock = within(screen.getByTestId('watchlist-detail-rail')).getByTestId('watchlist-scanner-lineage');
+    expect(lineageBlock).toHaveTextContent('历史研究流程');
+    fireEvent.click(within(lineageBlock).getByRole('button', { name: '展开 研究流程记录' }));
+
+    expect(lineageBlock).toHaveTextContent('历史观察');
+    expect(lineageBlock).toHaveTextContent('历史证据截止 · 2024/12/31');
+    expect(lineageBlock).toHaveTextContent(/运行时间 · 2026\/09\/08/);
+    expect(lineageBlock).toHaveTextContent(/加入观察 · 2026\/09\/09/);
+    expect(lineageBlock).not.toHaveTextContent(/研究更新/);
+  });
+
+  it('keeps a missing historical cutoff unavailable without substituting save time', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          id: 24,
+          symbol: 'MSFT',
+          source: 'scanner',
+          scannerRunId: 85,
+          intelligence: {
+            scanner: {
+              scannerLineageV1: {
+                contractVersion: 'scanner_watchlist_lineage_v1',
+                source: 'scanner',
+                scannerRunId: 85,
+                symbol: 'MSFT',
+                market: 'us',
+                scoreSnapshotKind: 'saved_at_add',
+                evaluationMode: 'historical_development',
+                evaluationCutoff: null,
+                historicalResearch: true,
+                runCompletedAt: '2026-09-08T10:31:00Z',
+                watchlistAddedAt: '2026-09-09T09:00:00Z',
+                researchReason: '历史证据进入观察队列。',
+                researchNextStep: '补充明确截止日后继续观察。',
+                dataState: 'unavailable',
+                freshnessLabel: '历史截止日不可用',
+                noAdviceBoundary: true,
+                observationOnly: true,
+                scoreGradeAllowed: false,
+              },
+            },
+          },
+        }),
+      ],
+    });
+
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-MSFT');
+    const lineageBlock = within(screen.getByTestId('watchlist-detail-rail')).getByTestId('watchlist-scanner-lineage');
+    fireEvent.click(within(lineageBlock).getByRole('button', { name: '展开 研究流程记录' }));
+    expect(lineageBlock).toHaveTextContent('历史证据截止 · 不可用');
+    expect(lineageBlock).toHaveTextContent(/加入观察 · 2026\/09\/09/);
+    expect(lineageBlock).not.toHaveTextContent(/历史证据截止 · 2026\/09\/09/);
+  });
+
+  it('does not add a historical cutoff label to current Scanner lineage', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          id: 25,
+          symbol: 'NVDA',
+          source: 'scanner',
+          intelligence: {
+            scanner: {
+              scannerLineageV1: {
+                contractVersion: 'scanner_watchlist_lineage_v1',
+                source: 'scanner',
+                scannerRunId: 86,
+                symbol: 'NVDA',
+                market: 'us',
+                scoreSnapshotKind: 'saved_at_add',
+                evaluationMode: 'current',
+                evaluationCutoff: null,
+                historicalResearch: false,
+                runCompletedAt: '2026-09-08T10:31:00Z',
+                watchlistAddedAt: '2026-09-09T09:00:00Z',
+                researchReason: '当前扫描观察。',
+                researchNextStep: '继续观察。',
+                dataState: 'available',
+                freshnessLabel: '当前可用',
+                noAdviceBoundary: true,
+                observationOnly: false,
+                scoreGradeAllowed: true,
+              },
+            },
+          },
+        }),
+      ],
+    });
+
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-NVDA');
+    const lineageBlock = within(screen.getByTestId('watchlist-detail-rail')).getByTestId('watchlist-scanner-lineage');
+    fireEvent.click(within(lineageBlock).getByRole('button', { name: '展开 研究流程记录' }));
+    expect(lineageBlock).toHaveTextContent(/运行时间 · 2026\/09\/08/);
+    expect(lineageBlock).toHaveTextContent(/加入观察 · 2026\/09\/09/);
+    expect(lineageBlock).not.toHaveTextContent(/历史证据截止|历史观察|不可用/);
+  });
+
   it('keeps stale inherited scanner scores from rendering as verified latest evidence', async () => {
     listWatchlistItems.mockResolvedValue({
       items: [makeItem({

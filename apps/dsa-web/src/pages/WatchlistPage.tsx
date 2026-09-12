@@ -269,11 +269,56 @@ const WATCHLIST_DATE_TIME_FORMATTERS = {
   }),
 } as const;
 
+const WATCHLIST_LINEAGE_DATE_TIME_FORMATTERS = {
+  en: new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }),
+  zh: new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }),
+} as const;
+
+const WATCHLIST_LINEAGE_DATE_ONLY_FORMATTERS = {
+  en: new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone: 'UTC',
+  }),
+  zh: new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone: 'UTC',
+  }),
+} as const;
+
 function formatDateTime(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
   if (!value) return '--';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return WATCHLIST_DATE_TIME_FORMATTERS[language].format(date);
+}
+
+function formatLineageTimestamp(value: string, language: 'zh' | 'en'): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return WATCHLIST_LINEAGE_DATE_TIME_FORMATTERS[language].format(date);
+}
+
+function formatHistoricalCutoff(value: string, language: 'zh' | 'en'): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return WATCHLIST_LINEAGE_DATE_ONLY_FORMATTERS[language].format(new Date(`${value}T00:00:00Z`));
+  }
+  return formatLineageTimestamp(value, language);
 }
 
 function hasInternalConsumerCopy(value?: string | null): boolean {
@@ -696,7 +741,10 @@ function buildScannerLineageView(
   }
   const stateLabel = formatLineageDataState(lineage, language);
   const freshnessLabel = formatLineageFreshness(lineage, language);
-  const snapshotLabel = formatLineageSnapshotLabel(lineage, language);
+  const isHistorical = lineage.evaluationMode === 'historical_development' && lineage.historicalResearch === true;
+  const snapshotLabel = isHistorical
+    ? (language === 'en' ? 'Historical observation' : '历史观察')
+    : formatLineageSnapshotLabel(lineage, language);
   const reason = formatLineageConsumerText(
     lineage.researchReason,
     language,
@@ -714,14 +762,21 @@ function buildScannerLineageView(
   const metadata = [
     scoreLine || null,
     lineage.runProfile ? (language === 'en' ? 'Research window recorded' : '研究窗口已记录') : null,
-    lineage.runCompletedAt ? `${language === 'en' ? 'Research updated' : '研究更新'} ${formatDateTime(lineage.runCompletedAt, language)}` : null,
-    lineage.watchlistAddedAt ? `${language === 'en' ? 'Saved' : '加入观察'} ${formatDateTime(lineage.watchlistAddedAt, language)}` : null,
+    isHistorical
+      ? `${language === 'en' ? 'Historical evidence cutoff' : '历史证据截止'} · ${lineage.evaluationCutoff
+        ? formatHistoricalCutoff(lineage.evaluationCutoff, language)
+        : (language === 'en' ? 'Unavailable' : '不可用')}`
+      : null,
+    lineage.runCompletedAt ? `${language === 'en' ? 'Run time' : '运行时间'} · ${formatLineageTimestamp(lineage.runCompletedAt, language)}` : null,
+    lineage.watchlistAddedAt ? `${language === 'en' ? 'Saved' : '加入观察'} · ${formatLineageTimestamp(lineage.watchlistAddedAt, language)}` : null,
     lineage.themeId ? (language === 'en' ? 'Theme context recorded' : '主题线索已记录') : null,
     lineage.universeType ? (language === 'en' ? 'Candidate scope recorded' : '候选范围已记录') : null,
   ].filter(Boolean) as string[];
 
   return {
-    summary: `${language === 'en' ? 'Research workflow' : '研究流程记录'} · ${freshnessLabel} · ${stateLabel}`,
+    summary: `${isHistorical
+      ? (language === 'en' ? 'Historical research workflow' : '历史研究流程')
+      : (language === 'en' ? 'Research workflow' : '研究流程记录')} · ${freshnessLabel} · ${stateLabel}`,
     snapshotLabel,
     stateLabel,
     freshnessLabel,

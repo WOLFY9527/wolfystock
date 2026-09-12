@@ -407,7 +407,9 @@ def test_analysis_sync_internal_error_preserves_request_and_task_ids_without_raw
     request_id = payload.get("detail", {}).get("requestId")
     task_id = payload.get("detail", {}).get("taskId")
     assert isinstance(request_id, str) and re.fullmatch(r"[a-f0-9]{32}", request_id)
-    assert task_id == request_id
+    assert isinstance(task_id, str) and re.fullmatch(r"[a-f0-9]{32}", task_id)
+    assert response.headers["X-Request-ID"] == request_id
+    assert task_id != request_id
     _assert_safe_error_payload(
         response,
         status_code=500,

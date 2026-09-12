@@ -10,6 +10,9 @@ export interface WatchlistScannerLineageV1 {
   scoreAtScan?: number | null;
   scoreSnapshotKind: 'saved_at_add' | 'post_add_refresh';
   runProfile?: string | null;
+  evaluationMode?: 'current' | 'historical_development' | null;
+  evaluationCutoff?: string | null;
+  historicalResearch?: boolean | null;
   runCompletedAt?: string | null;
   watchlistAddedAt?: string | null;
   themeId?: string | null;

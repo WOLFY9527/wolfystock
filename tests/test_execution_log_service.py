@@ -6,6 +6,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
+from api.request_context import bind_request_id, reset_request_id
 from src.storage import DatabaseManager
 from src.services.execution_log_service import ExecutionLogService
 from src.utils.security import sanitize_metadata, sanitize_url
@@ -272,6 +273,46 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["readable_summary"]["actor_role"], "user")
         self.assertEqual(detail["events"][0]["detail"]["action"], "buy_trade")
         self.assertEqual(detail["events"][0]["detail"]["account_id"], 7)
+
+    def test_execution_log_inherits_request_context_without_fabricating_background_id(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            background_id = service.record_portfolio_event(
+                action="background_reconcile",
+                message="Background portfolio reconciliation observed",
+                actor={"actor_type": "system", "role": "system"},
+            )
+            background = service.get_session_detail(background_id)
+
+            token = bind_request_id("a" * 32)
+            try:
+                execution_id = service.start_execution(
+                    category="system",
+                    type="request_scoped_probe",
+                    event="Request scoped probe",
+                    summary="Request scoped execution",
+                    request_id="domain-query-id",
+                    actor={"request_id": "legacy-actor-id"},
+                )
+                request_id = service.record_market_overview_fetch(
+                    panel_name="MarketCardFailure",
+                    endpoint_url="/api/v1/market-overview/indices",
+                    status="failure",
+                    fetch_timestamp="2026-09-12T08:00:00",
+                    error_message="bounded failure",
+                    actor={"actor_type": "anonymous", "role": "anonymous"},
+                )
+            finally:
+                reset_request_id(token)
+            execution = service.get_session_detail(execution_id)
+            request_scoped = service.get_session_detail(request_id)
+
+        self.assertIsNone(background["summary"]["meta"]["actor_request_id"])
+        self.assertIsNone(background["summary"]["business_event"]["requestId"])
+        self.assertEqual(execution["summary"]["business_event"]["requestId"], "a" * 32)
+        self.assertEqual(execution["summary"]["meta"]["actor_request_id"], "a" * 32)
+        self.assertEqual(execution["task_id"], "domain-query-id")
+        self.assertEqual(request_scoped["summary"]["meta"]["actor_request_id"], "a" * 32)
 
     def test_summarize_business_events_groups_and_sanitizes_failures(self) -> None:
         service = ExecutionLogService()

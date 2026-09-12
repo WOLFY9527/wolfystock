@@ -18,10 +18,12 @@ import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError, as_completed
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional
 
 from src.services.llm_instrumentation import emit_provider_event, hash_label_value
+from src.services.provider_circuit_observer import observe_runtime_provider_circuit
 from src.services.research_budget_profiles import (
     ResearchBudgetProfile,
     get_research_budget_profile,
@@ -427,6 +429,7 @@ class AnalysisProviderExecutor:
         failure_threshold: int = 3,
         failure_window_seconds: int = 300,
         cooldown_seconds: int = 120,
+        circuit_observer: Optional[Callable[..., Any]] = None,
     ) -> None:
         self.failure_threshold = failure_threshold
         self.failure_window_seconds = failure_window_seconds
@@ -437,6 +440,7 @@ class AnalysisProviderExecutor:
         self._health: dict[str, _ProviderHealth] = {}
         self._lock = threading.RLock()
         self._call_pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="provider_call_")
+        self._circuit_observer = circuit_observer or observe_runtime_provider_circuit
 
     def execute_plan(
         self,
@@ -584,7 +588,13 @@ class AnalysisProviderExecutor:
                 )
                 duration_ms = int((time.monotonic() - started) * 1000)
                 if not sufficient(data):
-                    self._record_failure(provider, category_plan.category, "missing_required_fields")
+                    self._record_failure(
+                        provider,
+                        category_plan.category,
+                        "missing_required_fields",
+                        duration_ms=duration_ms,
+                        request_executed=not cache_hit,
+                    )
                     self._emit_provider_event(
                         "provider_insufficient_payload",
                         provider=provider,
@@ -645,7 +655,12 @@ class AnalysisProviderExecutor:
                         has_next=index + 1 < len(attempted_providers),
                     )
                     continue
-                self._record_success(provider, category_plan.category)
+                self._record_success(
+                    provider,
+                    category_plan.category,
+                    duration_ms=duration_ms,
+                    request_executed=not cache_hit,
+                )
                 if cache_hit:
                     _record_provider_usage_diagnostic(
                         research_mode=research_mode,
@@ -723,7 +738,12 @@ class AnalysisProviderExecutor:
                 if reason == "timeout" and deadline_at is not None and time.monotonic() >= deadline_at:
                     reason = "analysis_deadline_exceeded"
                 if reason != "analysis_deadline_exceeded":
-                    self._record_failure(provider, category_plan.category, reason)
+                    self._record_failure(
+                        provider,
+                        category_plan.category,
+                        reason,
+                        duration_ms=duration_ms,
+                    )
                 action = "deadline_exceeded" if reason == "analysis_deadline_exceeded" else (
                     "timeout" if reason == "timeout" else "failure"
                 )
@@ -991,6 +1011,7 @@ class AnalysisProviderExecutor:
     def _is_circuit_open(self, provider: str, category: DataCategory) -> bool:
         key = f"{provider}:{category.value}"
         now = time.time()
+        transitioned_to_half_open = False
         with self._lock:
             state = self._circuits.get(key)
             if not state or state.opened_at is None:
@@ -998,14 +1019,33 @@ class AnalysisProviderExecutor:
             if now - state.opened_at >= self.cooldown_seconds:
                 state.opened_at = None
                 state.half_open = True
-                return False
-            return True
+                transitioned_to_half_open = True
+            else:
+                return True
+        if transitioned_to_half_open:
+            self._observe_circuit(
+                provider=provider,
+                category=category,
+                from_state="open",
+                to_state="half_open",
+                observed_at=datetime.fromtimestamp(now),
+            )
+        return False
 
-    def _record_failure(self, provider: str, category: DataCategory, reason: str = "unknown_error") -> None:
+    def _record_failure(
+        self,
+        provider: str,
+        category: DataCategory,
+        reason: str = "unknown_error",
+        *,
+        duration_ms: Optional[int] = None,
+        request_executed: bool = True,
+    ) -> None:
         key = f"{provider}:{category.value}"
         now = time.time()
         with self._lock:
             state = self._circuits.setdefault(key, _CircuitState())
+            from_state = "half_open" if state.half_open else ("open" if state.opened_at is not None else "closed")
             state.failures = [ts for ts in state.failures if now - ts <= self.failure_window_seconds]
             state.failures.append(now)
             health = self._health.setdefault(key, _ProviderHealth(provider=provider, category=category))
@@ -1022,12 +1062,80 @@ class AnalysisProviderExecutor:
                 state.opened_at = now
                 state.half_open = False
                 health.cooldown_until = now + self.cooldown_seconds
+            to_state = "half_open" if state.half_open else ("open" if state.opened_at is not None else "closed")
+            failure_count = len(state.failures)
+            cooldown_until = health.cooldown_until
+        self._observe_circuit(
+            provider=provider,
+            category=category,
+            result_bucket=self._runtime_reason_bucket(reason),
+            request_executed=request_executed,
+            from_state=from_state,
+            to_state=to_state,
+            failure_count=failure_count,
+            cooldown_until=datetime.fromtimestamp(cooldown_until) if cooldown_until is not None else None,
+            probe_executed=bool(from_state == "half_open" and request_executed),
+            duration_ms=duration_ms,
+            observed_at=datetime.fromtimestamp(now),
+        )
 
-    def _record_success(self, provider: str, category: DataCategory) -> None:
+    def _record_success(
+        self,
+        provider: str,
+        category: DataCategory,
+        *,
+        duration_ms: Optional[int] = None,
+        request_executed: bool = True,
+    ) -> None:
         key = f"{provider}:{category.value}"
+        now = time.time()
         with self._lock:
+            state = self._circuits.get(key)
+            from_state = "half_open" if state and state.half_open else (
+                "open" if state and state.opened_at is not None else "closed"
+            )
             self._circuits.pop(key, None)
             self._health.pop(key, None)
+        self._observe_circuit(
+            provider=provider,
+            category=category,
+            result_bucket="success",
+            request_executed=request_executed,
+            from_state=from_state,
+            to_state="closed",
+            failure_count=0,
+            probe_executed=bool(from_state == "half_open" and request_executed),
+            duration_ms=duration_ms,
+            observed_at=datetime.fromtimestamp(now),
+        )
+
+    def _observe_circuit(self, *, provider: str, category: DataCategory, **facts: Any) -> None:
+        try:
+            self._circuit_observer(
+                provider=provider,
+                provider_category=category.value,
+                route_family="analysis_provider_executor",
+                runtime_owner="analysis_provider_planner",
+                **facts,
+            )
+        except Exception as exc:  # injected observation sinks remain fail-open
+            logger.warning(
+                "ProviderCircuitObservationSinkFailed runtime_owner=analysis_provider_planner "
+                "error_type=%s",
+                type(exc).__name__,
+            )
+
+    @staticmethod
+    def _runtime_reason_bucket(reason: str) -> str:
+        return {
+            "timeout": "timeout",
+            "rate_limited": "provider_429",
+            "auth_error": "auth_or_key_invalid",
+            "provider_unavailable": "provider_5xx",
+            "missing_required_fields": "insufficient_payload",
+            "invalid_payload": "insufficient_payload",
+            "insufficient_payload": "insufficient_payload",
+        }.get(str(reason or "").strip().lower(), "network_error")
 
     @staticmethod
     def _classify_exception(exc: Exception) -> str:

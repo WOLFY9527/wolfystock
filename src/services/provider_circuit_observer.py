@@ -1,19 +1,22 @@
 # -*- coding: utf-8 -*-
-"""Dry-run provider circuit observation helper.
+"""Provider circuit observation helpers.
 
-This helper records synthetic provider circuit counters and events only. It does
-not read circuit state for enforcement and does not change provider order,
+These helpers record sanitized synthetic and runtime-owned circuit evidence. They
+do not read circuit state for enforcement and do not change provider order,
 fallback, retry, timeout, or cache behavior.
 """
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Tuple
 
 from sqlalchemy import desc, select
 
 from src.storage import DatabaseManager, ProviderCircuitEvent, ProviderQuotaWindow
+
+logger = logging.getLogger(__name__)
 
 
 class ProviderCircuitObserver:
@@ -58,6 +61,8 @@ class ProviderCircuitObserver:
         "disabled_by_operator",
         "provider_quota_depleted",
     }
+    RUNTIME_POLICY_KEY = "provider_circuit_runtime_v1"
+    RUNTIME_OWNERS = {"analysis_provider_planner", "realtime_circuit_breaker"}
 
     def __init__(self, *, db: Optional[DatabaseManager] = None) -> None:
         self.db = db or DatabaseManager.get_instance()
@@ -149,6 +154,119 @@ class ProviderCircuitObserver:
             "probe_event": probe_event,
             "preflight": self.classify_preflight_state(result_bucket=bucket),
             "state": None,
+        }
+
+    def record_runtime_observation(
+        self,
+        *,
+        provider: str,
+        runtime_owner: str,
+        provider_category: Optional[str] = None,
+        route_family: Optional[str] = None,
+        result_bucket: Optional[str] = None,
+        request_executed: bool = False,
+        from_state: Optional[str] = None,
+        to_state: Optional[str] = None,
+        failure_count: Optional[int] = None,
+        cooldown_until: Optional[datetime] = None,
+        half_open_sample_limit: Optional[int] = None,
+        probe_executed: bool = False,
+        duration_ms: Optional[int] = None,
+        observed_at: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        """Mirror one already-decided runtime outcome or transition.
+
+        The runtime breaker remains authoritative. A transition row is written
+        only when the owner reports a real state change, and a probe row is
+        written only when a half-open request actually completed.
+        """
+        owner = str(runtime_owner or "").strip().lower()
+        if owner not in self.RUNTIME_OWNERS:
+            raise ValueError("unsupported provider circuit runtime owner")
+        bucket = self._normalize_bucket(result_bucket) if result_bucket is not None else None
+        if request_executed and bucket is None:
+            raise ValueError("executed runtime request requires a result bucket")
+        if probe_executed and not request_executed:
+            raise ValueError("runtime probe requires an executed request")
+
+        now = observed_at or datetime.now()
+        normalized_from = str(from_state or "").strip().lower() or None
+        normalized_to = str(to_state or "").strip().lower() or None
+        state_changed = bool(normalized_from and normalized_to and normalized_from != normalized_to)
+        safe_metadata = {
+            "dry_run": False,
+            "observation_kind": "runtime",
+            "runtime_owner": owner,
+            "request_executed": bool(request_executed),
+            "probe_executed": bool(probe_executed),
+        }
+        if bucket is not None:
+            safe_metadata["result_bucket"] = bucket
+
+        state = None
+        if state_changed:
+            transition_reason = "recovered" if normalized_to == "closed" else bucket
+            half_open_started_at = now if normalized_to == "half_open" else None
+            sample_count = 1 if probe_executed else (0 if normalized_to == "half_open" else None)
+            state = self.db.transition_provider_circuit_state(
+                provider=provider,
+                provider_category=provider_category,
+                route_family=route_family,
+                to_state=normalized_to,
+                reason_bucket=transition_reason,
+                cooldown_until=cooldown_until,
+                half_open_started_at=half_open_started_at,
+                half_open_sample_limit=half_open_sample_limit,
+                half_open_sample_count=sample_count,
+                success_sample_count=1 if probe_executed and bucket == "success" else None,
+                failure_sample_count=1 if probe_executed and bucket in self.FAILURE_BUCKETS else None,
+                failure_count=failure_count,
+                success_count=1 if bucket == "success" else None,
+                metadata=safe_metadata,
+                now=now,
+            )
+
+        quota_window = None
+        if request_executed and bucket is not None:
+            window_start, window_end = self._window_bounds(now, "hour")
+            quota_window = self.db.update_provider_quota_window_counters(
+                provider=provider,
+                provider_category=provider_category,
+                route_family=route_family,
+                policy_key=self.RUNTIME_POLICY_KEY,
+                window_type="hour",
+                window_start=window_start,
+                window_end=window_end,
+                request_delta=1,
+                success_delta=1 if bucket == "success" else 0,
+                failure_delta=1 if bucket in self.FAILURE_BUCKETS else 0,
+                timeout_delta=1 if bucket == "timeout" else 0,
+                provider_429_delta=1 if bucket == "provider_429" else 0,
+                provider_403_delta=1 if bucket == "provider_403" else 0,
+                probe_delta=1 if probe_executed else 0,
+                metadata=safe_metadata,
+            )
+
+        probe_event = None
+        if probe_executed and bucket is not None:
+            probe_event = self.db.record_provider_probe_event(
+                provider=provider,
+                provider_category=provider_category,
+                route_family=route_family,
+                probe_type="half_open_request",
+                probe_source=owner,
+                state_id=int(state["id"]) if state is not None else None,
+                result_bucket=bucket,
+                duration_bucket_ms=self._duration_bucket_ms(duration_ms),
+                metadata=safe_metadata,
+                created_at=now,
+            )
+
+        return {
+            "quota_window": quota_window,
+            "event": state.get("transition_event") if state is not None else None,
+            "probe_event": probe_event,
+            "state": state,
         }
 
     def record_cooldown_observation(
@@ -695,3 +813,21 @@ class ProviderCircuitObserver:
         if cooldown_until:
             metadata["cooldown_until"] = cooldown_until
         return metadata
+
+
+def observe_runtime_provider_circuit(**observation: Any) -> bool:
+    """Persist runtime circuit evidence without allowing failure to affect routing."""
+    try:
+        ProviderCircuitObserver().record_runtime_observation(**observation)
+    except Exception as exc:  # observability must remain fail-open
+        logger.warning(
+            "ProviderCircuitObservationFailed runtime_owner=%s from_state=%s to_state=%s "
+            "result_bucket=%s error_type=%s",
+            observation.get("runtime_owner"),
+            observation.get("from_state"),
+            observation.get("to_state"),
+            observation.get("result_bucket"),
+            type(exc).__name__,
+        )
+        return False
+    return True

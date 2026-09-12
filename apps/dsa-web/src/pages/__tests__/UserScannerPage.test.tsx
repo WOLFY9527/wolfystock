@@ -1426,6 +1426,8 @@ describe('UserScannerPage', () => {
         market: 'us',
         profile: 'us_historical_research_v1',
         profileLabel: 'US Historical Research',
+        evaluationMode: 'historical_development',
+        evaluationCutoff: '2024-12-31',
         headline: 'Historical research replay through 2024-12-31',
         watchlistDate: '2024-12-31',
       },
@@ -1516,6 +1518,9 @@ describe('UserScannerPage', () => {
     fireEvent.click(screen.getByTestId('scanner-history-trigger'));
     const historyDrawer = await screen.findByTestId('user-scanner-bento-drawer');
     expect(historyDrawer).toHaveTextContent('Historical research replay through 2024-12-31');
+    expect(historyDrawer).toHaveTextContent('Saved · 12/31/2024');
+    expect(historyDrawer).toHaveTextContent('Cutoff 12/31/2024');
+    expect(historyDrawer).toHaveTextContent('Run time ·');
     fireEvent.click(within(historyDrawer).getByRole('button', { name: /Historical research replay through 2024-12-31/i }));
     await waitFor(() => expect(getRun).toHaveBeenCalledWith(84));
     expect(screen.getByTestId('scanner-page-profile-label')).toHaveTextContent('US Historical Research');

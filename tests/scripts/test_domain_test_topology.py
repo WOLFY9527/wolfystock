@@ -72,7 +72,7 @@ def test_manifest_schema_preserves_baseline_and_complete_surface_counts() -> Non
 
     assert result["status"] == "valid"
     assert result["baselineBackendTests"] == 7_609
-    assert result["backendTests"] == 8_393
+    assert result["backendTests"] == 8_404
     assert result["vitestFiles"] == 179
     assert result["playwrightSpecs"] == 72
     assert result["playwrightProjectCases"] == 798
@@ -581,8 +581,8 @@ def test_first_attempts_and_retries_are_never_coalesced(
     assert canonical["schemaVersion"] == full["schemaVersion"]
     assert canonical["structuredResultAuthority"] == topology.TEST_RESULT_SCHEMA_VERSION
     assert canonical["topology"] == load_manifest()["backend"]["currentInventory"]
-    assert canonical["selection"]["count"] == 8_375
-    assert release["selection"]["count"] == 8_393
+    assert canonical["selection"]["count"] == 8_386
+    assert release["selection"]["count"] == 8_404
     assert release["selection"] == full["selection"]
     assert set(canonical["validationStages"]["execution"]["nodeIds"]) == {
         node_id for item in canonical["shards"] for node_id in item["nodeIds"]

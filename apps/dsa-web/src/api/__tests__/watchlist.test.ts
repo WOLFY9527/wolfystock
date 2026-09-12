@@ -71,6 +71,112 @@ describe('watchlistApi investor signal normalization', () => {
     expect(scanner?.investorSignal?.reasonCodes).toEqual(['source_authority_missing', 'score_rights_missing']);
   });
 
+  it('normalizes historical Scanner lineage without coercing cutoff, saved, or run timestamps', async () => {
+    const { watchlistApi } = await import('../watchlist');
+    const lineage = (overrides: Record<string, unknown> = {}) => ({
+      contract_version: 'scanner_watchlist_lineage_v1',
+      source: 'scanner',
+      scanner_run_id: 84,
+      symbol: 'AAPL',
+      market: 'us',
+      rank_at_scan: 1,
+      score_at_scan: 74.3,
+      score_snapshot_kind: 'saved_at_add',
+      run_profile: 'us_historical_research_v1',
+      evaluation_mode: 'historical_development',
+      evaluation_cutoff: '2024-12-31',
+      historical_research: true,
+      run_completed_at: '2026-09-08T10:31:00Z',
+      watchlist_added_at: '2026-09-09T09:00:00Z',
+      research_reason: 'Historical evidence entered the research queue.',
+      research_next_step: 'Review the cutoff-bound evidence.',
+      data_state: 'cached',
+      freshness_label: 'Historical evidence through cutoff',
+      no_advice_boundary: true,
+      raw_diagnostics: { provider: 'hidden' },
+      ...overrides,
+    });
+    get.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            id: 1,
+            symbol: 'AAPL',
+            market: 'us',
+            source: 'scanner',
+            intelligence: { scanner: { scanner_lineage_v1: lineage() } },
+          },
+          {
+            id: 2,
+            symbol: 'MSFT',
+            market: 'us',
+            source: 'scanner',
+            intelligence: { scanner: { scanner_lineage_v1: lineage({ symbol: 'MSFT', evaluation_cutoff: null }) } },
+          },
+          {
+            id: 3,
+            symbol: 'NVDA',
+            market: 'us',
+            source: 'scanner',
+            intelligence: { scanner: { scanner_lineage_v1: lineage({ symbol: 'NVDA', evaluation_cutoff: '2024-02-30' }) } },
+          },
+          {
+            id: 4,
+            symbol: 'TSLA',
+            market: 'us',
+            source: 'scanner',
+            intelligence: {
+              scanner: {
+                scanner_lineage_v1: lineage({
+                  symbol: 'TSLA',
+                  evaluation_mode: 'current',
+                  evaluation_cutoff: null,
+                  historical_research: false,
+                }),
+              },
+            },
+          },
+          {
+            id: 5,
+            symbol: 'META',
+            market: 'us',
+            source: 'scanner',
+            intelligence: {
+              scanner: {
+                scanner_lineage_v1: lineage({
+                  symbol: 'META',
+                  evaluation_mode: 'current',
+                  historical_research: false,
+                }),
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    const payload = await watchlistApi.listWatchlistItems();
+    const historical = payload.items[0].intelligence?.scanner?.scannerLineageV1;
+    expect(historical).toEqual(expect.objectContaining({
+      evaluationMode: 'historical_development',
+      evaluationCutoff: '2024-12-31',
+      historicalResearch: true,
+      runCompletedAt: '2026-09-08T10:31:00Z',
+      watchlistAddedAt: '2026-09-09T09:00:00Z',
+    }));
+    expect(historical).not.toHaveProperty('rawDiagnostics');
+    expect(payload.items[1].intelligence?.scanner?.scannerLineageV1?.evaluationCutoff).toBeNull();
+    expect(payload.items[1].intelligence?.scanner?.scannerLineageV1?.watchlistAddedAt).toBe('2026-09-09T09:00:00Z');
+    expect(payload.items[2].intelligence?.scanner?.scannerLineageV1?.evaluationMode).toBe('historical_development');
+    expect(payload.items[2].intelligence?.scanner?.scannerLineageV1?.evaluationCutoff).toBeNull();
+    expect(payload.items[3].intelligence?.scanner?.scannerLineageV1).toEqual(expect.objectContaining({
+      evaluationMode: 'current',
+      evaluationCutoff: null,
+      historicalResearch: false,
+    }));
+    expect(payload.items[4].intelligence?.scanner?.scannerLineageV1).toBeNull();
+  });
+
   it('whitelists catalyst exposures to consumer-safe fields and strips raw/internal payloads', async () => {
     const { watchlistApi } = await import('../watchlist');
     get.mockResolvedValueOnce({

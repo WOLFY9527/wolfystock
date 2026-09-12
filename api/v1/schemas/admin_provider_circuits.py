@@ -225,6 +225,7 @@ class ProviderCircuitDiagnosticsMetadata(_AdminProviderCircuitModel):
     circuit_states_present: bool = Field(default=False, alias="circuitStatesPresent")
     circuit_events_present: bool = Field(default=False, alias="circuitEventsPresent")
     probe_events_present: bool = Field(default=False, alias="probeEventsPresent")
+    runtime_observations_present: bool = Field(default=False, alias="runtimeObservationsPresent")
     possible_unwired_circuit_observation: bool = Field(default=False, alias="possibleUnwiredCircuitObservation")
     recommended_next_action: str = Field(default="review_provider_circuit_diagnostics", alias="recommendedNextAction")
     diagnostic_signal_sources: List[str] = Field(default_factory=list, alias="diagnosticSignalSources")

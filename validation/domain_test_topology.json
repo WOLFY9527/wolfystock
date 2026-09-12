@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8393,
-      "sha256": "3cf9d478527893e8ce848a305764c9e698de99538dfe39c0692aa943083bae84"
+      "count": 8404,
+      "sha256": "e598eba650ce6c8842817e68d2d870af15aa3529c7ef111283668cedb8e84291"
     },
     "tests": [
       {
@@ -5059,6 +5059,31 @@
         "baseline": true
       },
       {
+        "id": "tests/api/test_request_context.py::RequestContextTestCase::test_concurrent_requests_do_not_cross_contaminate",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_request_context.py::RequestContextTestCase::test_error_and_slow_request_records_share_response_id",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_request_context.py::RequestContextTestCase::test_exception_before_response_resets_context",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_request_context.py::RequestContextTestCase::test_general_exception_response_and_log_retain_id_then_clear_context",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_request_context.py::RequestContextTestCase::test_success_header_logger_and_untrusted_inputs_use_one_server_owned_id",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
         "id": "tests/api/test_research_queue_endpoint.py::test_get_research_queue_fails_closed_when_sources_are_empty",
         "domain": "provider_external_network",
         "baseline": true
@@ -9377,6 +9402,11 @@
         "id": "tests/test_admin_activity_service.py::AdminActivityServiceTestCase::test_analysis_projection_omits_raw_sensitive_fields",
         "domain": "residual_repository_integration",
         "baseline": true
+      },
+      {
+        "id": "tests/test_admin_activity_service.py::AdminActivityServiceTestCase::test_request_correlation_is_hash_projected_for_admin_activity",
+        "domain": "residual_repository_integration",
+        "baseline": false
       },
       {
         "id": "tests/test_admin_data_missing_drilldown.py::AdminDataMissingDrilldownServiceTestCase::test_aggregates_missing_data_events_by_surface_domain_provider",
@@ -16807,6 +16837,11 @@
         "id": "tests/test_execution_log_service.py::ExecutionLogServiceTestCase::test_execution_finished_closes_orphan_running_steps",
         "domain": "residual_repository_integration",
         "baseline": true
+      },
+      {
+        "id": "tests/test_execution_log_service.py::ExecutionLogServiceTestCase::test_execution_log_inherits_request_context_without_fabricating_background_id",
+        "domain": "residual_repository_integration",
+        "baseline": false
       },
       {
         "id": "tests/test_execution_log_service.py::ExecutionLogServiceTestCase::test_execution_log_write_sanitizes_metadata",
@@ -32372,6 +32407,26 @@
         "id": "tests/test_provider_circuit_observer.py::ProviderCircuitObserverTestCase::test_window_bounds_are_derived_from_observed_at",
         "domain": "provider_external_network",
         "baseline": true
+      },
+      {
+        "id": "tests/test_provider_circuit_runtime_wiring.py::test_planner_runtime_open_half_open_recovery_and_probe_truth",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_circuit_runtime_wiring.py::test_planner_success_without_transition_and_observer_failure_preserve_decisions",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_circuit_runtime_wiring.py::test_realtime_breaker_runtime_transition_dedup_and_probe_truth",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_provider_circuit_runtime_wiring.py::test_realtime_observer_failure_cannot_change_breaker_outcome",
+        "domain": "provider_external_network",
+        "baseline": false
       },
       {
         "id": "tests/test_provider_circuit_storage.py::ProviderCircuitStorageTestCase::test_circuit_state_upsert_and_read",

@@ -310,7 +310,17 @@ class PortfolioApiTestCase(unittest.TestCase):
             json={"name": "Main", "broker": "Demo", "market": "cn", "base_currency": "CNY"},
         )
         self.assertEqual(create_resp.status_code, 200)
+        request_id = create_resp.headers["X-Request-ID"]
+        self.assertRegex(request_id, r"^[a-f0-9]{32}$")
         account_id = create_resp.json()["id"]
+
+        audit_logs, audit_total = self.db.list_execution_log_sessions(
+            task_id="portfolio.account_created",
+            limit=10,
+        )
+        self.assertEqual(audit_total, 1)
+        self.assertEqual(audit_logs[0]["summary"]["business_event"]["requestId"], request_id)
+        self.assertEqual(audit_logs[0]["summary"]["meta"]["actor_request_id"], request_id)
 
         list_resp = self.client.get("/api/v1/portfolio/accounts")
         self.assertEqual(list_resp.status_code, 200)

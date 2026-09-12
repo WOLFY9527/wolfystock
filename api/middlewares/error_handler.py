@@ -11,10 +11,11 @@
 """
 
 import logging
-import traceback
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
+
+from api.request_context import REQUEST_ID_HEADER, request_id_from_scope
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +68,12 @@ def add_error_handlers(app) -> None:
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
         """处理通用异常"""
+        request_id = request_id_from_scope(request.scope)
         logger.error(
-            f"未处理的异常: {exc}\n"
-            f"请求路径: {request.url.path}\n"
-            f"堆栈: {traceback.format_exc()}"
+            "Unhandled API exception request_id=%s route=%r",
+            request_id,
+            request.url.path,
+            exc_info=(type(exc), exc, exc.__traceback__),
         )
         return JSONResponse(
             status_code=500,
@@ -78,5 +81,6 @@ def add_error_handlers(app) -> None:
                 "error": "internal_error",
                 "message": "服务器内部错误",
                 "detail": None
-            }
+            },
+            headers={REQUEST_ID_HEADER: request_id} if request_id else None,
         )

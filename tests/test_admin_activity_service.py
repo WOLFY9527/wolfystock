@@ -9,7 +9,7 @@ from datetime import datetime
 from unittest.mock import patch
 
 from api.v1.schemas.admin_activity import AdminActivityEvent
-from src.services.admin_activity_service import AdminActivityService
+from src.services.admin_activity_service import AdminActivityService, hash_reference
 from src.storage import AnalysisHistory, DatabaseManager
 from src.services.execution_log_service import ExecutionLogService
 
@@ -147,6 +147,34 @@ class AdminActivityServiceTestCase(unittest.TestCase):
         terminal = {item["entity"]["label"]: item for item in items if item["status"] in {"cancelled", "unavailable", "skipped"}}
         self.assertEqual({item["status"] for item in terminal.values()}, {"cancelled", "unavailable", "skipped"})
         self.assertTrue(all(item["outcome"] == "warning" for item in terminal.values()))
+
+    def test_request_correlation_is_hash_projected_for_admin_activity(self) -> None:
+        raw_request_id = "b" * 32
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            execution_logs = ExecutionLogService()
+            execution_logs.record_user_write_action(
+                event_type="portfolio.account_created",
+                message="Portfolio account created",
+                actor={
+                    "user_id": "user-1",
+                    "actor_type": "user",
+                    "role": "user",
+                    "request_id": raw_request_id,
+                },
+                domain="portfolio",
+                target_type="portfolio_account",
+                target_id=7,
+            )
+
+        items, total = AdminActivityService(
+            db_manager=self.db,
+            execution_log_service=execution_logs,
+        ).list_activity(target_user_id="user-1", family="user_action")
+
+        self.assertEqual(total, 1)
+        self.assertEqual(items[0]["request_id_hash"], hash_reference(raw_request_id))
+        self.assertEqual(items[0]["actor"]["request_id_hash"], hash_reference(raw_request_id))
+        self.assertNotIn(raw_request_id, json.dumps(items[0], ensure_ascii=False))
 
 
 if __name__ == "__main__":

@@ -61,6 +61,7 @@ def test_authenticated_audit_actor_projection_preserves_ordinary_current_user_fi
         "role": "user",
         "actor_type": "user",
         "session_id": "user-session-1",
+        "request_id": None,
     }
 
 
@@ -72,6 +73,7 @@ def test_authenticated_audit_actor_projection_preserves_admin_identity() -> None
         "role": "admin",
         "actor_type": "admin",
         "session_id": "admin-session-1",
+        "request_id": None,
     }
 
 
@@ -84,7 +86,7 @@ def test_affected_endpoint_audit_recorders_share_one_projection() -> None:
 
 
 def test_guest_public_and_admin_audit_actor_shapes_remain_distinct() -> None:
-    guest = analysis._guest_actor("guest-session-1", "guest-query-1")
+    guest = analysis._guest_actor("guest-session-1")
     public = market._actor(None)
     admin_audit = admin_portfolio._to_admin_actor(_admin_user())
 
@@ -92,7 +94,7 @@ def test_guest_public_and_admin_audit_actor_shapes_remain_distinct() -> None:
         "actor_type": "guest",
         "role": "guest",
         "session_id": "guest-session-1",
-        "request_id": "guest-query-1",
+        "request_id": None,
         "display_name": "Guest",
     }
     assert public == {"actor_type": "anonymous", "role": "anonymous", "display_name": "Anonymous"}

@@ -161,6 +161,14 @@ def _provider_circuit_coverage_diagnostics() -> dict[str, Any]:
         circuit_state_count = int(session.execute(select(func.count(ProviderCircuitState.id))).scalar() or 0)
         circuit_event_count = int(session.execute(select(func.count(ProviderCircuitEvent.id))).scalar() or 0)
         probe_event_count = int(session.execute(select(func.count(ProviderProbeEvent.id))).scalar() or 0)
+        runtime_observation_count = int(
+            session.execute(
+                select(func.count(ProviderQuotaWindow.id)).where(
+                    ProviderQuotaWindow.policy_key == ProviderCircuitObserver.RUNTIME_POLICY_KEY
+                )
+            ).scalar()
+            or 0
+        )
 
         quota_failure_count = int(
             session.execute(
@@ -179,6 +187,8 @@ def _provider_circuit_coverage_diagnostics() -> dict[str, Any]:
             or 0
         )
         if quota_failure_count > 0:
+            signal_sources.add("provider_quota_windows")
+        if runtime_observation_count > 0:
             signal_sources.add("provider_quota_windows")
 
         recent_summaries = session.execute(
@@ -205,12 +215,20 @@ def _provider_circuit_coverage_diagnostics() -> dict[str, Any]:
     circuit_states_present = circuit_state_count > 0
     circuit_events_present = circuit_event_count > 0
     probe_events_present = probe_event_count > 0
-    provider_failure_signals_present = bool(signal_sources)
-    possible_unwired = provider_failure_signals_present and not circuit_states_present
+    runtime_observations_present = runtime_observation_count > 0
+    provider_failure_signals_present = bool(quota_failure_count or execution_log_failure_count)
+    possible_unwired = (
+        provider_failure_signals_present
+        and not circuit_states_present
+        and not runtime_observations_present
+    )
 
     if circuit_states_present:
         coverage_status = "states_present"
         recommended_next_action = "review_existing_circuit_state_rows"
+    elif runtime_observations_present:
+        coverage_status = "wired_no_transition"
+        recommended_next_action = "no_action_runtime_circuit_observations_present_without_transition"
     elif possible_unwired:
         coverage_status = "possible_unwired"
         recommended_next_action = "provider_failures_observed_without_circuit_state_rows_review_circuit_wiring"
@@ -224,6 +242,7 @@ def _provider_circuit_coverage_diagnostics() -> dict[str, Any]:
         "circuitStatesPresent": circuit_states_present,
         "circuitEventsPresent": circuit_events_present,
         "probeEventsPresent": probe_events_present,
+        "runtimeObservationsPresent": runtime_observations_present,
         "possibleUnwiredCircuitObservation": possible_unwired,
         "recommendedNextAction": recommended_next_action,
         "diagnosticSignalSources": sorted(signal_sources),

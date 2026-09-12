@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import admin_provider_circuits
+from data_provider.realtime_types import CircuitBreaker
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.services.options_market_data_provider import OptionsLiveProviderConfig
 from src.services.provider_circuit_observer import ProviderCircuitObserver
@@ -338,8 +339,28 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertFalse(metadata["circuitStatesPresent"])
         self.assertFalse(metadata["circuitEventsPresent"])
         self.assertFalse(metadata["probeEventsPresent"])
+        self.assertFalse(metadata["runtimeObservationsPresent"])
         self.assertFalse(metadata["possibleUnwiredCircuitObservation"])
         self.assertEqual(metadata["recommendedNextAction"], "no_action_provider_circuit_infrastructure_idle")
+
+        breaker = CircuitBreaker(
+            circuit_observer=ProviderCircuitObserver(db=self.db).record_runtime_observation,
+        )
+        breaker.record_success("akshare_sina")
+
+        wired_response = self.client.get("/api/v1/admin/providers/circuits")
+        wired_metadata = wired_response.json()["metadata"]
+        self.assertEqual(wired_metadata["circuitStateCoverageStatus"], "wired_no_transition")
+        self.assertTrue(wired_metadata["runtimeObservationsPresent"])
+        self.assertFalse(wired_metadata["providerFailureSignalsPresent"])
+        self.assertFalse(wired_metadata["circuitStatesPresent"])
+        self.assertFalse(wired_metadata["circuitEventsPresent"])
+        self.assertFalse(wired_metadata["probeEventsPresent"])
+        self.assertFalse(wired_metadata["possibleUnwiredCircuitObservation"])
+        self.assertEqual(
+            wired_metadata["recommendedNextAction"],
+            "no_action_runtime_circuit_observations_present_without_transition",
+        )
 
     def test_circuit_states_present_suppresses_possible_unwired_warning(self) -> None:
         self._as_provider_read_admin()

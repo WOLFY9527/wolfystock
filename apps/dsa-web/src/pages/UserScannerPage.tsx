@@ -3380,7 +3380,9 @@ const UserScannerPage: React.FC = () => {
       marketVariant: marketVariant(item.market),
       statusLabel: compactScannerStateLabel(item.status, language),
       statusVariant: statusVariant(item.status),
-      watchlistDateLabel: item.watchlistDate ? formatDateOnly(item.watchlistDate, language) : null,
+      watchlistDateLabel: item.watchlistDate
+        ? `${language === 'en' ? 'Saved' : '保存日期'} · ${formatDateOnly(item.watchlistDate, language)}`
+        : null,
       profileLabel: sanitizeScannerProfileLabel(item.profileLabel || item.profile, language),
       evaluationLabel: isHistoricalRun
         ? (language === 'en' ? 'Development replay' : '开发回放')
@@ -3393,7 +3395,7 @@ const UserScannerPage: React.FC = () => {
       shortlistSize: item.shortlistSize,
       universeSize: item.universeSize,
       evaluatedSize: item.evaluatedSize,
-      runAtLabel: formatTimestamp(item.runAt, language),
+      runAtLabel: `${language === 'en' ? 'Run time' : '运行时间'} · ${formatTimestamp(item.runAt, language)}`,
       comparisonLabel: hasComparison(item.changeSummary)
         ? (language === 'en'
           ? `new ${item.changeSummary.newCount} · retained ${item.changeSummary.retainedCount} · dropped ${item.changeSummary.droppedCount}`

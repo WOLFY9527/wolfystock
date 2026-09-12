@@ -20,8 +20,9 @@ import logging
 import math
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional, Dict, Any
+from datetime import datetime
 from enum import Enum
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 if TYPE_CHECKING:
     from src.contracts.evidence import SourceObservationFacts
@@ -29,6 +30,12 @@ if TYPE_CHECKING:
     from src.providers.types import ProviderCacheIdentity, ProviderDataResult
 
 logger = logging.getLogger(__name__)
+
+
+def _observe_runtime_provider_circuit(**observation: Any) -> bool:
+    from src.services.provider_circuit_observer import observe_runtime_provider_circuit
+
+    return observe_runtime_provider_circuit(**observation)
 
 
 # ============================================
@@ -380,11 +387,18 @@ class CircuitBreaker:
         self,
         failure_threshold: int = 3,       # 连续失败次数阈值
         cooldown_seconds: float = 300.0,  # 冷却时间（秒），默认5分钟
-        half_open_max_calls: int = 1      # 半开状态最大尝试次数
+        half_open_max_calls: int = 1,     # 半开状态最大尝试次数
+        *,
+        provider_category: str = "realtime_quote",
+        route_family: str = "data_provider_realtime",
+        circuit_observer: Optional[Callable[..., Any]] = None,
     ):
         self.failure_threshold = failure_threshold
         self.cooldown_seconds = cooldown_seconds
         self.half_open_max_calls = half_open_max_calls
+        self.provider_category = provider_category
+        self.route_family = route_family
+        self._circuit_observer = circuit_observer or _observe_runtime_provider_circuit
         
         # 各数据源状态 {source_name: {state, failures, last_failure_time, half_open_calls}}
         self._states: Dict[str, Dict[str, Any]] = {}
@@ -421,6 +435,12 @@ class CircuitBreaker:
                 state['state'] = self.HALF_OPEN
                 state['half_open_calls'] = 0
                 logger.info(f"[熔断器] {source} 冷却完成，进入半开状态")
+                self._observe_circuit(
+                    provider=source,
+                    from_state=self.OPEN,
+                    to_state=self.HALF_OPEN,
+                    half_open_sample_limit=self.half_open_max_calls,
+                )
                 return True
             else:
                 remaining = self.cooldown_seconds - time_since_failure
@@ -438,6 +458,7 @@ class CircuitBreaker:
     def record_success(self, source: str) -> None:
         """记录成功请求"""
         state = self._get_state(source)
+        from_state = state['state']
         
         if state['state'] == self.HALF_OPEN:
             # 半开状态下成功，完全恢复
@@ -447,11 +468,22 @@ class CircuitBreaker:
         state['state'] = self.CLOSED
         state['failures'] = 0
         state['half_open_calls'] = 0
+        self._observe_circuit(
+            provider=source,
+            result_bucket="success",
+            request_executed=True,
+            from_state=from_state,
+            to_state=self.CLOSED,
+            failure_count=0,
+            half_open_sample_limit=self.half_open_max_calls,
+            probe_executed=from_state == self.HALF_OPEN,
+        )
     
     def record_failure(self, source: str, error: Optional[str] = None) -> None:
         """记录失败请求"""
         state = self._get_state(source)
         current_time = time.time()
+        from_state = state['state']
         
         state['failures'] += 1
         state['last_failure_time'] = current_time
@@ -468,6 +500,56 @@ class CircuitBreaker:
                           f"(冷却 {self.cooldown_seconds}s)")
             if error:
                 logger.warning(f"[熔断器] 最后错误: {error}")
+        self._observe_circuit(
+            provider=source,
+            result_bucket=self._runtime_reason_bucket(error),
+            request_executed=True,
+            from_state=from_state,
+            to_state=state['state'],
+            failure_count=state['failures'],
+            cooldown_until=(
+                datetime.fromtimestamp(current_time + self.cooldown_seconds)
+                if state['state'] == self.OPEN
+                else None
+            ),
+            half_open_sample_limit=self.half_open_max_calls,
+            probe_executed=from_state == self.HALF_OPEN,
+        )
+
+    def _observe_circuit(self, *, provider: str, **facts: Any) -> None:
+        try:
+            self._circuit_observer(
+                provider=provider,
+                provider_category=self.provider_category,
+                route_family=self.route_family,
+                runtime_owner="realtime_circuit_breaker",
+                **facts,
+            )
+        except Exception as exc:  # injected observation sinks remain fail-open
+            logger.warning(
+                "ProviderCircuitObservationSinkFailed runtime_owner=realtime_circuit_breaker "
+                "error_type=%s",
+                type(exc).__name__,
+            )
+
+    @staticmethod
+    def _runtime_reason_bucket(error: Optional[str]) -> str:
+        text = str(error or "").strip().lower()
+        if "timeout" in text or "timed out" in text:
+            return "timeout"
+        if "429" in text or "rate limit" in text or "quota" in text:
+            return "provider_429"
+        if "403" in text or "forbidden" in text:
+            return "provider_403"
+        if "unauthorized" in text or "authentication" in text or "api key" in text or "api_key" in text:
+            return "auth_or_key_invalid"
+        if any(code in text for code in ("500", "502", "503", "504")):
+            return "provider_5xx"
+        if "malformed" in text:
+            return "malformed_payload"
+        if "insufficient" in text or "empty" in text:
+            return "insufficient_payload"
+        return "network_error"
     
     def get_status(self) -> Dict[str, str]:
         """获取所有数据源状态"""
@@ -486,14 +568,18 @@ class CircuitBreaker:
 _realtime_circuit_breaker = CircuitBreaker(
     failure_threshold=3,      # 连续失败3次熔断
     cooldown_seconds=300.0,   # 冷却5分钟
-    half_open_max_calls=1
+    half_open_max_calls=1,
+    provider_category="realtime_quote",
+    route_family="data_provider_realtime",
 )
 
 # 筹码接口熔断器（更保守的策略，因为该接口更不稳定）
 _chip_circuit_breaker = CircuitBreaker(
     failure_threshold=2,      # 连续失败2次熔断
     cooldown_seconds=600.0,   # 冷却10分钟
-    half_open_max_calls=1
+    half_open_max_calls=1,
+    provider_category="chip_distribution",
+    route_family="data_provider_chip",
 )
 
 
