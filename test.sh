@@ -214,9 +214,7 @@ test_yfinance_convert() {
     "${PYTHON_BIN}" << 'PYTEST'
 import sys
 sys.path.insert(0, '.')
-from data_provider.yfinance_fetcher import YfinanceFetcher
-
-fetcher = YfinanceFetcher()
+from src.utils.yfinance_symbol import to_yfinance_symbol
 
 test_cases = [
     ("AAPL", "AAPL", "美股"),
@@ -225,7 +223,7 @@ test_cases = [
     ("hk00700", "0700.HK", "港股"),
     ("HK09988", "9988.HK", "港股大写"),
     ("600519", "600519.SS", "A股沪市"),
-    ("000001", "000001.SZ", "A股深市"),
+    ("000001.SZ", "000001.SZ", "A股深市（显式交易所）"),
     ("300750", "300750.SZ", "A股创业板"),
 ]
 
@@ -233,10 +231,24 @@ print("\nYFinance 代码转换测试:")
 print("-" * 60)
 all_pass = True
 for input_code, expected, desc in test_cases:
-    result = fetcher._convert_stock_code(input_code)
+    result = to_yfinance_symbol(input_code)
     status = "✅" if result == expected else "❌"
     all_pass = all_pass and (result == expected)
     print(f"{status} {input_code:10} -> {result:12} (期望: {expected:12}) | {desc}")
+
+ambiguous_code = "000001"
+try:
+    to_yfinance_symbol(ambiguous_code)
+except ValueError as exc:
+    ambiguous_rejected = str(exc) == "unsupported or ambiguous stock symbol"
+    result = f"拒绝: {exc}"
+else:
+    ambiguous_rejected = False
+    result = "错误: 静默解析为深圳"
+
+status = "✅" if ambiguous_rejected else "❌"
+all_pass = all_pass and ambiguous_rejected
+print(f"{status} {ambiguous_code:10} -> {result} | 歧义代码不得猜测深圳")
 
 print("-" * 60)
 print(f"{'✅ 所有测试通过!' if all_pass else '❌ 有测试失败!'}")
