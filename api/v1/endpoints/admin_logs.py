@@ -21,9 +21,9 @@ from api.v1.schemas.admin_logs import (
     ExecutionLogSessionDetailModel,
     ExecutionLogSessionListResponse,
 )
+from src.auth_context import resolve_ordinary_user_actor_references
 from src.services.admin_incident_timeline_service import AdminIncidentTimelineService
 from src.services.admin_logs_service import AdminDataMissingDrilldownService, AdminLogsRetentionService, AdminOperatorIssueRollupService
-from src.services.admin_user_service import AdminUserService
 from src.services.execution_log_service import ExecutionLogService
 
 router = APIRouter()
@@ -41,7 +41,7 @@ def _project_authorized_user_actor_identity(
     """Add canonical ordinary-user references at the authorized API boundary."""
     if not _can_project_user_actor_identity(current_user):
         return items
-    references = AdminUserService().resolve_user_actor_references(
+    references = resolve_ordinary_user_actor_references(
         item.get("_rawUserId")
         for item in items
         if str(item.get("actorType") or "").strip().lower() == "user"

@@ -7,8 +7,8 @@ import hashlib
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
+from src.auth_context import resolve_ordinary_user_actor_references
 from src.repositories.auth_repo import AuthRepository
-from src.services.admin_user_service import AdminUserService
 from src.services.execution_log_service import ExecutionLogService
 from src.storage import AnalysisHistory, AppUserSession, DatabaseManager
 from src.utils.security import sanitize_metadata, sanitize_message
@@ -138,10 +138,13 @@ class AdminActivityService:
             limit=200,
             offset=0,
         )
-        actor_references = AdminUserService(repo=self.auth_repo).resolve_user_actor_references(
-            item.get("_rawUserId")
-            for item in items
-            if str(item.get("actorType") or "").strip().lower() == "user"
+        actor_references = resolve_ordinary_user_actor_references(
+            (
+                item.get("_rawUserId")
+                for item in items
+                if str(item.get("actorType") or "").strip().lower() == "user"
+            ),
+            repo=self.auth_repo,
         )
         events: list[dict[str, Any]] = []
         for item in items:

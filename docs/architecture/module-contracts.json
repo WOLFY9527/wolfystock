@@ -300,6 +300,7 @@
         "pathPrefixes": [],
         "pythonModules": [
           "api.actor_projection",
+          "api.request_context",
           "api.route_inventory",
           "api.v1.consumer_safe_response",
           "api.v1.errors",
@@ -350,6 +351,7 @@
           "server",
           "src.config",
           "src.logging_config",
+          "src.request_context",
           "src.scheduler",
           "src.services.uat_provider_isolation",
           "src.web_artifact",
@@ -372,6 +374,7 @@
           "main",
           "server",
           "src.config",
+          "src.request_context",
           "src.runtime.settings",
           "src.services.uat_provider_isolation",
           "src.web_artifact"
