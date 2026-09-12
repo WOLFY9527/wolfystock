@@ -163,6 +163,7 @@ _ANALYSIS_CAPABILITY_UNAVAILABLE_MESSAGE = "AI analysis capability is unavailabl
 _ANALYSIS_UNAVAILABLE_MESSAGE = "AI analysis is temporarily unavailable. Please retry later."
 _ANALYSIS_STATUS_UNAVAILABLE_MESSAGE = "Analysis task status is temporarily unavailable. Please retry later."
 _PUBLIC_PREVIEW_CAPABILITY_UNAVAILABLE_MESSAGE = "当前环境未提供公开 AI 分析预览。"
+_PUBLIC_PREVIEW_UNAVAILABLE_MESSAGE = "公开分析预览暂时不可用，请稍后重试。"
 
 
 def _raise_if_llm_model_unavailable(

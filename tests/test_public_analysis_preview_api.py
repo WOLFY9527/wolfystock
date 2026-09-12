@@ -301,6 +301,30 @@ class PublicAnalysisPreviewApiTestCase(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, serialized)
 
+        raw_exception_text = "preview runtime token=must-not-reach-consumer"
+        with patch(
+            "api.v1.endpoints.analysis._raise_if_llm_model_unavailable",
+            return_value=None,
+        ), patch(
+            "src.services.analysis_service.AnalysisService.analyze_stock",
+            side_effect=RuntimeError(raw_exception_text),
+        ) as analyze_stock:
+            runtime_failure_response = self.client.post(
+                "/api/v1/analysis/preview",
+                json={"stock_code": "AAPL", "stock_name": "Apple"},
+            )
+
+        self.assertEqual(runtime_failure_response.status_code, 500)
+        analyze_stock.assert_called_once()
+        runtime_envelope = runtime_failure_response.json()
+        self.assertEqual(runtime_envelope["error"], "internal_error")
+        self.assertEqual(runtime_envelope["message"], "公开分析预览暂时不可用，请稍后重试。")
+        self.assertTrue(runtime_envelope["retryable"])
+        self.assertNotEqual(runtime_envelope["error"], envelope["error"])
+        self.assertNotEqual(runtime_envelope["message"], envelope["message"])
+        self.assertNotEqual(runtime_failure_response.status_code, response.status_code)
+        self.assertNotIn(raw_exception_text, json.dumps(runtime_envelope, ensure_ascii=False))
+
 
 if __name__ == "__main__":
     unittest.main()
