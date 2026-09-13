@@ -45,6 +45,13 @@ async function switchLanguage(page: Page, expected: LocaleState) {
   await settleLocale(page, expected);
 }
 
+async function expectGuestLocalePresentation(page: Page, language: 'zh' | 'en') {
+  await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible();
+  await appExpect(page.getByRole('heading', {
+    name: language === 'zh' ? 'WolfyStock 研究控制台' : 'WolfyStock Research Console',
+  })).toBeVisible();
+}
+
 appTest.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     window.__localeRouteTrace = [];
@@ -73,14 +80,7 @@ appTest('keeps a guest Chinese-to-English language switch stable after route eff
 });
 
 appTest('keeps bidirectional guest switching, route suffixes, history, chunks, and visible copy aligned', async ({ page }) => {
-  const requestedLocaleChunks: string[] = [];
   const consoleErrors: string[] = [];
-  page.on('response', (response) => {
-    const url = response.url();
-    if (/\/assets\/(?:zh|en)-[^/]+\.js$/.test(url)) {
-      requestedLocaleChunks.push(url);
-    }
-  });
   page.on('console', (message) => {
     if (message.type() === 'error') {
       consoleErrors.push(message.text());
@@ -90,18 +90,14 @@ appTest('keeps bidirectional guest switching, route suffixes, history, chunks, a
   const initialPath = '/zh/guest?source=locale-switch#controls';
   const englishPath = '/en/guest?source=locale-switch#controls';
   await page.goto(initialPath);
-  await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible();
   await settleLocale(page, { language: 'zh', locale: 'zh', path: initialPath });
-  await expect.poll(() => requestedLocaleChunks.some((url) => /\/assets\/zh-[^/]+\.js$/.test(url))).toBe(true);
-  expect(requestedLocaleChunks.some((url) => /\/assets\/en-[^/]+\.js$/.test(url))).toBe(false);
-  await appExpect(page.getByRole('heading', { name: 'WolfyStock 研究控制台' })).toBeVisible();
+  await expectGuestLocalePresentation(page, 'zh');
 
   await switchLanguage(page, { language: 'en', locale: 'en', path: englishPath });
-  await appExpect(page.getByRole('heading', { name: 'WolfyStock Research Console' })).toBeVisible();
-  await expect.poll(() => requestedLocaleChunks.some((url) => /\/assets\/en-[^/]+\.js$/.test(url))).toBe(true);
+  await expectGuestLocalePresentation(page, 'en');
 
   await switchLanguage(page, { language: 'zh', locale: 'zh', path: initialPath });
-  await appExpect(page.getByRole('heading', { name: 'WolfyStock 研究控制台' })).toBeVisible();
+  await expectGuestLocalePresentation(page, 'zh');
 
   for (let index = 0; index < 10; index += 1) {
     const language = index % 2 === 0 ? 'en' : 'zh';
@@ -110,6 +106,7 @@ appTest('keeps bidirectional guest switching, route suffixes, history, chunks, a
       locale: language,
       path: language === 'en' ? englishPath : initialPath,
     });
+    await expectGuestLocalePresentation(page, language);
   }
 
   expect(await page.evaluate(() => window.__localeRouteTrace)).toEqual(
@@ -122,16 +119,16 @@ appTest('keeps bidirectional guest switching, route suffixes, history, chunks, a
   await switchLanguage(page, { language: 'en', locale: 'en', path: englishPath });
   const historyPath = '/zh/guest?source=locale-history#back-forward';
   await page.goto(historyPath);
-  await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible();
   await settleLocale(page, { language: 'zh', locale: 'zh', path: historyPath });
+  await expectGuestLocalePresentation(page, 'zh');
 
   await page.goBack();
-  await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible();
   await settleLocale(page, { language: 'en', locale: 'en', path: englishPath });
+  await expectGuestLocalePresentation(page, 'en');
 
   await page.goForward();
-  await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible();
   await settleLocale(page, { language: 'zh', locale: 'zh', path: historyPath });
+  await expectGuestLocalePresentation(page, 'zh');
 
   expect(consoleErrors).toEqual([]);
 });

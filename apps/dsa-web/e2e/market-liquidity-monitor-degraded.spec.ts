@@ -248,7 +248,7 @@ test.describe('Liquidity Monitor degraded proxy-only state', () => {
       try {
         await expect(page.getByRole('heading', { name: '流动性监测' })).toBeVisible({ timeout: 15_000 });
         const guidancePanel = page.getByTestId('liquidity-monitor-guidance-panel');
-        await expect(guidancePanel).toContainText('数据不足，暂不判断；保留最近一次流动性状态。');
+        await expect(guidancePanel).toContainText('数据不足');
         await expect(guidancePanel).toContainText('暂不可用');
         await expect(guidancePanel).toContainText('先看Crypto 现货动量');
         await expect(guidancePanel).toContainText('3 项可观察');
@@ -258,6 +258,7 @@ test.describe('Liquidity Monitor degraded proxy-only state', () => {
         await expect(guidancePanel).toContainText('已使用最近一次可用数据');
         await expect(guidancePanel).toContainText('数据状态说明');
         await expect(page.getByTestId('liquidity-section-overview')).toContainText('流动性格局');
+        await expect(page.getByTestId('liquidity-visual-posture')).toContainText('关键线索不足，当前不判断偏宽松或偏收紧。');
         await expect(page.getByTestId('liquidity-section-metrics')).toContainText('关键指标');
         await expect(page.getByTestId('liquidity-section-observation')).toContainText('资金面与说明');
         await expect(page.getByTestId('liquidity-visual-coverage')).toContainText('资金面线索');
