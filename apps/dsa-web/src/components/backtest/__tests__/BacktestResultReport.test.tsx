@@ -1,7 +1,22 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RuleBacktestRunResponse } from '../../../types/backtest';
 import BacktestResultReport from '../BacktestResultReport';
+
+const languageState = vi.hoisted(() => ({ value: 'zh' as 'zh' | 'en' }));
+
+vi.mock('../../../contexts/UiLanguageContext', () => ({
+  useI18n: () => ({
+    language: languageState.value,
+    setLanguage: () => undefined,
+    toggleLanguage: () => undefined,
+    t: (key: string) => key,
+  }),
+}));
+
+afterEach(() => {
+  languageState.value = 'zh';
+});
 
 function makeRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBacktestRunResponse {
   const auditRows = Array.from({ length: 64 }, (_, index) => ({
@@ -241,8 +256,10 @@ describe('BacktestResultReport', () => {
     expect(compositionOrder).toHaveTextContent('核心指标');
     expect(compositionOrder).toHaveTextContent('交易与事件账本');
     expect(compositionOrder).toHaveTextContent('假设与成本');
-    expect(compositionOrder).toHaveTextContent('Where It Breaks');
-    expect(screen.getByTestId('backtest-report-where-it-breaks')).toHaveTextContent('Where It Breaks');
+    expect(compositionOrder).toHaveTextContent('失效条件');
+    expect(compositionOrder).not.toHaveTextContent('Where It Breaks');
+    expect(screen.getByTestId('backtest-report-where-it-breaks')).toHaveTextContent('失效条件');
+    expect(screen.getByTestId('backtest-report-where-it-breaks')).not.toHaveTextContent('Where It Breaks');
     expect(simpleReport).toHaveTextContent('核心指标');
     expect(simpleReport).toHaveTextContent('策略解读');
     expect(simpleReport).toHaveTextContent('基准收益');
@@ -255,6 +272,14 @@ describe('BacktestResultReport', () => {
 
     render(<BacktestResultReport run={makeRun({ id: 78 })} mode="professional" />);
     expect(screen.getAllByTestId('backtest-result-report')[1]).toHaveAttribute('data-report-mode', 'professional');
+  });
+
+  it('keeps the failure-conditions concept in English for English report surfaces', () => {
+    languageState.value = 'en';
+    render(<BacktestResultReport run={makeRun()} mode="simple" />);
+
+    expect(screen.getByTestId('backtest-result-composition-order')).toHaveTextContent('Where It Breaks');
+    expect(screen.getByTestId('backtest-report-where-it-breaks')).toHaveTextContent('Where It Breaks');
   });
 
   it('uses actual metrics and safe unavailable states without crashing on minimal payloads', () => {

@@ -70,4 +70,16 @@ describe('consumerPresentationDataState', () => {
     expect(consumerPresentationText('initializing', 'zh')).toBe('初始化中');
     expect(consumerPresentationText('error', 'zh')).toBe('数据读取异常');
   });
+
+  it('maps reusable product and unknown internal tokens without over-sanitizing human prose', () => {
+    expect(consumerPresentationText('backtest_failure_conditions', 'zh')).toBe('失效条件');
+    expect(consumerPresentationText('backtest_failure_conditions', 'en')).toBe('Where It Breaks');
+
+    const unknownInternalToken = consumerPresentationText('unmapped_internal_state', 'zh');
+    expect(unknownInternalToken).toBe('数据不足，结论仅供观察');
+    expect(unknownInternalToken).not.toContain('unmapped_internal_state');
+
+    expect(consumerPresentationText('A broader comparison set remains useful.', 'en'))
+      .toBe('A broader comparison set remains useful.');
+  });
 });

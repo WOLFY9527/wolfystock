@@ -5,6 +5,7 @@ import { ApiErrorAlert } from '../common/ApiErrorAlert';
 import { GlassCard } from '../common/GlassCard';
 import type { ParsedApiError } from '../../api/error';
 import type { BacktestExecutionReadiness, BacktestHistoricalOhlcvReadiness } from '../../types/backtest';
+import { consumerPresentationText } from '../../utils/consumerPresentationBoundary';
 import BacktestExecutionReadinessPanel from './BacktestExecutionReadinessPanel';
 import BacktestRunFeedbackBanner, { type BacktestRunFeedback } from './BacktestRunFeedbackBanner';
 import {
@@ -87,6 +88,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
   runFeedback = null,
 }) => {
   const templateName = getPointAndShootTemplateName(strategyTemplate, language);
+  const failureConditionsLabel = consumerPresentationText('backtest_failure_conditions', language);
   const readinessState = String(runReadiness?.state || '').trim().toLowerCase().replaceAll('-', '_').replace(/\s+/g, '_');
   const historicalState = String(historicalOhlcvReadiness?.status || '').trim().toLowerCase().replaceAll('-', '_').replace(/\s+/g, '_');
   // Real result composition (equity / drawdown / metrics / ledger) must not appear before a real run result exists.
@@ -102,8 +104,8 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
       : '当前标的或日期区间尚未具备足够可用数据，暂不展示结果。可调整区间、核对历史数据，或待覆盖改善后重试。')
     : hasRealResultContract
       ? (language === 'en'
-        ? 'A real run result is available. Open the saved result page to inspect equity, benchmark, drawdown, metrics, trade ledger, and Where It Breaks.'
-        : '已有真实运行结果。可打开保存结果页，查看收益曲线、基准、回撤、核心指标、交易账本与 Where It Breaks。')
+        ? `A real run result is available. Open the saved result page to inspect equity, benchmark, drawdown, metrics, trade ledger, and ${failureConditionsLabel}.`
+        : `已有真实运行结果。可打开保存结果页，查看收益曲线、基准、回撤、核心指标、交易账本与${failureConditionsLabel}。`)
       : (language === 'en'
         ? 'Readiness is not a result. Configure the setup, review data readiness, then execute explicitly. Result composition appears only after a real run returns.'
         : '就绪度不是结果。先完成配置、核对数据就绪度，再显式执行；结果构成仅在真实运行返回后展示。');
@@ -124,8 +126,8 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
     ? ['Configuration', 'Readiness', 'Explicit execution', 'Real result workspace']
     : ['配置', '就绪度', '显式执行', '真实结果工作区'];
   const realResultComposition = language === 'en'
-    ? ['Equity vs benchmark', 'Drawdown', 'Core metrics', 'Trade ledger', 'Assumptions & costs', 'Where It Breaks']
-    : ['收益曲线与基准', '回撤', '核心指标', '交易与事件账本', '假设与成本', 'Where It Breaks'];
+    ? ['Equity vs benchmark', 'Drawdown', 'Core metrics', 'Trade ledger', 'Assumptions & costs', failureConditionsLabel]
+    : ['收益曲线与基准', '回撤', '核心指标', '交易与事件账本', '假设与成本', failureConditionsLabel];
 
   return (
     <section

@@ -9,6 +9,7 @@ import type {
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { EvidenceChips } from '../evidence/EvidenceChips';
 import { StatusBadge } from '../ui/StatusBadge';
+import { consumerPresentationText } from '../../utils/consumerPresentationBoundary';
 import { serializeCsvCell } from '../../utils/csvExport';
 import { normalizeBacktestReadiness, type NormalizedEvidenceSummary } from '../../utils/evidenceDisplay';
 import {
@@ -1357,13 +1358,14 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
     );
   };
   const detailToggleStateLabel = (open: boolean) => (open ? (isEnglish ? 'Collapse' : '收起') : (isEnglish ? 'Expand' : '展开'));
+  const failureConditionsLabel = consumerPresentationText('backtest_failure_conditions', language);
   const reportSectionLinks = [
     { id: '概览', label: isEnglish ? 'Overview' : '概览' },
     { id: '曲线', label: isEnglish ? 'Curve' : '曲线' },
     { id: '交易', label: isEnglish ? 'Trades' : '交易' },
     { id: '归因', label: isEnglish ? 'Attribution' : '归因' },
     { id: '风险', label: isEnglish ? 'Risk' : '风险' },
-    { id: 'breaks', label: isEnglish ? 'Where It Breaks' : '失效条件' },
+    { id: 'breaks', label: failureConditionsLabel },
     { id: '证据', label: isEnglish ? 'Review' : '复查' },
   ];
   const detailTabs = [
@@ -1397,7 +1399,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             isEnglish ? 'Core metrics' : '核心指标',
             isEnglish ? 'Trade ledger' : '交易与事件账本',
             isEnglish ? 'Assumptions & costs' : '假设与成本',
-            'Where It Breaks',
+            failureConditionsLabel,
           ].map((label, index) => (
             <li key={label} className="flex min-w-0 items-center gap-2">
               <span className="font-mono text-[color:var(--sage-deep)]">{index + 1}</span>
@@ -1665,7 +1667,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         <div id="backtest-report-breaks" data-testid="backtest-report-where-it-breaks" className={GHOST_SECTION_CLASS}>
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
             <div>
-              <p className={LABEL_CLASS}>Where It Breaks</p>
+              <p className={LABEL_CLASS}>{failureConditionsLabel}</p>
               <h3 className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
                 {isEnglish ? 'Failure conditions and research limits' : '失效条件与研究限制'}
               </h3>
@@ -1712,8 +1714,8 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           ) : null}
           <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
             {isEnglish
-              ? 'Where It Breaks is part of the real result workspace: use it after equity, drawdown, metrics, and the trade ledger—not as a substitute for a run.'
-              : 'Where It Breaks 属于真实结果工作区：在收益曲线、回撤、指标与交易账本之后阅读，不能替代一次真实运行。'}
+              ? `${failureConditionsLabel} is part of the real result workspace: use it after equity, drawdown, metrics, and the trade ledger—not as a substitute for a run.`
+              : `${failureConditionsLabel}属于真实结果工作区：在收益曲线、回撤、指标与交易账本之后阅读，不能替代一次真实运行。`}
           </p>
         </div>
 

@@ -331,7 +331,8 @@ test.describe('T179 Backtest and Scenario canonical workflow', () => {
     await expect(compositionOrder).toContainText('核心指标');
     await expect(compositionOrder).toContainText('交易与事件账本');
     await expect(compositionOrder).toContainText('假设与成本');
-    await expect(compositionOrder).toContainText('Where It Breaks');
+    await expect(compositionOrder).toContainText('失效条件');
+    await expect(compositionOrder).not.toContainText('Where It Breaks');
     await expect(dataQuality).toContainText(/数据质量|样本/);
     await expect(assumptions).toContainText(/执行假设|手续费|滑点|成本/);
     await expect(evidence).not.toHaveJSProperty('open', true);

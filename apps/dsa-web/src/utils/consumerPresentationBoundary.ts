@@ -124,6 +124,10 @@ const INTERNAL_COPY_BY_KEY: Record<string, PresentationCopy> = {
     zh: '数据新鲜度受限，当前仅供观察。',
     en: 'Freshness is limited for this observation.',
   },
+  backtest_failure_conditions: {
+    zh: '失效条件',
+    en: 'Where It Breaks',
+  },
 };
 
 const INTERNAL_PHRASE_COPY: Array<[RegExp, PresentationCopy]> = [
