@@ -42428,8 +42428,8 @@
       }
     },
     "inventory": {
-      "count": 180,
-      "sha256": "8428b3a394014aa74b8f1ea1e99186c6c9c272958d90923605d5a8ff77a5ba98"
+      "count": 181,
+      "sha256": "a6e8a82dc76ac22712443bfed50354fee40bf03601eace81725d1261ba372a8f"
     },
     "files": [
       {
@@ -42711,6 +42711,10 @@
       {
         "path": "apps/dsa-web/src/components/home-bento/__tests__/HomeCandlestickChart.test.tsx",
         "owner": "market"
+      },
+      {
+        "path": "apps/dsa-web/src/components/layout/__tests__/ConsumerEnglishPresentationBoundary.test.tsx",
+        "owner": "frontend_shared"
       },
       {
         "path": "apps/dsa-web/src/components/layout/__tests__/ConsumerProtectedFrame.test.tsx",
@@ -43294,11 +43298,11 @@
     "inventory": {
       "specCount": 72,
       "specSha256": "f80ab8e57fa9c7978be088a50d0dc4855539f973ddf1523cd74644ea18b1bb55",
-      "projectCaseCount": 798,
-      "projectCaseSha256": "293f52c8b16d8dcffbaa3163340ca133b2e2854feb20dd86e23770ede0655d2e",
+      "projectCaseCount": 812,
+      "projectCaseSha256": "51ef671ff6381be4272e77a73224670ce9cfd6ea3fb09b9ee6cda3d80bde3333",
       "projectCaseCounts": {
-        "chromium": 393,
-        "chromium-mobile": 393,
+        "chromium": 400,
+        "chromium-mobile": 400,
         "release-real-runtime": 6,
         "release-real-runtime-mobile": 6
       }
@@ -44017,14 +44021,21 @@
         "mandatory": false
       },
       {
-        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English backtest has no product-copy leakage",
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English backtest has no unreviewed visible CJK product copy",
         "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
         "project": "chromium-mobile",
         "owner": "uat",
         "mandatory": false
       },
       {
-        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English home has no product-copy leakage",
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English home has no unreviewed visible CJK product copy",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English liquidity-monitor fails closed without rendering Chinese product copy",
         "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
         "project": "chromium-mobile",
         "owner": "uat",
@@ -44038,14 +44049,42 @@
         "mandatory": true
       },
       {
-        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English portfolio has no product-copy leakage",
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English market-overview has no unreviewed visible CJK product copy",
         "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
         "project": "chromium-mobile",
         "owner": "uat",
         "mandatory": false
       },
       {
-        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English radar has no product-copy leakage",
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English options-lab fails closed without rendering Chinese product copy",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English portfolio has no unreviewed visible CJK product copy",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English research-radar has no unreviewed visible CJK product copy",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English scanner has no unreviewed visible CJK product copy",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English scenario-lab has no unreviewed visible CJK product copy",
         "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
         "project": "chromium-mobile",
         "owner": "uat",
@@ -44059,7 +44098,14 @@
         "mandatory": false
       },
       {
-        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English watchlist has no product-copy leakage",
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English stock-structure has no unreviewed visible CJK product copy",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English watchlist has no unreviewed visible CJK product copy",
         "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
         "project": "chromium-mobile",
         "owner": "uat",
@@ -44067,6 +44113,13 @@
       },
       {
         "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › group triggers show opaque keyboard focus",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium-mobile",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium-mobile::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › the visible CJK guard permits only the reviewed resolved identity context",
         "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
         "project": "chromium-mobile",
         "owner": "uat",
@@ -46768,14 +46821,21 @@
         "mandatory": false
       },
       {
-        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English backtest has no product-copy leakage",
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English backtest has no unreviewed visible CJK product copy",
         "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
         "project": "chromium",
         "owner": "uat",
         "mandatory": false
       },
       {
-        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English home has no product-copy leakage",
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English home has no unreviewed visible CJK product copy",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English liquidity-monitor fails closed without rendering Chinese product copy",
         "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
         "project": "chromium",
         "owner": "uat",
@@ -46789,14 +46849,42 @@
         "mandatory": true
       },
       {
-        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English portfolio has no product-copy leakage",
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English market-overview has no unreviewed visible CJK product copy",
         "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
         "project": "chromium",
         "owner": "uat",
         "mandatory": false
       },
       {
-        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English radar has no product-copy leakage",
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English options-lab fails closed without rendering Chinese product copy",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English portfolio has no unreviewed visible CJK product copy",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English research-radar has no unreviewed visible CJK product copy",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English scanner has no unreviewed visible CJK product copy",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English scenario-lab has no unreviewed visible CJK product copy",
         "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
         "project": "chromium",
         "owner": "uat",
@@ -46810,7 +46898,14 @@
         "mandatory": false
       },
       {
-        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English watchlist has no product-copy leakage",
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English stock-structure has no unreviewed visible CJK product copy",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › English watchlist has no unreviewed visible CJK product copy",
         "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
         "project": "chromium",
         "owner": "uat",
@@ -46818,6 +46913,13 @@
       },
       {
         "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › group triggers show opaque keyboard focus",
+        "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
+        "project": "chromium",
+        "owner": "uat",
+        "mandatory": false
+      },
+      {
+        "id": "chromium::apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts::consumer-frontend-browser-qualification.spec.ts › M9 locale and navigation regression › the visible CJK guard permits only the reviewed resolved identity context",
         "spec": "apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts",
         "project": "chromium",
         "owner": "uat",

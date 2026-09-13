@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Navigate, Outlet, Route, Routes, useLocation, 
 import { AppErrorBoundary } from './components/common/AppErrorBoundary';
 import { BrandedLoadingScreen } from './components/common/BrandedLoadingScreen';
 import { AccessGatePage } from './components/access/AccessGatePage';
+import { ConsumerEnglishPresentationBoundary } from './components/layout/ConsumerEnglishPresentationBoundary';
 import { ConsumerProtectedFrame } from './components/layout/ConsumerWorkspaceShell';
 import { Shell } from './components/layout/Shell';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -616,7 +617,15 @@ export const AppContent: React.FC = () => {
     { placement: 'shell', path: '/portfolio', element: <RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute> },
     { placement: 'shell', path: '/market-overview', element: <MarketOverviewPage /> },
     { placement: 'shell', path: '/market/decision-cockpit', element: <MarketDecisionCockpitPage /> },
-    { placement: 'shell', path: '/market/liquidity-monitor', element: <LiquidityMonitorPage /> },
+    {
+      placement: 'shell',
+      path: '/market/liquidity-monitor',
+      element: (
+        <ConsumerEnglishPresentationBoundary surface="liquidity-monitor" title="Liquidity Monitor">
+          <LiquidityMonitorPage />
+        </ConsumerEnglishPresentationBoundary>
+      ),
+    },
     { placement: 'shell', path: '/market/rotation-radar', element: <MarketRotationRadarPage /> },
     { placement: 'shell', path: '/stocks/structure-decision', element: <StockStructureDecisionEntryPage /> },
     { placement: 'shell', path: '/stocks/:stockCode/structure-decision', element: <RegisteredSurfaceRoute><StockStructureDecisionPage /></RegisteredSurfaceRoute> },
@@ -624,7 +633,17 @@ export const AppContent: React.FC = () => {
     { placement: 'shell', path: '/scenario-lab', element: <RegisteredSurfaceRoute><ScenarioLabPage /></RegisteredSurfaceRoute> },
     { placement: 'shell', path: '/watchlist', element: <RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute> },
     { placement: 'shell', path: '/backtest', element: <RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute> },
-    { placement: 'shell', path: '/options-lab', element: <RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute> },
+    {
+      placement: 'shell',
+      path: '/options-lab',
+      element: (
+        <RegisteredSurfaceRoute>
+          <ConsumerEnglishPresentationBoundary surface="options-lab" title="Options Lab">
+            <OptionsLabPage />
+          </ConsumerEnglishPresentationBoundary>
+        </RegisteredSurfaceRoute>
+      ),
+    },
     { placement: 'shell', path: '/backtest/compare', element: <RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute> },
     { placement: 'shell', path: '/backtest/results/:runId', element: <RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute> },
     { placement: 'shell', path: '/settings', element: <RegisteredSurfaceRoute><PersonalSettingsPage /></RegisteredSurfaceRoute> },

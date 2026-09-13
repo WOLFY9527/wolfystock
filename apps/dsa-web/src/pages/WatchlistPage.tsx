@@ -239,10 +239,10 @@ function normalizeMarket(value?: string | null): string {
   return normalizeText(value).toUpperCase();
 }
 
-function formatMarket(value?: string | null): string {
+function formatMarket(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
   const market = normalizeMarket(value);
-  if (market === 'CN') return 'A股';
-  if (market === 'HK') return '港股';
+  if (market === 'CN') return language === 'en' ? 'CN' : 'A股';
+  if (market === 'HK') return language === 'en' ? 'HK' : '港股';
   if (market === 'US') return 'US';
   return market || '--';
 }
@@ -1515,7 +1515,7 @@ function WatchlistConsumerObservationBoard({
           {visibleItems.map((item) => {
             const canonicalIdentity = getWatchlistCanonicalIdentity(item);
             const displaySymbol = canonicalIdentity?.symbol || '--';
-            const displayMarket = canonicalIdentity ? formatMarket(canonicalIdentity.market) : '--';
+            const displayMarket = canonicalIdentity ? formatMarket(canonicalIdentity.market, language) : '--';
             const stockStructurePath = buildStockStructurePath(item, language);
             const price = getWatchlistConsumerPrice(item, language);
             const change = getWatchlistConsumerChange(item);
@@ -2234,9 +2234,9 @@ const WatchlistPage: React.FC = () => {
     }))).sort();
     return [
       { value: 'all', label: copy.all },
-      ...markets.map((market) => ({ value: market, label: formatMarket(market) })),
+      ...markets.map((market) => ({ value: market, label: formatMarket(market, language) })),
     ];
-  }, [copy.all, items]);
+  }, [copy.all, items, language]);
 
   const sourceOptions = useMemo(() => {
     const sources = Array.from(new Set(items.flatMap((item) => {
@@ -3200,7 +3200,7 @@ const WatchlistPage: React.FC = () => {
                     const originLabel = formatWatchlistOrigin(item.source, language);
                     const canonicalIdentity = getWatchlistCanonicalIdentity(item);
                     const displaySymbol = canonicalIdentity?.symbol || '--';
-                    const displayMarket = canonicalIdentity ? formatMarket(canonicalIdentity.market) : '--';
+                    const displayMarket = canonicalIdentity ? formatMarket(canonicalIdentity.market, language) : '--';
                     const stockStructurePath = buildStockStructurePath(item, language);
                     const scannerPath = buildScannerPath(item, language);
                     const backtestPath = buildBacktestPath(item, language);
@@ -3806,7 +3806,7 @@ const WatchlistPage: React.FC = () => {
                       <h2 className="truncate text-base font-semibold text-[color:var(--wolfy-text-primary)]">{activeDisplaySymbol}</h2>
                       <p className="truncate text-xs text-[color:var(--wolfy-text-muted)]">{activeIdentityLabel}</p>
                     </div>
-                    <TerminalChip variant="neutral">{formatMarket(activeItem.market)}</TerminalChip>
+                    <TerminalChip variant="neutral">{formatMarket(activeItem.market, language)}</TerminalChip>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
                     <TerminalChip variant="info" className="font-mono text-[color:var(--wolfy-accent)]">

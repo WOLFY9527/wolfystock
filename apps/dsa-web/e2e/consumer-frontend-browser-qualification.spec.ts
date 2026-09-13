@@ -4,6 +4,7 @@ import path from 'node:path';
 import { expect, test } from './fixtures/appSmoke';
 import { installPortfolioSmokeHarness } from './fixtures/portfolioSmoke';
 import { buildHomeEvidencePacketShell } from './fixtures/smokeEvidence';
+import { getCoreProductRouteByKey, type CoreProductRouteKey } from '../src/components/layout/coreProductRoutes';
 
 const viewports = [
   { width: 1440, height: 1000 },
@@ -19,6 +20,49 @@ type QualificationRoute = {
   readyTestId: string;
   type: 'standard' | 'portfolio';
   evidenceTestIds?: string[];
+};
+
+type ReviewedVisibleCjkAllowance = {
+  id: string;
+  selector: string;
+  exactText: string;
+  reason: string;
+};
+
+type VisibleCjkHit = {
+  text: string;
+  tagName: string;
+  testId: string | null;
+};
+
+type VisibleCjkInspection = {
+  allowed: Array<VisibleCjkHit & { allowanceId: string }>;
+  unreviewed: VisibleCjkHit[];
+};
+
+type QualificationTruthPayload = {
+  schema_version?: unknown;
+  observation_only?: unknown;
+  decision_grade?: unknown;
+  data_quality?: { fail_closed?: unknown };
+  research_queue?: Array<{
+    provenance?: unknown;
+    readiness?: unknown;
+    evidence_gaps?: unknown;
+    data_as_of?: unknown;
+    material_change?: unknown;
+  }>;
+  source_confidence?: {
+    source_label?: unknown;
+    is_synthetic?: unknown;
+    as_of?: unknown;
+  };
+  status?: unknown;
+  spot_price?: unknown;
+  zero_dte?: {
+    contract_count?: unknown;
+    open_interest_share?: unknown;
+  };
 };
 
 type FindingSeverity = 'P0' | 'P1' | 'P2';
@@ -111,12 +155,116 @@ const evidence: { responsive: RouteViewportEvidence[]; journeys: JourneyEvidence
 };
 const strictQualification = process.env.STRICT_CONSUMER_FRONTEND_QUALIFICATION === '1';
 
+/**
+ * Only a resolved, provenance-preserved company identity may remain in CJK on
+ * an English consumer route. Exact text plus the row identity selector keeps
+ * product chrome and arbitrary user-facing copy outside this exception.
+ */
+const ENGLISH_VISIBLE_CJK_ALLOWLIST: readonly ReviewedVisibleCjkAllowance[] = [
+  {
+    id: 'resolved-cn-company-identity',
+    selector: '[data-testid="watchlist-row-identity-600519"]',
+    exactText: '贵州茅台 · cn',
+    reason: 'Resolved company identity is source truth; translating the proper name would alter that identity.',
+  },
+  {
+    id: 'resolved-cn-company-identity-observation',
+    selector: '[data-testid="watchlist-observation-row-600519"]',
+    exactText: '贵州茅台 · cn',
+    reason: 'The observation card repeats the same resolved source identity; its exact value remains constrained to that saved item.',
+  },
+];
+
+const localeIntegrityCoreRouteKeys = [
+  'home',
+  'market-overview',
+  'research-radar',
+  'stock-structure',
+  'scanner',
+  'watchlist',
+  'backtest',
+  'scenario-lab',
+  'portfolio',
+] as const satisfies readonly CoreProductRouteKey[];
+
+const qualificationRouteKeyByCoreRoute: Record<(typeof localeIntegrityCoreRouteKeys)[number], QualificationRoute['key']> = {
+  home: 'home',
+  'market-overview': 'market-overview',
+  'research-radar': 'radar',
+  'stock-structure': 'stock-research',
+  scanner: 'scanner',
+  watchlist: 'watchlist',
+  backtest: 'backtest',
+  'scenario-lab': 'scenario-lab',
+  portfolio: 'portfolio',
+};
+
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
   await route.fulfill({
     status,
     contentType: 'application/json',
     body: JSON.stringify(payload),
   });
+}
+
+function localizedCoreRoutePath(key: (typeof localeIntegrityCoreRouteKeys)[number]): string {
+  const route = getCoreProductRouteByKey(key);
+  if (key === 'stock-structure') {
+    // The registry owns this consumer surface; the fixture exercises its
+    // canonical detail variant so it can render a real research packet.
+    return '/en/stocks/AAPL/structure-decision';
+  }
+  return route.path === '/' ? '/en/' : `/en${route.path}`;
+}
+
+function qualificationRouteForCoreRoute(key: (typeof localeIntegrityCoreRouteKeys)[number]): QualificationRoute {
+  const qualificationKey = qualificationRouteKeyByCoreRoute[key];
+  const route = routes.find((entry) => entry.key === qualificationKey);
+  if (!route) {
+    throw new Error(`Missing qualification fixture route for ${key}`);
+  }
+  return { ...route, path: localizedCoreRoutePath(key) };
+}
+
+async function inspectEnglishVisibleCjk(page: Page): Promise<VisibleCjkInspection> {
+  return page.locator('body').evaluate((owner, allowlist: readonly ReviewedVisibleCjkAllowance[]) => {
+    const isVisible = (element: Element) => {
+      if (element.closest('[aria-hidden="true"]')) return false;
+      const style = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0 || rect.width <= 0 || rect.height <= 0) return false;
+      const closedDisclosure = element.closest('details:not([open])');
+      const disclosureSummary = closedDisclosure?.querySelector(':scope > summary');
+      return !closedDisclosure || Boolean(disclosureSummary?.contains(element));
+    };
+    const normalizeText = (value: string | null) => (value || '').replace(/\s+/g, ' ').trim();
+    const seen = new Set<string>();
+    const allowed: VisibleCjkInspection['allowed'] = [];
+    const unreviewed: VisibleCjkHit[] = [];
+
+    for (const element of Array.from(owner.querySelectorAll<HTMLElement>('*'))) {
+      if (element.children.length !== 0 || !isVisible(element)) continue;
+      const text = normalizeText(element.textContent);
+      if (!/[\u3400-\u9fff]/.test(text)) continue;
+      const testId = element.closest<HTMLElement>('[data-testid]')?.dataset.testid ?? null;
+      const identity = `${text}\u0000${element.tagName}\u0000${testId ?? ''}`;
+      if (seen.has(identity)) continue;
+      seen.add(identity);
+
+      const allowance = allowlist.find((entry) => (
+        text === entry.exactText
+        && (element.matches(entry.selector) || Boolean(element.closest(entry.selector)))
+      ));
+      const hit = { text, tagName: element.tagName, testId };
+      if (allowance) {
+        allowed.push({ ...hit, allowanceId: allowance.id });
+      } else {
+        unreviewed.push(hit);
+      }
+    }
+
+    return { allowed, unreviewed };
+  }, ENGLISH_VISIBLE_CJK_ALLOWLIST);
 }
 
 async function installSignedInOverrides(page: Page) {
@@ -394,7 +542,7 @@ async function installMarketOverviewOverrides(page: Page) {
   });
 }
 
-async function installWatchlistOverrides(page: Page) {
+async function installWatchlistOverrides(page: Page, { includeResolvedCnIdentity = false }: { includeResolvedCnIdentity?: boolean } = {}) {
   await page.route('**/api/v1/watchlist/items**', async (route) => {
     await fulfillJson(route, {
       items: [
@@ -463,6 +611,38 @@ async function installWatchlistOverrides(page: Page) {
           created_at: '2026-07-06T08:00:00Z',
           updated_at: '2026-07-06T09:00:00Z',
         },
+        ...(includeResolvedCnIdentity ? [{
+          id: 2,
+          symbol: '600519',
+          market: 'cn',
+          identity: {
+            canonical_symbol: '600519',
+            display_symbol: '600519',
+            market: 'cn',
+            display_name: '贵州茅台',
+            display_name_state: 'resolved',
+            display_name_provenance: 'authoritative',
+            identity_state: 'resolved',
+          },
+          name: '贵州茅台',
+          source: 'manual',
+          scanner_run_id: null,
+          scanner_rank: null,
+          scanner_score: null,
+          last_scored_at: null,
+          score_source: null,
+          score_profile: null,
+          score_reason: null,
+          score_status: 'unknown',
+          score_status_context: null,
+          score_error: null,
+          intelligence: null,
+          theme_id: null,
+          universe_type: 'manual',
+          notes: null,
+          created_at: '2026-07-06T08:00:00Z',
+          updated_at: '2026-07-06T09:00:00Z',
+        }] : []),
       ],
     });
   });
@@ -714,7 +894,7 @@ async function installRadarOverrides(page: Page) {
   });
 }
 
-async function installQualificationOverrides(page: Page) {
+async function installQualificationOverrides(page: Page, { includeResolvedCnIdentity = false }: { includeResolvedCnIdentity?: boolean } = {}) {
   await installSignedInOverrides(page);
   await page.route('**/api/v1/user-alerts/rules', async (route) => {
     await fulfillJson(route, { contract_version: 'user_alert_contract_v1', delivery_mode: 'in_app', in_app_only: true, owner_scoped: true, items: [] });
@@ -724,7 +904,7 @@ async function installQualificationOverrides(page: Page) {
   });
   await installStockOverrides(page);
   await installMarketOverviewOverrides(page);
-  await installWatchlistOverrides(page);
+  await installWatchlistOverrides(page, { includeResolvedCnIdentity });
   await installScenarioOverrides(page);
   await installRadarOverrides(page);
 
@@ -1164,7 +1344,7 @@ test.describe('consumer frontend keyboard journey qualification', () => {
       const url = response.url();
       if (!url.includes('/api/v1/research/queue') && !url.includes('/api/v1/stocks/NVDA/quote') && !url.includes('/api/v1/options/underlyings/NVDA/structure')) return;
       truthChecks.push((async () => {
-        const payload = await response.json() as Record<string, any>;
+        const payload = await response.json() as QualificationTruthPayload;
         try {
           if (url.includes('/api/v1/research/queue')) {
             const item = payload.research_queue?.[0];
@@ -1348,17 +1528,71 @@ test.describe('consumer frontend keyboard journey qualification', () => {
   });
 });
 
-// Bounded M9 regression: reuse the isolated consumer transport and route owners.
+// Bounded M9 regression: reuse isolated consumer transport and registry-owned route paths.
 test.describe('M9 locale and navigation regression', () => {
-  for (const key of ['home', 'radar', 'watchlist', 'backtest', 'portfolio']) {
-    test(`English ${key} has no product-copy leakage`, async ({ page }) => {
-      const route = routes.find((entry) => entry.key === key)!;
+  for (const coreRouteKey of localeIntegrityCoreRouteKeys) {
+    test(`English ${coreRouteKey} has no unreviewed visible CJK product copy`, async ({ page }) => {
+      const route = qualificationRouteForCoreRoute(coreRouteKey);
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await installQualificationOverrides(page, { includeResolvedCnIdentity: coreRouteKey === 'watchlist' });
+      await waitForRoute(page, route);
+      const cjkInspection = await inspectEnglishVisibleCjk(page);
+      expect(cjkInspection.unreviewed).toEqual([]);
+      const copy = await page.locator('body').innerText();
+      expect(copy).not.toMatch(/\b(?:nav|home|common|backtest|portfolio|watchlist|researchRadar|guidance)\.[a-zA-Z][\w.]*/);
+    });
+  }
+
+  test('the visible CJK guard permits only the reviewed resolved identity context', async ({ page }) => {
+    const route = qualificationRouteForCoreRoute('watchlist');
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await installQualificationOverrides(page, { includeResolvedCnIdentity: true });
+    await waitForRoute(page, route);
+
+    const approvedIdentity = await inspectEnglishVisibleCjk(page);
+    expect(approvedIdentity.allowed).toContainEqual(expect.objectContaining({
+      allowanceId: 'resolved-cn-company-identity',
+      text: '贵州茅台 · cn',
+      testId: 'watchlist-row-identity-600519',
+    }));
+    expect(approvedIdentity.unreviewed).toEqual([]);
+
+    await page.evaluate(() => {
+      const probe = document.createElement('p');
+      probe.dataset.testid = 'locale-integrity-unreviewed-probe';
+      probe.textContent = '未审查的产品文案';
+      document.body.append(probe);
+    });
+
+    const withUnreviewedCopy = await inspectEnglishVisibleCjk(page);
+    expect(withUnreviewedCopy.allowed).toContainEqual(expect.objectContaining({
+      allowanceId: 'resolved-cn-company-identity',
+      text: '贵州茅台 · cn',
+    }));
+    expect(withUnreviewedCopy.unreviewed).toContainEqual(expect.objectContaining({
+      text: '未审查的产品文案',
+      testId: 'locale-integrity-unreviewed-probe',
+    }));
+  });
+
+  for (const [surface, title] of [
+    ['liquidity-monitor', 'Liquidity Monitor'],
+    ['options-lab', 'Options Lab'],
+  ] as const) {
+    test(`English ${surface} fails closed without rendering Chinese product copy`, async ({ page }) => {
+      const route = getCoreProductRouteByKey(surface);
       await page.setViewportSize({ width: 1440, height: 1000 });
       await installQualificationOverrides(page);
-      await waitForRoute(page, { ...route, path: route.path.replace('/zh', '/en') });
-      const copy = await page.locator('body').innerText();
-      expect(copy.split('\n').filter((line) => /\p{Script=Han}/u.test(line) && line !== '中文')).toEqual([]);
-      expect(copy).not.toMatch(/\b(?:nav|home|common|backtest|portfolio|watchlist|researchRadar|guidance)\.[a-zA-Z][\w.]*/);
+      await page.goto(`/en${route.path}`);
+
+      const boundary = page.getByTestId(`consumer-english-presentation-${surface}`);
+      await expect(boundary).toBeVisible({ timeout: 15_000 });
+      await expect(boundary.getByRole('heading', { name: title })).toBeVisible();
+      await expect(boundary.getByRole('link', { name: 'Open this surface in Chinese' })).toHaveAttribute(
+        'href',
+        `/zh${route.path}`,
+      );
+      expect((await inspectEnglishVisibleCjk(page)).unreviewed).toEqual([]);
     });
   }
   test('group triggers show opaque keyboard focus', async ({ page }) => {

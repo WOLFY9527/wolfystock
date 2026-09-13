@@ -5143,6 +5143,45 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-manual-research-path')).toHaveTextContent('只读研究单个代码');
   });
 
+  it('fails closed to English readiness copy when a consumer-safe scanner message contains CJK', async () => {
+    getRuns.mockResolvedValue(makeHistoryResponse([]));
+    getRun.mockResolvedValue(null);
+    getReadiness.mockResolvedValue({
+      market: 'cn',
+      profile: 'cn_preopen_v1',
+      watchlistDate: '2026-06-27',
+      todayTradingDay: true,
+      scheduleEnabled: false,
+      scheduleRunImmediately: false,
+      notificationEnabled: false,
+      qualitySummary: {
+        available: false,
+        reviewWindowDays: 5,
+        runCount: 0,
+        reviewedRunCount: 0,
+        reviewedCandidateCount: 0,
+        strongCount: 0,
+        mixedCount: 0,
+        weakCount: 0,
+      },
+      dataReadiness: makeHistoricalDataReadiness({
+        market: 'cn',
+        profile: 'cn_preopen_v1',
+        scannerUniverseReadiness: {
+          ...makeHistoricalDataReadiness().scannerUniverseReadiness,
+          market: 'CN',
+          consumerSafeMessage: '标的池已准备，仍需复核市场数据完整度。',
+        },
+      }),
+    });
+
+    renderUserScannerPage({ initialEntry: '/en/scanner' });
+
+    const summary = await screen.findByTestId('scanner-consumer-readiness-summary');
+    expect(summary).toHaveTextContent('Scanner data readiness needs review.');
+    expect(summary.textContent || '').not.toMatch(/[\u3400-\u9fff]/u);
+  });
+
   it('shows the operator data readiness link only for admin users with provider-read access', async () => {
     productSurfaceMock.state = {
       isAdminAccount: true,

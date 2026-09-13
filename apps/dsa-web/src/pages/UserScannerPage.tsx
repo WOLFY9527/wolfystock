@@ -480,6 +480,9 @@ function sanitizeScannerDataReadinessText(value: string | null | undefined, lang
   if (language === 'en' && text === '标的池可用，但行情或历史覆盖不足，暂不生成候选。') {
     return 'The scope is available, but quote or history coverage is insufficient to produce candidates yet.';
   }
+  if (language === 'en' && /[\u3400-\u9fff]/u.test(text)) {
+    return 'Scanner data readiness needs review.';
+  }
   if (/provider|debug|trace|schema|raw|request|cache|runtime|sourceauthority|blockerbucket|pipeline|dry[-_\s]?run|\bscanner\b/i.test(text)) {
     return sanitizeConsumerDataStateText(text, 'partial');
   }
