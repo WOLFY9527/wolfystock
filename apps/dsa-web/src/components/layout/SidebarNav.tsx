@@ -39,7 +39,7 @@ import { buildLoginPath, useProductSurface } from '../../hooks/useProductSurface
 import { cn } from '../../utils/cn';
 import { isAdminMissionControlPrototypeEnabled } from '../../utils/adminCapabilities';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../../utils/localeRouting';
-import { canonicalStockSymbolFromValidation, stocksApi } from '../../api/stocks';
+import { resolveCanonicalStockSymbol } from '../../utils/stockIdentityLookup';
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
 import { Button } from '../common/Button';
 import { ConfirmDialog } from '../common/ConfirmDialog';
@@ -431,8 +431,7 @@ function useSidebarNavView({
 
     setIsStockSearchResolving(true);
     try {
-      const validation = await stocksApi.verifyTickerExists(rawSymbol);
-      const canonicalSymbol = canonicalStockSymbolFromValidation(validation);
+      const canonicalSymbol = await resolveCanonicalStockSymbol(rawSymbol);
       if (!canonicalSymbol) {
         setStockSearchError(language === 'en' ? 'No matching stock route for that symbol format.' : '未找到可打开的标的路由，请检查代码格式。');
         setStockSearchFocused(true);
@@ -440,8 +439,8 @@ function useSidebarNavView({
       }
 
       const target = routeLocale
-        ? buildLocalizedPath(`/stocks/${encodeURIComponent(canonicalSymbol.symbol)}/structure-decision`, routeLocale)
-        : `/stocks/${encodeURIComponent(canonicalSymbol.symbol)}/structure-decision`;
+        ? buildLocalizedPath(`/stocks/${encodeURIComponent(canonicalSymbol)}/structure-decision`, routeLocale)
+        : `/stocks/${encodeURIComponent(canonicalSymbol)}/structure-decision`;
       setStockSearchError('');
       setStockSearchQuery('');
       setStockSearchFocused(false);

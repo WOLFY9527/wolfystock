@@ -51,8 +51,7 @@ import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { cn } from '../utils/cn';
 import { formatCurrency, formatDateTime, formatNumber } from '../utils/format';
-import { portfolioDecimalSign } from '../utils/portfolioDecimal';
-import type { PortfolioDecimal } from '../types/portfolio';
+import { presentAdminPortfolioDecimalSign, type PortfolioDecimal } from '../utils/adminUserPortfolioPresentation';
 
 type PageMode = 'directory' | 'detail' | 'activity';
 type DetailTabKey = 'detail' | 'portfolio' | 'security';
@@ -217,7 +216,7 @@ function formatMoney(value?: AdminMoneyAmount | null): string {
 
 function moneyTone(value?: AdminMoneyAmount | null): 'neutral' | 'good' | 'danger' {
   if (!value || value.amount === null) return 'neutral';
-  return portfolioDecimalSign(value.amount) < 0 ? 'danger' : 'good';
+  return presentAdminPortfolioDecimalSign(value.amount) < 0 ? 'danger' : 'good';
 }
 
 function holdingMoney(value: PortfolioDecimal | null | undefined, currency?: string | null): string {
@@ -228,7 +227,7 @@ function holdingMoney(value: PortfolioDecimal | null | undefined, currency?: str
 
 function holdingPnlClass(value: PortfolioDecimal | null | undefined): string {
   if (value === null || value === undefined) return 'text-[color:var(--wolfy-text-muted)]';
-  return portfolioDecimalSign(value) < 0
+  return presentAdminPortfolioDecimalSign(value) < 0
     ? 'text-[color:var(--wolfy-market-down)]'
     : 'text-[color:var(--wolfy-market-up)]';
 }

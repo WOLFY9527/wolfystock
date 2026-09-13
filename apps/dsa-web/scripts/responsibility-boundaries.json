@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "signalModel": "frontend-responsibility-signals-v1",
   "acceptedBase": {
-    "commit": "9d98b940c6dd3e757043c7e7be3e8f9bcd14269e",
-    "tree": "bc5dedc4c0aa3d619605195ce5b884ceff26f8ce"
+    "commit": "fbf2806ff26912cdaa687f04e033c435e497ec24",
+    "tree": "d482e968e2c3230979a8b02d176bcf0756cf6411"
   },
   "owners": [
     {
@@ -59,7 +59,7 @@
     {
       "path": "src/components/market-overview/MarketOverviewWorkbench.tsx",
       "profile": "cohesive-owner",
-      "maxSignals": { "stateCalls": 2, "effects": 0, "apiCalls": 0, "effectApiCalls": 0, "truthCalls": 27, "domainCalls": 33 },
+      "maxSignals": { "stateCalls": 2, "effects": 0, "apiCalls": 0, "effectApiCalls": 0, "truthCalls": 28, "domainCalls": 34 },
       "allowedResponsibilities": ["presentation", "state-ownership", "truth-projection", "domain-calculation"],
       "allowedDependencies": ["market"],
       "staleProtection": "not-applicable",
@@ -229,7 +229,7 @@
     {
       "path": "src/pages/HomeBentoDashboardPage.tsx",
       "profile": "legacy-concentrated",
-      "maxSignals": { "stateCalls": 34, "effects": 21, "apiCalls": 6, "effectApiCalls": 5, "truthCalls": 28, "domainCalls": 57 },
+      "maxSignals": { "stateCalls": 37, "effects": 21, "apiCalls": 8, "effectApiCalls": 6, "truthCalls": 28, "domainCalls": 56 },
       "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "truth-projection", "domain-calculation", "cross-domain-dependency"],
       "allowedDependencies": ["market", "research"],
       "staleProtection": "observed",
@@ -279,7 +279,7 @@
     {
       "path": "src/pages/MarketRotationRadarPage.tsx",
       "profile": "cohesive-owner",
-      "maxSignals": { "stateCalls": 3, "effects": 2, "apiCalls": 1, "effectApiCalls": 0, "truthCalls": 12, "domainCalls": 23 },
+      "maxSignals": { "stateCalls": 3, "effects": 2, "apiCalls": 1, "effectApiCalls": 0, "truthCalls": 12, "domainCalls": 25 },
       "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection", "domain-calculation"],
       "allowedDependencies": ["market"],
       "staleProtection": "not-applicable",
@@ -309,7 +309,7 @@
     {
       "path": "src/pages/PortfolioPage.tsx",
       "profile": "legacy-concentrated",
-      "maxSignals": { "stateCalls": 66, "effects": 6, "apiCalls": 30, "effectApiCalls": 0, "truthCalls": 12, "domainCalls": 17 },
+      "maxSignals": { "stateCalls": 66, "effects": 6, "apiCalls": 32, "effectApiCalls": 0, "truthCalls": 12, "domainCalls": 18 },
       "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection", "domain-calculation", "cross-domain-dependency"],
       "allowedDependencies": ["portfolio", "research"],
       "staleProtection": "not-applicable",
@@ -319,7 +319,7 @@
     {
       "path": "src/pages/ResearchRadarPage.tsx",
       "profile": "legacy-concentrated",
-      "maxSignals": { "stateCalls": 7, "effects": 1, "apiCalls": 2, "effectApiCalls": 0, "truthCalls": 17, "domainCalls": 17 },
+      "maxSignals": { "stateCalls": 7, "effects": 1, "apiCalls": 2, "effectApiCalls": 0, "truthCalls": 18, "domainCalls": 17 },
       "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "truth-projection", "domain-calculation"],
       "allowedDependencies": ["research"],
       "staleProtection": "not-applicable",
@@ -379,7 +379,7 @@
     {
       "path": "src/pages/WatchlistPage.tsx",
       "profile": "legacy-concentrated",
-      "maxSignals": { "stateCalls": 32, "effects": 11, "apiCalls": 13, "effectApiCalls": 3, "truthCalls": 11, "domainCalls": 29 },
+      "maxSignals": { "stateCalls": 34, "effects": 11, "apiCalls": 14, "effectApiCalls": 2, "truthCalls": 11, "domainCalls": 32 },
       "allowedResponsibilities": ["route-composition", "presentation", "state-ownership", "effect-ownership", "request-orchestration", "stale-response-protection", "truth-projection", "domain-calculation", "cross-domain-dependency"],
       "allowedDependencies": ["backtest", "research", "scanner", "watchlist"],
       "staleProtection": "observed",

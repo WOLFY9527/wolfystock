@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "acceptedBase": "fbf2806ff26912cdaa687f04e033c435e497ec24",
+  "description": "Source-derived debt ceiling for the repaired P2 design candidate. Update only with an intentional reduction and focused ratchet tests.",
+  "categories": {
+    "literalFontSize": 1336,
+    "literalRadius": 127,
+    "literalColor": 25,
+    "arbitraryShadow": 14,
+    "otherLiteralNumeric": 566
+  }
+}

@@ -4,11 +4,13 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { scanResponsibilityProject } from './responsibility-qualification.mjs';
+import { classifyDesignDebtText, inventoryDesignDebt, qualifyDesignDebt } from './design-debt-ratchet.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(SCRIPT_DIR, '..');
 const SRC_DIR = path.join(ROOT_DIR, 'src');
 const RESPONSIBILITY_MANIFEST_PATH = path.join(SCRIPT_DIR, 'responsibility-boundaries.json');
+const DESIGN_DEBT_BASELINE_PATH = path.join(SCRIPT_DIR, 'design-debt-baseline.json');
 
 const SCANNED_EXTENSIONS = new Set(['.tsx', '.ts', '.css', '.js']);
 const EXTRA_SCAN_FILES = [
@@ -208,7 +210,7 @@ Options:
 `);
 }
 
-function shouldScanFile(relativePath) {
+export function shouldScanFile(relativePath) {
   const parts = relativePath.split(path.sep);
   if (parts.some((part) => EXCLUDED_PARTS.has(part))) {
     return false;
@@ -683,6 +685,7 @@ export function scanProject({ rootDir = ROOT_DIR, files = null } = {}) {
     blocking: [],
     warnings: [],
     responsibilityFilesScanned: 0,
+    debtInventory: null,
   };
 
   for (const file of scanFiles) {
@@ -703,7 +706,46 @@ export function scanProject({ rootDir = ROOT_DIR, files = null } = {}) {
   result.responsibilityFilesScanned = responsibility.filesScanned;
   result.blocking.push(...responsibility.blocking);
 
+  // The inventory is always project-wide: a selected-file run still needs to
+  // prove that its edit did not grow the durable candidate ceiling.
+  const baseline = JSON.parse(fs.readFileSync(DESIGN_DEBT_BASELINE_PATH, 'utf8'));
+  const fullInventory = inventoryDesignDebt(allProjectFiles, { rootDir });
+  result.debtInventory = fullInventory.inventory;
+  const changedInventory = inventoryAddedDebtSinceBaseline({ rootDir, acceptedBase: baseline.acceptedBase });
+  for (const finding of qualifyDesignDebt({
+    candidate: fullInventory.inventory,
+    baseline: baseline.categories,
+    changedFiles: changedInventory,
+    // This compares only added production source lines since the reviewed base;
+    // touching a file that already contains historical debt is not itself debt.
+    changedBaseline: { literalFontSize: 0, literalRadius: 0, literalColor: 0, arbitraryShadow: 0, otherLiteralNumeric: 0 },
+  })) {
+    result.blocking.push(makeFinding({
+      rule: finding.rule,
+      severity: 'blocking',
+      relativePath: 'scripts/design-debt-baseline.json',
+      line: 1,
+      excerpt: `${finding.category}: ${finding.actual} (ceiling ${finding.expected})`,
+      hint: 'Use an existing semantic role or reduce the source-derived debt inventory; baseline increases are not permitted.',
+    }));
+  }
+
   return result;
+}
+
+function inventoryAddedDebtSinceBaseline({ rootDir, acceptedBase }) {
+  if (!/^[0-9a-f]{40}$/.test(acceptedBase ?? '')) return {};
+  const diff = spawnSync('git', ['diff', '--unified=0', acceptedBase, '--', 'apps/dsa-web/src'], {
+    cwd: path.resolve(rootDir, '..', '..'), encoding: 'utf8', stdio: 'pipe',
+  });
+  if (diff.status !== 0) return {};
+  const added = diff.stdout.split(/\r?\n/)
+    .filter((line) => line.startsWith('+') && !line.startsWith('+++'))
+    .map((line) => line.slice(1))
+    .join('\n');
+  const inventory = { literalFontSize: 0, literalRadius: 0, literalColor: 0, arbitraryShadow: 0, otherLiteralNumeric: 0 };
+  for (const finding of classifyDesignDebtText(added)) inventory[finding.category] += 1;
+  return inventory;
 }
 
 function printFindings(title, findings) {
@@ -727,6 +769,7 @@ function printReport(result) {
   console.log(`Rules checked: ${RULES.map((rule) => `${rule.id} (${rule.severity})`).join(', ')}`);
   console.log(`Files scanned: ${result.filesScanned}`);
   console.log(`Responsibility owners analyzed: ${result.responsibilityFilesScanned}`);
+  if (result.debtInventory) console.log(`Design debt inventory: ${Object.entries(result.debtInventory).map(([key, value]) => `${key}=${value}`).join(', ')}`);
   console.log('Responsibility qualification: semantic owner mixes, owner-specific ceilings, dependency growth, and fail-closed analysis');
 
   printFindings('Blocking violations', result.blocking);

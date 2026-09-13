@@ -804,12 +804,12 @@ describe('HomeSurfacePage', () => {
     expect(guestSurface).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'WolfyStock 研究控制台' })).toBeInTheDocument();
     expect(guestCommandSurface).toBeInTheDocument();
-    expect(guestCommandSurface).toHaveClass('rounded-[12px]');
+    expect(guestCommandSurface).toHaveClass('rounded-xl');
     expect(guestMarketPreviewStrip).toBeInTheDocument();
     expect(guestMarketPreviewStrip).toHaveAttribute('role', 'status');
     expect(guestMarketPreviewStrip).toHaveAttribute('aria-live', 'polite');
     expect(guestMarketPreviewStrip).toHaveAttribute('aria-atomic', 'true');
-    expect(guestMarketPreviewStrip).toHaveClass('rounded-[10px]', 'bg-[var(--wolfy-surface-input)]');
+    expect(guestMarketPreviewStrip).toHaveClass('rounded-lg', 'bg-[var(--wolfy-surface-input)]');
     expect(screen.getByText('WolfyStock 是面向独立研究者与自驱投资者的股票研究工作区。你可以先查看单个标的预览，登录后再保存报告、回看历史，并继续进入组合或扫描工作台。')).toBeInTheDocument();
     expect(guestMarketPreviewStrip).toHaveTextContent('当前市场观察');
     // Strip mounts in loading state; wait for public-safe briefing settlement (ready != loading).
@@ -1335,7 +1335,7 @@ describe('HomeSurfacePage', () => {
     // G017 denser identity mark: compact base size with sm: upscale, not 72px monopoly.
     expect(screen.getByTestId('home-research-company-mark')).toHaveClass('h-12', 'w-12', 'rounded-[12px]');
     expect(screen.queryByTestId('home-bento-decision-hero-row')).not.toBeInTheDocument();
-    expect(headerStrip).toHaveClass('rounded-[10px]');
+    expect(headerStrip).toHaveClass('rounded-lg');
     expect(conclusionConsole).toHaveClass('home-research-conclusion-console', 'rounded-[10px]', 'border');
 
     expect(keyLevels).toHaveAttribute('data-linear-primitive', 'key-level-strip');
@@ -1391,13 +1391,13 @@ describe('HomeSurfacePage', () => {
     expect(railSections).toEqual(['current-action', 'observation', 'risk', 'next', 'fundamentals-summary']);
     expect(rail.querySelectorAll('.home-research-rail-card')).toHaveLength(2);
     rail.querySelectorAll('.home-research-rail-card').forEach((node) => {
-      expect(node).toHaveClass('rounded-[10px]');
+      expect(node).toHaveClass('rounded-lg');
     });
     expect(rail.querySelector('[class*="bg-black"]')).toBeNull();
 
     expect(secondaryDeck).toContainElement(catalysts);
     expect(catalysts).toHaveAttribute('data-visual-role', 'attached-event-deck');
-    expect(secondaryDeck).toHaveClass('rounded-[12px]');
+    expect(secondaryDeck).toHaveClass('rounded-xl');
     expect(within(catalysts).getByText('近期催化剂 / 事件')).toBeInTheDocument();
     expect(screen.getByTestId('home-linear-events-evidence-note')).toHaveTextContent('事件证据');
     expect(eventTable).not.toHaveTextContent('类型');

@@ -15,7 +15,7 @@ import {
   consumerPresentationText,
 } from '../utils/consumerPresentationBoundary';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
-import { canonicalStockSymbolFromValidation, stocksApi } from '../api/stocks';
+import { resolveCanonicalStockSymbol } from '../utils/stockIdentityLookup';
 import { RoughBulletList, RoughSectionCard, RoughSurfaceIntro } from './roughShellShared';
 
 function parseStockStructureSymbols(value: string | null | undefined): string[] {
@@ -52,8 +52,7 @@ export default function StockStructureDecisionEntryPage() {
     }
 
     try {
-      const validation = await stocksApi.verifyTickerExists(rawSymbol);
-      const canonicalSymbol = canonicalStockSymbolFromValidation(validation);
+      const canonicalSymbol = await resolveCanonicalStockSymbol(rawSymbol);
       if (!canonicalSymbol) {
         setSymbolError(locale === 'en'
           ? 'Use a supported stock symbol.'
@@ -62,7 +61,7 @@ export default function StockStructureDecisionEntryPage() {
       }
 
       setSymbolError('');
-      navigate(localize(`/stocks/${encodeURIComponent(canonicalSymbol.symbol)}/structure-decision`));
+      navigate(localize(`/stocks/${encodeURIComponent(canonicalSymbol)}/structure-decision`));
     } catch {
       setSymbolError(locale === 'en'
         ? 'Stock identity could not be verified.'

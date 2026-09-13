@@ -220,17 +220,17 @@ type HomeDailyResearchView = {
   dataLedger: HomeDailyChangeView[];
 };
 
-const HOME_LOCAL_SURFACE_PANEL_CLASS = 'min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)]';
-const HOME_LOCAL_INSET_PANEL_CLASS = 'min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)]';
+const HOME_LOCAL_SURFACE_PANEL_CLASS = 'min-w-0 rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)]';
+const HOME_LOCAL_INSET_PANEL_CLASS = 'min-w-0 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)]';
 const HOME_LOCAL_RAIL_CARD_CLASS =
-  'home-research-rail-card min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-3.5 py-2.5 md:px-4 md:py-3';
+  'home-research-rail-card min-w-0 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-3.5 py-2.5 md:px-4 md:py-3';
 const HOME_LOCAL_STAGE_CLASS =
   'home-research-stage mx-auto flex w-full max-w-[var(--wolfy-consumer-shell-max,1880px)] min-w-0 flex-col gap-[var(--wolfy-consumer-shell-gap,1rem)] px-[var(--wolfy-consumer-shell-gutter,1rem)] py-[var(--wolfy-consumer-shell-padding-block,1rem)]';
 const HOME_LOCAL_FIXED_GRID_CLASS = 'home-research-fixed-grid w-full min-w-0 gap-3 overflow-visible';
 const HOME_LOCAL_HEADER_STRIP_CLASS =
-  'mb-3 min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-3.5 py-3 md:px-5 md:py-3.5';
+  'mb-3 min-w-0 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-3.5 py-3 md:px-5 md:py-3.5';
 const HOME_LOCAL_SECONDARY_DECK_CLASS =
-  'home-research-secondary-deck mt-3 min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-2.5 md:px-5 md:py-3';
+  'home-research-secondary-deck mt-3 min-w-0 rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-2.5 md:px-5 md:py-3';
 const GUEST_PREVIEW_TIMEOUT_MS = 4_000;
 
 const LazyFullDecisionReportDrawer = lazy(() => import('../components/home-bento/FullDecisionReportDrawer'));
@@ -6337,7 +6337,7 @@ function timelineStatusLabel(status: 'pending' | 'running' | 'completed' | 'fail
 
 function timelineDotTone(status: 'pending' | 'running' | 'completed' | 'failed'): string {
   if (status === 'completed') return 'bg-[color:var(--state-success-text)] ';
-  if (status === 'running') return 'bg-indigo-200 shadow-[0_0_18px_rgba(165,180,252,0.55)] animate-pulse';
+  if (status === 'running') return 'bg-[color:var(--state-info-text)] shadow-[var(--wolfy-shadow-panel)] animate-pulse';
   if (status === 'failed') return 'bg-[color:var(--state-danger-text)] ';
   return 'bg-[var(--wolfy-surface-inset)]';
 }
@@ -6389,7 +6389,7 @@ function InPlaceDecisionSkeleton({
               <span className="font-mono text-sm text-[color:var(--wolfy-text-muted)]">{ticker}</span>
             </div>
           </div>
-          <span className="rounded-md border border-[#3B82F6]/24 bg-[#3B82F6]/10 px-2 py-1 text-[11px] font-medium text-[#93C5FD]">
+          <span className="rounded-md border border-[color:var(--state-info-border)] bg-[color:var(--state-info-bg)] px-2 py-1 text-xs font-medium text-[color:var(--state-info-text)]">
             {locale === 'en' ? 'Running' : '分析中'}
           </span>
         </div>
@@ -6406,7 +6406,7 @@ function InPlaceDecisionSkeleton({
               <span className="pb-1 text-xs text-[color:var(--wolfy-text-muted)]">/100</span>
             </div>
             <div className="mt-4 h-1 overflow-hidden rounded-full bg-[var(--wolfy-surface-inset)]">
-              <div className="h-full w-1/2 rounded-full bg-[#3B82F6]" />
+              <div className="h-full w-1/2 rounded-full bg-[color:var(--state-info-text)]" />
             </div>
           </div>
         </div>

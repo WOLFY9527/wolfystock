@@ -71,15 +71,15 @@ def test_manifest_schema_preserves_baseline_and_complete_surface_counts() -> Non
     result = topology.validate_manifest(manifest)
 
     assert result["status"] == "valid"
-    assert result["baselineBackendTests"] == 7_609
+    assert result["baselineBackendTests"] == 7_313
     assert result["backendTests"] == 8_404
-    assert result["vitestFiles"] == 181
+    assert result["vitestFiles"] == 182
     assert result["playwrightSpecs"] == 72
     assert result["playwrightProjectCases"] == 812
     assert manifest["backend"]["baselineCapture"] == {
         "baseSha": topology.BASE_SHA,
-        "count": 7_609,
-        "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4",
+        "count": 7_313,
+        "sha256": "80412d5648733e6c8f24c47a1963afd6fd81e787945c867cc14df64d755ae9dc",
     }
 
 
@@ -99,7 +99,7 @@ def test_manifest_validator_preserves_explicit_historical_baseline_collection_ga
 
     result = topology.validate_manifest(broken)
 
-    assert result["baselineBackendTests"] == 7_609
+    assert result["baselineBackendTests"] == 7_313
     assert result["backendTests"] == len(current_ids)
 
 
@@ -194,7 +194,7 @@ def test_vitest_ownership_has_explicit_milestones_and_identifies_large_files() -
     manifest = load_manifest()
     entries = manifest["vitest"]["files"]
 
-    assert len(entries) == len({entry["path"] for entry in entries}) == 181
+    assert len(entries) == len({entry["path"] for entry in entries}) == 182
     assert {entry["owner"] for entry in entries} <= set(manifest["vitest"]["owners"])
     assert any(entry["owner"] == "milestone_t448_consumer_product" for entry in entries)
     assert any(entry["owner"] == "milestone_t451_auth_session" for entry in entries)
