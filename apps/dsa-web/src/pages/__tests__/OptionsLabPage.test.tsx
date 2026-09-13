@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OptionsLabPage, { OptionsLabErrorBoundary } from '../OptionsLabPage';
 import { optionsLabApi } from '../../api/optionsLab';
+import type { OptionsUnderlyingSnapshot } from '../../api/optionsLab';
 import type { OptionsResearchReadiness } from '../../types/researchReadiness';
 import { findConsumerRawLeakage } from '../../test-utils/consumerRawLeakageGuard';
 
@@ -339,6 +340,7 @@ function buildStrategyAnalyzerResponse(overrides: Record<string, unknown> = {}) 
 function mockHappyPath(
   readiness?: OptionsResearchReadiness | null,
   optionsChainReadinessView?: Record<string, unknown> | null,
+  underlyingIdentity?: OptionsUnderlyingSnapshot['identity'],
 ) {
   vi.mocked(optionsLabApi.getUnderlyingSummary).mockResolvedValue(withOptionsReadiness({
     symbol: 'TEM',
@@ -349,6 +351,7 @@ function mockHappyPath(
       source: OPTIONS_DEMO_FIXTURE_SOURCE,
       asOf: OPTIONS_DEMO_FIXTURE_TIMESTAMP,
       freshness: 'mock',
+      identity: underlyingIdentity,
     },
     optionsAvailability: {
       supported: true,
@@ -389,6 +392,7 @@ function mockHappyPath(
       source: OPTIONS_DEMO_FIXTURE_SOURCE,
       asOf: OPTIONS_DEMO_FIXTURE_TIMESTAMP,
       freshness: 'mock',
+      identity: underlyingIdentity,
     },
     calls: [
       {
@@ -853,6 +857,24 @@ describe('OptionsLabPage', () => {
     expect(vi.mocked(optionsLabApi.analyzeStrategies)).not.toHaveBeenCalled();
   });
 
+  it('renders only an explicitly resolved typed underlying name and never repeats a fallback ticker', async () => {
+    mockHappyPath(undefined, undefined, {
+      canonicalSymbol: 'TEM',
+      displaySymbol: 'TEM',
+      displayName: 'Tempus AI',
+      displayNameState: 'resolved',
+      displayNameProvenance: 'fixture',
+      exchange: 'NASDAQ',
+    });
+
+    renderPage({ autoRun: false });
+
+    const productHero = await screen.findByTestId('options-lab-product-hero');
+    expect(productHero).toHaveTextContent('TEM · Tempus AI');
+    expect(productHero).not.toHaveTextContent('TEM · TEM');
+    expect(optionsLabPageSource).not.toMatch(/recordValue\((?:summary|chain)\?\.underlying/);
+  });
+
   it('runs strategy comparison only after the explicit comparison action', async () => {
     renderPage({ autoRun: false });
 
@@ -931,7 +953,8 @@ describe('OptionsLabPage', () => {
     expect(productHero).toHaveTextContent('期权研究首读');
     await waitFor(() => {
       expect(productHero).toHaveTextContent('TEM');
-      expect(productHero).toHaveTextContent('TEM · 演示标的');
+      expect(productHero).toHaveTextContent('TEM');
+      expect(productHero).not.toHaveTextContent('TEM · TEM');
       expect(productHero).toHaveTextContent('US · 演示/延迟数据');
       expect(productHero).toHaveTextContent('策略结构可比');
       expect(productHero).toHaveTextContent('演示样本');

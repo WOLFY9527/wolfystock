@@ -199,6 +199,8 @@ export type SymbolResearchStatus = 'ready' | 'partial' | 'blocked' | 'unknown' |
 
 export type SymbolResearchIdentity = {
   name?: string | null;
+  displayNameState?: 'resolved' | 'symbol_fallback' | 'unresolved' | 'unavailable' | 'unknown' | string | null;
+  displayNameProvenance?: 'authoritative' | 'fixture' | 'demo' | 'unknown' | string | null;
   exchange?: string | null;
   sector?: string | null;
   industry?: string | null;

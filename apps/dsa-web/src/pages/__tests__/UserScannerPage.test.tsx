@@ -2849,6 +2849,19 @@ describe('UserScannerPage', () => {
     expect(await screen.findByTestId('scanner-diagnostics-panel')).toBeInTheDocument();
   });
 
+  it('does not promote an unproven scanner name into the compact symbol title', async () => {
+    const tickerFallback = makeCandidate({ symbol: 'AAPL', name: 'AAPL', companyName: 'AAPL', rank: 1 });
+    getRun.mockResolvedValue(makeRunDetail({
+      shortlist: [tickerFallback],
+      selected: [tickerFallback],
+    }));
+    renderUserScannerPage();
+
+    const status = await screen.findByTestId('scanner-status-strip');
+    expect(status).toHaveTextContent('AAPL');
+    expect(status).not.toHaveTextContent('AAPL · AAPL');
+  });
+
   it('renders the controlled RankingBoard zones with compact filters, bounded detail, and a secondary deck', async () => {
     getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
     renderUserScannerPage();

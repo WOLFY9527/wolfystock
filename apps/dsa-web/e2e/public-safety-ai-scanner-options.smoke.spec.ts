@@ -46,6 +46,14 @@ function metadata() {
 
 function underlying() {
   return {
+    identity: {
+      canonical_symbol: 'TEM',
+      display_symbol: 'TEM',
+      display_name: 'TEM',
+      display_name_state: 'symbol_fallback',
+      display_name_provenance: 'fixture',
+      exchange: 'NASDAQ',
+    },
     price: 52.34,
     change_pct: 1.2,
     source: 'playwright_fixture',
@@ -423,6 +431,9 @@ appTest.describe('options public safety surface', () => {
       await signIn(page, '/zh/options-lab', page.getByRole('heading', { name: '期权实验室' }));
 
       await expect(page.getByRole('heading', { name: '期权实验室' })).toBeVisible({ timeout: 15_000 });
+      const productHero = page.getByTestId('options-lab-product-hero');
+      await expect(productHero).toContainText('TEM');
+      await expect(productHero).not.toContainText('TEM · TEM');
       const consumerAvailability = page.getByTestId('options-lab-consumer-availability');
       await expect(consumerAvailability).toBeVisible();
       await expect(consumerAvailability).toContainText('当前可读');

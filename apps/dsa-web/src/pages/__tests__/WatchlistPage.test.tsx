@@ -199,6 +199,7 @@ function makePartialPacketReadiness(asOf: string): NonNullable<WatchlistItem['re
 function makeItem(overrides: Partial<WatchlistItem>): WatchlistItem {
   const symbol = overrides.symbol ?? 'NVDA';
   const market = overrides.market ?? 'us';
+  const name = Object.prototype.hasOwnProperty.call(overrides, 'name') ? overrides.name ?? null : 'NVIDIA';
   return {
     id: 1,
     symbol,
@@ -207,8 +208,12 @@ function makeItem(overrides: Partial<WatchlistItem>): WatchlistItem {
       canonicalSymbol: symbol,
       displaySymbol: symbol,
       market,
+      displayName: name,
+      displayNameState: 'resolved',
+      displayNameProvenance: 'authoritative',
+      identityState: 'resolved',
     },
-    name: 'NVIDIA',
+    name,
     source: 'scanner',
     scannerRunId: 42,
     scannerRank: 1,
@@ -818,7 +823,7 @@ describe('WatchlistPage', () => {
     fireEvent.click(within(board).getByRole('button', { name: '查看 AAPL 详情' }));
     const detail = screen.getByTestId('watchlist-consumer-detail-panel');
     expect(detail).toHaveTextContent('AAPL');
-    expect(detail).toHaveTextContent('Apple · US');
+    expect(detail).toHaveTextContent('Apple · NASDAQ');
     expect(detail).toHaveTextContent('最新报价 $190.3');
     expect(detail).toHaveTextContent('资料缺口：基本面、事件、同业');
     expect(detail).toHaveTextContent('下一步：查看个股结构');
@@ -1330,7 +1335,8 @@ describe('WatchlistPage', () => {
     const row = await screen.findByTestId('watchlist-row-600519');
     const primaryRegion = screen.getByTestId('watchlist-board-shell');
     expect(row).toHaveTextContent('600519');
-    expect(row).toHaveTextContent('A股 600519');
+    expect(row).toHaveTextContent('A股');
+    expect(row).not.toHaveTextContent('600519 · 600519');
     expect(row).toHaveTextContent('报价待补');
     expect(row).toHaveTextContent('数据待补');
     expect(row).toHaveTextContent('待扫描');
@@ -1360,6 +1366,32 @@ describe('WatchlistPage', () => {
     fireEvent.click(within(row).getByRole('button', { name: '查看个股结构 600519' }));
     expect(screen.getByText('stock structure')).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/zh/stocks/600519/structure-decision');
+  });
+
+  it('does not repeat a ticker that the API explicitly classifies as a fallback display name', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [makeItem({
+        id: 72,
+        symbol: 'AAPL',
+        market: 'us',
+        name: 'AAPL',
+        identity: {
+          canonicalSymbol: 'AAPL',
+          displaySymbol: 'AAPL',
+          displayName: 'AAPL',
+          displayNameState: 'symbol_fallback',
+          displayNameProvenance: 'unknown',
+          market: 'us',
+          identityState: 'unresolved',
+        },
+      })],
+    });
+
+    renderWatchlist();
+
+    const row = await screen.findByTestId('watchlist-row-AAPL');
+    expect(row).toHaveTextContent('AAPL');
+    expect(row).not.toHaveTextContent('AAPL · AAPL');
   });
 
   it('renders row decision context for partial packets without raw diagnostics or advice wording', async () => {
@@ -2171,7 +2203,7 @@ describe('WatchlistPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '查看详情 TSM' }));
 
     await waitFor(() => expect(within(detailRail).getByText('TSM')).toBeInTheDocument());
-    expect(within(detailRail).getByText('TSMC')).toBeInTheDocument();
+    expect(detailRail).toHaveTextContent('TSMC');
   });
 
   it('renders the user alerts panel inside the detail rail for the selected symbol without route or nav changes', async () => {

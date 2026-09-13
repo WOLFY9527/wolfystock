@@ -25,6 +25,7 @@ import {
   type OptionsUnderlyingSummaryResponse,
 } from '../api/optionsLab';
 import type { OptionsResearchReadiness } from '../types/researchReadiness';
+import { presentConsumerSymbolIdentity } from '../utils/consumerSymbolIdentityPresentation';
 import {
   CompactFilterBar,
   ConsoleDisclosure,
@@ -451,10 +452,16 @@ function sourceContextLabel(value?: string | null): string {
 
 function underlyingDisplayName(summary: OptionsUnderlyingSummaryResponse | null, chain: OptionsChainResponse | null): string {
   const symbol = summary?.symbol || chain?.symbol || '--';
-  const underlying = recordValue(summary?.underlying) || recordValue(chain?.underlying);
-  const candidate = [underlying?.displayName, underlying?.name, underlying?.companyName]
-    .find((value): value is string => typeof value === 'string' && value.trim().length > 0);
-  return candidate ? `${symbol} · ${candidate.trim()}` : `${symbol} · 演示标的`;
+  const underlying = summary?.underlying || chain?.underlying;
+  return presentConsumerSymbolIdentity({
+    canonicalSymbol: symbol,
+    displaySymbol: underlying?.identity?.displaySymbol,
+    displayName: underlying?.identity?.displayName,
+    displayNameState: underlying?.identity?.displayNameState,
+    market: summary?.market || chain?.market,
+    exchange: underlying?.identity?.exchange,
+    provenance: underlying?.identity?.displayNameProvenance,
+  }).combinedLabel;
 }
 
 function underlyingContextLine(summary: OptionsUnderlyingSummaryResponse | null, chain: OptionsChainResponse | null): string {

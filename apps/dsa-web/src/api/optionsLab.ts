@@ -16,6 +16,14 @@ export type OptionsUnderlyingSnapshot = {
   source: string;
   asOf: string;
   freshness: OptionsFreshness;
+  identity?: {
+    canonicalSymbol: string;
+    displaySymbol: string;
+    displayName?: string | null;
+    displayNameState: 'resolved' | 'symbol_fallback' | 'unresolved' | 'unavailable' | 'unknown' | string;
+    displayNameProvenance: 'authoritative' | 'fixture' | 'demo' | 'unknown' | string;
+    exchange?: string | null;
+  } | null;
 };
 
 export type OptionsAvailability = {
@@ -83,6 +91,7 @@ export type OptionContract = {
 
 export type OptionsChainResponse = {
   symbol: string;
+  market?: string;
   expiration: string;
   underlying: OptionsUnderlyingSnapshot | null;
   calls: OptionContract[];

@@ -286,7 +286,14 @@ class WatchlistService:
         return None
 
     @classmethod
-    def _identity_state(cls, *, symbol: Any, market: Any, display_name: Any = None, exchange: Any = None) -> str:
+    def _identity_state(
+        cls,
+        *,
+        symbol: Any,
+        market: Any,
+        display_name_state: Any = None,
+        exchange: Any = None,
+    ) -> str:
         precheck = validate_consumer_symbol_precheck(
             cls._optional_str(symbol),
             market=cls._optional_str(market),
@@ -297,9 +304,26 @@ class WatchlistService:
             return "unknown"
         if precheck.status == "unavailable":
             return "unavailable"
-        if cls._optional_str(display_name) or cls._optional_str(exchange):
+        if cls._optional_str(display_name_state) == "resolved" or cls._optional_str(exchange):
             return "resolved"
         return "unresolved"
+
+    @classmethod
+    def _display_name_state(cls, packet_identity: Dict[str, Any]) -> str:
+        state = (cls._optional_str(packet_identity.get("displayNameState")) or "").lower()
+        if state in {"resolved", "symbol_fallback", "unresolved", "unavailable", "unknown"}:
+            return state
+        # A persisted legacy name has no machine-readable proof of being a
+        # company name. Keep it available to consumers, but do not present it
+        # as resolved identity.
+        return "unresolved"
+
+    @classmethod
+    def _display_name_provenance(cls, packet_identity: Dict[str, Any]) -> str:
+        provenance = (cls._optional_str(packet_identity.get("displayNameProvenance")) or "").lower()
+        if provenance in {"authoritative", "fixture", "demo", "unknown"}:
+            return provenance
+        return "unknown"
 
     @classmethod
     def _build_symbol_identity_payload(cls, item: Dict[str, Any], packet_identity: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -311,16 +335,24 @@ class WatchlistService:
             or canonical_symbol
         )
         market = cls._optional_str(item.get("market")) or cls._optional_str(packet_identity.get("market")) or "unknown"
-        display_name = (
-            cls._optional_str(item.get("name"))
-            or cls._optional_str(packet_identity.get("displayName"))
+        packet_display_name = (
+            cls._optional_str(packet_identity.get("displayName"))
             or cls._optional_str(packet_identity.get("name"))
         )
+        packet_display_name_state = cls._optional_str(packet_identity.get("displayNameState"))
+        # A packet that declares a name state owns the corresponding name.
+        # Never combine its resolved-state claim with a separately persisted
+        # legacy watchlist name, which may only be a ticker fallback.
+        display_name = packet_display_name if packet_display_name_state is not None else (
+            cls._optional_str(item.get("name")) or packet_display_name
+        )
         exchange = cls._optional_str(packet_identity.get("exchange"))
+        display_name_state = cls._display_name_state(packet_identity)
+        display_name_provenance = cls._display_name_provenance(packet_identity)
         identity_state = cls._identity_state(
             symbol=canonical_symbol,
             market=market,
-            display_name=display_name,
+            display_name_state=display_name_state,
             exchange=exchange,
         )
         return {
@@ -329,6 +361,8 @@ class WatchlistService:
             "market": market,
             "exchange": exchange,
             "display_name": display_name,
+            "display_name_state": display_name_state,
+            "display_name_provenance": display_name_provenance,
             "identity_state": identity_state,
         }
 
@@ -687,7 +721,14 @@ class WatchlistService:
             packet = {
                 "symbol": symbol,
                 "market": market or "unknown",
-                "identity": {"name": None, "exchange": None, "sector": None, "industry": None},
+                "identity": {
+                    "name": None,
+                    "displayNameState": "unresolved",
+                    "displayNameProvenance": "unknown",
+                    "exchange": None,
+                    "sector": None,
+                    "industry": None,
+                },
                 "quote": {"state": "unknown", "price": None, "changePercent": None, "asOf": None},
                 "missingData": ["quote", "price_history", "structure_analysis", "fundamentals", "filing_event_catalyst", "peer_benchmark"],
                 "researchStatus": "blocked",
@@ -705,6 +746,8 @@ class WatchlistService:
             "canonicalSymbol": symbol_identity["canonical_symbol"],
             "displaySymbol": symbol_identity["display_symbol"],
             "displayName": symbol_identity["display_name"],
+            "displayNameState": symbol_identity["display_name_state"],
+            "displayNameProvenance": symbol_identity["display_name_provenance"],
             "identityState": symbol_identity["identity_state"],
         }
         run_id = cls._safe_int(item.get("scanner_run_id"))

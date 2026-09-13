@@ -39,6 +39,7 @@ import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { getConsumerStatusLabel, mapConsumerStatusText } from '../utils/consumerStatusLabels';
 import { consumerPresentationText } from '../utils/consumerPresentationBoundary';
+import { presentConsumerSymbolIdentity } from '../utils/consumerSymbolIdentityPresentation';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { parseResearchWorkspaceSearch } from '../utils/researchWorkspaceRoute';
 import {
@@ -1235,8 +1236,16 @@ function buildEvidenceGapLabels(packet: SymbolResearchPacket, language: 'zh' | '
 }
 
 function buildEvidenceStackRows(packet: SymbolResearchPacket, language: 'zh' | 'en'): EvidenceStackRow[] {
+  const identityPresentation = presentConsumerSymbolIdentity({
+    canonicalSymbol: packet.symbol,
+    displayName: packet.identity.name,
+    displayNameState: packet.identity.displayNameState,
+    market: packet.market,
+    exchange: packet.identity.exchange,
+    provenance: packet.identity.displayNameProvenance,
+  });
   const hasSymbolContext = Boolean(
-    packet.identity.name
+    identityPresentation.displayName
       || packet.identity.exchange
       || packet.identity.sector
       || packet.identity.industry,
@@ -3324,10 +3333,15 @@ function StockResearchPacketPanel({
   const fundamentalsRows = buildFundamentalsReadinessRows(packet, language);
   const fundamentalsCopy = safeOptionalConsumerText(packet.fundamentals.consumerSafeCopy, language);
   const fundamentalsAction = safeFundamentalsAction(packet.fundamentals.providerNeutralNextDataAction, language);
-  const identityLabel = [
-    safeOptionalConsumerText(packet.identity.name, language),
-    safeOptionalConsumerText(packet.market, language),
-  ].filter(Boolean).join(' · ') || packet.symbol;
+  const identityPresentation = presentConsumerSymbolIdentity({
+    canonicalSymbol: packet.symbol,
+    displayName: safeOptionalConsumerText(packet.identity.name, language),
+    displayNameState: packet.identity.displayNameState,
+    market: safeOptionalConsumerText(packet.market, language),
+    exchange: safeOptionalConsumerText(packet.identity.exchange, language),
+    provenance: packet.identity.displayNameProvenance,
+  });
+  const identityLabel = identityPresentation.contextLabel || identityPresentation.marketContext || packet.symbol;
 
   return (
     <div className="grid gap-3" data-testid="stock-research-packet-panel">

@@ -346,6 +346,14 @@ def test_summary_endpoint_returns_safe_normalized_fixture_response() -> None:
         assert payload["metadata"]["noOrderPlacement"] is True
         assert payload["limitations"]["optionsAreHighRisk"] is True
         assert payload["limitations"]["dataMayBeDelayedOrStale"] is True
+        assert payload["underlying"]["identity"] == {
+            "canonicalSymbol": "TEM",
+            "displaySymbol": "TEM",
+            "displayName": None,
+            "displayNameState": "unresolved",
+            "displayNameProvenance": "fixture",
+            "exchange": None,
+        }
     finally:
         client.close()
 
@@ -404,7 +412,20 @@ def test_summary_and_expirations_endpoint_mappers_preserve_alias_contracts() -> 
         symbol="TEM",
         market="us",
         currency="USD",
-        underlying={"symbol": "TEM", "price": 52.4},
+        underlying={
+            "price": 52.4,
+            "source": "synthetic_fixture",
+            "asOf": "2026-05-06T14:30:00Z",
+            "freshness": "synthetic_delayed",
+            "identity": {
+                "canonicalSymbol": "TEM",
+                "displaySymbol": "TEM",
+                "displayName": None,
+                "displayNameState": "unresolved",
+                "displayNameProvenance": "fixture",
+                "exchange": None,
+            },
+        },
         options_availability={
             "supported": True,
             "provider": "synthetic_fixture",
@@ -430,7 +451,22 @@ def test_summary_and_expirations_endpoint_mappers_preserve_alias_contracts() -> 
         "currency": "USD",
         "observationOnly": True,
         "decisionGrade": False,
-        "underlying": {"symbol": "TEM", "price": 52.4},
+        "underlying": {
+            "price": 52.4,
+            "changePct": None,
+            "source": "synthetic_fixture",
+            "asOf": "2026-05-06T14:30:00Z",
+            "freshness": "synthetic_delayed",
+            "providerQuality": None,
+            "identity": {
+                "canonicalSymbol": "TEM",
+                "displaySymbol": "TEM",
+                "displayName": None,
+                "displayNameState": "unresolved",
+                "displayNameProvenance": "fixture",
+                "exchange": None,
+            },
+        },
         "optionsAvailability": {
             "supported": True,
             "provider": "synthetic_fixture",

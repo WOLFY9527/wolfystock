@@ -327,6 +327,8 @@ class WatchlistApiTestCase(unittest.TestCase):
                 "market": "us",
                 "identity": {
                     "name": "Apple Inc.",
+                    "displayNameState": "resolved",
+                    "displayNameProvenance": "authoritative",
                     "exchange": "NASDAQ",
                     "sector": "Technology",
                     "industry": "Consumer Electronics",
@@ -362,7 +364,7 @@ class WatchlistApiTestCase(unittest.TestCase):
             json={
                 "symbol": "aapl",
                 "market": "us",
-                "name": "Apple Inc.",
+                "name": "AAPL",
                 "source": "scanner",
                 "scanner_score": 88,
                 "score_status": "partial",
@@ -379,6 +381,8 @@ class WatchlistApiTestCase(unittest.TestCase):
                 "market": "us",
                 "exchange": "NASDAQ",
                 "display_name": "Apple Inc.",
+                "display_name_state": "resolved",
+                "display_name_provenance": "authoritative",
                 "identity_state": "resolved",
             },
         )
@@ -393,7 +397,12 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(payload["rowResearchPacket"]["researchReadiness"], payload["research_readiness"])
         self.assertEqual(payload["rowResearchPacket"]["identity"]["canonicalSymbol"], "AAPL")
         self.assertEqual(payload["rowResearchPacket"]["identity"]["displaySymbol"], "AAPL")
+        self.assertEqual(payload["rowResearchPacket"]["identity"]["displayNameState"], "resolved")
+        self.assertEqual(payload["rowResearchPacket"]["identity"]["displayNameProvenance"], "authoritative")
         self.assertEqual(payload["rowResearchPacket"]["identity"]["identityState"], "resolved")
+        list_payload = self.client.get("/api/v1/watchlist/items").json()["items"][0]
+        self.assertEqual(list_payload["identity"], payload["identity"])
+        self.assertEqual(list_payload["rowResearchPacket"]["identity"]["displayName"], "Apple Inc.")
 
         available_market = {
             "quote": {"state": "available", "asOf": "2026-08-25T08:00:00Z"},

@@ -68,6 +68,8 @@ class WatchlistRowResearchIdentityResponse(BaseModel):
     canonicalSymbol: Optional[str] = None
     displaySymbol: Optional[str] = None
     displayName: Optional[str] = None
+    displayNameState: Optional[Literal["resolved", "symbol_fallback", "unresolved", "unavailable", "unknown"]] = None
+    displayNameProvenance: Optional[Literal["authoritative", "fixture", "demo", "unknown"]] = None
     identityState: Optional[str] = None
 
 
@@ -77,6 +79,8 @@ class WatchlistSymbolIdentityResponse(BaseModel):
     market: str
     exchange: Optional[str] = None
     display_name: Optional[str] = None
+    display_name_state: Literal["resolved", "symbol_fallback", "unresolved", "unavailable", "unknown"] = "unresolved"
+    display_name_provenance: Literal["authoritative", "fixture", "demo", "unknown"] = "unknown"
     identity_state: str
 
 

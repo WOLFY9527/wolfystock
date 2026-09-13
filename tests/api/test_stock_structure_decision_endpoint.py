@@ -478,7 +478,14 @@ def test_research_packet_endpoint_assembles_existing_data_and_missing_families(m
     assert fake_evidence.calls == [["AAPL"]]
     assert payload["symbol"] == "AAPL"
     assert payload["market"] == "us"
-    assert payload["identity"] == {"name": "Apple", "exchange": None, "sector": None, "industry": None}
+    assert payload["identity"] == {
+        "name": "Apple",
+        "displayNameState": "resolved",
+        "displayNameProvenance": "authoritative",
+        "exchange": None,
+        "sector": None,
+        "industry": None,
+    }
     assert payload["quote"] == {
         "state": "available",
         "price": 214.55,
@@ -821,6 +828,8 @@ def test_research_packet_endpoint_uses_us_fundamentals_service_for_company_conte
     assert fake_us_fundamentals.calls == ["AAPL"]
     assert payload["identity"] == {
         "name": "Apple Inc.",
+        "displayNameState": "resolved",
+        "displayNameProvenance": "authoritative",
         "exchange": None,
         "sector": "Technology",
         "industry": "Consumer Electronics",

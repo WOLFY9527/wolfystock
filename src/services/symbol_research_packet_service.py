@@ -77,11 +77,82 @@ def consumer_safe_stock_name(value: object, symbol: str) -> Optional[str]:
             "trustlevel",
             "reasoncode",
             "sourcetype",
+        )
+    ):
+        return None
+    return text
+
+
+def _consumer_safe_display_name(value: object) -> Optional[str]:
+    """Retain a source-declared name without treating ticker spelling as state."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if any(
+        marker in text.lower()
+        for marker in (
+            "traceback",
+            "http://",
+            "https://",
+            "api_key",
+            "apikey",
+            "secret",
+            "cookie",
+            "session",
+            "token",
+            "trustlevel",
+            "reasoncode",
+            "sourcetype",
             "fallback",
         )
     ):
         return None
     return text
+
+
+def _display_name_provenance(*sources: object) -> str:
+    source_text = " ".join(str(source or "").strip().lower() for source in sources)
+    if "fixture" in source_text or "synthetic" in source_text or "mock" in source_text:
+        return "fixture"
+    if "demo" in source_text or "example" in source_text:
+        return "demo"
+    return "authoritative"
+
+
+def _source_can_resolve_display_name(source: object) -> bool:
+    """Only an available source may establish a resolved display name."""
+    source_text = str(source or "").strip().lower()
+    return not any(marker in source_text for marker in ("fallback", "unavailable", "unknown", "missing"))
+
+
+def _resolved_identity_name(
+    *,
+    fundamentals: Mapping[str, Any],
+    quote_payload: Mapping[str, Any],
+    history_payload: Mapping[str, Any],
+    fundamentals_source: object = None,
+) -> tuple[Optional[str], str, str]:
+    """Use declared identity fields as evidence; never infer name state from text."""
+    candidates = (
+        (_get_nested(fundamentals, "companyName"), fundamentals_source or fundamentals.get("source"), fundamentals),
+        (_get_nested(quote_payload, "stock_name", "stockName"), quote_payload.get("source"), quote_payload),
+        (_get_nested(history_payload, "stock_name", "stockName"), history_payload.get("source"), history_payload),
+    )
+    for candidate, source, payload in candidates:
+        if not _source_can_resolve_display_name(source) or _is_true(
+            payload,
+            "is_fallback",
+            "isFallback",
+            "is_partial",
+            "isPartial",
+            "is_unavailable",
+            "isUnavailable",
+        ):
+            continue
+        name = _consumer_safe_display_name(candidate)
+        if name:
+            return name, "resolved", _display_name_provenance(source)
+    return None, "unresolved", "unknown"
 
 
 def _get_nested(payload: Mapping[str, Any], *keys: str) -> Any:
@@ -702,7 +773,14 @@ def _fail_closed_research_packet(precheck: ConsumerSymbolPrecheck) -> dict[str, 
     return {
         "symbol": normalized_symbol,
         "market": precheck.market or "unknown",
-        "identity": {"name": None, "exchange": None, "sector": None, "industry": None},
+        "identity": {
+            "name": None,
+            "displayNameState": "unresolved",
+            "displayNameProvenance": "unknown",
+            "exchange": None,
+            "sector": None,
+            "industry": None,
+        },
         "quote": {"state": "unknown", "price": None, "changePercent": None, "asOf": None},
         "history": {"state": "unknown", "bars": 0, "period": "daily", "asOf": None},
         "structure": {"state": "unknown", "label": None, "confidence": None, "asOf": None},
@@ -753,7 +831,14 @@ def build_symbol_research_packet_from_parts(stock_code: str, *, market: Optional
     return {
         "symbol": symbol,
         "market": precheck.market or "unknown",
-        "identity": {"name": None, "exchange": None, "sector": None, "industry": None},
+        "identity": {
+            "name": None,
+            "displayNameState": "unresolved",
+            "displayNameProvenance": "unknown",
+            "exchange": None,
+            "sector": None,
+            "industry": None,
+        },
         "quote": quote,
         "history": history,
         "structure": structure,
@@ -849,11 +934,11 @@ def build_symbol_research_packet(stock_code: str, *, market: Optional[str] = Non
         "peer": peer,
     }
     research_status = _research_status(packet_parts)
-    name = consumer_safe_stock_name(
-        _get_nested(fundamentals, "companyName")
-        or _get_nested(_as_mapping(quote_payload), "stock_name", "stockName")
-        or _get_nested(_as_mapping(history_payload), "stock_name", "stockName"),
-        symbol,
+    name, display_name_state, display_name_provenance = _resolved_identity_name(
+        fundamentals=fundamentals,
+        quote_payload=_as_mapping(quote_payload),
+        history_payload=_as_mapping(history_payload),
+        fundamentals_source=_as_mapping(us_fundamentals_payload).get("source"),
     )
     sector = consumer_safe_stock_name(_get_nested(fundamentals, "sector"), symbol)
     industry = consumer_safe_stock_name(_get_nested(fundamentals, "industry"), symbol)
@@ -861,7 +946,14 @@ def build_symbol_research_packet(stock_code: str, *, market: Optional[str] = Non
     return {
         "symbol": symbol,
         "market": precheck.market or "unknown",
-        "identity": {"name": name, "exchange": None, "sector": sector, "industry": industry},
+        "identity": {
+            "name": name,
+            "displayNameState": display_name_state,
+            "displayNameProvenance": display_name_provenance,
+            "exchange": None,
+            "sector": sector,
+            "industry": industry,
+        },
         "quote": quote,
         "history": history,
         "structure": structure,

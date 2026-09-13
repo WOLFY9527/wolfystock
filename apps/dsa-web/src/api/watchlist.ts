@@ -352,6 +352,8 @@ function normalizeRowResearchPacket(
       canonicalSymbol: normalizeOptionalText(identity.canonicalSymbol)?.toUpperCase() ?? symbol,
       displaySymbol: normalizeOptionalText(identity.displaySymbol)?.toUpperCase() ?? symbol,
       displayName: normalizeOptionalText(identity.displayName) ?? normalizeOptionalText(identity.name),
+      displayNameState: normalizeOptionalText(identity.displayNameState) ?? 'unknown',
+      displayNameProvenance: normalizeOptionalText(identity.displayNameProvenance) ?? 'unknown',
       identityState: normalizeOptionalText(identity.identityState) ?? 'unknown',
     },
     savedItemSource: normalizeOptionalText(record.savedItemSource) ?? 'unknown',
@@ -410,6 +412,8 @@ function normalizeWatchlistItem(item: WatchlistItem): WatchlistItem {
       market: normalizeOptionalText(identity.market)?.toLowerCase() ?? item.market,
       exchange: normalizeOptionalText(identity.exchange),
       displayName: normalizeOptionalText(identity.displayName),
+      displayNameState: normalizeOptionalText(identity.displayNameState) ?? 'unknown',
+      displayNameProvenance: normalizeOptionalText(identity.displayNameProvenance) ?? 'unknown',
       identityState: normalizeOptionalText(identity.identityState) ?? 'unknown',
     } : item.identity,
     researchReadiness: normalizeResearchReadiness(researchReadiness)

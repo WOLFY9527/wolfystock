@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from src.services.stock_service import StockService
 from src.services.stock_service_provider_adapter import StockServiceQuoteSnapshot
-from src.services.symbol_research_packet_service import _quote_packet
+from src.services.symbol_research_packet_service import _quote_packet, _resolved_identity_name
 
 
 class StockServiceValidationTestCase(unittest.TestCase):
@@ -155,6 +155,24 @@ class StockServiceValidationTestCase(unittest.TestCase):
 
         self.assertEqual(packet["state"], "stale")
         self.assertIsNone(packet["asOf"])
+        name, state, provenance = _resolved_identity_name(
+            fundamentals={},
+            quote_payload={"stock_name": "AAPL", "source": "provider_runtime"},
+            history_payload={},
+        )
+
+        self.assertEqual(name, "AAPL")
+        self.assertEqual(state, "resolved")
+        self.assertEqual(provenance, "authoritative")
+
+        fallback_name, fallback_state, fallback_provenance = _resolved_identity_name(
+            fundamentals={},
+            quote_payload={"stock_name": "AAPL", "source": "provider_runtime", "is_fallback": True},
+            history_payload={},
+        )
+        self.assertIsNone(fallback_name)
+        self.assertEqual(fallback_state, "unresolved")
+        self.assertEqual(fallback_provenance, "unknown")
 
 
 if __name__ == "__main__":

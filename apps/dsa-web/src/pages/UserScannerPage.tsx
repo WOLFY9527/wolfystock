@@ -113,6 +113,7 @@ import { buildLocalizedPath } from '../utils/localeRouting';
 import { buildResearchWorkspacePath } from '../utils/researchWorkspaceRoute';
 import { serializeCsvCell } from '../utils/csvExport';
 import { normalizeScannerEvidence } from '../utils/evidenceDisplay';
+import { presentConsumerSymbolIdentity } from '../utils/consumerSymbolIdentityPresentation';
 import type { TrustDisclosureBucket } from '../utils/trustDisclosure';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import { getConsumerSafeApiErrorCopy } from '../utils/consumerErrorCopy';
@@ -268,6 +269,22 @@ function withCandidateEvidence(candidate: ScannerCandidate): ScannerCandidateWit
 
 function getCandidateIdentity(candidate: ScannerCandidate): string {
   return normalizeCandidateSymbol(candidate.symbol) || `no-symbol-${candidate.rank}`;
+}
+
+/**
+ * Scanner candidates still expose a legacy `name` field without an explicit
+ * display-name state. It remains available in the detailed source row, but is
+ * deliberately not promoted into the compact symbol/name title until the
+ * scanner contract can prove it is a resolved identity name.
+ */
+function presentScannerCandidateTitle(candidate: ScannerCandidate) {
+  return presentConsumerSymbolIdentity({
+    canonicalSymbol: candidate.symbol,
+    displaySymbol: candidate.symbol,
+    displayName: candidate.companyName || candidate.name,
+    displayNameState: 'unknown',
+    provenance: 'unknown',
+  });
 }
 
 function normalizeScannerMarket(market?: string | null): string | null {
@@ -4038,7 +4055,7 @@ const UserScannerPage: React.FC = () => {
     {
       label: language === 'en' ? 'Top ranked row (observation)' : '排序首位（观察）',
       value: activeDetailCandidate
-        ? `${activeDetailCandidate.symbol || '--'} · ${activeDetailCandidate.companyName || activeDetailCandidate.name || '--'}`
+        ? presentScannerCandidateTitle(activeDetailCandidate).combinedLabel
         : (scannerConclusion.state === 'waiting'
           ? (language === 'en' ? 'Waiting for a scan' : '等待扫描')
           : (language === 'en' ? 'No candidate yet' : '暂无候选')),

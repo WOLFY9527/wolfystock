@@ -237,7 +237,14 @@ async function installCurrentResearchUnavailableRoutes(page: Page) {
   await page.route('**/api/v1/stocks/AAPL/research-packet', (route) => fulfillJson(route, {
     symbol: 'AAPL',
     market: 'us',
-    identity: { name: 'Apple', exchange: 'NASDAQ', sector: 'Technology', industry: 'Hardware' },
+    identity: {
+      name: 'Apple',
+      display_name_state: 'resolved',
+      display_name_provenance: 'fixture',
+      exchange: 'NASDAQ',
+      sector: 'Technology',
+      industry: 'Hardware',
+    },
     quote: { state: 'unavailable', price: null, change_percent: null, as_of: null },
     history: { state: 'unavailable', bars: 0, period: 'daily', as_of: null },
     structure: { state: 'unavailable', label: null, confidence: 'low', as_of: null },

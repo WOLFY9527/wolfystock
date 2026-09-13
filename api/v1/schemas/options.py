@@ -54,6 +54,35 @@ class OptionsMetadata(_OptionsModel):
     live_provider_enabled: bool = Field(default=False, alias="liveProviderEnabled")
 
 
+class OptionsUnderlyingIdentity(_OptionsModel):
+    """Explicit identity projection for a read-only options underlying."""
+
+    canonical_symbol: str = Field(alias="canonicalSymbol")
+    display_symbol: str = Field(alias="displaySymbol")
+    display_name: Optional[str] = Field(default=None, alias="displayName")
+    display_name_state: Literal["resolved", "symbol_fallback", "unresolved", "unavailable", "unknown"] = Field(
+        default="unresolved",
+        alias="displayNameState",
+    )
+    display_name_provenance: Literal["authoritative", "fixture", "demo", "unknown"] = Field(
+        default="unknown",
+        alias="displayNameProvenance",
+    )
+    exchange: Optional[str] = None
+
+
+class OptionsUnderlyingSnapshot(_OptionsModel):
+    """Consumer-safe underlying quote plus typed identity facts."""
+
+    price: Optional[float] = None
+    change_pct: Optional[float] = Field(default=None, alias="changePct")
+    source: str = "unknown"
+    as_of: str = Field(default="", alias="asOf")
+    freshness: str = "unknown"
+    provider_quality: Optional[str] = Field(default=None, alias="providerQuality")
+    identity: Optional[OptionsUnderlyingIdentity] = None
+
+
 class OptionExpirationItem(_OptionsModel):
     date: str
     dte: int
@@ -108,7 +137,7 @@ class OptionUnderlyingSummaryResponse(_OptionsModel):
     currency: str = "USD"
     observation_only: bool = Field(default=True, alias="observationOnly")
     decision_grade: bool = Field(default=False, alias="decisionGrade")
-    underlying: Dict[str, Any]
+    underlying: OptionsUnderlyingSnapshot
     options_availability: Dict[str, Any] = Field(alias="optionsAvailability")
     as_of: str = Field(alias="asOf")
     source: str
@@ -128,7 +157,7 @@ class OptionUnderlyingSummaryResponse(_OptionsModel):
             contracts=[],
             scenario_coverage="missing_chain_data",
             source_hint=self.source,
-            freshness_hint=str(self.underlying.get("freshness") or ""),
+            freshness_hint=str(self.underlying.freshness or ""),
         )
         self.options_readiness, self.options_research_readiness = _ensure_readiness_aliases(
             existing_readiness=self.options_readiness,
@@ -177,7 +206,7 @@ class OptionChainResponse(_OptionsModel):
     market: str
     observation_only: bool = Field(default=True, alias="observationOnly")
     decision_grade: bool = Field(default=False, alias="decisionGrade")
-    underlying: Dict[str, Any]
+    underlying: OptionsUnderlyingSnapshot
     expiration: Optional[str] = None
     calls: List[OptionContract] = Field(default_factory=list)
     puts: List[OptionContract] = Field(default_factory=list)
@@ -206,7 +235,7 @@ class OptionChainResponse(_OptionsModel):
             contracts=contracts,
             scenario_coverage="single_contract",
             source_hint=self.source,
-            freshness_hint=str(self.underlying.get("freshness") or ""),
+            freshness_hint=str(self.underlying.freshness or ""),
         )
         self.options_readiness, self.options_research_readiness = _ensure_readiness_aliases(
             existing_readiness=self.options_readiness,
@@ -218,14 +247,14 @@ class OptionChainResponse(_OptionsModel):
                 metadata=self.metadata,
                 contracts=contracts,
                 source_hint=self.source,
-                freshness_hint=str(self.underlying.get("freshness") or ""),
+                freshness_hint=str(self.underlying.freshness or ""),
             )
         if self.options_chain_readiness is None:
             self.options_chain_readiness = _build_options_chain_readiness(
                 metadata=self.metadata,
                 contracts=contracts,
                 source_hint=self.source,
-                freshness_hint=str(self.underlying.get("freshness") or ""),
+                freshness_hint=str(self.underlying.freshness or ""),
                 selected_expiration=self.expiration,
             )
         return self

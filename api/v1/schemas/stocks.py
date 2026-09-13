@@ -247,7 +247,19 @@ class StockValidationResponse(BaseModel):
 class SymbolResearchIdentity(BaseModel):
     """最小标的身份信息。"""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     name: Optional[str] = Field(None, description="标的名称")
+    display_name_state: Literal["resolved", "symbol_fallback", "unresolved", "unavailable", "unknown"] = Field(
+        "unresolved",
+        alias="displayNameState",
+        description="显示名称的显式解析状态；symbol 本身不是公司名称",
+    )
+    display_name_provenance: Literal["authoritative", "fixture", "demo", "unknown"] = Field(
+        "unknown",
+        alias="displayNameProvenance",
+        description="显示名称的来源边界；fixture/demo 不等同于实时或已验证身份",
+    )
     exchange: Optional[str] = Field(None, description="交易所")
     sector: Optional[str] = Field(None, description="行业板块")
     industry: Optional[str] = Field(None, description="细分行业")

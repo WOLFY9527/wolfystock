@@ -493,6 +493,8 @@ const partialResearchPacket = () => ({
   market: 'us',
   identity: {
     name: 'Apple',
+    displayNameState: 'resolved',
+    displayNameProvenance: 'authoritative',
     exchange: null,
     sector: null,
     industry: null,

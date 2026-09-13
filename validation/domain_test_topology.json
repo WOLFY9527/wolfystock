@@ -42428,8 +42428,8 @@
       }
     },
     "inventory": {
-      "count": 179,
-      "sha256": "6d7eaa40ca1ee69ffa90507d0ad86768c2bf6e64f65ba6364556b76a29a4587b"
+      "count": 180,
+      "sha256": "8428b3a394014aa74b8f1ea1e99186c6c9c272958d90923605d5a8ff77a5ba98"
     },
     "files": [
       {
@@ -43070,6 +43070,10 @@
       },
       {
         "path": "apps/dsa-web/src/utils/__tests__/consumerStatusLabels.test.ts",
+        "owner": "frontend_shared"
+      },
+      {
+        "path": "apps/dsa-web/src/utils/__tests__/consumerSymbolIdentityPresentation.test.ts",
         "owner": "frontend_shared"
       },
       {

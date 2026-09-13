@@ -152,6 +152,14 @@ def test_tem_summary_uses_synthetic_fixture_and_risk_metadata() -> None:
     assert summary.symbol == "TEM"
     assert summary.market == "us"
     assert summary.underlying["price"] == 52.4
+    assert summary.underlying["identity"] == {
+        "canonicalSymbol": "TEM",
+        "displaySymbol": "TEM",
+        "displayName": None,
+        "displayNameState": "unresolved",
+        "displayNameProvenance": "fixture",
+        "exchange": None,
+    }
     assert summary.options_availability["supported"] is True
     assert summary.options_availability["provider"] == "synthetic_fixture"
     assert isinstance(summary.metadata, OptionsLabMetadataModel)

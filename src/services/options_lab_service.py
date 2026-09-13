@@ -1565,13 +1565,34 @@ class OptionsLabService:
     @staticmethod
     def _safe_underlying(fixture: Dict[str, Any]) -> Dict[str, Any]:
         underlying = copy.deepcopy(fixture.get("underlying") or {})
+        raw_identity = underlying.get("identity") if isinstance(underlying.get("identity"), dict) else {}
+        display_name_state = str(raw_identity.get("displayNameState") or "").strip().lower()
+        if display_name_state not in {"resolved", "symbol_fallback", "unresolved", "unavailable", "unknown"}:
+            display_name_state = "unresolved"
+        display_name_provenance = str(raw_identity.get("displayNameProvenance") or "").strip().lower()
+        if display_name_provenance not in {"authoritative", "fixture", "demo", "unknown"}:
+            source_hint = " ".join(
+                str(value or "").strip().lower()
+                for value in (underlying.get("source"), fixture.get("source"), fixture.get("providerName"))
+            )
+            display_name_provenance = "fixture" if any(
+                marker in source_hint for marker in ("fixture", "synthetic", "mock")
+            ) else "unknown"
         return {
             "price": underlying.get("price"),
             "changePct": underlying.get("changePct"),
             "source": underlying.get("source") or fixture.get("source") or "unknown",
-            "asOf": underlying.get("asOf") or fixture.get("chainAsOf"),
+            "asOf": underlying.get("asOf") or fixture.get("chainAsOf") or "",
             "freshness": underlying.get("freshness") or "synthetic_delayed",
             "providerQuality": underlying.get("providerQuality") or fixture.get("providerQuality"),
+            "identity": {
+                "canonicalSymbol": str(raw_identity.get("canonicalSymbol") or fixture.get("symbol") or "").strip().upper(),
+                "displaySymbol": str(raw_identity.get("displaySymbol") or fixture.get("symbol") or "").strip().upper(),
+                "displayName": raw_identity.get("displayName"),
+                "displayNameState": display_name_state,
+                "displayNameProvenance": display_name_provenance,
+                "exchange": raw_identity.get("exchange"),
+            },
         }
 
     def _contracts_for_fixture(self, fixture: Dict[str, Any], include_greeks: bool) -> Iterable[OptionContract]:

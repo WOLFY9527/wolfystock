@@ -105,6 +105,8 @@ export interface WatchlistRowResearchIdentity {
   canonicalSymbol?: string | null;
   displaySymbol?: string | null;
   displayName?: string | null;
+  displayNameState?: string | null;
+  displayNameProvenance?: string | null;
   identityState?: string | null;
 }
 
@@ -165,6 +167,8 @@ export interface WatchlistSymbolIdentity {
   market: string;
   exchange?: string | null;
   displayName?: string | null;
+  displayNameState: string;
+  displayNameProvenance: string;
   identityState: string;
 }
 

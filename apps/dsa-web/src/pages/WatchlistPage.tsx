@@ -48,6 +48,7 @@ import type { InvestorSignalContract } from '../types/scanner';
 import type { WatchlistCatalystExposure, WatchlistItem, WatchlistResearchOverlayResponse, WatchlistResearchPriorityQueueItem, WatchlistResearchReadiness, WatchlistResearchReadinessState, WatchlistScannerLineageV1 } from '../types/watchlist';
 import type { RuleBacktestRunResponse } from '../types/backtest';
 import { describeBooleanEnabled, describeDisplayStatus, type DisplayStatusTone } from '../utils/displayStatus';
+import { presentConsumerSymbolIdentity } from '../utils/consumerSymbolIdentityPresentation';
 import { buildLocalizedPath } from '../utils/localeRouting';
 import {
   buildResearchWorkspacePath,
@@ -202,13 +203,24 @@ function getWatchlistCanonicalIdentity(item: WatchlistItem): WatchlistCanonicalI
   return symbol && market ? { symbol, market } : null;
 }
 
-function getWatchlistDisplaySymbol(item: WatchlistItem): string {
-  return getWatchlistCanonicalIdentity(item)?.symbol || '--';
+function presentWatchlistIdentity(item: WatchlistItem) {
+  const packetIdentity = item.rowResearchPacket?.identity;
+  const identity = item.identity;
+  const packetNameState = packetIdentity?.displayNameState;
+  const packetDisplayName = packetIdentity?.displayName || packetIdentity?.name;
+  return presentConsumerSymbolIdentity({
+    canonicalSymbol: packetIdentity?.canonicalSymbol || identity?.canonicalSymbol || item.symbol,
+    displaySymbol: packetIdentity?.displaySymbol || identity?.displaySymbol,
+    displayName: packetNameState ? packetDisplayName : identity?.displayName || item.name || packetDisplayName,
+    displayNameState: packetNameState || identity?.displayNameState,
+    market: packetIdentity ? item.rowResearchPacket?.market : identity?.market || item.market,
+    exchange: packetIdentity?.exchange || identity?.exchange,
+    provenance: packetIdentity?.displayNameProvenance || identity?.displayNameProvenance,
+  });
 }
 
-function getWatchlistDisplayMarket(item: WatchlistItem): string {
-  const identity = getWatchlistCanonicalIdentity(item);
-  return identity ? formatMarket(identity.market) : '--';
+function getWatchlistDisplaySymbol(item: WatchlistItem): string {
+  return presentWatchlistIdentity(item).primarySymbol;
 }
 
 function getManualResearchInput(value: string): string {
@@ -236,12 +248,10 @@ function formatMarket(value?: string | null): string {
 }
 
 function buildWatchlistIdentityLabel(item: WatchlistItem, language: 'zh' | 'en'): string {
-  const name = normalizeText(item.rowResearchPacket?.identity?.name || item.name);
-  if (name) return name;
-  const symbol = getWatchlistDisplaySymbol(item);
-  const market = getWatchlistDisplayMarket(item);
-  if (symbol && market !== '--') return `${market} ${symbol}`;
-  if (symbol !== '--') return language === 'en' ? `Saved symbol ${symbol}` : `观察标的 ${symbol}`;
+  const identity = presentWatchlistIdentity(item);
+  if (identity.contextLabel) return identity.contextLabel;
+  if (identity.marketContext) return identity.marketContext;
+  if (identity.primarySymbol !== '--') return language === 'en' ? 'Saved symbol' : '观察标的';
   return language === 'en' ? 'Saved symbol' : '观察标的';
 }
 
@@ -1467,7 +1477,6 @@ function WatchlistConsumerObservationBoard({
   const selectedGaps = selected ? getWatchlistConsumerGapLabels(selected, language) : [];
   const packetCopy = selected ? buildWatchlistRowResearchPacketView(selected, language) : null;
   const selectedName = selected ? buildWatchlistIdentityLabel(selected, language) : '';
-  const selectedMarket = selected ? getWatchlistDisplayMarket(selected) : '--';
   const selectedSymbol = selected ? getWatchlistDisplaySymbol(selected) : '--';
   const selectedNext = selected?.rowResearchPacket
     ? (language === 'en' ? 'Review stock structure' : '查看个股结构')
@@ -1585,7 +1594,7 @@ function WatchlistConsumerObservationBoard({
         >
           <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Selected symbol' : '当前标的'}</p>
           <h2 className="mt-1 text-lg font-semibold text-[color:var(--wolfy-text-primary)]">{selectedSymbol}</h2>
-          <p className="mt-1 break-words text-sm text-[color:var(--wolfy-text-secondary)] md:truncate">{selectedName} · {selectedMarket}</p>
+          <p className="mt-1 break-words text-sm text-[color:var(--wolfy-text-secondary)] md:truncate">{selectedName}</p>
           <div className="mt-3 space-y-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
             <p>{language === 'en' ? 'Latest quote' : '最新报价'} {selectedPrice}</p>
             <p>
