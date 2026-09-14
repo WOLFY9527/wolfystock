@@ -6,6 +6,7 @@ export type ApiErrorCategory =
   | 'missing_params'
   | 'validation_error'
   | 'analysis_conflict'
+  | 'rate_limited'
   | 'capability_unavailable'
   | 'llm_not_configured'
   | 'model_tool_incompatible'
@@ -357,27 +358,30 @@ function extractErrorPayloadText(data: unknown): string | null {
   }
 
   const detail = data.detail;
-  if (isRecord(detail)) {
-    return (
-      pickString(detail.message, detail.error)
-      ?? extractValidationDetail(detail.detail)
-      ?? stringifyValue(detail)
-    );
+  const detailRecord = isRecord(detail) ? detail : undefined;
+  const nestedDetailRecord = isRecord(detailRecord?.detail) ? detailRecord.detail : undefined;
+  const records = [data, detailRecord, nestedDetailRecord].filter(
+    (value): value is Record<string, unknown> => Boolean(value),
+  );
+
+  // Prefer an explicitly composed backend-safe message over any structured
+  // metadata. Never stringify a record into consumer-visible payload text.
+  const consumerSafeMessage = records
+    .map((record) => pickString(record.consumerSafeMessage, record.consumer_safe_message))
+    .find((value): value is string => Boolean(value));
+  if (consumerSafeMessage) {
+    return consumerSafeMessage;
   }
 
-  return (
-    pickString(
-      detail,
-      data.message,
-      data.error,
-      data.title,
-      data.reason,
-      data.description,
-      data.msg,
-    )
-    ?? extractValidationDetail(detail)
-    ?? stringifyValue(data)
-  );
+  const message = records
+    .map((record) => pickString(record.message))
+    .find((value): value is string => Boolean(value));
+  if (message) {
+    return message;
+  }
+
+  const detailText = pickString(detail);
+  return detailText ?? extractValidationDetail(detail) ?? null;
 }
 
 function inferParsedErrorFlags(
@@ -756,6 +760,22 @@ export function parseApiError(error: unknown, fallbackMessage?: string): ParsedA
       '持仓账本正忙',
       '持仓账本正在处理另一笔变更，请稍后重试。',
       'portfolio_busy',
+    );
+  }
+
+  // HTTP 429 is authoritative throttling semantics: the backend emits it only
+  // for request-rate limiting (`rate_limited`) and analysis quota limiting
+  // (`quota_pilot_blocked`). Both are transient unless the backend explicitly
+  // says otherwise, so they must not fall through to generic `http_error`.
+  if (status === 429 || code === 'rate_limited' || code === 'quota_pilot_blocked') {
+    const isQuotaPilotBlocked = code === 'quota_pilot_blocked';
+    return buildError(
+      isQuotaPilotBlocked ? '分析额度暂时受限' : '请求过于频繁',
+      isQuotaPilotBlocked
+        ? '当前分析额度试点限制，请稍后重试或联系管理员。'
+        : '操作过于频繁，请稍后重试。',
+      'rate_limited',
+      { retryable: retryable ?? true },
     );
   }
 

@@ -308,4 +308,162 @@ describe('parseApiError', () => {
     expect(parsed.category).toBe('validation_error');
     expect(parsed.title).toBe('IBKR 账户映射冲突');
   });
+
+  describe('consumer-safe structured 409 envelopes', () => {
+    it('prefers the composed scanner message while preserving readiness metadata', () => {
+      const readiness = {
+        state: 'blocked',
+        provider: 'internal-provider-diagnostic',
+        reasonCode: 'missing_quote_snapshot',
+      };
+      const parsed = parseApiError({
+        response: {
+          status: 409,
+          data: {
+            error: 'scanner_data_not_ready',
+            message: 'Scanner data is insufficient for this request.',
+            consumerSafeMessage: 'Scanner data is insufficient for this request.',
+            retryable: false,
+            detail: { dataReadiness: readiness },
+          },
+        },
+      });
+
+      expect(parsed.status).toBe(409);
+      expect(parsed.code).toBe('scanner_data_not_ready');
+      expect(parsed.category).toBe('http_error');
+      expect(parsed.retryable).toBe(false);
+      expect(parsed.message).toBe('Scanner data is insufficient for this request.');
+      expect(parsed.rawMessage).toBe('Scanner data is insufficient for this request.');
+      expect(parsed.details).toEqual({
+        error: 'scanner_data_not_ready',
+        message: 'Scanner data is insufficient for this request.',
+        consumerSafeMessage: 'Scanner data is insufficient for this request.',
+        retryable: false,
+        detail: { dataReadiness: readiness },
+      });
+      expect(parsed.message).not.toContain('provider');
+      expect(parsed.message).not.toContain('{');
+    });
+
+    it('uses an outer safe conflict message instead of stringifying structured detail', () => {
+      const parsed = parseApiError({
+        response: {
+          status: 409,
+          data: {
+            error: 'conflict',
+            message: 'Portfolio import conflicts with existing records.',
+            detail: {
+              reasonCode: 'portfolio_conflict',
+              currentState: 'internal-ledger-state',
+            },
+          },
+        },
+      });
+
+      expect(parsed.category).toBe('http_error');
+      expect(parsed.message).toBe('Portfolio import conflicts with existing records.');
+      expect(parsed.rawMessage).toBe('Portfolio import conflicts with existing records.');
+      expect(parsed.details).toMatchObject({
+        detail: {
+          reasonCode: 'portfolio_conflict',
+          currentState: 'internal-ledger-state',
+        },
+      });
+      expect(parsed.message).not.toContain('currentState');
+      expect(parsed.message).not.toContain('{');
+    });
+
+    it('fails closed to bounded HTTP copy when a 409 has only structured metadata', () => {
+      const parsed = parseApiError({
+        response: {
+          status: 409,
+          data: {
+            error: 'scanner_data_not_ready',
+            detail: {
+              dataReadiness: {
+                state: 'blocked',
+                provider: 'internal-provider-diagnostic',
+              },
+            },
+          },
+        },
+      });
+
+      expect(parsed.message).toBe('请求未成功完成（HTTP 409）。');
+      expect(parsed.message).not.toContain('{');
+      expect(parsed.message).not.toContain('provider');
+      expect(parsed.details).toEqual({
+        error: 'scanner_data_not_ready',
+        detail: {
+          dataReadiness: {
+            state: 'blocked',
+            provider: 'internal-provider-diagnostic',
+          },
+        },
+      });
+    });
+  });
+
+  describe('HTTP 429 throttling', () => {
+    it('classifies rate-limited responses as retryable and preserves metadata', () => {
+      const parsed = parseApiError({
+        response: {
+          status: 429,
+          data: {
+            error: 'rate_limited',
+            message: 'Too many failed attempts. Please try again later.',
+            retryable: true,
+            reasonCode: 'login_rate_limit',
+            detail: { capabilityState: 'temporarily_blocked' },
+          },
+        },
+      });
+
+      expect(parsed.status).toBe(429);
+      expect(parsed.code).toBe('rate_limited');
+      expect(parsed.category).toBe('rate_limited');
+      expect(parsed.retryable).toBe(true);
+      expect(parsed.reasonCode).toBe('login_rate_limit');
+      expect(parsed.capabilityState).toBe('temporarily_blocked');
+      expect(parsed.message).toBe('操作过于频繁，请稍后重试。');
+      expect(parsed.rawMessage).toBe('Too many failed attempts. Please try again later.');
+      expect(parsed.isAuthError).toBe(false);
+      expect(parsed.isNetworkError).toBe(false);
+      expect(parsed.isValidationError).toBe(false);
+    });
+
+    it('classifies quota pilot blocking and preserves explicit non-retryability', () => {
+      const parsed = parseApiError({
+        response: {
+          status: 429,
+          data: {
+            error: 'quota_pilot_blocked',
+            message: '当前分析额度试点限制，请稍后重试或联系管理员',
+            retryable: false,
+            detail: { reasonCode: 'analysis_sync_quota_exceeded' },
+          },
+        },
+      });
+
+      expect(parsed.category).toBe('rate_limited');
+      expect(parsed.retryable).toBe(false);
+      expect(parsed.reasonCode).toBe('analysis_sync_quota_exceeded');
+      expect(parsed.message).toBe('当前分析额度试点限制，请稍后重试或联系管理员。');
+      expect(parsed.details).toEqual({
+        error: 'quota_pilot_blocked',
+        message: '当前分析额度试点限制，请稍后重试或联系管理员',
+        retryable: false,
+        detail: { reasonCode: 'analysis_sync_quota_exceeded' },
+      });
+    });
+
+    it('classifies a bare 429 without an error code', () => {
+      const parsed = parseApiError({ response: { status: 429, data: {} } });
+
+      expect(parsed.category).toBe('rate_limited');
+      expect(parsed.retryable).toBe(true);
+      expect(parsed.message).toBe('操作过于频繁，请稍后重试。');
+    });
+  });
 });
