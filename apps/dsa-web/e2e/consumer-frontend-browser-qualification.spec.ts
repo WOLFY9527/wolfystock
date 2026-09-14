@@ -1090,19 +1090,22 @@ async function collectRouteEvidence(page: Page, route: QualificationRoute, viewp
         const rect = element.getBoundingClientRect();
         return (rect.left < -2 || rect.right > viewportWidth + 2) && !hasHorizontalScrollBoundary(element);
       });
-    const unexpectedFixedWidth = Array.from(document.body.querySelectorAll<HTMLElement>('body *'))
-      .filter((element) => visible(element))
-      .filter((element) => {
-        const style = window.getComputedStyle(element);
-        const rect = element.getBoundingClientRect();
-        return style.width.endsWith('px') && rect.width > viewportWidth + 2;
-      }).length;
-    const chartClippingCount = Array.from(document.body.querySelectorAll<HTMLElement>('canvas, [data-chart-engine], [data-chart-kind], [data-testid*="chart"], [data-testid*="visual"], svg[data-chart], svg[aria-label*="chart" i]'))
-      .filter((element) => visible(element))
-      .filter((element) => {
-        const rect = element.getBoundingClientRect();
-        return rect.right > viewportWidth + 2 || rect.left < -2 || rect.height < 80 || rect.width < 80;
-      }).length;
+    const overflowCandidates = overflowingElements;
+    const unexpectedFixedWidth = overflowCandidates.filter((element) => {
+      const parent = element.parentElement;
+      return !parent || !overflowCandidates.includes(parent);
+    }).length;
+    const chartCandidates = Array.from(document.body.querySelectorAll<HTMLElement>(
+      'canvas, [data-chart-engine], [data-chart-kind], [data-visual-role="primary-chart"], [data-visual-role="primary-chart-region"], svg[data-chart], svg[aria-label*="chart" i]',
+    )).filter((element) => visible(element));
+    const chartClippingCount = chartCandidates.filter((element) => {
+      const rect = element.getBoundingClientRect();
+      const primaryRole = element.dataset.visualRole === 'primary-chart' || element.dataset.visualRole === 'primary-chart-region';
+      const requiresUsableDimensions = primaryRole || Boolean(element.dataset.chartEngine || element.dataset.chartKind);
+      const clipped = (rect.right > viewportWidth + 2 || rect.left < -2) && !hasHorizontalScrollBoundary(element);
+      const unusablyCollapsed = requiresUsableDimensions && (rect.height < 80 || rect.width < 80);
+      return clipped || unusablyCollapsed;
+    }).length;
     const tableClippingCount = Array.from(document.body.querySelectorAll<HTMLElement>('table, [role="table"], [data-testid*="table"], [data-testid*="ledger"], [data-testid*="list"]'))
       .filter((element) => visible(element))
       .filter((element) => {
@@ -1220,6 +1223,19 @@ async function collectRouteEvidence(page: Page, route: QualificationRoute, viewp
   };
 }
 
+async function inspectSyntheticResponsiveDetector(page: Page, body: string): Promise<RouteViewportEvidence> {
+  const detectorRoute: QualificationRoute = {
+    key: 'detector-regression',
+    label: 'Detector regression',
+    path: '/',
+    readyTestId: 'detector-root',
+    type: 'standard',
+  };
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setContent(`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><main><button type="button">Inspect</button>${body}</main></body></html>`);
+  return collectRouteEvidence(page, detectorRoute, '390x844');
+}
+
 async function verifyFocusVisible(page: Page) {
   await page.keyboard.press('Tab');
   return page.evaluate(() => {
@@ -1312,6 +1328,17 @@ test.describe('consumer frontend browser qualification matrix', () => {
 
         await expect(page.getByTestId(route.readyTestId), `${route.label} route loaded`).toBeVisible();
         expectNoProductionDefectsWhenStrict(routeEvidence);
+
+        if (route.key === 'home' && viewport.width === 1440) {
+          await test.step('responsive detector semantic regression cases', async () => {
+            expect((await inspectSyntheticResponsiveDetector(page, '<div data-visual-role="primary-chart" data-chart-engine="echarts" style="width:500px;height:120px"></div>')).chartClippingCount).toBeGreaterThan(0);
+            expect((await inspectSyntheticResponsiveDetector(page, '<div data-visual-role="primary-chart" data-chart-kind="trend" style="width:40px;height:40px"></div>')).chartClippingCount).toBeGreaterThan(0);
+            expect((await inspectSyntheticResponsiveDetector(page, '<button data-testid="compact-chart-control" style="width:40px;height:40px">1D</button>')).chartClippingCount).toBe(0);
+            expect((await inspectSyntheticResponsiveDetector(page, '<div style="width:100%;height:120px"></div>')).unexpectedFixedWidth).toBe(0);
+            expect((await inspectSyntheticResponsiveDetector(page, '<div data-testid="too-wide" style="width:500px;height:120px"></div>')).unexpectedFixedWidth).toBeGreaterThan(0);
+            expect((await inspectSyntheticResponsiveDetector(page, '<div style="width:390px;overflow-x:auto"><div data-testid="wide-scroll-content" style="width:760px;height:120px"></div></div>')).unexpectedFixedWidth).toBe(0);
+          });
+        }
       });
     }
   }
