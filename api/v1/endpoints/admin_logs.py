@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -54,6 +55,112 @@ def _project_authorized_user_actor_identity(
         if str(item.get("actorType") or "").strip().lower() == "user" and reference:
             next_item["userId"] = reference["id"]
             next_item["actorLabel"] = reference["label"]
+        projected.append(next_item)
+    return projected
+
+
+_SESSION_ACTOR_IDENTITY_KEYS = {
+    "actor_user_id",
+    "actoruserid",
+    "actor_username",
+    "actorusername",
+    "actor_display",
+    "actor_display_name",
+    "actordisplay",
+    "actordisplayname",
+    "actor_label",
+    "actorlabel",
+    "actor_session_id",
+    "actorsessionid",
+    "actor_request_id",
+    "actorrequestid",
+    "request_id",
+    "requestid",
+    "query_id",
+    "queryid",
+    "owner_user_id",
+    "user_id",
+    "userid",
+    "username",
+    "display_name",
+    "displayname",
+    "session_id",
+    "sessionid",
+    "email",
+    "password",
+    "password_hash",
+}
+
+
+def _session_actor_type(item: dict) -> str:
+    summary = item.get("summary") if isinstance(item.get("summary"), dict) else {}
+    meta = summary.get("meta") if isinstance(summary.get("meta"), dict) else {}
+    readable = item.get("readable_summary") if isinstance(item.get("readable_summary"), dict) else {}
+    return str(
+        meta.get("actor_type")
+        or meta.get("actor_role")
+        or readable.get("actor_type")
+        or readable.get("actor_role")
+        or ""
+    ).strip().lower()
+
+
+def _session_actor_user_id(item: dict) -> str:
+    summary = item.get("summary") if isinstance(item.get("summary"), dict) else {}
+    meta = summary.get("meta") if isinstance(summary.get("meta"), dict) else {}
+    readable = item.get("readable_summary") if isinstance(item.get("readable_summary"), dict) else {}
+    return str(meta.get("actor_user_id") or readable.get("actor_user_id") or "").strip()
+
+
+def _project_session_actor_value(value: object, *, reference: dict[str, str] | None) -> object:
+    """Remove actor identity copies from session summaries, preserving safe fields."""
+    if isinstance(value, dict):
+        projected: dict[str, object] = {}
+        for key, child in value.items():
+            normalized = str(key).strip().lower()
+            if normalized in _SESSION_ACTOR_IDENTITY_KEYS:
+                if normalized in {"actor_user_id", "actoruserid", "userid"} and reference:
+                    projected[key] = reference["id"]
+                elif normalized in {
+                    "actor_display",
+                    "actor_display_name",
+                    "actordisplay",
+                    "actordisplayname",
+                    "display_name",
+                    "displayname",
+                    "actorlabel",
+                } and reference:
+                    projected[key] = reference["label"]
+                continue
+            projected[key] = _project_session_actor_value(child, reference=reference)
+        return projected
+    if isinstance(value, list):
+        return [_project_session_actor_value(child, reference=reference) for child in value]
+    if isinstance(value, tuple):
+        return tuple(_project_session_actor_value(child, reference=reference) for child in value)
+    return value
+
+
+def _project_authorized_session_actor_identity(
+    items: list[dict],
+    *,
+    current_user: CurrentUser,
+) -> list[dict]:
+    """Apply the canonical actor projection to execution-session list/detail payloads."""
+    user_items = [item for item in items if _session_actor_type(item) == "user"]
+    references = (
+        resolve_ordinary_user_actor_references(_session_actor_user_id(item) for item in user_items)
+        if _can_project_user_actor_identity(current_user)
+        else {}
+    )
+    projected: list[dict] = []
+    for item in items:
+        next_item = deepcopy(item)
+        if _session_actor_type(next_item) == "user":
+            reference = references.get(_session_actor_user_id(next_item))
+            for field in ("summary", "readable_summary", "events", "operation_detail"):
+                if field in next_item:
+                    next_item[field] = _project_session_actor_value(next_item[field], reference=reference)
         projected.append(next_item)
     return projected
 
@@ -144,6 +251,7 @@ def _effective_offset(
 
 def _list_execution_logs(
     *,
+    current_user: CurrentUser,
     task_id: Optional[str],
     stock: Optional[str],
     status: Optional[str],
@@ -182,6 +290,7 @@ def _list_execution_logs(
         limit=effective_limit,
         offset=_effective_offset(offset=offset, page=page, cursor=cursor, limit=effective_limit),
     )
+    items = _project_authorized_session_actor_identity(items, current_user=current_user)
     return ExecutionLogSessionListResponse(
         total=total,
         items=items,
@@ -417,6 +526,7 @@ def list_execution_log_sessions(
     _: CurrentUser = Depends(require_admin_capability("ops:logs:read")),
 ):
     return _list_execution_logs(
+        current_user=_,
         task_id=_coalesce_query_text(task_id, task_id_alias),
         stock=stock,
         status=status,
@@ -456,7 +566,8 @@ def get_execution_log_session_detail(
                 "message": f"Execution log session not found: {session_id}",
             },
         )
-    return ExecutionLogSessionDetailModel(**detail)
+    projected = _project_authorized_session_actor_identity([detail], current_user=_)[0]
+    return ExecutionLogSessionDetailModel(**projected)
 
 
 @router.get(

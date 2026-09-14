@@ -59,8 +59,8 @@
       "sha256": "80412d5648733e6c8f24c47a1963afd6fd81e787945c867cc14df64d755ae9dc"
     },
     "currentInventory": {
-      "count": 8404,
-      "sha256": "e598eba650ce6c8842817e68d2d870af15aa3529c7ef111283668cedb8e84291"
+      "count": 8405,
+      "sha256": "11f45698d9a3c313bad1f1f86217729f792be946f5eb7d35db8ffc4f73a82355"
     },
     "tests": [
       {
@@ -127,6 +127,11 @@
         "id": "tests/api/test_admin_cost_summary.py::AdminCostSummaryApiTestCase::test_summary_returns_safe_sections_and_metadata",
         "domain": "api_schema_contracts",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_admin_logs.py::AdminLogsApiTestCase::test_actor_projection_matrix_covers_sessions_and_business_event_sibling",
+        "domain": "api_schema_contracts",
+        "baseline": false
       },
       {
         "id": "tests/api/test_admin_logs.py::AdminLogsApiTestCase::test_business_event_list_and_detail_require_admin_authorization",

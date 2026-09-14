@@ -2462,6 +2462,147 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(payload.items, [])
         self.assertEqual(payload.empty_state.reason, "no_matching_read_models")
 
+    def test_actor_projection_matrix_covers_sessions_and_business_event_sibling(self) -> None:
+        """Actor identity is capability-aware across every Admin Logs read surface."""
+        self.db.create_or_update_app_user(
+            user_id="user-actor-1",
+            username="alice",
+            display_name="Alice",
+            role="user",
+        )
+        self.db.create_or_update_app_user(
+            user_id="admin-actor-1",
+            username="operator",
+            display_name="Operator",
+            role="admin",
+        )
+
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            user_session = service.start_execution(
+                category="security",
+                type="user_action",
+                event="UserAction",
+                summary="ordinary user action",
+                actor={
+                    "user_id": "user-actor-1",
+                    "username": "alice",
+                    "display_name": "Alice",
+                    "role": "user",
+                    "actor_type": "user",
+                    "session_id": "session-user-1",
+                    "request_id": "user:session-user-1:req-1",
+                },
+            )
+            service.finish_execution(user_session, status="success")
+            admin_session = service.start_execution(
+                category="security",
+                type="admin_action",
+                event="AdminAction",
+                summary="admin action",
+                actor={
+                    "user_id": "admin-actor-1",
+                    "username": "operator",
+                    "display_name": "Operator",
+                    "role": "admin",
+                    "actor_type": "admin",
+                    "session_id": "session-admin-1",
+                },
+            )
+            service.finish_execution(admin_session, status="success")
+            system_session = service.start_execution(
+                category="system",
+                type="scheduled_job",
+                event="SystemJob",
+                summary="system job",
+                actor={"actor_type": "system", "role": "system"},
+            )
+            service.finish_execution(system_session, status="success")
+            missing_session = service.start_execution(
+                category="security",
+                type="user_action",
+                event="DeletedUserAction",
+                summary="deleted user action",
+                actor={
+                    "user_id": "deleted-user-404",
+                    "username": "deleted-alice",
+                    "display_name": "Deleted Alice",
+                    "role": "user",
+                    "actor_type": "user",
+                    "session_id": "session-deleted-1",
+                },
+            )
+            service.finish_execution(missing_session, status="success")
+            business_event = service.record_user_write_action(
+                event_type="portfolio.account_created",
+                message="ordinary user account created",
+                actor={
+                    "user_id": "user-actor-1",
+                    "username": "alice",
+                    "display_name": "Alice",
+                    "role": "user",
+                    "actor_type": "user",
+                },
+                domain="portfolio",
+                target_type="portfolio_account",
+                target_id="account-1",
+            )
+
+            app = FastAPI()
+            app.include_router(admin_logs.router, prefix="/api/v1/admin/logs")
+
+            def request_as(user: CurrentUser | None, path: str):
+                if user is None:
+                    app.dependency_overrides.pop(get_current_user, None)
+                else:
+                    app.dependency_overrides[get_current_user] = lambda: user
+                with TestClient(app) as client:
+                    return client.get(path)
+
+            anonymous = request_as(None, f"/api/v1/admin/logs/sessions/{user_session}")
+            ops_user = _admin_user_with_capabilities("ops:logs:read")
+            ops_list = request_as(ops_user, "/api/v1/admin/logs/sessions?min_level=INFO&since=")
+            ops_detail = request_as(ops_user, f"/api/v1/admin/logs/sessions/{user_session}")
+            ops_business = request_as(ops_user, f"/api/v1/admin/logs/{business_event}")
+            rich_user = _admin_user_with_capabilities("ops:logs:read", "users:read")
+            rich_list = request_as(rich_user, "/api/v1/admin/logs/sessions?min_level=INFO&since=")
+            rich_detail = request_as(rich_user, f"/api/v1/admin/logs/sessions/{user_session}")
+            rich_missing = request_as(rich_user, f"/api/v1/admin/logs/sessions/{missing_session}")
+            rich_business = request_as(rich_user, f"/api/v1/admin/logs/{business_event}")
+
+        self.assertEqual(anonymous.status_code, 401)
+        self.assertEqual(ops_list.status_code, 200)
+        self.assertEqual(ops_detail.status_code, 200)
+        self.assertEqual(ops_business.status_code, 200)
+        self.assertEqual(rich_list.status_code, 200)
+        self.assertEqual(rich_detail.status_code, 200)
+        self.assertEqual(rich_missing.status_code, 200)
+        self.assertEqual(rich_business.status_code, 200)
+
+        ops_items = {item["session_id"]: item for item in ops_list.json()["items"]}
+        ops_user_readable = ops_items[user_session]["readable_summary"]
+        self.assertEqual(ops_user_readable["actor_type"], "user")
+        self.assertEqual(ops_items[admin_session]["readable_summary"]["actor_role"], "admin")
+        self.assertEqual(ops_items[system_session]["readable_summary"]["actor_type"], "system")
+        for payload in (ops_list.text, ops_detail.text, ops_business.text):
+            for forbidden in ("user-actor-1", "alice", "Alice", "session-user-1", "user:session-user-1:req-1"):
+                self.assertNotIn(forbidden, payload)
+        self.assertIsNone(ops_business.json()["userId"])
+        self.assertIsNone(ops_business.json()["actorLabel"])
+
+        rich_readable = rich_detail.json()["readable_summary"]
+        self.assertEqual(rich_readable["actor_user_id"], "user-actor-1")
+        self.assertEqual(rich_readable["actor_display"], "Alice")
+        rich_items = {item["session_id"]: item for item in rich_list.json()["items"]}
+        self.assertEqual(rich_items[user_session]["readable_summary"]["actor_user_id"], "user-actor-1")
+        self.assertEqual(rich_items[user_session]["readable_summary"]["actor_display"], "Alice")
+        self.assertNotIn("actor_username", rich_readable)
+        self.assertNotIn("actor_session_id", rich_readable)
+        self.assertNotIn("actor_request_id", rich_readable)
+        self.assertNotIn("actor_user_id", rich_missing.json()["readable_summary"])
+        self.assertEqual(rich_business.json()["userId"], "user-actor-1")
+        self.assertEqual(rich_business.json()["actorLabel"], "Alice")
+
 
 if __name__ == "__main__":
     unittest.main()
