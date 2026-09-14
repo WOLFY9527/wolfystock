@@ -15,6 +15,9 @@ from src.services.source_confidence_contract import (
     ProviderSourceReadinessContract,
     ScoreGradeSourceAuthorityResult,
     SourceConfidenceContract,
+    EvidenceCompleteness,
+    MarketEvidenceCondition,
+    ProductionPosture,
     SourceConfidenceValidationIssue,
     SourceConfidenceValidationResult,
     SourceFreshness,
@@ -28,6 +31,7 @@ from src.services.source_confidence_contract import (
     coerce_source_confidence_contract,
     evaluate_score_grade_source_authority,
     validate_source_confidence_contract,
+    normalize_market_freshness,
 )
 from src.services.market_intelligence_trust_gate import (
     MARKET_INTELLIGENCE_TRUST_GATE_VERSION,
@@ -57,6 +61,9 @@ __all__ = [
     "ProviderSourceReadinessContract",
     "ScoreGradeSourceAuthorityResult",
     "SourceConfidenceContract",
+    "EvidenceCompleteness",
+    "MarketEvidenceCondition",
+    "ProductionPosture",
     "SourceConfidenceValidationIssue",
     "SourceConfidenceValidationResult",
     "SourceFreshness",
@@ -73,4 +80,5 @@ __all__ = [
     "evaluate_market_intelligence_trust_from_sources",
     "resolve_market_intelligence_source_tier",
     "validate_source_confidence_contract",
+    "normalize_market_freshness",
 ]

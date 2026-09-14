@@ -2651,7 +2651,8 @@ class MarketScannerService:
             "reason": reason,
             "sourceClass": "local_us_parquet_cache",
             "lineageState": "explicit",
-            "freshness": "current" if state == "available" else state,
+            # Local cache availability does not prove observation recency.
+            "freshness": "unknown" if state == "available" else state,
             "qualifiedSymbols": sorted(
                 symbol
                 for symbol, item in by_symbol.items()

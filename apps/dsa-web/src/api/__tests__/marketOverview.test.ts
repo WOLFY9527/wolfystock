@@ -15,6 +15,32 @@ describe('marketOverviewApi', () => {
     get.mockReset();
   });
 
+  it('keeps canonical freshnessState separate from legacy degradation values', async () => {
+    const { isMarketOverviewFreshnessState, isMarketOverviewPanelContract } = await import('../marketOverview');
+
+    expect(isMarketOverviewFreshnessState('delayed')).toBe(true);
+    expect(isMarketOverviewFreshnessState('partial')).toBe(false);
+    expect(isMarketOverviewFreshnessState('historical')).toBe(false);
+    expect(isMarketOverviewPanelContract({
+      panelName: 'IndexTrendsCard',
+      lastRefreshAt: '2026-06-09T13:00:00Z',
+      status: 'partial',
+      source: 'official_public',
+      freshness: 'partial',
+      freshnessState: 'unknown',
+      items: [{ symbol: 'SPX', label: 'S&P 500', value: 5000, freshnessState: 'unknown' }],
+    })).toBe(true);
+    expect(isMarketOverviewPanelContract({
+      panelName: 'IndexTrendsCard',
+      lastRefreshAt: '2026-06-09T13:00:00Z',
+      status: 'success',
+      source: 'official_public',
+      freshness: 'live',
+      freshnessState: 'partial',
+      items: [],
+    })).toBe(false);
+  });
+
   it('preserves panel freshness metadata and nested item synthetic flags from snake_case responses', async () => {
     const { marketOverviewApi } = await import('../marketOverview');
 

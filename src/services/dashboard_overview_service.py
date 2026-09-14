@@ -150,14 +150,9 @@ def _dashboard_product_read_model(section_states: Mapping[str, str], *, as_of: s
     )
     return {
         **model,
-        "freshness": {
-            "state": "available" if model["state"] == "available" else model["state"],
-            "asOf": as_of,
-        },
         "provenance": {
             "sourceClass": "dashboard_read_models",
             "asOf": as_of,
-            "freshness": "available" if model["state"] == "available" else model["state"],
             "quality": model["state"],
         },
     }

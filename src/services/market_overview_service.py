@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import math
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError, as_completed
 from datetime import datetime, timedelta, timezone
@@ -19,7 +20,19 @@ from data_provider.coinbase_public_provider import (
     COINBASE_PUBLIC_TRUST_LEVEL,
     COINBASE_PUBLIC_VENUE,
 )
-from src.contracts.source_confidence import coerce_source_confidence_contract
+from src.contracts.source_confidence import (
+    coerce_source_confidence_contract,
+    EvidenceCompleteness,
+    MarketEvidenceCondition,
+    ProductionPosture,
+    normalize_market_freshness,
+)
+from src.contracts.evidence.source_observation import (
+    ObservationFreshness,
+    RawAvailability,
+    SourceClass,
+    SourceIdentity,
+)
 from src.services.cn_hk_connect_flow_provider import AuthorizedCnHkConnectFlowCacheProvider
 from src.services.cn_hk_flow_contracts import (
     CnHkFlowProviderUnavailable,
@@ -589,7 +602,7 @@ PROVIDER_HEALTH_STATUSES = {
     "refreshing",
 }
 MARKET_OVERVIEW_NORMALIZED_FRESHNESS_STATES = frozenset(
-    {"live", "delayed", "cached", "stale", "unavailable", "proxy"}
+    {"live", "delayed", "cached", "stale", "unavailable", "proxy", "unknown"}
 )
 MARKET_OVERVIEW_PROXY_SOURCE_TYPES = frozenset(
     {"public_proxy", "proxy_public"}
@@ -604,7 +617,85 @@ MARKET_OVERVIEW_CONSUMER_FRESHNESS_LABELS = {
     "stale": "过期",
     "unavailable": "不可用",
     "proxy": "代理",
+    "unknown": "待确认",
 }
+
+
+def _build_market_evidence_condition(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    """Project legacy Market Overview metadata into the shared orthogonal contract."""
+    source_raw = str(payload.get("source") or "unknown").strip().lower()
+    source_id = re.sub(r"[^a-z0-9._:-]+", "_", source_raw).strip("_") or "unknown"
+    source_type = str(payload.get("sourceType") or payload.get("sourceClass") or "").strip().lower()
+    source_class = (
+        SourceClass.OFFICIAL
+        if "official" in source_type
+        else SourceClass.LICENSED
+        if any(token in source_type for token in ("licensed", "broker", "authorized"))
+        else SourceClass.THIRD_PARTY
+        if source_id != "unknown"
+        else SourceClass.UNKNOWN
+    )
+    is_synthetic = bool(payload.get("isSynthetic") or source_type in {"synthetic_fixture", "mock"})
+    is_proxy = bool(payload.get("isProxy") or source_type in MARKET_OVERVIEW_PROXY_SOURCE_TYPES or source_raw in MARKET_OVERVIEW_PROXY_SOURCES)
+    if is_proxy and source_class is SourceClass.OFFICIAL:
+        source_class = SourceClass.THIRD_PARTY
+    source = SourceIdentity(
+        source_id=source_id,
+        source_class=source_class,
+        is_proxy=is_proxy,
+        is_synthetic=is_synthetic,
+        is_fixture=is_synthetic and source_type in {"synthetic_fixture", "fixture", "mock"},
+    )
+    has_value = any(
+        key in payload and payload.get(key) not in (None, "", [])
+        for key in ("value", "items", "scores")
+    )
+    availability = RawAvailability.AVAILABLE
+    if source_raw in {"unavailable", "missing"} or (bool(payload.get("isUnavailable")) and not has_value):
+        availability = RawAvailability.UNAVAILABLE
+    elif not has_value:
+        availability = RawAvailability.UNKNOWN
+    completeness = (
+        EvidenceCompleteness.PARTIAL
+        if bool(payload.get("isPartial"))
+        else EvidenceCompleteness.INSUFFICIENT
+        if availability is not RawAvailability.AVAILABLE
+        else EvidenceCompleteness.COMPLETE
+    )
+    posture_raw = str(payload.get("productionPosture") or "production").strip().lower()
+    posture = ProductionPosture(posture_raw) if posture_raw in {item.value for item in ProductionPosture} else ProductionPosture.DEVELOPMENT
+    observed_at_raw = payload.get("observedAt") or payload.get("asOf")
+    observed_at = None
+    if isinstance(observed_at_raw, datetime):
+        observed_at = observed_at_raw
+    elif observed_at_raw:
+        try:
+            observed_at = datetime.fromisoformat(str(observed_at_raw).replace("Z", "+00:00"))
+            if observed_at.tzinfo is None:
+                observed_at = observed_at.replace(tzinfo=timezone.utc)
+        except ValueError:
+            observed_at = None
+    has_timestamp = observed_at is not None
+    freshness = normalize_market_freshness(
+        payload.get("freshnessState") or payload.get("freshness"),
+        has_timestamp_proof=has_timestamp,
+        availability=availability,
+        is_synthetic=is_synthetic,
+        is_fallback=bool(payload.get("isFallback") or payload.get("fallbackUsed")),
+        production_posture=posture,
+    )
+    condition = MarketEvidenceCondition(
+        freshness=freshness,
+        availability=availability,
+        source=source,
+        completeness=completeness,
+        production_posture=posture,
+        observed_at=observed_at,
+        as_of=observed_at,
+        is_cached=bool(payload.get("isCached") or payload.get("isFromSnapshot")),
+        has_fallback=bool(payload.get("isFallback") or payload.get("fallbackUsed")),
+    )
+    return condition.to_dict()
 CN_INDICES_OBSERVATION_PROVIDER_TIMEOUT_SECONDS = 1.0
 CN_INDICES_AKSHARE_OBSERVATION_TIMEOUT_SECONDS = 1.0
 MARKET_OVERVIEW_OBSERVATION_ROUTE_REJECTED_REASON = "market_overview_observation_route_rejected"
@@ -5721,26 +5812,30 @@ class MarketOverviewService:
         )
 
     @staticmethod
-    def _normalize_market_overview_freshness_state(value: Any) -> str:
-        freshness = str(value or "").strip().lower()
-        aliases = {
-            "fresh": "live",
-            "realtime": "live",
-            "current": "live",
-            "t_plus_1_or_delayed": "delayed",
-            "t+1_or_delayed": "delayed",
-            "fallback": "cached",
-            "mock": "unavailable",
-            "synthetic": "unavailable",
-            "error": "unavailable",
-            "partial": "cached",
-        }
-        normalized = aliases.get(freshness, freshness)
-        if normalized in MARKET_OVERVIEW_NORMALIZED_FRESHNESS_STATES:
-            return normalized
-        if normalized == "fallback":
-            return "cached"
-        return "unavailable"
+    def _normalize_market_overview_freshness_state(
+        value: Any,
+        *,
+        has_timestamp_proof: bool = True,
+        availability: str = "available",
+        is_synthetic: bool = False,
+        is_fallback: bool = False,
+        production_posture: str = "production",
+    ) -> str:
+        """Delegate temporal normalization to the shared evidence authority."""
+        raw = str(value or "").strip().lower()
+        if raw == "unavailable":
+            return "unknown" if availability == "available" else "unavailable"
+        if raw == "proxy" and has_timestamp_proof:
+            return "proxy"
+        normalized = normalize_market_freshness(
+            value,
+            has_timestamp_proof=has_timestamp_proof,
+            availability=availability,
+            is_synthetic=is_synthetic,
+            is_fallback=is_fallback,
+            production_posture=production_posture,
+        )
+        return normalized.value if isinstance(normalized, ObservationFreshness) else str(normalized)
 
     @classmethod
     def _degradation_reason_for_freshness(
@@ -5805,7 +5900,16 @@ class MarketOverviewService:
         is_proxy: bool,
         degradation_reason: Optional[str],
     ) -> Dict[str, Any]:
-        state = cls._normalize_market_overview_freshness_state(freshness)
+        state = cls._normalize_market_overview_freshness_state(
+            freshness,
+            availability="unavailable" if payload.get("isUnavailable") else "available",
+            # providerFreshness is the legacy compatibility projection; the
+            # canonical timestamp-gated state is emitted as freshnessState.
+            has_timestamp_proof=True,
+            is_synthetic=bool(payload.get("isSynthetic")),
+            is_fallback=bool(payload.get("isFallback")),
+            production_posture=str(payload.get("productionPosture") or "production"),
+        )
         is_unavailable = bool(payload.get("isUnavailable") or state == "unavailable")
         is_stale = bool(payload.get("isStale") or state == "stale")
         summary = {
@@ -5967,6 +6071,12 @@ class MarketOverviewService:
             payload,
             normalized_freshness,
         )
+        if legacy_freshness == "unavailable" and item_freshness == "unknown" and not eligible_items:
+            # Preserve the legacy unavailable outcome when no item can provide
+            # evidence; the orthogonal condition still records unknown recency
+            # when a value exists without timestamp proof.
+            normalized_freshness = "unavailable"
+            item_freshness = "unavailable"
         if normalized_freshness == "stale" and item_freshness == "proxy":
             item_reason = None
             item_freshness = "stale"
@@ -6016,7 +6126,7 @@ class MarketOverviewService:
             "isUnavailable": bool(
                 payload.get("isUnavailable")
                 or preserved_freshness.get("isUnavailable")
-                or (self._normalize_market_overview_freshness_state(normalized_freshness) == "unavailable" and not item_partial)
+                or (normalized_freshness == "unavailable" and not eligible_items)
             ),
             "isProxy": proxy_source,
             "delayMinutes": freshness["delayMinutes"],
@@ -6028,8 +6138,25 @@ class MarketOverviewService:
             "isFromSnapshot": bool(payload.get("isFromSnapshot")),
             "lastSuccessfulAt": payload.get("lastSuccessfulAt"),
         }
+        # Preserve the established mixed-panel compatibility label when real
+        # items coexist with unavailable rows; canonical freshnessState below
+        # remains timestamp-gated and may still be unknown.
+        if (
+            normalized_payload["freshness"] == "unavailable"
+            and normalized_payload["isPartial"]
+            and eligible_items
+        ):
+            normalized_payload["freshness"] = "cached"
         normalized_payload["sourceClass"] = normalized_payload.get("sourceClass") or normalized_payload.get("sourceType")
-        normalized_payload["freshnessState"] = normalized_payload.get("freshnessState") or normalized_payload.get("freshness")
+        normalized_payload["freshnessState"] = self._normalize_market_overview_freshness_state(
+            normalized_payload.get("freshnessState") or normalized_payload.get("freshness"),
+            has_timestamp_proof=as_of is not None,
+            availability="available" if eligible_items else "unavailable",
+            is_synthetic=bool(normalized_payload.get("isSynthetic")),
+            is_fallback=bool(normalized_payload.get("isFallback")),
+            production_posture=str(normalized_payload.get("productionPosture") or "production"),
+        )
+        normalized_payload["marketEvidenceCondition"] = _build_market_evidence_condition(normalized_payload)
         normalized_payload["proxyIdentity"] = normalized_payload.get("proxyIdentity") or self._proxy_identity(normalized_payload)
         if normalized_payload.get("sourceAuthorityState") is None:
             normalized_payload["sourceAuthorityState"] = self._source_authority_state(normalized_payload, proxy_source)
@@ -6464,7 +6591,10 @@ class MarketOverviewService:
                     "warning": item.get("warning") or panel.get("warning") or "数据源刷新失败，当前显示最近成功快照",
                 }
         legacy_item_freshness = str(freshness["freshness"] or "").strip().lower()
-        normalized_freshness = self._normalize_market_overview_freshness_state(legacy_item_freshness)
+        normalized_freshness = self._normalize_market_overview_freshness_state(
+            legacy_item_freshness,
+            availability="unavailable" if legacy_item_freshness == "unavailable" else "available",
+        )
         proxy_source = self._is_proxy_source(
             source=source,
             source_type=item.get("sourceType") or panel.get("sourceType") or "",
@@ -6503,7 +6633,15 @@ class MarketOverviewService:
             "isFromSnapshot": bool(item.get("isFromSnapshot") or panel.get("isFromSnapshot")),
         }
         normalized["sourceClass"] = normalized.get("sourceClass") or normalized.get("sourceType")
-        normalized["freshnessState"] = normalized.get("freshnessState") or normalized.get("freshness")
+        normalized["freshnessState"] = self._normalize_market_overview_freshness_state(
+            normalized.get("freshnessState") or normalized.get("freshness"),
+            has_timestamp_proof=as_of is not None,
+            availability="unavailable" if (normalized.get("isUnavailable") or legacy_item_freshness == "unavailable") else "available",
+            is_synthetic=bool(normalized.get("isSynthetic")),
+            is_fallback=bool(normalized.get("isFallback")),
+            production_posture=str(normalized.get("productionPosture") or "production"),
+        )
+        normalized["marketEvidenceCondition"] = _build_market_evidence_condition(normalized)
         normalized["proxyIdentity"] = normalized.get("proxyIdentity") or self._proxy_identity(normalized)
         if normalized.get("sourceAuthorityState") is None:
             normalized["sourceAuthorityState"] = self._source_authority_state(normalized, proxy_source)
@@ -6603,6 +6741,10 @@ class MarketOverviewService:
             normalized = {**normalized, **self._source_activation_meta(normalized)}
         if final_degradation_reason:
             normalized["degradationReason"] = final_degradation_reason
+        if bool(normalized.get("isUnavailable")) and legacy_item_freshness == "unavailable":
+            # Keep the legacy payload's explicit source-unavailable result;
+            # freshnessState remains the timestamp-gated canonical axis.
+            normalized["freshness"] = "unavailable"
         normalized["providerFreshness"] = self._consumer_provider_freshness(
             normalized,
             freshness=final_freshness,

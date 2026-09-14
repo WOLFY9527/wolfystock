@@ -9,12 +9,15 @@ runtime provider ordering.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Mapping, Protocol
 
 from src.contracts.evidence.source_observation import (
     ObservationFreshness,
     RawAvailability,
+    SourceClass,
+    SourceIdentity,
     SourceObservationFacts,
 )
 
@@ -22,6 +25,117 @@ from src.contracts.evidence.source_observation import (
 SOURCE_CONFIDENCE_CONTRACT_VERSION = "source_confidence_contract_v1"
 PROVIDER_SOURCE_READINESS_CONTRACT_VERSION = "provider_source_readiness_contract_v1"
 STRONG_FRESHNESS_VALUES = {"fresh", "live"}
+
+
+class EvidenceCompleteness(str, Enum):
+    COMPLETE = "complete"
+    PARTIAL = "partial"
+    INSUFFICIENT = "insufficient"
+    DEGRADED = "degraded"
+
+
+class ProductionPosture(str, Enum):
+    PRODUCTION = "production"
+    HISTORICAL_REPLAY = "historical_replay"
+    DEVELOPMENT = "development"
+
+
+_MARKET_FRESHNESS_ALIASES = {
+    "live": ObservationFreshness.LIVE,
+    "realtime": ObservationFreshness.LIVE,
+    "current": ObservationFreshness.FRESH,
+    "fresh": ObservationFreshness.FRESH,
+    "delayed": ObservationFreshness.DELAYED,
+    "t_plus_1_or_delayed": ObservationFreshness.DELAYED,
+    "t+1_or_delayed": ObservationFreshness.DELAYED,
+    "cached": "cached",
+    "stale": ObservationFreshness.STALE,
+    "old": ObservationFreshness.STALE,
+}
+
+
+def normalize_market_freshness(
+    value: Any,
+    *,
+    has_timestamp_proof: bool,
+    availability: RawAvailability | str = RawAvailability.UNKNOWN,
+    is_synthetic: bool = False,
+    is_fallback: bool = False,
+    production_posture: ProductionPosture | str = ProductionPosture.PRODUCTION,
+) -> ObservationFreshness | str:
+    """Normalize temporal freshness without borrowing availability or lineage facts."""
+    raw = str(value or "").strip().lower()
+    if isinstance(availability, str):
+        try:
+            availability = RawAvailability(availability)
+        except ValueError:
+            availability = RawAvailability.UNKNOWN
+    if isinstance(production_posture, str):
+        try:
+            production_posture = ProductionPosture(production_posture)
+        except ValueError:
+            production_posture = ProductionPosture.DEVELOPMENT
+    if raw == "unavailable":
+        return ObservationFreshness.UNKNOWN if availability is RawAvailability.AVAILABLE else "unavailable"
+    if raw == "proxy":
+        return ObservationFreshness.DELAYED if has_timestamp_proof else ObservationFreshness.UNKNOWN
+    if raw in {"", "unknown", "error", "mock", "synthetic", "fallback", "partial", "missing", "no_evidence", "noevidence"}:
+        return ObservationFreshness.UNKNOWN
+    if is_synthetic or is_fallback or production_posture is not ProductionPosture.PRODUCTION:
+        return ObservationFreshness.UNKNOWN
+    normalized = _MARKET_FRESHNESS_ALIASES.get(raw)
+    if normalized is None or availability is not RawAvailability.AVAILABLE or not has_timestamp_proof:
+        return ObservationFreshness.UNKNOWN
+    return normalized
+
+
+@dataclass(frozen=True, slots=True)
+class MarketEvidenceCondition:
+    """Orthogonal market-data condition used at producer/consumer boundaries."""
+
+    freshness: str
+    availability: RawAvailability
+    source: SourceIdentity
+    completeness: EvidenceCompleteness
+    production_posture: ProductionPosture
+    observed_at: datetime | None = None
+    as_of: datetime | None = None
+    is_cached: bool = False
+    has_fallback: bool = False
+
+    def __post_init__(self) -> None:
+        freshness = self.freshness.value if isinstance(self.freshness, ObservationFreshness) else self.freshness
+        if freshness not in {"live", "fresh", "delayed", "cached", "stale", "unknown", "unavailable"}:
+            raise ValueError("invalid canonical freshness")
+        if not isinstance(self.availability, RawAvailability) or not isinstance(self.source, SourceIdentity):
+            raise TypeError("invalid evidence condition facts")
+        if not isinstance(self.completeness, EvidenceCompleteness) or not isinstance(self.production_posture, ProductionPosture):
+            raise TypeError("invalid evidence condition axes")
+        for value, field in ((self.observed_at, "observed_at"), (self.as_of, "as_of")):
+            if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+                raise ValueError(f"{field} must be timezone-aware")
+        if self.freshness in {"live", "fresh", "delayed", "cached"} and self.observed_at is None and self.as_of is None:
+            raise ValueError("positive freshness requires timestamp proof")
+        if self.source.is_synthetic and self.production_posture is ProductionPosture.PRODUCTION:
+            raise ValueError("synthetic evidence cannot claim production posture")
+
+    def to_dict(self) -> dict[str, Any]:
+        def render(value: datetime | None) -> str | None:
+            if value is None:
+                return None
+            rendered = value.astimezone(timezone.utc).isoformat()
+            return f"{rendered[:-6]}Z" if rendered.endswith("+00:00") else rendered
+        return {
+            "freshness": self.freshness.value if isinstance(self.freshness, ObservationFreshness) else self.freshness,
+            "availability": self.availability.value,
+            "source": self.source.to_dict(),
+            "completeness": self.completeness.value,
+            "productionPosture": self.production_posture.value,
+            "observedAt": render(self.observed_at),
+            "asOf": render(self.as_of),
+            "isCached": self.is_cached,
+            "hasFallback": self.has_fallback,
+        }
 PROVIDER_SOURCE_READINESS_STATES = frozenset(
     {
         "ready_for_observation",
@@ -1188,6 +1302,9 @@ _SOURCE_AUTHORITY_BLOCKING_REASON_CODES = frozenset(
 
 
 __all__ = [
+    "EvidenceCompleteness",
+    "MarketEvidenceCondition",
+    "ProductionPosture",
     "SOURCE_CONFIDENCE_CONTRACT_VERSION",
     "PROVIDER_SOURCE_READINESS_CONTRACT_VERSION",
     "PROVIDER_SOURCE_READINESS_STATES",
@@ -1214,4 +1331,5 @@ __all__ = [
     "build_provider_source_readiness_contract",
     "evaluate_score_grade_source_authority",
     "validate_source_confidence_contract",
+    "normalize_market_freshness",
 ]

@@ -21,6 +21,8 @@ export type MarketDataFreshness =
   | 'unavailable'
   | 'unknown'
   | 'proxy';
+/** Canonical temporal freshness axis. Availability, provenance and degradation stay separate. */
+export type MarketOverviewFreshnessState = 'live' | 'fresh' | 'delayed' | 'cached' | 'stale' | 'unknown';
 export type MarketProviderHealthStatus = 'live' | 'cache' | 'stale' | 'fallback' | 'partial' | 'unavailable' | 'error' | 'refreshing';
 
 export interface MarketProviderHealth {
@@ -67,6 +69,8 @@ export interface MarketDataMeta extends MarketObservationTruthInput {
   dataQuality?: MarketConsumerDataQuality | null;
   updatedAt: string;
   freshness: MarketDataFreshness;
+  freshnessState?: MarketOverviewFreshnessState;
+  marketEvidenceCondition?: Record<string, unknown>;
   isFromSnapshot?: boolean;
   lastSuccessfulAt?: string;
   refreshError?: string | null;
@@ -136,6 +140,14 @@ const MARKET_DATA_FRESHNESS_STATES = new Set<MarketDataFreshness>([
   'unknown',
   'proxy',
 ]);
+const MARKET_OVERVIEW_CANONICAL_FRESHNESS_STATES = new Set<MarketOverviewFreshnessState>([
+  'live',
+  'fresh',
+  'delayed',
+  'cached',
+  'stale',
+  'unknown',
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -151,6 +163,11 @@ function isFiniteNumberOrNull(value: unknown): boolean {
 
 export function isMarketDataFreshnessValue(value: unknown): value is MarketDataFreshness {
   return typeof value === 'string' && MARKET_DATA_FRESHNESS_STATES.has(value as MarketDataFreshness);
+}
+
+export function isMarketOverviewFreshnessState(value: unknown): value is MarketOverviewFreshnessState {
+  return typeof value === 'string'
+    && MARKET_OVERVIEW_CANONICAL_FRESHNESS_STATES.has(value as MarketOverviewFreshnessState);
 }
 
 function hasPanelEvidenceTime(panel: Partial<MarketOverviewPanel>): boolean {
@@ -172,7 +189,10 @@ function isMarketOverviewItemContract(value: unknown): value is MarketOverviewIt
   )) {
     return false;
   }
-  return value.freshness === undefined || isMarketDataFreshnessValue(value.freshness);
+  return (
+    (value.freshness === undefined || isMarketDataFreshnessValue(value.freshness))
+    && (value.freshnessState === undefined || isMarketOverviewFreshnessState(value.freshnessState))
+  );
 }
 
 export function isMarketOverviewPanelContract(value: unknown): value is MarketOverviewPanel {
@@ -185,6 +205,7 @@ export function isMarketOverviewPanelContract(value: unknown): value is MarketOv
     || !MARKET_PANEL_STATUSES.has(panel.status as MarketPanelStatus)
     || !hasText(panel.source)
     || !isMarketDataFreshnessValue(panel.freshness)
+    || (panel.freshnessState !== undefined && !isMarketOverviewFreshnessState(panel.freshnessState))
     || !Array.isArray(panel.items)
     || !panel.items.every(isMarketOverviewItemContract)
   ) {
@@ -250,6 +271,8 @@ function normalizePanel(payload: unknown): MarketOverviewPanel {
     asOf: normalized.asOf,
     expiresAt: normalized.expiresAt,
     freshness: normalized.freshness,
+    freshnessState: normalized.freshnessState,
+    marketEvidenceCondition: normalized.marketEvidenceCondition,
     isProxy: normalized.isProxy,
     isFallback: normalized.isFallback,
     isSynthetic: normalized.isSynthetic,

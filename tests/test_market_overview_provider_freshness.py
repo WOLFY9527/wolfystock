@@ -12,6 +12,18 @@ from src.services.market_overview_service import (
     MarketOverviewService,
     get_freshness_status,
 )
+from src.contracts.source_confidence import (
+    EvidenceCompleteness,
+    MarketEvidenceCondition,
+    ProductionPosture,
+    normalize_market_freshness,
+)
+from src.contracts.evidence.source_observation import (
+    ObservationFreshness,
+    RawAvailability,
+    SourceClass,
+    SourceIdentity,
+)
 
 
 CN_TZ = timezone(timedelta(hours=8))
@@ -184,6 +196,37 @@ def test_freshness_helper_normalizes_core_states_without_silent_upgrade() -> Non
     assert service._sina_as_of("", "") is None
     assert service._sina_as_of("not-a-date", "not-a-time") is None
 
+    assert normalize_market_freshness(
+        "current", has_timestamp_proof=False, availability=RawAvailability.AVAILABLE
+    ) is ObservationFreshness.UNKNOWN
+    assert normalize_market_freshness(
+        "delayed", has_timestamp_proof=True, availability=RawAvailability.AVAILABLE
+    ) is ObservationFreshness.DELAYED
+    assert normalize_market_freshness(
+        "partial", has_timestamp_proof=True, availability=RawAvailability.AVAILABLE
+    ) is ObservationFreshness.UNKNOWN
+    assert normalize_market_freshness(
+        "live", has_timestamp_proof=True, availability=RawAvailability.AVAILABLE, is_synthetic=True
+    ) is ObservationFreshness.UNKNOWN
+
+
+def _market_evidence_condition_examples() -> None:
+    condition = MarketEvidenceCondition(
+        freshness=ObservationFreshness.UNKNOWN,
+        availability=RawAvailability.AVAILABLE,
+        source=SourceIdentity("public_proxy", SourceClass.THIRD_PARTY, is_proxy=True),
+        completeness=EvidenceCompleteness.PARTIAL,
+        production_posture=ProductionPosture.HISTORICAL_REPLAY,
+        has_fallback=True,
+    )
+    payload = condition.to_dict()
+    assert payload["freshness"] == "unknown"
+    assert payload["availability"] == "available"
+    assert payload["completeness"] == "partial"
+    assert payload["productionPosture"] == "historical_replay"
+    assert payload["source"]["isProxy"] is True
+    assert payload["hasFallback"] is True
+
 
 def test_market_meta_projects_consumer_safe_freshness_summary_and_specific_reason() -> None:
     service = MarketOverviewService()
@@ -211,6 +254,53 @@ def test_market_meta_projects_consumer_safe_freshness_summary_and_specific_reaso
     assert payload["degradationReason"] == "stale_source"
     assert payload["fallbackReason"] == "stale_source"
     assert payload["fallbackReason"] not in ENGINEERING_REASON_ALIASES
+
+    no_timestamp = service._with_market_meta(
+        {
+            "source": "official_public",
+            "sourceType": "official_public",
+            "items": [{"symbol": "SPX", "label": "S&P 500", "value": 5000.0}],
+        },
+        "equity_index",
+    )
+    assert no_timestamp["freshnessState"] == "unknown"
+    assert no_timestamp["marketEvidenceCondition"]["freshness"] == "unknown"
+    assert no_timestamp["marketEvidenceCondition"]["availability"] == "available"
+    assert no_timestamp["marketEvidenceCondition"]["asOf"] is None
+
+    condition = MarketEvidenceCondition(
+        freshness=ObservationFreshness.UNKNOWN,
+        availability=RawAvailability.AVAILABLE,
+        source=SourceIdentity("public_proxy", SourceClass.THIRD_PARTY, is_proxy=True),
+        completeness=EvidenceCompleteness.PARTIAL,
+        production_posture=ProductionPosture.HISTORICAL_REPLAY,
+        has_fallback=True,
+    ).to_dict()
+    assert condition["freshness"] == "unknown"
+    assert condition["completeness"] == "partial"
+    assert condition["productionPosture"] == "historical_replay"
+    assert condition["source"]["isProxy"] is True
+    assert condition["hasFallback"] is True
+
+    partial_item = service._with_item_meta(
+        {
+            "symbol": "SPX",
+            "label": "S&P 500",
+            "value": 5000.0,
+            "source": "yfinance_proxy",
+            "sourceType": "public_proxy",
+            "asOf": "2026-06-09T13:00:00Z",
+            "freshness": "partial",
+            "isPartial": True,
+            "isFallback": True,
+        },
+        "equity_index",
+        {"source": "yfinance_proxy", "sourceType": "public_proxy"},
+    )
+    assert partial_item["freshnessState"] == "unknown"
+    assert partial_item["marketEvidenceCondition"]["completeness"] == "partial"
+    assert partial_item["marketEvidenceCondition"]["hasFallback"] is True
+    assert partial_item["marketEvidenceCondition"]["source"]["isProxy"] is True
 
 
 def test_spy_proxy_for_spx_is_explicit_and_never_official_index() -> None:
