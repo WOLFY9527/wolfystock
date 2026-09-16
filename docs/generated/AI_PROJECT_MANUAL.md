@@ -72,7 +72,7 @@ This manual is a generated navigation and integrity catalog. It does not copy do
 | [docs/contracts/historical-market-data.md](../contracts/historical-market-data.md) | canonical | active | yes | Historical OHLCV foundation contract | d3767d52a921 |
 | [docs/design/frontend.md](../design/frontend.md) | canonical | active | yes | Consumer frontend design and implementation contract | 8d343ceca2c8 |
 | [docs/development/environment.md](../development/environment.md) | canonical | active | yes | Dependency, bootstrap, target, snapshot, runtime, and configuration authority | eaba2d40fec1 |
-| [docs/development/validation.md](../development/validation.md) | canonical | active | yes | Validation command routing and evidence reference | 7bbd0701c0c8 |
+| [docs/development/validation.md](../development/validation.md) | canonical | active | yes | Validation command routing and evidence reference | 24931f332937 |
 | [docs/generated/AI_PROJECT_MANUAL.md](AI_PROJECT_MANUAL.md) | generated | generated | no | Generated complete documentation catalog | generated |
 | [docs/operations/database.md](../operations/database.md) | canonical | active | yes | Database diagnostics, baseline artifacts, Phase F, and DuckDB runbook | a8e92511388e |
 | [docs/operations/historical-ohlcv-seed.md](../operations/historical-ohlcv-seed.md) | canonical | active | yes | Local historical OHLCV seed and verification runbook | d4d4706d3d51 |

@@ -1277,5 +1277,170 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
         self._assert_exposure_research_context(payload, expected_symbol="600519")
 
 
+class PortfolioFxRateHttpContractTestCase(unittest.TestCase):
+    """HTTP behavioral coverage for the UI-consumed portfolio FX rate routes.
+
+    ``portfolioApi.getFxRate`` reads the cached rate through
+    ``GET /api/v1/portfolio/fx-rate`` while ``portfolioApi.refreshFxRate`` mutates the
+    provider cache through ``POST /api/v1/portfolio/fx-rate/refresh``. These tests pin
+    the authenticated-member boundary, the shared response contract, and the
+    read-versus-refresh distinction.
+    """
+
+    READ_URL = "/api/v1/portfolio/fx-rate"
+    REFRESH_URL = "/api/v1/portfolio/fx-rate/refresh"
+
+    def setUp(self) -> None:
+        _reset_auth_globals()
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.data_dir = Path(self.temp_dir.name)
+        self.env_path = self.data_dir / ".env"
+        self.db_path = self.data_dir / "portfolio_fx_rate_contract.db"
+        self.env_path.write_text(
+            "\n".join(
+                [
+                    "STOCK_LIST=600519",
+                    "GEMINI_API_KEY=test",
+                    "ADMIN_AUTH_ENABLED=true",
+                    f"DATABASE_PATH={self.db_path}",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        os.environ["ENV_FILE"] = str(self.env_path)
+        os.environ["DATABASE_PATH"] = str(self.db_path)
+        Config.reset_instance()
+        DatabaseManager.reset_instance()
+        self.db = DatabaseManager.get_instance()
+
+        self.app = create_app(static_dir=self.data_dir / "empty-static")
+        self.client = TestClient(self.app)
+        self.anonymous_client = TestClient(self.app)
+
+        login = self.client.post(
+            "/api/v1/auth/login",
+            json={"password": "fx-rate-admin-pass", "passwordConfirm": "fx-rate-admin-pass"},
+        )
+        self.assertEqual(login.status_code, 200, login.text)
+
+    def tearDown(self) -> None:
+        self.client.close()
+        self.anonymous_client.close()
+        DatabaseManager.reset_instance()
+        Config.reset_instance()
+        os.environ.pop("ENV_FILE", None)
+        os.environ.pop("DATABASE_PATH", None)
+        _reset_auth_globals()
+        _reset_public_limiter_state_if_available()
+        self.temp_dir.cleanup()
+
+    @staticmethod
+    def _rate_payload(*, cache_hit: bool, stale: bool, provider: str = "frankfurter") -> dict:
+        return {
+            "base_currency": "USD",
+            "quote_currency": "CNY",
+            "rate": "7.12345678",
+            "provider": provider,
+            "fetched_at": "2026-09-14T05:00:00",
+            "cache_hit": cache_hit,
+            "stale": stale,
+        }
+
+    def _assert_fx_rate_contract(self, payload: dict, *, cache_hit: bool, stale: bool) -> None:
+        # Field names asserted in snake_case exactly as the UI's toCamelCase<PortfolioLiveFxRateResponse> consumes them.
+        self.assertEqual(payload["base_currency"], "USD")
+        self.assertEqual(payload["quote_currency"], "CNY")
+        self.assertEqual(payload["rate"], "7.12345678")
+        self.assertEqual(payload["provider"], "frankfurter")
+        self.assertEqual(payload["fetched_at"], "2026-09-14T05:00:00")
+        self.assertIs(payload["cache_hit"], cache_hit)
+        self.assertIs(payload["stale"], stale)
+        self.assertIsNone(payload.get("error"))
+
+    def test_fx_rate_routes_require_authenticated_member(self) -> None:
+        anonymous_read = self.anonymous_client.get(
+            self.READ_URL,
+            params={"base": "USD", "quote": "CNY"},
+        )
+        anonymous_refresh = self.anonymous_client.post(
+            self.REFRESH_URL,
+            params={"base": "USD", "quote": "CNY"},
+        )
+
+        self.assertEqual(anonymous_read.status_code, 401, anonymous_read.text)
+        self.assertEqual(anonymous_refresh.status_code, 401, anonymous_refresh.text)
+
+    def test_cached_read_returns_contract_without_force_refresh(self) -> None:
+        service = MagicMock()
+        service.fetch_rate.return_value = self._rate_payload(cache_hit=True, stale=False)
+
+        with patch("api.v1.endpoints.portfolio.default_fx_rate_service", service):
+            response = self.client.get(self.READ_URL, params={"base": "USD", "quote": "CNY"})
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self._assert_fx_rate_contract(response.json(), cache_hit=True, stale=False)
+        service.fetch_rate.assert_called_once_with("USD", "CNY")
+
+    def test_refresh_is_a_distinct_force_refresh_mutation(self) -> None:
+        service = MagicMock()
+        service.fetch_rate.return_value = self._rate_payload(cache_hit=False, stale=False)
+
+        with patch("api.v1.endpoints.portfolio.default_fx_rate_service", service):
+            response = self.client.post(self.REFRESH_URL, params={"base": "USD", "quote": "CNY"})
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self._assert_fx_rate_contract(response.json(), cache_hit=False, stale=False)
+        service.fetch_rate.assert_called_once_with("USD", "CNY", force_refresh=True)
+
+    def test_fx_rate_routes_require_bounded_base_and_quote_params(self) -> None:
+        missing_quote = self.client.get(self.READ_URL, params={"base": "USD"})
+        short_base = self.client.get(self.READ_URL, params={"base": "US", "quote": "CNY"})
+        oversized_quote = self.client.get(self.READ_URL, params={"base": "USD", "quote": "C" * 9})
+
+        self.assertEqual(missing_quote.status_code, 422, missing_quote.text)
+        self.assertEqual(short_base.status_code, 422, short_base.text)
+        self.assertEqual(oversized_quote.status_code, 422, oversized_quote.text)
+
+    def test_fx_rate_maps_unsupported_pair_to_bounded_validation_error(self) -> None:
+        service = MagicMock()
+        service.fetch_rate.side_effect = ValueError(
+            "currency code is unsupported for the Portfolio FX policy"
+        )
+
+        with patch("api.v1.endpoints.portfolio.default_fx_rate_service", service):
+            read_response = self.client.get(self.READ_URL, params={"base": "USD", "quote": "CNY"})
+            refresh_response = self.client.post(
+                self.REFRESH_URL,
+                params={"base": "USD", "quote": "CNY"},
+            )
+
+        for response in (read_response, refresh_response):
+            self.assertEqual(response.status_code, 400, response.text)
+            # Portfolio errors use a flat consumer-safe envelope rather than a
+            # "detail" wrapper, so the UI reads the code from the top level.
+            payload = response.json()
+            self.assertEqual(payload["error"], "validation_error")
+            self.assertEqual(payload["code"], "validation_error")
+            self.assertEqual(payload["status"], 400)
+            self.assertNotIn("Traceback", response.text)
+            self.assertNotIn("provider_url", response.text)
+
+    def test_fx_rate_surfaces_stale_provider_fallback_without_leaking_exception_text(self) -> None:
+        service = MagicMock()
+        stale_payload = self._rate_payload(cache_hit=True, stale=True)
+        stale_payload["error"] = "provider unavailable"
+        service.fetch_rate.return_value = stale_payload
+
+        with patch("api.v1.endpoints.portfolio.default_fx_rate_service", service):
+            response = self.client.get(self.READ_URL, params={"base": "USD", "quote": "CNY"})
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["cache_hit"], True)
+        self.assertEqual(payload["stale"], True)
+        self.assertEqual(payload["error"], "provider unavailable")
+
+
 if __name__ == "__main__":
     unittest.main()

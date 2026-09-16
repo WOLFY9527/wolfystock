@@ -154,6 +154,24 @@ const evidence: { responsive: RouteViewportEvidence[]; journeys: JourneyEvidence
   journeys: [],
 };
 const strictQualification = process.env.STRICT_CONSUMER_FRONTEND_QUALIFICATION === '1';
+const canonicalQualification =
+  process.env.WOLFYSTOCK_CONSUMER_BROWSER_QUALIFICATION_CANONICAL === '1';
+
+/**
+ * Canonical strict consumer browser qualification is owned by
+ * `apps/dsa-web/scripts/run-consumer-frontend-browser-qualification.sh`, which
+ * exports both markers. The canonical marker alone must never qualify a weaker
+ * matrix: if strict mode were accidentally dropped while the marker survived,
+ * this file would otherwise report a pass without applying the strict
+ * production-defect and keyboard-journey assertions. Fail closed at load time
+ * instead of silently qualifying less.
+ */
+if (canonicalQualification && !strictQualification) {
+  throw new Error(
+    'Canonical consumer browser qualification requires STRICT_CONSUMER_FRONTEND_QUALIFICATION=1; ' +
+      'run apps/dsa-web/scripts/run-consumer-frontend-browser-qualification.sh instead of invoking Playwright directly.',
+  );
+}
 
 /**
  * Only a resolved, provenance-preserved company identity may remain in CJK on

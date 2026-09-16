@@ -82,6 +82,16 @@ def _regular_user() -> CurrentUser:
     )
 
 
+def _admin_logs_http_client(user: CurrentUser | None) -> TestClient:
+    """Mount the admin log router and optionally project an authenticated caller."""
+
+    app = FastAPI()
+    app.include_router(admin_logs.router, prefix="/api/v1/admin/logs")
+    if user is not None:
+        app.dependency_overrides[get_current_user] = lambda: user
+    return TestClient(app)
+
+
 class AdminLogsApiTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._prior_admin_auth_enabled = os.environ.get("ADMIN_AUTH_ENABLED")
@@ -2602,6 +2612,153 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertNotIn("actor_user_id", rich_missing.json()["readable_summary"])
         self.assertEqual(rich_business.json()["userId"], "user-actor-1")
         self.assertEqual(rich_business.json()["actorLabel"], "Alice")
+
+
+class AdminLogsSessionDetailHttpContractTestCase(unittest.TestCase):
+    """HTTP coverage for the UI session-detail route under the R08 privacy contract."""
+
+    SESSION_DETAIL_URL = "/api/v1/admin/logs/sessions/{session_id}"
+
+    def setUp(self) -> None:
+        self._prior_admin_auth_enabled = os.environ.get("ADMIN_AUTH_ENABLED")
+        os.environ["ADMIN_AUTH_ENABLED"] = "true"
+        auth.refresh_auth_state()
+        DatabaseManager.reset_instance()
+        self.db = DatabaseManager(db_url="sqlite:///:memory:")
+
+    def tearDown(self) -> None:
+        DatabaseManager.reset_instance()
+        if self._prior_admin_auth_enabled is None:
+            os.environ.pop("ADMIN_AUTH_ENABLED", None)
+        else:
+            os.environ["ADMIN_AUTH_ENABLED"] = self._prior_admin_auth_enabled
+        auth.refresh_auth_state()
+
+    def _seed_actor_session(
+        self,
+        session_id: str,
+        *,
+        actor_user_id: str = "user-actor-1",
+        create_user: bool = True,
+    ) -> None:
+        event_at = datetime.now()
+        summary = {
+            "meta": {
+                "actor_user_id": actor_user_id,
+                "actor_username": "alice",
+                "actor_display": "Alice",
+                "actor_role": "user",
+                "actor_type": "user",
+                "actor_session_id": "session-actor-1",
+                "actor_request_id": "request-actor-1",
+                "password_hash": "STOREDPASSWORDHASH",
+                "provider_credential": "RAWPROVIDERCREDENTIAL",
+            },
+            "log": {"level": "WARNING", "category": "security"},
+        }
+        if create_user:
+            self.db.create_or_update_app_user(
+                user_id=actor_user_id,
+                username="alice",
+                display_name="Alice",
+                role="user",
+                password_hash="pbkdf2:fixture",
+                is_active=True,
+            )
+        self.db.create_execution_log_session(
+            session_id=session_id,
+            task_id="AdminAction",
+            code=None,
+            name="AdminAction",
+            overall_status="completed",
+            truth_level="actual",
+            summary=summary,
+            started_at=event_at,
+        )
+        self.db.append_execution_log_event(
+            session_id=session_id,
+            phase="security",
+            step="AdminAction",
+            target="security",
+            status="completed",
+            truth_level="actual",
+            message="admin action failed token=RAWTOKEN",
+            detail={"level": "WARNING", "category": "security", "event_name": "AdminAction"},
+            event_at=event_at,
+        )
+        self.db.finalize_execution_log_session(
+            session_id=session_id,
+            overall_status="completed",
+            truth_level="actual",
+            summary=summary,
+            ended_at=event_at,
+        )
+
+    def test_session_detail_http_enforces_admin_rbac_boundary(self) -> None:
+        url = self.SESSION_DETAIL_URL.format(session_id="rbac-probe")
+        with _admin_logs_http_client(None) as client:
+            self.assertEqual(client.get(url).status_code, 401)
+        with _admin_logs_http_client(_regular_user()) as client:
+            response = client.get(url)
+            self.assertEqual(response.status_code, 403)
+            self.assertEqual(response.json()["detail"]["error"], "admin_required")
+        with _admin_logs_http_client(_admin_user()) as client:
+            response = client.get(url)
+            self.assertEqual(response.status_code, 403)
+            self.assertEqual(response.json()["detail"]["error"], "admin_capability_required")
+
+    def test_session_detail_http_returns_bounded_not_found(self) -> None:
+        with _admin_logs_http_client(_admin_user_with_capabilities("ops:logs:read")) as client:
+            with patch("src.services.execution_log_service.get_db", return_value=self.db):
+                response = client.get(self.SESSION_DETAIL_URL.format(session_id="absent-session"))
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"]["error"], "not_found")
+        self.assertNotIn("Traceback", response.text)
+        self.assertNotIn("/Users/", response.text)
+
+    def test_session_detail_http_preserves_r08_privacy_for_ops_only_and_users_read(self) -> None:
+        session_id = "actor-projection-session"
+        self._seed_actor_session(session_id)
+        url = self.SESSION_DETAIL_URL.format(session_id=session_id)
+
+        with _admin_logs_http_client(_admin_user_with_capabilities("ops:logs:read")) as client:
+            with patch("src.services.execution_log_service.get_db", return_value=self.db):
+                ops_response = client.get(url)
+        self.assertEqual(ops_response.status_code, 200, ops_response.text)
+        ops_payload = ops_response.json()
+        self.assertEqual(ops_payload["session_id"], session_id)
+        for forbidden in (
+            "user-actor-1", "alice", "Alice", "session-actor-1", "request-actor-1",
+            "STOREDPASSWORDHASH", "RAWPROVIDERCREDENTIAL", "RAWTOKEN",
+        ):
+            self.assertNotIn(forbidden, ops_response.text)
+
+        with _admin_logs_http_client(_admin_user_with_capabilities("ops:logs:read", "users:read")) as client:
+            with patch("src.services.execution_log_service.get_db", return_value=self.db):
+                reviewed_response = client.get(url)
+        self.assertEqual(reviewed_response.status_code, 200, reviewed_response.text)
+        reviewed = reviewed_response.json()
+        readable = reviewed["readable_summary"]
+        self.assertEqual(readable["actor_user_id"], "user-actor-1")
+        self.assertEqual(readable["actor_display"], "Alice")
+        for forbidden_key in ("actor_username", "actor_session_id", "actor_request_id", "email", "password_hash"):
+            self.assertNotIn(forbidden_key, str(readable))
+        for forbidden in ("alice", "session-actor-1", "request-actor-1", "STOREDPASSWORDHASH", "RAWPROVIDERCREDENTIAL", "RAWTOKEN"):
+            self.assertNotIn(forbidden, reviewed_response.text)
+
+    def test_session_detail_http_fails_safe_for_missing_actor_reference(self) -> None:
+        self._seed_actor_session(
+            "missing-actor-session",
+            actor_user_id="missing-user-404",
+            create_user=False,
+        )
+        with _admin_logs_http_client(_admin_user_with_capabilities("ops:logs:read", "users:read")) as client:
+            with patch("src.services.execution_log_service.get_db", return_value=self.db):
+                response = client.get(self.SESSION_DETAIL_URL.format(session_id="missing-actor-session"))
+        self.assertEqual(response.status_code, 200, response.text)
+        readable = response.json()["readable_summary"]
+        self.assertNotIn("actor_user_id", readable)
+        self.assertNotIn("actor_display", readable)
 
 
 if __name__ == "__main__":

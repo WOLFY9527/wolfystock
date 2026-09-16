@@ -102,6 +102,26 @@ complete asset inventory without Git, Web source, Node/npm, or the `scripts/`
 tree. Missing package evidence or partial external identity assertions fail
 closed at the image and startup boundaries.
 
+## Strict Consumer Browser Qualification
+
+Consumer browser qualification has exactly one canonical entrypoint:
+
+```bash
+./wolfy exec --profile test -- bash apps/dsa-web/scripts/run-consumer-frontend-browser-qualification.sh
+```
+
+The runner owns the qualified matrix, not the shell caller: strict
+qualification is always enabled, the `chromium` and `chromium-mobile` projects
+always run, and the complete
+`apps/dsa-web/e2e/consumer-frontend-browser-qualification.spec.ts` matrix is
+selected. Matrix-weakening flags (`--project`, `--grep`, `--config`,
+`--workers`) are rejected. `--print-plan` prints the resolved selection as JSON
+without starting Playwright, and `--list` collects the canonical cases without
+a browser. The spec fails closed at load time when the canonical marker is
+present without strict mode, so a weakened run cannot be reported as consumer
+qualification evidence. Direct `playwright test` invocations of that spec are
+not a qualified consumer result.
+
 ## Runtime UAT
 
 The local UAT harness binds evidence to the expected source identity:

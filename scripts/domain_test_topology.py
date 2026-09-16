@@ -654,6 +654,15 @@ def validate_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         raise TopologyError("unsupported domain topology schema/manifest version")
     if manifest.get("shadowOnly") is not True:
         raise TopologyError("domain topology must remain shadowOnly")
+    authoritative_gates = manifest.get("authoritativeGates")
+    expected_consumer_gate = (
+        "./wolfy exec --profile test -- bash "
+        "apps/dsa-web/scripts/run-consumer-frontend-browser-qualification.sh"
+    )
+    if not isinstance(authoritative_gates, list) or expected_consumer_gate not in authoritative_gates:
+        raise TopologyError("authoritative consumer browser gate must resolve to the canonical runner")
+    if "cd apps/dsa-web && npm run test:e2e" in authoritative_gates:
+        raise TopologyError("stale unusable e2e gate must not remain authoritative")
     counts = {}
     counts.update(_validate_backend(manifest))
     counts.update(_validate_vitest(manifest))
@@ -874,7 +883,7 @@ def build_manifest(
         "authoritativeGates": [
             "bash scripts/ci_gate.sh",
             "cd apps/dsa-web && npm test",
-            "cd apps/dsa-web && npm run test:e2e",
+            "./wolfy exec --profile test -- bash apps/dsa-web/scripts/run-consumer-frontend-browser-qualification.sh",
         ],
         "backend": {
             "domainOrder": list(BACKEND_DOMAINS),

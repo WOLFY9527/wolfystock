@@ -1798,5 +1798,259 @@ class AuthApiTestCase(unittest.TestCase):
         self.assertIn(b'"error":"unauthorized"', response.body)
 
 
+class AuthChangePasswordHttpContractTestCase(unittest.TestCase):
+    """HTTP behavioral coverage for POST /api/v1/auth/change-password.
+
+    ``authApi.changePassword`` posts the current/new/confirm triple and expects a
+    session-scoped result with no password material echoed back. These tests use a
+    real ASGI app so the request-local ``resolve_current_user`` guard, the validation
+    branches, and the session-revocation side effect are exercised end to end.
+    """
+
+    URL = "/api/v1/auth/change-password"
+    BOOTSTRAP_PASSWORD = "bootstrap-pass-1"
+    MEMBER_INITIAL_PASSWORD = "member-pass-1"
+    MEMBER_NEW_PASSWORD = "member-pass-2"
+
+    def setUp(self) -> None:
+        _reset_auth_globals()
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.data_dir = Path(self.temp_dir.name)
+        self.env_path = self.data_dir / ".env"
+        self.db_path = self.data_dir / "auth_change_password.db"
+        self.env_path.write_text(
+            "STOCK_LIST=600519\nGEMINI_API_KEY=test\nADMIN_AUTH_ENABLED=true\n",
+            encoding="utf-8",
+        )
+        os.environ["ENV_FILE"] = str(self.env_path)
+        os.environ["DATABASE_PATH"] = str(self.db_path)
+        Config.reset_instance()
+        DatabaseManager.reset_instance()
+        self.db = DatabaseManager.get_instance()
+
+        self.app = FastAPI()
+        self.app.include_router(auth_endpoint.router, prefix="/api/v1/auth")
+        self.anonymous_client = TestClient(self.app)
+        self.admin_client = TestClient(self.app)
+        self.member_client = TestClient(self.app)
+
+        self._login_admin()
+        self._login_member()
+
+    def tearDown(self) -> None:
+        self.anonymous_client.close()
+        self.admin_client.close()
+        self.member_client.close()
+        DatabaseManager.reset_instance()
+        Config.reset_instance()
+        os.environ.pop("ENV_FILE", None)
+        os.environ.pop("DATABASE_PATH", None)
+        _reset_auth_globals()
+        self.temp_dir.cleanup()
+
+    def _login_admin(self) -> None:
+        response = self.admin_client.post(
+            "/api/v1/auth/login",
+            json={"password": self.BOOTSTRAP_PASSWORD, "passwordConfirm": self.BOOTSTRAP_PASSWORD},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+
+    def _login_member(self) -> None:
+        response = self.member_client.post(
+            "/api/v1/auth/login",
+            json={
+                "username": "carol",
+                "displayName": "Carol",
+                "createUser": True,
+                "password": self.MEMBER_INITIAL_PASSWORD,
+                "passwordConfirm": self.MEMBER_INITIAL_PASSWORD,
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+
+    def _change_password(
+        self,
+        client: TestClient,
+        *,
+        current: str,
+        new: str,
+        confirm: str,
+    ):
+        return client.post(
+            self.URL,
+            json={"currentPassword": current, "newPassword": new, "newPasswordConfirm": confirm},
+        )
+
+    def _login_still_works(self, *, username: str | None, password: str) -> bool:
+        body: dict[str, object] = {"password": password}
+        if username is not None:
+            body["username"] = username
+        with TestClient(self.app) as client:
+            response = client.post("/api/v1/auth/login", json=body)
+        return response.status_code == 200
+
+    @staticmethod
+    def _resolved_session_state(client: TestClient) -> int:
+        return client.get("/api/v1/auth/me").status_code
+
+    def test_change_password_requires_authenticated_session(self) -> None:
+        response = self._change_password(
+            self.anonymous_client,
+            current=self.BOOTSTRAP_PASSWORD,
+            new="rotation-pass-1",
+            confirm="rotation-pass-1",
+        )
+
+        self.assertEqual(response.status_code, 401, response.text)
+        self.assertEqual(response.json()["error"], "unauthorized")
+        self.assertNotIn(self.BOOTSTRAP_PASSWORD, response.text)
+
+    def test_change_password_rejects_missing_current_password(self) -> None:
+        response = self._change_password(
+            self.admin_client,
+            current="   ",
+            new="rotation-pass-1",
+            confirm="rotation-pass-1",
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(response.json()["error"], "current_required")
+
+    def test_change_password_rejects_mismatched_confirmation(self) -> None:
+        response = self._change_password(
+            self.member_client,
+            current=self.MEMBER_INITIAL_PASSWORD,
+            new=self.MEMBER_NEW_PASSWORD,
+            confirm="member-pass-3",
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(response.json()["error"], "password_mismatch")
+        # The rejected confirmation must not be reflected back to the caller.
+        self.assertNotIn("member-pass-3", response.text)
+        self.assertNotIn(self.MEMBER_INITIAL_PASSWORD, response.text)
+
+    def test_change_password_rejects_wrong_current_password_without_mutating_credential(self) -> None:
+        response = self._change_password(
+            self.member_client,
+            current="definitely-wrong",
+            new=self.MEMBER_NEW_PASSWORD,
+            confirm=self.MEMBER_NEW_PASSWORD,
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(response.json()["error"], "invalid_password")
+        self.assertNotIn("definitely-wrong", response.text)
+        self.assertNotIn(self.MEMBER_NEW_PASSWORD, response.text)
+
+        # Credential must be untouched: the original password still authenticates.
+        self.assertTrue(
+            self._login_still_works(username="carol", password=self.MEMBER_INITIAL_PASSWORD)
+        )
+
+    def test_change_password_rejects_weak_new_password_with_bounded_error(self) -> None:
+        too_short = self._change_password(
+            self.member_client,
+            current=self.MEMBER_INITIAL_PASSWORD,
+            new="abc",
+            confirm="abc",
+        )
+        numeric_only = self._change_password(
+            self.member_client,
+            current=self.MEMBER_INITIAL_PASSWORD,
+            new="123456789",
+            confirm="123456789",
+        )
+
+        for response in (too_short, numeric_only):
+            self.assertEqual(response.status_code, 400, response.text)
+            self.assertEqual(response.json()["error"], "invalid_password")
+            self.assertNotIn("Traceback", response.text)
+
+        self.assertTrue(
+            self._login_still_works(username="carol", password=self.MEMBER_INITIAL_PASSWORD)
+        )
+
+    def test_change_password_rotates_credential_and_revokes_existing_session(self) -> None:
+        with TestClient(self.app) as before:
+            prior_login = before.post(
+                "/api/v1/auth/login",
+                json={"username": "carol", "password": self.MEMBER_INITIAL_PASSWORD},
+            )
+            self.assertEqual(prior_login.status_code, 200, prior_login.text)
+            self.assertEqual(self._resolved_session_state(before), 200)
+
+            response = self._change_password(
+                self.member_client,
+                current=self.MEMBER_INITIAL_PASSWORD,
+                new=self.MEMBER_NEW_PASSWORD,
+                confirm=self.MEMBER_NEW_PASSWORD,
+            )
+
+            self.assertEqual(response.status_code, 204, response.text)
+            self.assertEqual(response.content, b"")
+
+            # The pre-change session must stop resolving after the rotation.
+            self.assertEqual(self._resolved_session_state(before), 401)
+
+        # Old credential no longer authenticates; the rotated one does.
+        self.assertFalse(self._login_still_works(username="carol", password=self.MEMBER_INITIAL_PASSWORD))
+        self.assertTrue(self._login_still_works(username="carol", password=self.MEMBER_NEW_PASSWORD))
+
+    def test_bootstrap_admin_change_password_rotates_and_revokes_session(self) -> None:
+        new_password = "bootstrap-pass-2"
+        response = self._change_password(
+            self.admin_client,
+            current=self.BOOTSTRAP_PASSWORD,
+            new=new_password,
+            confirm=new_password,
+        )
+
+        self.assertEqual(response.status_code, 204, response.text)
+        self.assertEqual(response.content, b"")
+        self.assertEqual(self._resolved_session_state(self.admin_client), 401)
+        self.assertFalse(self._login_still_works(username=None, password=self.BOOTSTRAP_PASSWORD))
+        self.assertTrue(self._login_still_works(username=None, password=new_password))
+
+    def test_change_password_refuses_when_web_change_is_not_available(self) -> None:
+        with patch.object(auth_endpoint, "is_password_changeable", return_value=False):
+            response = self._change_password(
+                self.admin_client,
+                current=self.BOOTSTRAP_PASSWORD,
+                new="rotation-pass-1",
+                confirm="rotation-pass-1",
+            )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(response.json()["error"], "not_changeable")
+        self.assertNotIn(self.BOOTSTRAP_PASSWORD, response.text)
+
+    def test_change_password_never_echoes_password_or_hash_material(self) -> None:
+        responses = [
+            self._change_password(
+                self.member_client,
+                current=self.MEMBER_INITIAL_PASSWORD,
+                new=self.MEMBER_NEW_PASSWORD,
+                confirm=self.MEMBER_NEW_PASSWORD,
+            ),
+            self._change_password(
+                self.member_client,
+                current=self.MEMBER_NEW_PASSWORD,
+                new=self.MEMBER_NEW_PASSWORD,
+                confirm="mismatch-pass-9",
+            ),
+        ]
+
+        for response in responses:
+            for forbidden in (
+                self.MEMBER_INITIAL_PASSWORD,
+                self.MEMBER_NEW_PASSWORD,
+                "mismatch-pass-9",
+                "pbkdf2",
+                "password_hash",
+            ):
+                self.assertNotIn(forbidden, response.text)
+
+
 if __name__ == "__main__":
     unittest.main()

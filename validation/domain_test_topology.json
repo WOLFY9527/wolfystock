@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "manifestVersion": "1.0.0",
   "shadowOnly": true,
-  "capturedOn": "2026-09-13",
+  "capturedOn": "2026-09-16",
   "authoritativeGates": [
     "bash scripts/ci_gate.sh",
     "cd apps/dsa-web && npm test",
-    "cd apps/dsa-web && npm run test:e2e"
+    "./wolfy exec --profile test -- bash apps/dsa-web/scripts/run-consumer-frontend-browser-qualification.sh"
   ],
   "backend": {
     "domainOrder": [
@@ -59,8 +59,8 @@
       "sha256": "80412d5648733e6c8f24c47a1963afd6fd81e787945c867cc14df64d755ae9dc"
     },
     "currentInventory": {
-      "count": 8405,
-      "sha256": "11f45698d9a3c313bad1f1f86217729f792be946f5eb7d35db8ffc4f73a82355"
+      "count": 8441,
+      "sha256": "17cd22ed12d8911b6d5c5aca55d2c789cd482b49464c28114b06910328908b13"
     },
     "tests": [
       {
@@ -422,6 +422,26 @@
         "id": "tests/api/test_admin_logs.py::AdminLogsApiTestCase::test_storage_summary_uses_sqlite_database_file_size_when_available",
         "domain": "api_schema_contracts",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_admin_logs.py::AdminLogsSessionDetailHttpContractTestCase::test_session_detail_http_enforces_admin_rbac_boundary",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_admin_logs.py::AdminLogsSessionDetailHttpContractTestCase::test_session_detail_http_fails_safe_for_missing_actor_reference",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_admin_logs.py::AdminLogsSessionDetailHttpContractTestCase::test_session_detail_http_preserves_r08_privacy_for_ops_only_and_users_read",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_admin_logs.py::AdminLogsSessionDetailHttpContractTestCase::test_session_detail_http_returns_bounded_not_found",
+        "domain": "api_schema_contracts",
+        "baseline": false
       },
       {
         "id": "tests/api/test_admin_logs_real_pg.py::AdminLogsRealPgQuotaTestCase::test_storage_quota_warns_criticalizes_and_cleans_up_against_real_postgresql",
@@ -6534,6 +6554,36 @@
         "baseline": true
       },
       {
+        "id": "tests/scripts/test_consumer_browser_qualification_runner.py::test_canonical_runner_assigns_strict_markers_instead_of_defaulting_them",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_consumer_browser_qualification_runner.py::test_canonical_runner_plan_forces_strict_mode_and_both_consumer_projects",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_consumer_browser_qualification_runner.py::test_canonical_runner_rejects_caller_supplied_matrix_weakening_flags",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_consumer_browser_qualification_runner.py::test_canonical_runner_selects_the_complete_inventoried_consumer_matrix",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_consumer_browser_qualification_runner.py::test_consumer_qualification_spec_fails_closed_without_strict_mode",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_consumer_browser_qualification_runner.py::test_machine_authority_resolves_to_canonical_runner_without_stale_e2e_alias",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_data_chain_operator_verifier.py::test_adjusted_ohlcv_and_quote_snapshot_available_returns_ok",
         "domain": "runtime_operator_tooling",
         "baseline": true
@@ -12219,6 +12269,51 @@
         "baseline": true
       },
       {
+        "id": "tests/test_auth_api.py::AuthChangePasswordHttpContractTestCase::test_bootstrap_admin_change_password_rotates_and_revokes_session",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_auth_api.py::AuthChangePasswordHttpContractTestCase::test_change_password_never_echoes_password_or_hash_material",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_auth_api.py::AuthChangePasswordHttpContractTestCase::test_change_password_refuses_when_web_change_is_not_available",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_auth_api.py::AuthChangePasswordHttpContractTestCase::test_change_password_rejects_mismatched_confirmation",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_auth_api.py::AuthChangePasswordHttpContractTestCase::test_change_password_rejects_missing_current_password",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_auth_api.py::AuthChangePasswordHttpContractTestCase::test_change_password_rejects_weak_new_password_with_bounded_error",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_auth_api.py::AuthChangePasswordHttpContractTestCase::test_change_password_rejects_wrong_current_password_without_mutating_credential",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_auth_api.py::AuthChangePasswordHttpContractTestCase::test_change_password_requires_authenticated_session",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_auth_api.py::AuthChangePasswordHttpContractTestCase::test_change_password_rotates_credential_and_revokes_existing_session",
+        "domain": "auth_security",
+        "baseline": false
+      },
+      {
         "id": "tests/test_auth_route_capability_inventory.py::test_admin_observability_route_inventory_keeps_capabilities_and_transitional_gaps_explicit",
         "domain": "auth_security",
         "baseline": true
@@ -12857,6 +12952,61 @@
         "id": "tests/test_backtest_api_contract.py::BacktestApiContractTestCase::test_support_bundle_api_surface_truthfully_closes_missing_trace_contract",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_backtest_api_contract.py::BacktestUiConsumedApiHttpContractTestCase::test_prepare_samples_http_exposes_frontend_consumed_contract",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_api_contract.py::BacktestUiConsumedApiHttpContractTestCase::test_prepare_samples_http_maps_service_value_error_to_bounded_validation_error",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_api_contract.py::BacktestUiConsumedApiHttpContractTestCase::test_prepare_samples_http_rejects_out_of_range_sample_count",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_api_contract.py::BacktestUiConsumedApiHttpContractTestCase::test_rule_parse_http_preserves_rule_normalization_semantics",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_api_contract.py::BacktestUiConsumedApiHttpContractTestCase::test_rule_parse_http_rejects_invalid_capital_and_cost_bounds",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_api_contract.py::BacktestUiConsumedApiHttpContractTestCase::test_samples_clear_http_maps_value_error_to_bounded_validation_error",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_api_contract.py::BacktestUiConsumedApiHttpContractTestCase::test_samples_clear_http_returns_owner_scoped_clear_contract",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_api_contract.py::BacktestUiConsumedApiHttpContractTestCase::test_stock_performance_http_exposes_frontend_consumed_contract",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_api_contract.py::BacktestUiConsumedApiHttpContractTestCase::test_stock_performance_http_rejects_out_of_range_eval_window",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_api_contract.py::BacktestUiConsumedApiHttpContractTestCase::test_stock_performance_http_returns_zero_state_when_no_summary_is_available",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_api_contract.py::BacktestUiConsumedApiHttpContractTestCase::test_ui_consumed_backtest_routes_require_authenticated_member",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_backtest_api_contract.py::test_backtest_data_basis_schema_preserves_explicit_financial_truth",
@@ -29949,6 +30099,36 @@
         "baseline": false
       },
       {
+        "id": "tests/test_portfolio_api_contract.py::PortfolioFxRateHttpContractTestCase::test_cached_read_returns_contract_without_force_refresh",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_api_contract.py::PortfolioFxRateHttpContractTestCase::test_fx_rate_maps_unsupported_pair_to_bounded_validation_error",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_api_contract.py::PortfolioFxRateHttpContractTestCase::test_fx_rate_routes_require_authenticated_member",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_api_contract.py::PortfolioFxRateHttpContractTestCase::test_fx_rate_routes_require_bounded_base_and_quote_params",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_api_contract.py::PortfolioFxRateHttpContractTestCase::test_fx_rate_surfaces_stale_provider_fallback_without_leaking_exception_text",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_api_contract.py::PortfolioFxRateHttpContractTestCase::test_refresh_is_a_distinct_force_refresh_mutation",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_exact_numeric.py::test_asset_quantity_and_price_precision_use_the_market_registry[cn]",
         "domain": "portfolio_broker",
         "baseline": false
@@ -42916,7 +43096,7 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/HomeSurfacePage.test.tsx",
         "owner": "milestone_t448_consumer_product",
-        "bytes": 276913,
+        "bytes": 276893,
         "lines": 5946
       },
       {

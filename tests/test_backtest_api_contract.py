@@ -4,18 +4,26 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import unittest
 import warnings
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import BackgroundTasks, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.routing import APIRoute
+from fastapi.testclient import TestClient
 
 from tests.litellm_stub import ensure_litellm_stub
 
 ensure_litellm_stub()
 
+import src.auth as auth  # noqa: E402
+from api.deps import CurrentUser, get_current_user, get_database_manager  # noqa: E402
+from src.config import Config  # noqa: E402
+from src.storage import DatabaseManager  # noqa: E402
 from api.v1.endpoints.backtest import (  # noqa: E402
     clear_backtest_samples,
     cancel_rule_backtest_run,
@@ -4300,6 +4308,492 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "Backtest request could not be processed.",
         )
         self.assertNotIn("code is required", str(ctx.exception.detail))
+
+
+def _backtest_http_member_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="backtest-member-1",
+        username="member",
+        display_name="Member",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+        session_id="backtest-member-session",
+    )
+
+
+def _reset_auth_globals() -> None:
+    auth._auth_enabled = None
+    auth._session_secret = None
+    auth._password_hash_salt = None
+    auth._password_hash_stored = None
+    auth._rate_limit = {}
+
+
+class BacktestUiConsumedApiHttpContractTestCase(unittest.TestCase):
+    """HTTP behavioral coverage for UI-consumed backtest routes.
+
+    ``backtestApi`` consumes ``GET /performance/{code}``, ``POST /prepare-samples``,
+    ``POST /rule/parse`` and ``POST /samples/clear``. These tests drive the mounted
+    router through a real ASGI request so the authenticated-member boundary, the
+    request-validation bounds, the server-authoritative benchmark/sample/rule
+    semantics, and the frontend-consumed response fields are all pinned on the wire.
+    """
+
+    PERFORMANCE_URL = "/api/v1/backtest/performance/{code}"
+    PREPARE_SAMPLES_URL = "/api/v1/backtest/prepare-samples"
+    RULE_PARSE_URL = "/api/v1/backtest/rule/parse"
+    SAMPLES_CLEAR_URL = "/api/v1/backtest/samples/clear"
+
+    def setUp(self) -> None:
+        _reset_auth_globals()
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.data_dir = Path(self.temp_dir.name)
+        self.env_path = self.data_dir / ".env"
+        self.env_path.write_text(
+            "\n".join(
+                [
+                    "STOCK_LIST=600519",
+                    "GEMINI_API_KEY=test",
+                    "ADMIN_AUTH_ENABLED=true",
+                    f"DATABASE_PATH={self.data_dir / 'backtest_http_contract.db'}",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        os.environ["ENV_FILE"] = str(self.env_path)
+        os.environ["DATABASE_PATH"] = str(self.data_dir / "backtest_http_contract.db")
+        Config.reset_instance()
+        DatabaseManager.reset_instance()
+        auth.refresh_auth_state()
+        self.db = DatabaseManager.get_instance()
+
+    def tearDown(self) -> None:
+        DatabaseManager.reset_instance()
+        Config.reset_instance()
+        os.environ.pop("ENV_FILE", None)
+        os.environ.pop("DATABASE_PATH", None)
+        _reset_auth_globals()
+        self.temp_dir.cleanup()
+
+    def _client(self, *, authenticated: bool = True) -> TestClient:
+        app = FastAPI()
+        app.include_router(backtest_router, prefix="/api/v1/backtest")
+        # The database manager is always isolated so the auth boundary is the only
+        # variable under test and no real store is touched on the rejected path.
+        app.dependency_overrides[get_database_manager] = lambda: MagicMock()
+        if authenticated:
+            app.dependency_overrides[get_current_user] = _backtest_http_member_user
+        return TestClient(app)
+
+    @staticmethod
+    def _performance_payload() -> dict:
+        return {
+            "scope": "stock",
+            "code": "AAPL",
+            "eval_window_days": 10,
+            "evaluation_window_trading_bars": 10,
+            "engine_version": "v1",
+            "computed_at": "2026-04-27T09:00:00Z",
+            "total_evaluations": 12,
+            "completed_count": 10,
+            "insufficient_count": 2,
+            "long_count": 7,
+            "cash_count": 3,
+            "win_count": 6,
+            "loss_count": 2,
+            "neutral_count": 2,
+            "direction_accuracy_pct": 70.0,
+            "win_rate_pct": 75.0,
+            "neutral_rate_pct": 20.0,
+            "avg_stock_return_pct": 4.5,
+            "avg_simulated_return_pct": 5.1,
+            "stop_loss_trigger_rate": 10.0,
+            "take_profit_trigger_rate": 30.0,
+            "ambiguous_rate": 5.0,
+            "avg_days_to_first_hit": 4.0,
+            "advice_breakdown": {"buy": 8, "hold": 2},
+            "diagnostics": {"source": "summary_table"},
+            "evaluation_mode": "standard",
+            "requested_mode": "local_first",
+            "resolved_source": "LocalParquet",
+            "fallback_used": False,
+            "execution_assumptions": {"entry_timing": "next_bar_open"},
+        }
+
+    @staticmethod
+    def _prepare_samples_payload() -> dict:
+        return {
+            "code": "AAPL",
+            "sample_count": 20,
+            "prepared": 20,
+            "skipped_existing": 0,
+            "market_rows_saved": 260,
+            "candidate_rows": 20,
+            "eval_window_days": 10,
+            "min_age_days": 14,
+            "prepared_start_date": "2026-01-02",
+            "prepared_end_date": "2026-04-10",
+            "latest_prepared_at": "2026-04-27T09:00:00Z",
+            "latest_prepared_sample_date": "2026-04-10",
+            "latest_eligible_sample_date": "2026-04-10",
+            "evaluation_window_trading_bars": 10,
+            "maturity_calendar_days": 14,
+            "requested_mode": "local_first",
+            "resolved_source": "LocalParquet",
+            "fallback_used": False,
+            "execution_readiness": {"state": "ready", "result_contract_available": True},
+        }
+
+    @staticmethod
+    def _parsed_strategy_payload() -> dict:
+        return {
+            "version": "v1",
+            "timeframe": "daily",
+            "source_text": "Buy when Close > MA3. Sell when Close < MA3.",
+            "normalized_text": "Buy when Close > MA3. Sell when Close < MA3.",
+            "entry": {"type": "group", "op": "and", "rules": []},
+            "exit": {"type": "group", "op": "or", "rules": []},
+            "confidence": 0.94,
+            "needs_confirmation": True,
+            "ambiguities": [],
+            "summary": {"entry": "Close > MA3", "exit": "Close < MA3"},
+            "max_lookback": 5,
+            "strategy_kind": "moving_average_crossover",
+            "strategy_spec": {
+                "version": "v1",
+                "strategy_type": "moving_average_crossover",
+                "strategy_family": "moving_average_crossover",
+                "symbol": "AAPL",
+                "timeframe": "daily",
+                "max_lookback": 5,
+                "date_range": {"start_date": "2026-01-01", "end_date": "2026-12-31"},
+                "capital": {"initial_capital": 100000.0, "currency": "CNY"},
+                "costs": {"fee_bps": 0.0, "slippage_bps": 0.0},
+                "signal": {
+                    "indicator_family": "moving_average",
+                    "fast_period": 3,
+                    "slow_period": 5,
+                    "fast_type": "sma",
+                    "slow_type": "sma",
+                    "entry_condition": "fast_crosses_above_slow",
+                    "exit_condition": "fast_crosses_below_slow",
+                },
+                "execution": {
+                    "frequency": "daily",
+                    "signal_timing": "close",
+                    "fill_timing": "same_bar_close",
+                },
+                "position_behavior": {
+                    "direction": "long_only",
+                    "entry_sizing": "all_in",
+                    "max_positions": 1,
+                    "pyramiding": False,
+                },
+                "end_behavior": {"policy": "force_close", "price_basis": "close"},
+            },
+            "executable": True,
+            "normalization_state": "assumed",
+            "assumptions": [{"key": "fast_period", "value": 3}],
+            "assumption_groups": [{"key": "indicator_defaults", "items": [{"key": "fast_period"}]}],
+            "detected_strategy_family": "moving_average_crossover",
+            "unsupported_reason": None,
+            "unsupported_details": [],
+            "unsupported_extensions": [],
+            "core_intent_summary": "双向均线交叉规则。",
+            "interpretation_confidence": 0.94,
+            "supported_portion_summary": "已识别均线交叉主规则。",
+            "rewrite_suggestions": [],
+            "parse_warnings": [],
+        }
+
+    def test_ui_consumed_backtest_routes_require_authenticated_member(self) -> None:
+        cases = (
+            ("GET", self.PERFORMANCE_URL.format(code="AAPL"), None),
+            ("POST", self.PREPARE_SAMPLES_URL, {"code": "AAPL"}),
+            ("POST", self.RULE_PARSE_URL, {"strategy_text": "Buy when Close > MA3."}),
+            ("POST", self.SAMPLES_CLEAR_URL, {"code": "AAPL"}),
+        )
+
+        with self._client(authenticated=False) as unauthenticated:
+            for method, url, body in cases:
+                with self.subTest(method=method, url=url):
+                    response = unauthenticated.request(method, url, json=body)
+                    self.assertEqual(response.status_code, 401, response.text)
+                    self.assertEqual(response.json()["detail"]["error"], "unauthorized")
+
+    def test_stock_performance_http_exposes_frontend_consumed_contract(self) -> None:
+        service = MagicMock()
+        service.get_stock_summary.return_value = self._performance_payload()
+
+        with self._client() as client, patch(
+            "api.v1.endpoints.backtest.BacktestService", return_value=service
+        ):
+            response = client.get(
+                self.PERFORMANCE_URL.format(code="AAPL"),
+                params={"eval_window_days": 5},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["scope"], "stock")
+        self.assertEqual(payload["code"], "AAPL")
+        self.assertEqual(payload["eval_window_days"], 10)
+        self.assertEqual(payload["engine_version"], "v1")
+        self.assertEqual(payload["computed_at"], "2026-04-27T09:00:00Z")
+        self.assertEqual(payload["total_evaluations"], 12)
+        self.assertEqual(payload["completed_count"], 10)
+        self.assertEqual(payload["win_rate_pct"], 75.0)
+        self.assertEqual(payload["advice_breakdown"], {"buy": 8, "hold": 2})
+        self.assertEqual(payload["execution_assumptions"], {"entry_timing": "next_bar_open"})
+        # Request-derived benchmark mode plus the server-authoritative status contract.
+        self.assertEqual(payload["requested_mode"], "local_first")
+        self.assertEqual(payload["resolved_source"], "LocalParquet")
+        self.assertFalse(payload["fallback_used"])
+        self.assertEqual(payload["data_status"], "ready")
+        self.assertEqual(payload["calculation_status"], "ready")
+        self.assertEqual(payload["sample_status"], "ready")
+        self.assertEqual(payload["source_window"]["eval_window_days"], 10)
+        self.assertEqual(payload["as_of"], "2026-04-27T09:00:00Z")
+        self.assertIn("Research diagnostic only", payload["no_advice_disclosure"])
+        service.get_stock_summary.assert_called_once_with("AAPL", eval_window_days=5)
+
+    def test_stock_performance_http_returns_zero_state_when_no_summary_is_available(self) -> None:
+        service = MagicMock()
+        service.get_stock_summary.return_value = None
+        rule_service = MagicMock()
+        rule_service.list_runs.return_value = {"total": 0, "page": 1, "limit": 100, "items": []}
+
+        with self._client() as client, patch(
+            "api.v1.endpoints.backtest.BacktestService", return_value=service
+        ), patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=rule_service):
+            response = client.get(self.PERFORMANCE_URL.format(code="AAPL"))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["resolved_source"], "no_backtest_data")
+        self.assertEqual(payload["evaluation_mode"], "empty_state")
+        self.assertEqual(payload["data_status"], "data_unavailable")
+        self.assertEqual(payload["calculation_status"], "calculation_unavailable")
+        self.assertEqual(payload["sample_status"], "data_unavailable")
+        self.assertEqual(payload["total_evaluations"], 0)
+        self.assertIsNone(payload["win_rate_pct"])
+        self.assertTrue(payload["limitations"])
+        self.assertFalse(payload["fallback_used"])
+
+    def test_stock_performance_http_rejects_out_of_range_eval_window(self) -> None:
+        service = MagicMock()
+        with self._client() as client, patch(
+            "api.v1.endpoints.backtest.BacktestService", return_value=service
+        ):
+            too_small = client.get(
+                self.PERFORMANCE_URL.format(code="AAPL"),
+                params={"eval_window_days": 0},
+            )
+            too_large = client.get(
+                self.PERFORMANCE_URL.format(code="AAPL"),
+                params={"eval_window_days": 121},
+            )
+
+        self.assertEqual(too_small.status_code, 422, too_small.text)
+        self.assertEqual(too_large.status_code, 422, too_large.text)
+        service.get_stock_summary.assert_not_called()
+
+    def test_prepare_samples_http_exposes_frontend_consumed_contract(self) -> None:
+        service = MagicMock()
+        service.prepare_backtest_samples.return_value = self._prepare_samples_payload()
+
+        with self._client() as client, patch(
+            "api.v1.endpoints.backtest.BacktestService", return_value=service
+        ):
+            response = client.post(
+                self.PREPARE_SAMPLES_URL,
+                json={
+                    "code": "AAPL",
+                    "sample_count": 20,
+                    "eval_window_days": 10,
+                    "min_age_days": 14,
+                    "force_refresh": False,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        for field in (
+            "code",
+            "sample_count",
+            "prepared",
+            "skipped_existing",
+            "market_rows_saved",
+            "candidate_rows",
+            "eval_window_days",
+            "min_age_days",
+            "prepared_start_date",
+            "prepared_end_date",
+            "latest_prepared_at",
+            "latest_prepared_sample_date",
+            "latest_eligible_sample_date",
+            "requested_mode",
+            "resolved_source",
+            "fallback_used",
+            "execution_readiness",
+        ):
+            self.assertIn(field, payload)
+        self.assertEqual(payload["code"], "AAPL")
+        self.assertEqual(payload["prepared"], 20)
+        self.assertEqual(payload["market_rows_saved"], 260)
+        self.assertEqual(payload["candidate_rows"], 20)
+        self.assertFalse(payload["fallback_used"])
+        self.assertEqual(payload["execution_readiness"]["state"], "ready")
+        service.prepare_backtest_samples.assert_called_once_with(
+            code="AAPL",
+            sample_count=20,
+            eval_window_days=10,
+            min_age_days=14,
+            force_refresh=False,
+        )
+
+    def test_prepare_samples_http_rejects_out_of_range_sample_count(self) -> None:
+        service = MagicMock()
+        with self._client() as client, patch(
+            "api.v1.endpoints.backtest.BacktestService", return_value=service
+        ):
+            too_small = client.post(self.PREPARE_SAMPLES_URL, json={"code": "AAPL", "sample_count": 0})
+            too_large = client.post(self.PREPARE_SAMPLES_URL, json={"code": "AAPL", "sample_count": 366})
+            missing_code = client.post(self.PREPARE_SAMPLES_URL, json={"sample_count": 20})
+
+        self.assertEqual(too_small.status_code, 422, too_small.text)
+        self.assertEqual(too_large.status_code, 422, too_large.text)
+        self.assertEqual(missing_code.status_code, 422, missing_code.text)
+        service.prepare_backtest_samples.assert_not_called()
+
+    def test_prepare_samples_http_maps_service_value_error_to_bounded_validation_error(self) -> None:
+        service = MagicMock()
+        service.prepare_backtest_samples.side_effect = ValueError("provider token=SUPERSECRETTOKEN failed")
+
+        with self._client() as client, patch(
+            "api.v1.endpoints.backtest.BacktestService", return_value=service
+        ):
+            response = client.post(self.PREPARE_SAMPLES_URL, json={"code": "AAPL"})
+
+        self.assertEqual(response.status_code, 400, response.text)
+        detail = response.json()["detail"]
+        self.assertEqual(detail["error"], "validation_error")
+        self.assertEqual(detail["status"], 400)
+        self.assertEqual(detail["message"], "Backtest request could not be processed.")
+        self.assertNotIn("SUPERSECRETTOKEN", response.text)
+
+    def test_rule_parse_http_preserves_rule_normalization_semantics(self) -> None:
+        service = MagicMock()
+        service.parse_strategy.return_value = self._parsed_strategy_payload()
+
+        with self._client() as client, patch(
+            "api.v1.endpoints.backtest.RuleBacktestService", return_value=service
+        ):
+            response = client.post(
+                self.RULE_PARSE_URL,
+                json={
+                    "code": "AAPL",
+                    "strategy_text": "Buy when Close > MA3. Sell when Close < MA3.",
+                    "start_date": "2026-01-01",
+                    "end_date": "2026-12-31",
+                    "initial_capital": 100000.0,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["code"], "AAPL")
+        self.assertEqual(payload["strategy_text"], "Buy when Close > MA3. Sell when Close < MA3.")
+        self.assertEqual(payload["normalized_strategy_family"], "moving_average_crossover")
+        self.assertEqual(payload["detected_strategy_family"], "moving_average_crossover")
+        self.assertTrue(payload["executable"])
+        self.assertEqual(payload["normalization_state"], "assumed")
+        self.assertEqual(payload["max_lookback"], 5)
+        self.assertEqual(payload["confidence"], 0.94)
+        self.assertTrue(payload["needs_confirmation"])
+        self.assertEqual(payload["assumptions"], [{"key": "fast_period", "value": 3}])
+        self.assertEqual(payload["summary"], {"entry": "Close > MA3", "exit": "Close < MA3"})
+        # Rule semantics are carried verbatim on the normalized strategy spec.
+        self.assertEqual(
+            payload["parsed_strategy"]["strategy_spec"]["strategy_type"],
+            "moving_average_crossover",
+        )
+        self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["signal"]["slow_period"], 5)
+        service.parse_strategy.assert_called_once_with(
+            "Buy when Close > MA3. Sell when Close < MA3.",
+            code="AAPL",
+            start_date="2026-01-01",
+            end_date="2026-12-31",
+            initial_capital=100000.0,
+            fee_bps=0.0,
+            slippage_bps=0.0,
+        )
+
+    def test_rule_parse_http_rejects_invalid_capital_and_cost_bounds(self) -> None:
+        service = MagicMock()
+        with self._client() as client, patch(
+            "api.v1.endpoints.backtest.RuleBacktestService", return_value=service
+        ):
+            zero_capital = client.post(
+                self.RULE_PARSE_URL,
+                json={"strategy_text": "Buy when Close > MA3.", "initial_capital": 0},
+            )
+            negative_capital = client.post(
+                self.RULE_PARSE_URL,
+                json={"strategy_text": "Buy when Close > MA3.", "initial_capital": -1},
+            )
+            oversized_fee = client.post(
+                self.RULE_PARSE_URL,
+                json={"strategy_text": "Buy when Close > MA3.", "fee_bps": 501},
+            )
+            missing_strategy = client.post(self.RULE_PARSE_URL, json={"code": "AAPL"})
+
+        for response in (zero_capital, negative_capital, oversized_fee, missing_strategy):
+            self.assertEqual(response.status_code, 422, response.text)
+        service.parse_strategy.assert_not_called()
+
+    def test_samples_clear_http_returns_owner_scoped_clear_contract(self) -> None:
+        service = MagicMock()
+        service.clear_backtest_samples.return_value = {
+            "code": "AAPL",
+            "deleted_runs": 0,
+            "deleted_results": 0,
+            "deleted_samples": 3,
+            "deleted_summaries": 2,
+        }
+
+        with self._client() as client, patch(
+            "api.v1.endpoints.backtest.BacktestService", return_value=service
+        ):
+            response = client.post(self.SAMPLES_CLEAR_URL, json={"code": "AAPL"})
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["code"], "AAPL")
+        self.assertEqual(payload["deleted_samples"], 3)
+        self.assertEqual(payload["deleted_summaries"], 2)
+        self.assertEqual(payload["deleted_runs"], 0)
+        self.assertEqual(payload["deleted_results"], 0)
+        self.assertEqual(payload["message"], "回测样本已清理")
+        service.clear_backtest_samples.assert_called_once_with(code="AAPL")
+
+    def test_samples_clear_http_maps_value_error_to_bounded_validation_error(self) -> None:
+        service = MagicMock()
+        service.clear_backtest_samples.side_effect = ValueError("code is required")
+
+        with self._client() as client, patch(
+            "api.v1.endpoints.backtest.BacktestService", return_value=service
+        ):
+            response = client.post(self.SAMPLES_CLEAR_URL, json={"code": " "})
+
+        self.assertEqual(response.status_code, 400, response.text)
+        detail = response.json()["detail"]
+        self.assertEqual(detail["error"], "validation_error")
+        self.assertNotIn("code is required", response.text)
 
 
 if __name__ == "__main__":
